@@ -1,0 +1,214 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
+  <PropertyGroup>
+    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
+    <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
+    <ProjectGuid>{9DC21067-A102-419A-993C-4AA10C0B4708}</ProjectGuid>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>Frostvein.Parser</RootNamespace>
+    <AssemblyName>Frostvein.Parser</AssemblyName>
+    <TargetFrameworkVersion>v4.8</TargetFrameworkVersion>
+    <FileAlignment>512</FileAlignment>
+    <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
+    <Deterministic>true</Deterministic>
+    <NuGetPackageImportStamp>
+    </NuGetPackageImportStamp>
+    <PublishUrl>publish\</PublishUrl>
+    <Install>true</Install>
+    <InstallFrom>Disk</InstallFrom>
+    <UpdateEnabled>false</UpdateEnabled>
+    <UpdateMode>Foreground</UpdateMode>
+    <UpdateInterval>7</UpdateInterval>
+    <UpdateIntervalUnits>Days</UpdateIntervalUnits>
+    <UpdatePeriodically>false</UpdatePeriodically>
+    <UpdateRequired>false</UpdateRequired>
+    <MapFileExtensions>true</MapFileExtensions>
+    <ApplicationRevision>0</ApplicationRevision>
+    <ApplicationVersion>1.0.0.%2a</ApplicationVersion>
+    <IsWebBootstrapper>false</IsWebBootstrapper>
+    <UseApplicationTrust>false</UseApplicationTrust>
+    <BootstrapperEnabled>true</BootstrapperEnabled>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
+    <PlatformTarget>AnyCPU</PlatformTarget>
+    <DebugSymbols>true</DebugSymbols>
+    <DebugType>full</DebugType>
+    <Optimize>false</Optimize>
+    <OutputPath>..\..\..\bin\Debug\Parser\</OutputPath>
+    <DefineConstants>DEBUG;TRACE</DefineConstants>
+    <ErrorReport>prompt</ErrorReport>
+    <WarningLevel>4</WarningLevel>
+    <Prefer32Bit>false</Prefer32Bit>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
+    <PlatformTarget>AnyCPU</PlatformTarget>
+    <DebugType>pdbonly</DebugType>
+    <Optimize>true</Optimize>
+    <OutputPath>..\..\..\bin\Release\Parser\</OutputPath>
+    <DefineConstants>TRACE</DefineConstants>
+    <ErrorReport>prompt</ErrorReport>
+    <WarningLevel>4</WarningLevel>
+    <Prefer32Bit>false</Prefer32Bit>
+  </PropertyGroup>
+  <PropertyGroup>
+    <StartupObject>Frostvein.Parser.Program</StartupObject>
+  </PropertyGroup>
+  <PropertyGroup>
+    <ApplicationIcon>favicon.ico</ApplicationIcon>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="System" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="Import\IImport.cs" />
+    <Compile Include="Import\ImportAccounts.cs" />
+    <Compile Include="Import\ImportCards.cs" />
+    <Compile Include="Import\ImportConfiguration.cs" />
+    <Compile Include="Import\ImportDrops.cs" />
+    <Compile Include="Import\ImportFishPosition.cs" />
+    <Compile Include="Import\ImportHardcodedRecipes.cs" />
+    <Compile Include="Import\ImportItems.cs" />
+    <Compile Include="Import\ImportMapNpcs.cs" />
+    <Compile Include="Import\ImportMaps.cs" />
+    <Compile Include="Import\ImportMapType.cs" />
+    <Compile Include="Import\ImportMapTypeMap.cs" />
+    <Compile Include="Import\ImportMonsters.cs" />
+    <Compile Include="Import\ImportNpcMonsterData.cs" />
+    <Compile Include="Import\ImportNpcMonsters.cs" />
+    <Compile Include="Import\ImportPackets.cs" />
+    <Compile Include="Import\ImportPortals.cs" />
+    <Compile Include="Import\ImportQuests.cs" />
+    <Compile Include="Import\ImportRecipe.cs" />
+    <Compile Include="Import\ImportRespawnMapType.cs" />
+    <Compile Include="Import\ImportScriptedInstances.cs" />
+    <Compile Include="Import\ImportSecondaryMaps.cs" />
+    <Compile Include="Import\ImportShopItems.cs" />
+    <Compile Include="Import\ImportShops.cs" />
+    <Compile Include="Import\ImportShopSkills.cs" />
+    <Compile Include="Import\ImportSkills.cs" />
+    <Compile Include="Import\ImportTeleporters.cs" />
+    <Compile Include="Program.cs" />
+    <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="Resource\LocalizedResources.de.Designer.cs">
+      <DependentUpon>LocalizedResources.de.resx</DependentUpon>
+      <AutoGen>True</AutoGen>
+      <DesignTime>True</DesignTime>
+    </Compile>
+    <Compile Include="Resource\LocalizedResources.Designer.cs">
+      <DependentUpon>LocalizedResources.resx</DependentUpon>
+      <AutoGen>True</AutoGen>
+      <DesignTime>True</DesignTime>
+    </Compile>
+    <Compile Include="Resource\LocalizedResources.fr.Designer.cs">
+      <DependentUpon>LocalizedResources.fr.resx</DependentUpon>
+      <AutoGen>True</AutoGen>
+      <DesignTime>True</DesignTime>
+    </Compile>
+    <Compile Include="Resource\LocalizedResources.it.Designer.cs">
+      <DependentUpon>LocalizedResources.it.resx</DependentUpon>
+      <AutoGen>True</AutoGen>
+      <DesignTime>True</DesignTime>
+    </Compile>
+    <Compile Include="Resource\LocalizedResources.pl.Designer.cs">
+      <DependentUpon>LocalizedResources.pl.resx</DependentUpon>
+      <AutoGen>True</AutoGen>
+      <DesignTime>True</DesignTime>
+    </Compile>
+    <Compile Include="Resource\LocalizedResources.th.Designer.cs">
+      <DependentUpon>LocalizedResources.th.resx</DependentUpon>
+      <AutoGen>True</AutoGen>
+      <DesignTime>True</DesignTime>
+    </Compile>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="App.config" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\Frostvein.DAL\Frostvein.DAL.EF\Frostvein.DAL.EF.csproj">
+      <Project>{4aecc47d-098a-4493-8e1e-d10edbb7a189}</Project>
+      <Name>Frostvein.DAL.EF</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\..\Frostvein.DAL\Frostvein.DAL.Interface\Frostvein.DAL.Interface.csproj">
+      <Project>{175c851b-8dc8-43a5-af93-af32d106cd77}</Project>
+      <Name>Frostvein.DAL.Interface</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\..\Frostvein.DAL\Frostvein.DAL\Frostvein.DAL.csproj">
+      <Project>{d8c8a266-3d46-42c5-a492-28c75db85ba8}</Project>
+      <Name>Frostvein.DAL</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\..\Frostvein.DAL\Frostvein.Data\Frostvein.Data.csproj">
+      <Project>{f1071ded-3d92-4416-9b9c-8664441ade64}</Project>
+      <Name>Frostvein.Data</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\..\Frostvein.Configuration\Frostvein.Configuration.csproj">
+      <Project>{011EE023-E1B8-4645-BBE9-94AC35B55390}</Project>
+      <Name>Frostvein.Configuration</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\..\Frostvein.Core\Frostvein.Core.csproj">
+      <Project>{C93A0A40-0551-4732-B594-171B87679AC1}</Project>
+      <Name>Frostvein.Core</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\..\Frostvein.Domain\Frostvein.Domain.csproj">
+      <Project>{20ADDDDD-DAD9-44F3-9BEB-026C73090660}</Project>
+      <Name>Frostvein.Domain</Name>
+    </ProjectReference>
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="EntityFramework">
+      <Version>6.5.2</Version>
+    </PackageReference>
+    <PackageReference Include="log4net">
+      <Version>3.3.2</Version>
+    </PackageReference>
+  </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="Resource\LocalizedResources.de.resx">
+      <Generator>ResXFileCodeGenerator</Generator>
+      <LastGenOutput>LocalizedResources.de.Designer.cs</LastGenOutput>
+      <SubType>Designer</SubType>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Resource\LocalizedResources.fr.resx">
+      <Generator>ResXFileCodeGenerator</Generator>
+      <LastGenOutput>LocalizedResources.fr.Designer.cs</LastGenOutput>
+      <SubType>Designer</SubType>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Resource\LocalizedResources.it.resx">
+      <Generator>ResXFileCodeGenerator</Generator>
+      <LastGenOutput>LocalizedResources.it.Designer.cs</LastGenOutput>
+      <SubType>Designer</SubType>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Resource\LocalizedResources.pl.resx">
+      <Generator>ResXFileCodeGenerator</Generator>
+      <LastGenOutput>LocalizedResources.pl.Designer.cs</LastGenOutput>
+      <SubType>Designer</SubType>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Resource\LocalizedResources.resx">
+      <Generator>ResXFileCodeGenerator</Generator>
+      <LastGenOutput>LocalizedResources.Designer.cs</LastGenOutput>
+      <SubType>Designer</SubType>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Resource\LocalizedResources.th.resx">
+      <Generator>ResXFileCodeGenerator</Generator>
+      <LastGenOutput>LocalizedResources.th.Designer.cs</LastGenOutput>
+      <SubType>Designer</SubType>
+    </EmbeddedResource>
+  </ItemGroup>
+  <ItemGroup>
+    <BootstrapperPackage Include=".NETFramework,Version=v4.8">
+      <Visible>False</Visible>
+      <ProductName>Microsoft .NET Framework 4.8 %28x86 and x64%29</ProductName>
+      <Install>true</Install>
+    </BootstrapperPackage>
+    <BootstrapperPackage Include="Microsoft.Net.Framework.3.5.SP1">
+      <Visible>False</Visible>
+      <ProductName>.NET Framework 3.5 SP1</ProductName>
+      <Install>false</Install>
+    </BootstrapperPackage>
+  </ItemGroup>
+  <ItemGroup>
+    <Content Include="favicon.ico" />
+    <Content Include="Files\Resources\logo_raw_no_slogan.ico" />
+  </ItemGroup>
+  <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
+</Project>

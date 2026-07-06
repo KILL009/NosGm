@@ -1,0 +1,141 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
+  <PropertyGroup>
+    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
+    <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
+    <ProjectGuid>{057B5A6F-378A-4BD9-B17B-074C7F5C9FEC}</ProjectGuid>
+    <OutputType>Library</OutputType>
+    <AppDesignerFolder>Properties</AppDesignerFolder>
+    <RootNamespace>Frostvein.Mapper</RootNamespace>
+    <AssemblyName>Frostvein.Mapper</AssemblyName>
+    <TargetFrameworkVersion>v4.8</TargetFrameworkVersion>
+    <FileAlignment>512</FileAlignment>
+    <TargetFrameworkProfile />
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
+    <DebugSymbols>true</DebugSymbols>
+    <DebugType>full</DebugType>
+    <Optimize>false</Optimize>
+    <OutputPath>bin\Debug\</OutputPath>
+    <DefineConstants>DEBUG;TRACE</DefineConstants>
+    <ErrorReport>prompt</ErrorReport>
+    <WarningLevel>4</WarningLevel>
+    <CodeAnalysisRuleSet>..\..\..\ProjectRuleset.ruleset</CodeAnalysisRuleSet>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
+    <DebugType>pdbonly</DebugType>
+    <Optimize>true</Optimize>
+    <OutputPath>bin\Release\</OutputPath>
+    <DefineConstants>TRACE</DefineConstants>
+    <ErrorReport>prompt</ErrorReport>
+    <WarningLevel>4</WarningLevel>
+    <CodeAnalysisRuleSet>..\..\..\ProjectRuleset.ruleset</CodeAnalysisRuleSet>
+  </PropertyGroup>
+  <PropertyGroup>
+    <ApplicationIcon>favicon.ico</ApplicationIcon>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="System" />
+    <Reference Include="System.Core" />
+    <Reference Include="System.Net.Http" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="IMapper.cs" />
+    <Compile Include="Mappers\BattlePassAccountLogMapper.cs" />
+    <Compile Include="Mappers\BattlePassPrizeMapper.cs" />
+    <Compile Include="Mappers\BattlePassQuestMapper.cs" />
+    <Compile Include="Mappers\BattlePassQuestProgressMapper.cs" />
+    <Compile Include="Mappers\BazaarItemMapper.cs" />
+    <Compile Include="Mappers\BCardMapper.cs" />
+    <Compile Include="Mappers\CharacterFIshMapper.cs" />
+    <Compile Include="Mappers\CharacterQuestMapper.cs" />
+    <Compile Include="Mappers\CharacterTimespaceLogMapper.cs" />
+    <Compile Include="Mappers\CharacterTitleMapper.cs" />
+    <Compile Include="Mappers\FairyEnchantmentMapper.cs" />
+    <Compile Include="Mappers\FamilySkillMissionMapper.cs" />
+    <Compile Include="Mappers\FishingInformationsMapper.cs" />
+    <Compile Include="Mappers\FishingPositionMapper.cs" />
+    <Compile Include="Mappers\ItemInstanceMapper.cs" />
+    <Compile Include="Mappers\CardMapper.cs" />
+    <Compile Include="Mappers\CellonOptionMapper.cs" />
+    <Compile Include="Mappers\CharacterRelationMapper.cs" />
+    <Compile Include="Mappers\CharacterSkillMapper.cs" />
+    <Compile Include="Mappers\ComboMapper.cs" />
+    <Compile Include="Mappers\DropMapper.cs" />
+    <Compile Include="Mappers\FamilyCharacterMapper.cs" />
+    <Compile Include="Mappers\FamilyLogMapper.cs" />
+    <Compile Include="Mappers\FamilyMapper.cs" />
+    <Compile Include="Mappers\GeneralLogMapper.cs" />
+    <Compile Include="Mappers\ItemMapper.cs" />
+    <Compile Include="Mappers\MailMapper.cs" />
+    <Compile Include="Mappers\MapMapper.cs" />
+    <Compile Include="Mappers\MapMonsterMapper.cs" />
+    <Compile Include="Mappers\MapNpcMapper.cs" />
+    <Compile Include="Mappers\MapTypeMapMapper.cs" />
+    <Compile Include="Mappers\MapTypeMapper.cs" />
+    <Compile Include="Mappers\MateMapper.cs" />
+    <Compile Include="Mappers\MinilandObjectMapper.cs" />
+    <Compile Include="Mappers\PartnerSkillMapper.cs" />
+    <Compile Include="Mappers\QuestLogMapper.cs" />
+    <Compile Include="Mappers\QuestObjectiveMapper.cs" />
+    <Compile Include="Mappers\QuestRewardMapper.cs" />
+    <Compile Include="Mappers\RaidboxMapper.cs" />
+    <Compile Include="Mappers\RuneEffectMapper.cs" />
+    <Compile Include="Mappers\ShopSkillMapper.cs" />
+    <Compile Include="Mappers\StaticBonusMapper.cs" />
+    <Compile Include="Mappers\StaticBuffMapper.cs" />
+    <Compile Include="Mappers\TeleporterMapper.cs" />
+    <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="Mappers\AccountMapper.cs" />
+    <Compile Include="Mappers\CharacterMapper.cs" />
+    <Compile Include="Mappers\PenaltyLogMapper.cs" />
+    <Compile Include="Mappers\NpcMonsterMapper.cs" />
+    <Compile Include="Mappers\NpcMonsterSkillMapper.cs" />
+    <Compile Include="Mappers\PortalMapper.cs" />
+    <Compile Include="Mappers\QuestMapper.cs" />
+    <Compile Include="Mappers\QuicklistEntryMapper.cs" />
+    <Compile Include="Mappers\RecipeMapper.cs" />
+    <Compile Include="Mappers\RecipeItemMapper.cs" />
+    <Compile Include="Mappers\RecipeListMapper.cs" />
+    <Compile Include="Mappers\RespawnMapper.cs" />
+    <Compile Include="Mappers\RespawnMapTypeMapper.cs" />
+    <Compile Include="Mappers\ShellEffectMapper.cs" />
+    <Compile Include="Mappers\ScriptedInstanceMapper.cs" />
+    <Compile Include="Mappers\ShopMapper.cs" />
+    <Compile Include="Mappers\ShopItemMapper.cs" />
+    <Compile Include="Mappers\SkillMapper.cs" />
+    <Compile Include="Mappers\MinigameLogMapper.cs" />
+    <Compile Include="Props\ModuleMapper.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="app.config" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Newtonsoft.Json">
+      <Version>13.0.4</Version>
+    </PackageReference>
+  </ItemGroup>
+  <ItemGroup>
+    <Content Include="favicon.ico" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\Frostvein.Domain\Frostvein.Domain.csproj">
+      <Project>{20addddd-dad9-44f3-9beb-026c73090660}</Project>
+      <Name>Frostvein.Domain</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\Frostvein.DAL.EF\Frostvein.DAL.EF.csproj">
+      <Project>{4aecc47d-098a-4493-8e1e-d10edbb7a189}</Project>
+      <Name>Frostvein.DAL.EF</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\Frostvein.DAL.Interface\Frostvein.DAL.Interface.csproj">
+      <Project>{175c851b-8dc8-43a5-af93-af32d106cd77}</Project>
+      <Name>Frostvein.DAL.Interface</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\Frostvein.Data\Frostvein.Data.csproj">
+      <Project>{f1071ded-3d92-4416-9b9c-8664441ade64}</Project>
+      <Name>Frostvein.Data</Name>
+    </ProjectReference>
+  </ItemGroup>
+  <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
+</Project>

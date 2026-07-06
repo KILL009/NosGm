@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net7.0</TargetFramework>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="FluentValidation" Version="11.9.0" />
+    <PackageReference Include="MediatR" Version="12.2.0" />
+    <PackageReference Include="MediatR.Extensions.Microsoft.DependencyInjection" Version="9.0.0" />
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.Core" Version="2.2.5" />
+    <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" Version="8.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\Frostvein.DAL\Frostvein.DAL.Interface\Frostvein.DAL.Interface.csproj" />
+    <ProjectReference Include="..\..\Frostvein.DAL\Frostvein.Data\Frostvein.Data.csproj" />
+    <ProjectReference Include="..\..\Frostvein.Domain\Frostvein.Domain.csproj" />
+    <ProjectReference Include="..\..\Frostvein.GameObject\Frostvein.GameObject.csproj" />
+    <ProjectReference Include="..\..\Frostvein.Packets\Frostvein.Packets.csproj" />
+  </ItemGroup>
+
+</Project>
