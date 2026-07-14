@@ -10,6 +10,7 @@ using Frostvein.GameObject.TitanShield;
 using Frostvein.GameObject.TitanShield.Thread;
 using Frostvein.GameObject.Event.ARENA;
 using System;
+using Frostvein.GameObject.Plugin.Event.Handler.GameEvent.LandOfDeath;
 
 namespace Frostvein.GameObject.Plugin.Event
 {

@@ -83,7 +83,7 @@ namespace Frostvein.GameObject.Plugin.Event
 
             while (lodTime > 0)
             {
-                refreshLOD(lodTime);
+                RefreshLod(lodTime);
 
                 if (lodTime == hornTime - hornRespawn * dhspawns)
                 {
@@ -106,7 +106,7 @@ namespace Frostvein.GameObject.Plugin.Event
                                 EventActionType.CHANGEDROPRATE,
                                 3));
 
-                        spawnDH(fam.LandOfDeath);
+                        SpawnDh(fam.LandOfDeath);
                     }
                 }
                 else if (lodTime == hornTime - hornRespawn * dhspawns - hornStay)
@@ -114,7 +114,7 @@ namespace Frostvein.GameObject.Plugin.Event
                     foreach (var fam in ServerManager.Instance.FamilyList.GetAllItems())
                         if (fam.LandOfDeath != null)
                         {
-                            despawnDH(fam.LandOfDeath);
+                            DespawnDh(fam.LandOfDeath);
                         }
 
                     dhspawns++;
@@ -124,7 +124,7 @@ namespace Frostvein.GameObject.Plugin.Event
                 Thread.Sleep(interval * 1000);
             }
 
-            endLOD();
+            EndLod();
         }
 
         private void ChangePortalEffect(short effectId)
@@ -132,11 +132,11 @@ namespace Frostvein.GameObject.Plugin.Event
             ServerManager.Instance.GetMapNpcsByVNum(453).ForEach(mapNpc => mapNpc.Effect = effectId);
         }
 
-        private void despawnDH(MapInstance LandOfDeath)
+        private void DespawnDh(MapInstance landOfDeath)
         {
             EventHelper.Instance.RunEvent(new EventContainer(ServerManager.GetMapInstance(ServerManager.GetBaseMapInstanceIdByMapId(98)), EventActionType.NPCSEFFECTCHANGESTATE, false));
-            EventHelper.Instance.RunEvent(new EventContainer(LandOfDeath, EventActionType.SENDPACKET, UserInterfaceHelper.GenerateMsg(Language.Instance.GetMessageFromKey("HORN_DISAPEAR"), 0)));
-            EventHelper.Instance.RunEvent(new EventContainer(LandOfDeath, EventActionType.UNSPAWNMONSTERS, 443));
+            EventHelper.Instance.RunEvent(new EventContainer(landOfDeath, EventActionType.SENDPACKET, UserInterfaceHelper.GenerateMsg(Language.Instance.GetMessageFromKey("HORN_DISAPEAR"), 0)));
+            EventHelper.Instance.RunEvent(new EventContainer(landOfDeath, EventActionType.UNSPAWNMONSTERS, 443));
 
             if (IsOpen)
             {
@@ -146,7 +146,7 @@ namespace Frostvein.GameObject.Plugin.Event
             }
         }
 
-        private void endLOD()
+        private void EndLod()
         {
             foreach (var fam in ServerManager.Instance.FamilyList.GetAllItems())
             {
@@ -173,25 +173,22 @@ namespace Frostvein.GameObject.Plugin.Event
             ChangePortalEffect(0);
         }
 
-        private void refreshLOD(int remaining)
+        private void RefreshLod(int remaining)
         {
             foreach (var fam in ServerManager.Instance.FamilyList.GetAllItems())
             {
-                if (fam.LandOfDeath == null)
-                {
-                    fam.LandOfDeath = ServerManager.GenerateMapInstance(150, MapInstanceType.LodInstance, new InstanceBag());
-                }
+                fam.LandOfDeath ??= ServerManager.GenerateMapInstance(150, MapInstanceType.LodInstance, new InstanceBag());
 
                 EventHelper.Instance.RunEvent(new EventContainer(fam.LandOfDeath, EventActionType.CLOCK, remaining * 10));
                 EventHelper.Instance.RunEvent(new EventContainer(fam.LandOfDeath, EventActionType.STARTCLOCK, new Tuple<List<EventContainer>, List<EventContainer>>(new List<EventContainer>(), new List<EventContainer>())));
             }
         }
 
-        private void spawnDH(MapInstance LandOfDeath)
+        private void SpawnDh(MapInstance landOfDeath)
         {
-            EventHelper.Instance.RunEvent(new EventContainer(LandOfDeath, EventActionType.SPAWNONLASTENTRY, 443));
-            EventHelper.Instance.RunEvent(new EventContainer(LandOfDeath, EventActionType.SENDPACKET, "df 2"));
-            EventHelper.Instance.RunEvent(new EventContainer(LandOfDeath, EventActionType.SENDPACKET, UserInterfaceHelper.GenerateMsg(Language.Instance.GetMessageFromKey("HORN_APPEAR"), 0)));
+            EventHelper.Instance.RunEvent(new EventContainer(landOfDeath, EventActionType.SPAWNONLASTENTRY, 443));
+            EventHelper.Instance.RunEvent(new EventContainer(landOfDeath, EventActionType.SENDPACKET, "df 2"));
+            EventHelper.Instance.RunEvent(new EventContainer(landOfDeath, EventActionType.SENDPACKET, UserInterfaceHelper.GenerateMsg(Language.Instance.GetMessageFromKey("HORN_APPEAR"), 0)));
         }
     }
 }
