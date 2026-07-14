@@ -4,7 +4,7 @@
     {
         public static string IPAddress = "127.0.0.1";
         public static string MasterServerPort = "4545";
-        public static string WorldServerPort = "1338";
+        public static string WorldServerPort = "1337";
         public static string LoginServerPort = "4000";
         public static string GlacernonServerPort = "5100";
 

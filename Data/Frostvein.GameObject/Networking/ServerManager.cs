@@ -1514,9 +1514,11 @@ namespace Frostvein.GameObject.Networking
                     {
                         session.Character.ClearLaurena();
                     }
-
+                    Logger.Info($"C_MODE: {session.Character.GenerateCMode()}");
+                    Logger.Info($"CHAR_SC: {session.Character.GenerateScal()}");
                     session.SendPacket(session.Character.GenerateCInfo());
                     session.SendPacket(session.Character.GenerateCMode());
+                    session.SendPacket(session.Character.GenerateScal());
                     session.SendPacket(session.Character.GenerateEq());
                     session.SendPacket(session.Character.GenerateLev());
                     session.SendPacket(session.Character.GenerateStat());
@@ -1717,10 +1719,10 @@ namespace Frostvein.GameObject.Networking
                     session.Character.Mates?.ForEach(s => session.SendPacket(s.GenerateScPacket()));
                     session.SendPackets(session.Character.GeneratePst());
 
-                    if (session.Character.Size != 10)
-                    {
-                        session.SendPacket(session.Character.GenerateScal());
-                    }
+                     if (session.Character.Size != 106)
+                     {
+                         session.SendPacket(session.Character.GenerateScal());
+                     }            
 
                     if (session.CurrentMapInstance?.IsDancing == true && !session.Character.IsDancing)
                     {
@@ -1777,7 +1779,7 @@ namespace Frostvein.GameObject.Networking
                 catch (Exception ex)
                 {
                     Logger.Warn("Character changed while changing map. Do not abuse " +
-                        "Commands.", ex);
+                        "Commands.", ex); 
                     session.Character.IsChangingMapInstance = false;
                 }
             }
@@ -2093,13 +2095,7 @@ namespace Frostvein.GameObject.Networking
 
         public bool IsAct4Online() => CommunicationServiceClient.Instance.IsAct4Online();
 
-        public bool IsChannel1Online() => CommunicationServiceClient.Instance.IsChannel1Online(ServerGroup);
-        public bool IsChannel2Online() => CommunicationServiceClient.Instance.IsChannel2Online(ServerGroup);
-        public bool IsChannel3Online() => CommunicationServiceClient.Instance.IsChannel3Online(ServerGroup);
-        public bool IsChannel4Online() => CommunicationServiceClient.Instance.IsChannel4Online(ServerGroup);
-        public bool IsChannel5Online() => CommunicationServiceClient.Instance.IsChannel5Online(ServerGroup);
-        public bool IsChannel6Online() => CommunicationServiceClient.Instance.IsChannel6Online(ServerGroup);
-        public bool IsChannel7Online() => CommunicationServiceClient.Instance.IsChannel7Online(ServerGroup);
+     
 
         public bool IsCharacterMemberOfGroup(long characterId)
         {
@@ -2540,55 +2536,7 @@ namespace Frostvein.GameObject.Networking
             }
         }
 
-        private static void Act4StatProcess()
-        {
-            if (Instance.ChannelId != 51)
-            {
-                return;
-            }
-
-            CommunicationServiceClient.Instance.SendMessageToCharacter(new SCSCharacterMessage
-            {
-                DestinationCharacterId = null,
-                SourceCharacterId = 0,
-                SourceWorldId = Instance.WorldId,
-                Message =
-                            $"[A4 Status] Angels: {Instance.Act4AngelStat.Percentage / 100} % Demons: {Instance.Act4DemonStat.Percentage / 100} %",
-                Type = MessageType.Shout
-            });
-        }
-
-        private static void LoadNpcMonsters()
-        {
-            var bcards = DAOFactory.BCardDAO.LoadAll().ToArray().Where(s => s.NpcMonsterVNum.HasValue);
-            foreach (var npcMonster in DAOFactory.NpcMonsterDAO.LoadAll().ToArray())
-            {
-                var tmp = new NpcMonster(npcMonster);
-
-                if (!(tmp is NpcMonster monster))
-                {
-                    continue;
-                }
-
-                // TODO: remove that after
-                monster.Initialize();
-                monster.BCards = new List<BCard>();
-
-                foreach (var s in bcards.Where(s =>
-                    s.NpcMonsterVNum == (monster.OriginalNpcMonsterVNum > 0
-                        ? npcMonster.OriginalNpcMonsterVNum
-                        : monster.NpcMonsterVNum)))
-                {
-                    monster.BCards.Add(new BCard(s));
-                }
-
-                Npcs.Add(monster);
-            }
-
-            Logger.Info(
-                string.Format(Language.Instance.GetMessageFromKey("NPCMONSTERS_LOADED"), Npcs.Count));
-        }
-
+     
         public static void OnGlobalEvent(object sender, EventArgs e)
         {
             var tuple = (Tuple<EventType, byte>)sender;
@@ -2647,61 +2595,7 @@ namespace Frostvein.GameObject.Networking
             });
         }
 
-        private void Act4FlowerProcess()
-        {
-            foreach (var map in GetAllMapInstances().Where(s =>
-                s.Map.MapTypes.Any(m => m.MapTypeId == (short)MapTypeEnum.Act4) &&
-                s.Npcs.Count(o => o.NpcVNum == 2004 && o.IsOut) < s.Npcs.Count(n => n.NpcVNum == 2004)))
-                foreach (var i in map.Npcs.Where(s => s.IsOut && s.NpcVNum == 2004))
-                {
-                    var randomPos = map.Map.GetRandomPosition();
-                    i.MapX = randomPos.X;
-                    i.MapY = randomPos.Y;
-                    i.MapInstance.Broadcast(i.GenerateIn());
-                }
-        }
-
-        private void GroupProcess()
-        {
-            try
-            {
-                if (Groups != null)
-                {
-                    foreach (var grp in Groups)
-                        foreach (var session in grp.Sessions.GetAllItems())
-                        {
-                            if (grp.GroupType == GroupType.Group)
-                            {
-                                session.SendPackets(grp.GeneratePst(session));
-                            }
-                            else if (grp.GroupType == GroupType.Team || grp.GroupType == GroupType.BigTeam || grp.GroupType == GroupType.GiantTeam)
-                            {
-                                session.SendPacket(grp.GenerateRdlst());
-                            }
-                            else if (grp.GroupType == GroupType.RBBBlue || grp.GroupType == GroupType.RBBRed)
-                            {
-                                session.SendPacket(RainbowThread.GenerateFbList(session));
-                            }
-                        }
-                }
-            }
-            catch (Exception e)
-            {
-                //LOGGERServerLog($"{e.ToString()}", LogType.ServerError);
-            }
-        }
-
-        private void InitAllProperty()
-        {
-            Act4RaidStart = DateTime.Now;
-            Act4AngelStat = new Act4Stat();
-            Act4DemonStat = new Act4Stat();
-            Act6Erenia = new Act4Stat();
-            Act6Zenas = new Act4Stat();
-            LastFCSent = DateTime.Now;
-            CharacterScreenSessions = new ThreadSafeSortedList<long, ClientSession>();
-        }
-
+        
         private bool IsTimeBetween(DateTime dateTime, TimeSpan start, TimeSpan end)
         {
             var now = dateTime.TimeOfDay;

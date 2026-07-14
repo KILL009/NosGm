@@ -83,6 +83,7 @@ namespace Frostvein.GameObject
 
         public event EventHandler<FinishScriptedInstanceEventArgs> FinishScriptedInstance;
 
+
         #endregion
 
         #region Instantiation
@@ -843,7 +844,13 @@ namespace Frostvein.GameObject
 
         public ConcurrentBag<ShellEffectDTO> ShellEffectSecondary { get; set; }
 
-        public int Size { get; set; } = 10;
+        // size cambio a 106 client "0.9.3.3254"
+        public static int DefaultCharacterSize =>
+       ServerConfiguration.GameVersion == "0.9.3.3254"
+           ? 106
+           : 10;
+
+        public int Size { get; set; } = DefaultCharacterSize;
 
         public byte SkillComboCount { get; set; }
 
@@ -1951,44 +1958,37 @@ namespace Frostvein.GameObject
             }
         }
 
-        /// <summary>
-        ///     Efecto Equipo
-        /// </summary>
         public void GenerateEquipmentShine()
         {
-            var weapon = Session.Character.Inventory.LoadBySlotAndType((byte)EquipmentType.MainWeapon, InventoryType.Wear);
-            var armor = Session.Character.Inventory.LoadBySlotAndType((byte)EquipmentType.Armor, InventoryType.Wear);
-            if (weapon == null) return;
-            if (armor == null) return;
-            if (weapon.Upgrade == 13 && LastEffect.AddSeconds(3) <= DateTime.Now)
-            {
-                Session.CurrentMapInstance?.Broadcast(Session, Session.Character.GenerateEff(3040));
-                LastEffect = DateTime.Now;
-            }
+            var now = DateTime.UtcNow;
+            if ((now - LastEffect).TotalSeconds < 3)
+                return; // sale sin tocar el inventario
 
-            if (armor.Upgrade == 13 && LastEffect.AddSeconds(3) <= DateTime.Now)
-            {
-                Session.CurrentMapInstance?.Broadcast(Session, Session.Character.GenerateEff(3048));
-                LastEffect = DateTime.Now;
-            }
+            var inventory = Session.Character.Inventory;
+            var weapon = inventory.LoadBySlotAndType((byte)EquipmentType.MainWeapon, InventoryType.Wear);
+            var armor = inventory.LoadBySlotAndType((byte)EquipmentType.Armor, InventoryType.Wear);
+            if (weapon == null || armor == null)
+                return;
 
-            if (armor.Upgrade == 12 && LastEffect.AddSeconds(3) <= DateTime.Now)
+            int effect = weapon.Upgrade switch
             {
-                Session.CurrentMapInstance?.Broadcast(Session, Session.Character.GenerateEff(3043));
-                LastEffect = DateTime.Now;
-            }
+                13 => 4945,
+                12 => 4459,
+                11 => 4358,
+                _ => armor.Upgrade switch
+                {
+                    13 => 4950,
+                    12 => 4946,
+                    11 => 4947,
+                    _ => 0
+                }
+            };
 
-            if (armor.Upgrade == 11 && LastEffect.AddSeconds(3) <= DateTime.Now)
-            {
-                Session.CurrentMapInstance?.Broadcast(Session, Session.Character.GenerateEff(3042));
-                LastEffect = DateTime.Now;
-            }
+            if (effect == 0)
+                return;
 
-            if (weapon.Upgrade == 12 && LastEffect.AddSeconds(3) <= DateTime.Now)
-            {
-                Session.CurrentMapInstance?.Broadcast(Session, Session.Character.GenerateEff(3022));
-                LastEffect = DateTime.Now;
-            }
+            Session.CurrentMapInstance?.Broadcast(Session, Session.Character.GenerateEff(effect));
+            LastEffect = now;
         }
 
         public void GenerateWaterfallBerserkerRage()
@@ -2578,7 +2578,7 @@ namespace Frostvein.GameObject
                         {
                             spType = 3;
                         }
-                        else if (specialist.Item.Morph > 16 && specialist.Item.Morph < 29)
+                        else if (specialist.Item.Morph > 16 && specialist.Item.Morph < 55)
                         {
                             spType = 2;
                         }
@@ -3157,22 +3157,30 @@ namespace Frostvein.GameObject
 
         public string GenerateCInfo()
         {
-            var morph = (UseSp && !IsVehicled && SpInstance.HasSkin ? SpInstance.Item.VNum == 903 ? 102 :
-                SpInstance.Item.VNum == 913 ? 101 :
-                SpInstance.Item.VNum == 902 ? 100 :
-                UseSp || IsVehicled || IsMorphed ? Morph : 0 :
-                UseSp || IsVehicled || IsMorphed ? Morph : 0);
+            var morph =
+                UseSp && !IsVehicled && SpInstance?.HasSkin == true
+                    ? SpInstance.Item.VNum == 903 ? 102
+                    : SpInstance.Item.VNum == 913 ? 101
+                    : SpInstance.Item.VNum == 902 ? 100
+                    : (UseSp || IsVehicled || IsMorphed ? Morph : 0)
+                    : (UseSp || IsVehicled || IsMorphed ? Morph : 0);
 
-            return $"c_info {Name} - -1 {(Family != null && FamilyCharacter != null && !Undercover ? $"{Family.FamilyId}.{CharacterExtension.GetFamilyNameType(Session)} {Family.Name}" : "-1 -")} " +
-              $"{CharacterId} {(Invisible && Authority >= AuthorityType.GM ? 6 : 0)} " +
-              $"{(byte)Gender} {(byte)HairStyle} " +
-              $"{(byte)HairColor} {(byte)Class} " +
-              $"{(GetDignityIco() == 1 ? GetReputationIco() : -GetDignityIco())} {(Compliment)} " +
-              $"{(UseSp || IsVehicled ? Morph : 0)} {(Invisible ? 1 : 0)} " +
-              $"{Family?.FamilyLevel ?? 0} {(UseSp ? MorphUpgrade : 0)} " +
-              $"{ArenaWinner} 0 0";
+            string packet =
+                $"c_info {Name} - -1 " +
+                $"{(Family != null && FamilyCharacter != null && !Undercover
+                    ? $"{Family.FamilyId}.{CharacterExtension.GetFamilyNameType(Session)} {Family.Name}"
+                    : "-1 -")} " +
+                $"{CharacterId} {(Invisible && Authority >= AuthorityType.GM ? 6 : 0)} " +
+                $"{(byte)Gender} {(byte)HairStyle} {(byte)HairColor} {(byte)Class} " +
+                $"{(GetDignityIco() == 1 ? GetReputationIco() : -GetDignityIco())} {Compliment} " +
+                $"{morph} {(Invisible ? 1 : 0)} " +
+                $"{Family?.FamilyLevel ?? 0} {(UseSp ? MorphUpgrade : 0)} " +
+                $"{ArenaWinner} 0 0";
+
+            Logger.Info($"C_INFO: {packet}");
+
+            return packet;
         }
-
         public string GenerateCMap() =>
             $"c_map 0 {MapInstance.Map.MapId} {(MapInstance.MapInstanceType != MapInstanceType.BaseMapInstance ? 1 : 0)}";
 
@@ -3180,17 +3188,27 @@ namespace Frostvein.GameObject
 
         public string GenerateCMode()
         {
-            var morph = (UseSp && !IsVehicled && SpInstance.HasSkin ? SpInstance.Item.VNum == 903 ? 102 :
-                SpInstance.Item.VNum == 913 ? 101 :
-                SpInstance.Item.VNum == 902 ? 100 :
-                UseSp || IsVehicled || IsMorphed ? Morph : 0 :
-                UseSp || IsVehicled || IsMorphed ? Morph : 0);
+            var morph = (UseSp && !IsVehicled && SpInstance.HasSkin
+                ? SpInstance.Item.VNum == 903 ? 102
+                : SpInstance.Item.VNum == 913 ? 101
+                : SpInstance.Item.VNum == 902 ? 100
+                : UseSp || IsVehicled || IsMorphed ? Morph : 0
+                : UseSp || IsVehicled || IsMorphed ? Morph : 0);
 
-            ItemInstance item = Inventory.LoadBySlotAndType((byte)EquipmentType.Wings, InventoryType.Wear);
+            ItemInstance item = Inventory.LoadBySlotAndType(
+                (byte)EquipmentType.Wings,
+                InventoryType.Wear);
 
-            return !IsSeal
-                ? $"c_mode 1 {CharacterId} {morph} {(!IsLaurenaMorph() && UseSp ? MorphUpgrade : 0)} {(!IsLaurenaMorph() && UseSp ? MorphUpgrade2 : 0)} {ArenaWinner} {Size} {item?.Item.Morph ?? 0}"
+            string packet = !IsSeal
+                ? $"c_mode 1 {CharacterId} {morph} " +
+                  $"{(!IsLaurenaMorph() && UseSp ? MorphUpgrade : 0)} " +
+                  $"{(!IsLaurenaMorph() && UseSp ? MorphUpgrade2 : 0)} " +
+                  $"{ArenaWinner} {Size} {item?.Item.Morph ?? 0}"
                 : "";
+
+            Logger.Info($"C_MODE: {packet}");
+
+            return packet;
         }
 
         public string GenerateCond() =>
@@ -3310,7 +3328,7 @@ namespace Frostvein.GameObject
 
             if (Inventory != null)
             {
-                for (short i = 0; i < 21; i++)
+                for (short i = 0; i < 17; i++)
                 {
                     ItemInstance wearable = Inventory.LoadBySlotAndType(i, InventoryType.Wear);
 
@@ -3354,7 +3372,7 @@ namespace Frostvein.GameObject
                     EquipmentBCards.AddRange(GetRunesInEquipment());
                     EquipmentBCards.AddRange(GetFairyEnchantments());
 
-                    for (short i = 0; i < 18; i++)
+                    for (short i = 0; i < 17; i++)
                     {
                         ItemInstance item = Inventory.LoadBySlotAndType(i, InventoryType.Wear);
                         if (item != null)
@@ -4107,8 +4125,8 @@ namespace Frostvein.GameObject
                    $"{GenerateEqRareUpgradeForPacket()} {(!Undercover ? (foe ? -1 : Family?.FamilyId ?? -1) : -1)} {(!Undercover ? (foe ? name : Family?.Name ?? "-") : "-")} " +
                    $"{(GetDignityIco() == 1 ? GetReputationIco() : -GetDignityIco())} {(Invisible ? 1 : 0)} {(UseSp ? MorphUpgrade : 0)} {faction} " +
                    $"{(UseSp ? MorphUpgrade2 : 0)} {Level} {Family?.FamilyLevel ?? 0} " +
-                   $"{ArenaWinner} " +
                    $"{Family?.IconTopOne ?? 0}|0|{Family?.IconTopRaid ?? 0} " +
+                   $"{ArenaWinner} " +
                    $"{Compliment} {Size} {HeroLevel} {tit}";
             }
             return $"in 1 " +
@@ -4121,8 +4139,8 @@ namespace Frostvein.GameObject
                    $"{GenerateEqRareUpgradeForPacket()} {(!Undercover ? (foe ? -1 : Family?.FamilyId ?? -1) : -1)} {(!Undercover ? (foe ? name : Family?.Name ?? "-") : "-")} " +
                    $"{(GetDignityIco() == 1 ? GetReputationIco() : -GetDignityIco())} {(Invisible ? 1 : 0)} {(UseSp ? MorphUpgrade : 0)} {faction} " +
                    $"{(UseSp ? MorphUpgrade2 : 0)} {Level} {Family?.FamilyLevel ?? 0} " +
-                   $"{ArenaWinner} " +
                    $"{Family?.IconTopOne ?? 0}|0|{Family?.IconTopRaid ?? 0} " +
+                   $"{ArenaWinner} " +
                    $"{Compliment} {Size} {HeroLevel} {tit}";
         }
 
@@ -5221,7 +5239,7 @@ namespace Frostvein.GameObject
         }
 
         public string GenerateParcel(MailDTO mail) => mail.AttachmentVNum != null
-            ? $"parcel 1 1 {MailList.First(s => s.Value.MailId == mail.MailId).Key} {(mail.Title == "FROSTVEIN" ? 1 : 4)} 0 {mail.Date.ToString("yyMMddHHmm")} {mail.Title} {mail.AttachmentVNum} {mail.AttachmentAmount} {(byte)ServerManager.GetItem((short)mail.AttachmentVNum).Type}"
+            ? $"parcel 1 1 {MailList.First(s => s.Value.MailId == mail.MailId).Key} {(mail.Title == "NOSTALE" ? 1 : 4)} 0 {mail.Date.ToString("yyMMddHHmm")} {mail.Title} {mail.AttachmentVNum} {mail.AttachmentAmount} {(byte)ServerManager.GetItem((short)mail.AttachmentVNum).Type}"
             : "";
 
         public string GeneratePetskill(int VNum = -1, int VNum2 = -1, int VNum3 = -1) => $"petski {VNum} {VNum2} {VNum3}";
@@ -5514,7 +5532,14 @@ namespace Frostvein.GameObject
             return "";
         }
 
-        public string GenerateScal() => $"char_sc 1 {CharacterId} {Size}";
+        public string GenerateScal()
+        {
+            string packet = $"char_sc 1 {CharacterId} {Size}";
+
+            Logger.Info($"CHAR_SC: {packet}");
+
+            return packet;
+        }
 
         public List<string> GenerateScN()
         {

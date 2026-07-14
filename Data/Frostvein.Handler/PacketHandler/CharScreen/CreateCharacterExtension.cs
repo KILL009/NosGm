@@ -66,7 +66,7 @@ namespace Frostvein.Handler.Packets.CharScreenPackets
 
             Logger.LogUserEvent("CREATECHARACTER", Session.GenerateIdentity(), $"[CreateCharacter]Name: {characterCreatePacket.Name} Slot: {characterCreatePacket.Slot} Gender: {characterCreatePacket.Gender} HairStyle: {characterCreatePacket.HairStyle} HairColor: {characterCreatePacket.HairColor}");
 
-            if (characterCreatePacket.Slot <= 3
+            if (characterCreatePacket.Slot <= 4
                 && DAOFactory.CharacterDAO.LoadBySlot(Session.Account.AccountId, characterCreatePacket.Slot) == null
                 && characterCreatePacket.Name != null
                 && (characterCreatePacket.Gender == GenderType.Male || characterCreatePacket.Gender == GenderType.Female)
@@ -149,6 +149,7 @@ namespace Frostvein.Handler.Packets.CharScreenPackets
                     Reputation = 0,
                     IsPartnerAutoRelive = true,
                     IsPetAutoRelive = true,
+                    
                 };
 
                 switch (characterDTO.Class)
