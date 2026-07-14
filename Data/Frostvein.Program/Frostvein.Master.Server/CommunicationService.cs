@@ -30,6 +30,8 @@ namespace Frostvein.Master.Server
             fakes = new List<Fake>();
         }
 
+        private const int NsTeSTPadding = 56;
+
         #region Methods
 
         public bool Authenticate(string authKey)
@@ -413,19 +415,24 @@ namespace Frostvein.Master.Server
 
         public int? RegisterWorldServer(SerializableWorldServer worldServer)
         {
+            Logger.Info("===== NsTeST =====");
+
             if (!MSManager.Instance.AuthentificatedClients.Any(s => s.Equals(CurrentClient.ClientId))) return null;
             var ws = new WorldServer(worldServer.Id,
                 new ScsTcpEndPoint(worldServer.EndPointIP, worldServer.EndPointPort), worldServer.AccountLimit,
                 worldServer.WorldGroup)
+
             {
                 CommunicationServiceClient = CurrentClient,
                 ChannelId = Enumerable.Range(1, 30).Except(MSManager.Instance.WorldServers
                     .Where(w => w.WorldGroup.Equals(worldServer.WorldGroup)).OrderBy(w => w.ChannelId)
                     .Select(w => w.ChannelId)).First()
             };
+            Logger.Info($"IP registrada = {worldServer.EndPointIP}");
             if (worldServer.EndPointPort == Convert.ToInt32(ServerConfiguration.GlacernonServerPort)) ws.ChannelId = 51;
             MSManager.Instance.WorldServers.Add(ws);
             return ws.ChannelId;
+           
         }
 
         public void Restart(string worldGroup, int time = 5)
@@ -475,11 +482,12 @@ namespace Frostvein.Master.Server
         public string RetrieveRegisteredWorldServers(string username, byte regionType, int sessionId, bool ignoreUserName,
             long AccountId)
         {
+           
             if (!MSManager.Instance.AuthentificatedClients.Any(s => s.Equals(CurrentClient.ClientId)))
             {
                 return null;
             }
-
+           
             var characters = DAOFactory.CharacterDAO.LoadByAccount(AccountId);
 
             var lastGroup = "";
@@ -505,15 +513,34 @@ namespace Frostvein.Master.Server
                     International = "1 1 -99 1 -99 1 -99 1 ";
                     break;
             }
+            // Cliente 0.9.3.3254
+            // El padding del paquete NsTeST debe ser 56 pares "-99 0".
+            // Cambiar este valor desplaza el SessionId y rompe
+            // la selección del servidor.
+         
 
-            var OtherSv = string.Concat(Enumerable.Repeat("-99 0 ", 32));
+        var OtherSv = string.Concat(
+            Enumerable.Repeat("-99 0 ", NsTeSTPadding));
 
-            //to access to chnanel
-            var channelPacket = $"NsTeST {regionType} {username} {International}{OtherSv}{sessionId} ";
 
+        //to access to chnanel
+        //var channelPacket = $"NsTeST {regionType} {username} {International}{OtherSv}{sessionId} ";
+        var channelPacket =
+    $"NsTeST {regionType} {username} {International}{OtherSv}{sessionId} ";
+            Logger.Info("===== NsTeST =====");
+            Logger.Info(channelPacket);
+
+            Logger.Info($"WorldServers Count = {MSManager.Instance.WorldServers.Count}");
 
             foreach (var world in MSManager.Instance.WorldServers.OrderBy(w => w.WorldGroup))
             {
+                Logger.Info(
+       $"Group={world.WorldGroup} " +
+       $"Channel={world.ChannelId} " +
+       $"IP={world.Endpoint.IpAddress} " +
+       $"Port={world.Endpoint.TcpPort}");
+              
+
                 if (lastGroup != world.WorldGroup)
                 {
                     worldCount++;
@@ -540,6 +567,7 @@ namespace Frostvein.Master.Server
             }
 
             channelPacket += "-1:-1:-1:10000.10000.1";
+            Logger.Info(channelPacket);
             return channelPacket;
         }
 

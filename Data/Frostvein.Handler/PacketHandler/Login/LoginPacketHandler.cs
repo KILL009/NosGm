@@ -1,17 +1,19 @@
 ﻿using Frostvein.Configuration;
-using Frostvein.Packets.Packets.ClientPackets;
 using Frostvein.Core;
 using Frostvein.DAL;
+using Frostvein.DAL.EF;
 using Frostvein.Data;
 using Frostvein.Domain;
 using Frostvein.GameObject;
 using Frostvein.Master.Library.Client;
+using Frostvein.Master.Library.Data;
+using Frostvein.Packets.Packets.ClientPackets;
+using Frostvein.Packets.Packets.CommandPackets;
 using System;
 using System.Configuration;
 using System.Linq;
 using System.Threading.Tasks;
 using static System.Collections.Specialized.BitVector32;
-using Frostvein.DAL.EF;
 
 namespace Frostvein.Handler.BasicPacket.Login
 {
@@ -39,6 +41,7 @@ namespace Frostvein.Handler.BasicPacket.Login
             var channelpacket =
                 CommunicationServiceClient.Instance.RetrieveRegisteredWorldServers(username, regionType, sessionId,
                     ignoreUserName, AccountID);
+            
 
             if (channelpacket == null || !channelpacket.Contains(':'))
             {
@@ -152,12 +155,17 @@ namespace Frostvein.Handler.BasicPacket.Login
 
                             default:
                                 {
-                                    
+                                    Logger.Info($"ClientData: {loginPacket.ClientData}");
+                                    Logger.Info($"RegionType: {loginPacket.RegionType}");
+                                  ;
 
                                     int newSessionId = SessionFactory.Instance.GenerateSessionId();
                                     Logger.Info($"{user.Name} connected | SessionID: {newSessionId}");
                                     try
                                     {
+                                        Logger.Info($"REGISTER LOGIN");
+                                        Logger.Info($"Account={loadedAccount.Name}");
+                                        Logger.Info($"Session={newSessionId}");
                                         ipAddress = ipAddress.Substring(6, ipAddress.LastIndexOf(':') - 6);
                                         CommunicationServiceClient.Instance.RegisterAccountLogin(loadedAccount.AccountId, newSessionId, ipAddress);
                                     }
@@ -186,6 +194,13 @@ namespace Frostvein.Handler.BasicPacket.Login
                                                              || ConfigurationManager.AppSettings["UseOldCrypto"] == "true");
                                     _session.SendPacket(await BuildServersPacketAsync(user.Name, loginPacket.RegionType, newSessionId, ignoreUserName,
                                         loadedAccount.AccountId));
+                                    Logger.Info(await BuildServersPacketAsync(
+    user.Name,
+    loginPacket.RegionType,
+    newSessionId,
+    ignoreUserName,
+    loadedAccount.AccountId));
+                                    Logger.Info($"RegionType = {loginPacket.RegionType}");
                                     _session.PacketHandlerInterval?.Dispose();
                                 }
                                 break;

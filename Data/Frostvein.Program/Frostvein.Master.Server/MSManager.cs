@@ -26,7 +26,7 @@ namespace Frostvein.Master.Server
             AuthentificatedClients = new ThreadSafeGenericLockedList<long>();
             ConfigurationObject = new ConfigurationObject
             {
-                
+
             };
         }
 

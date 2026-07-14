@@ -38,12 +38,27 @@ namespace Frostvein.Handler.BasicPacket.CharScreen
 
         public void LoadCharacters(FrostveinEntryPointPacket packet)
         {
+
             string[] loginPacketParts = null;
+            Logger.Info("========= ENTRY =========");
+            Logger.Info(packet.PacketData);
+
+            if (loginPacketParts != null)
+            {
+                Logger.Info("========== ENTRY ==========");
+                Logger.Info(packet.PacketData);
+
+                for (int i = 0; i < loginPacketParts.Length; i++)
+                {
+                    Logger.Info($"{i} -> {loginPacketParts[i]}");
+                }
+            }
             if (!string.IsNullOrEmpty(packet.PacketData))
             {
                 loginPacketParts = packet.PacketData.Split(' ');
             }
             bool isCrossServerLogin = false;
+
 
             // Load account by given SessionId
             if (Session.Account == null)
@@ -74,9 +89,17 @@ namespace Frostvein.Handler.BasicPacket.CharScreen
                             hasRegisteredAccountLogin = CommunicationServiceClient.Instance.IsCrossServerLoginPermitted(account.AccountId, Session.SessionId);
                         }
                         else
+
                         {
+                          
                             hasRegisteredAccountLogin = CommunicationServiceClient.Instance.IsLoginPermitted(account.AccountId, Session.SessionId);
                         }
+
+                        Logger.Info("========== LOGIN CHECK ==========");
+                        Logger.Info($"Session.SessionId = {Session.SessionId}");
+                        Logger.Info($"Packet Session   = {loginPacketParts[1]}");
+                        Logger.Info($"Username         = {loginPacketParts[2]}");
+                        Logger.Info($"IsLoginPermitted = {hasRegisteredAccountLogin}");
                     }
                 }
                 catch (Exception ex)
@@ -113,7 +136,7 @@ namespace Frostvein.Handler.BasicPacket.CharScreen
 
             if (isCrossServerLogin)
             {
-                if (byte.TryParse(loginPacketParts[5], out var slot))
+                if (byte.TryParse(loginPacketParts[6], out var slot))
                 {
                     new SelectCharacterPacketHandler(Session).SelectCharacter(new SelectPacket { Slot = slot });
                 }
