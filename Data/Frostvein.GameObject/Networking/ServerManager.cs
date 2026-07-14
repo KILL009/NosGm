@@ -1255,9 +1255,6 @@ namespace Frostvein.GameObject.Networking
         {
             foreach (var session in ServerManager.Instance.Sessions)
             {
-                //MessageExtension.SendHeader(session, "Hello Frostvein Player\n\nThe Server will perform an Auto-Reboot in 5 Minutes");
-                //int sleepDuration = 5 * 60 * 1000;
-                //Thread.Sleep(sleepDuration);
                 MessageExtension.SendModal(session, GameConfiguration.RebootMessage);
             }
             for (var i = 0; i < 30; i++)
