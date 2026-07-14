@@ -40,8 +40,7 @@ namespace Frostvein.Handler.BasicPacket.CharScreen
         {
 
             string[] loginPacketParts = null;
-            Logger.Info("========= ENTRY =========");
-            Logger.Info(packet.PacketData);
+           
 
             if (loginPacketParts != null)
             {
