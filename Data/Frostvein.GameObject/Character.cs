@@ -255,7 +255,7 @@ namespace Frostvein.GameObject
 
         public int WaterfallBerserkerRage { get; set; }
 
-        public int Sharpness { get; set; }
+        public int Sharpness { get; set; }     
 
         public int Heat { get; set; }
 
