@@ -13,25 +13,60 @@ namespace Frostvein.GameObject.Plugin.Event
 {
     public static class LandOfDeath
     {
+        private static readonly object LodLock = new object();
+        private static bool _isRunning;
+
         public static EventType EventType => EventType.LOD;
 
         public static void GenerateLandOfDeath()
         {
-            const int LOD_TIME = 60;
-            const int HORN_TIME = 45;
-            const int HORN_STAY_TIME = 1;
-            const int HORN_RESPAWN_TIME = 3;
-
-            EventHelper.Instance.RunEvent(new EventContainer(ServerManager.GetMapInstance(ServerManager.GetBaseMapInstanceIdByMapId(98)), EventActionType.NPCSEFFECTCHANGESTATE, true));
-            var lodThread = new LandOfDeathThread();
-            var compositeDisposable = new CompositeDisposable();
-            var cancellationTokenSource1 = new CancellationTokenSource();
-            var observable1 = EventServiceExtension.CreateRepeatingObservableSeconds(5, async () =>
+            lock (LodLock)
             {
-               lodThread.Run(LOD_TIME * 60, (HORN_TIME + 1) * 60, (HORN_RESPAWN_TIME + HORN_STAY_TIME) * 60, HORN_STAY_TIME * 60);
-            }, cancellationTokenSource1.Token);
-            var subscription1 = observable1.Subscribe();
-            compositeDisposable.Add(subscription1);
+                if (_isRunning)
+                {
+                    Logger.Warn("Land of Death is already running.");
+                    return;
+                }
+
+                _isRunning = true;
+            }
+
+            const int lodTime = 60;
+            const int hornTime = 45;
+            const int hornStayTime = 1;
+            const int hornRespawnTime = 3;
+
+            EventHelper.Instance.RunEvent(
+                new EventContainer(
+                    ServerManager.GetMapInstance(
+                        ServerManager.GetBaseMapInstanceIdByMapId(98)),
+                    EventActionType.NPCSEFFECTCHANGESTATE,
+                    true));
+
+            Task.Run(() =>
+            {
+                try
+                {
+                    var lodThread = new LandOfDeathThread();
+
+                    lodThread.Run(
+                        lodTime * 60,
+                        (hornTime + 1) * 60,
+                        (hornRespawnTime + hornStayTime) * 60,
+                        hornStayTime * 60);
+                }
+                catch (Exception ex)
+                {
+                    Logger.Error("Land of Death execution failed.", ex);
+                }
+                finally
+                {
+                    lock (LodLock)
+                    {
+                        _isRunning = false;
+                    }
+                }
+            });
         }
     }
 
@@ -50,16 +85,29 @@ namespace Frostvein.GameObject.Plugin.Event
             {
                 refreshLOD(lodTime);
 
-                if (lodTime == hornTime || lodTime == hornTime - hornRespawn * dhspawns)
+                if (lodTime == hornTime - hornRespawn * dhspawns)
                 {
                     foreach (var fam in ServerManager.Instance.FamilyList.GetAllItems())
-                        if (fam.LandOfDeath != null)
+                    {
+                        if (fam?.LandOfDeath == null)
                         {
-                            //fam.SendPacket(UserInterfaceHelper.GenerateMsg(Language.Instance.GetMessageFromKey("LOD_RATES_INCREASED"), 0)); fix this
-                            EventHelper.Instance.RunEvent(new EventContainer(fam.LandOfDeath, EventActionType.CHANGEXPRATE, 2));
-                            EventHelper.Instance.RunEvent(new EventContainer(fam.LandOfDeath, EventActionType.CHANGEDROPRATE, 3));
-                            spawnDH(fam.LandOfDeath);
+                            continue;
                         }
+
+                        EventHelper.Instance.RunEvent(
+                            new EventContainer(
+                                fam.LandOfDeath,
+                                EventActionType.CHANGEXPRATE,
+                                2));
+
+                        EventHelper.Instance.RunEvent(
+                            new EventContainer(
+                                fam.LandOfDeath,
+                                EventActionType.CHANGEDROPRATE,
+                                3));
+
+                        spawnDH(fam.LandOfDeath);
+                    }
                 }
                 else if (lodTime == hornTime - hornRespawn * dhspawns - hornStay)
                 {
@@ -101,13 +149,28 @@ namespace Frostvein.GameObject.Plugin.Event
         private void endLOD()
         {
             foreach (var fam in ServerManager.Instance.FamilyList.GetAllItems())
-                if (fam.LandOfDeath != null)
+            {
+                if (fam?.LandOfDeath == null)
                 {
-                    EventHelper.Instance.RunEvent(new EventContainer(fam.LandOfDeath, EventActionType.DISPOSEMAP, null));
-                    fam.LandOfDeath = null;
+                    continue;
                 }
 
-            ServerManager.Instance.StartedEvents.Remove(EventType.LOD);
+                EventHelper.Instance.RunEvent(
+                    new EventContainer(
+                        fam.LandOfDeath,
+                        EventActionType.DISPOSEMAP,
+                        null));
+
+                fam.LandOfDeath = null;
+            }
+
+            if (ServerManager.Instance.StartedEvents.Contains(EventType.LOD))
+            {
+                ServerManager.Instance.StartedEvents.Remove(EventType.LOD);
+            }
+
+            IsOpen = false;
+            ChangePortalEffect(0);
         }
 
         private void refreshLOD(int remaining)
