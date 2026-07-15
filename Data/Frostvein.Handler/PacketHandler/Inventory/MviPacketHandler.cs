@@ -1,8 +1,9 @@
-﻿using Frostvein.Packets.Packets.ClientPackets;
-using Frostvein.Core;
+﻿using Frostvein.Core;
 using Frostvein.Domain;
 using Frostvein.GameObject;
 using Frostvein.GameObject.Helpers;
+using Frostvein.Packets.Packets.ClientPackets;
+
 
 namespace Frostvein.Handler.PacketHandler.Inventory
 {
@@ -25,103 +26,157 @@ namespace Frostvein.Handler.PacketHandler.Inventory
 
         #region Methods
 
+        
         public void MoveItem(MviPacket mviPacket)
         {
-            if (mviPacket != null)
+            if (mviPacket == null ||
+                Session?.Character?.Inventory == null ||
+                !Session.HasSelectedCharacter ||
+                Session.IsDisposing)
             {
+                return;
+            }
 
-                if (mviPacket.InventoryType != InventoryType.Equipment
-                    && mviPacket.InventoryType != InventoryType.Main
-                    && mviPacket.InventoryType != InventoryType.Etc
-                    && mviPacket.InventoryType != InventoryType.Miniland)
+            if (mviPacket.InventoryType != InventoryType.Equipment
+                && mviPacket.InventoryType != InventoryType.Main
+                && mviPacket.InventoryType != InventoryType.Etc
+                && mviPacket.InventoryType != InventoryType.Miniland)
+            {
+                return;
+            }
+
+            if (mviPacket.Amount <= 0 ||
+                mviPacket.Slot < 0 ||
+                mviPacket.DestinationSlot < 0 ||
+                mviPacket.Slot == mviPacket.DestinationSlot ||
+                mviPacket.InventoryType == InventoryType.Wear)
+            {
+                return;
+            }
+
+            lock (Session.Character.Inventory)
+            {
+                int maximumSlot =
+                    48
+                    + (Session.Character.HaveBackpack() ? 12 : 0)
+                    + (Session.Character.HaveExtension() ? 60 : 0);
+
+                if (mviPacket.DestinationSlot >= maximumSlot)
                 {
                     return;
                 }
 
-                if (mviPacket.Amount <= 0)
-                {
-                    Session.SendPacket($"say 1 0 10 Fixxed, thanks for try.");
-                    return;
-                }
-
-                if (mviPacket.Amount < 1)
+                if (Session.Character.InExchangeOrTrade)
                 {
                     return;
                 }
 
-                if (mviPacket.Slot == mviPacket.DestinationSlot)
+                ItemInstance sourceItem =
+                    Session.Character.Inventory.LoadBySlotAndType(
+                        mviPacket.Slot,
+                        mviPacket.InventoryType);
+
+                if (sourceItem == null ||
+                    sourceItem.Amount < mviPacket.Amount)
                 {
                     return;
                 }
 
-                if (mviPacket.InventoryType == InventoryType.Wear)
+                if (mviPacket.InventoryType == InventoryType.Equipment &&
+                    mviPacket.Amount != 1)
                 {
                     return;
                 }
 
-                lock (Session.Character.Inventory)
+                if (mviPacket.InventoryType == InventoryType.Miniland)
                 {
-                    // check if the destination slot is out of range
-                    if (mviPacket.DestinationSlot > 48 + (Session.Character.HaveBackpack() ? 1 : 0) * 12 +
-                        (Session.Character.HaveExtension() ? 1 : 0) * 60)
+                    MinilandObject sourceObject =
+                        Session.Character.MinilandObjects.Find(
+                            item => item.ItemInstanceId == sourceItem.Id);
+
+                    if (sourceObject != null)
                     {
                         return;
                     }
 
-                    if (mviPacket.InventoryType == InventoryType.Miniland)
-                    {
-                        ItemInstance minigame1 = Session.Character.Inventory.LoadBySlotAndType(mviPacket.Slot, InventoryType.Miniland);
+                    ItemInstance destinationItem =
+                        Session.Character.Inventory.LoadBySlotAndType(
+                            mviPacket.DestinationSlot,
+                            InventoryType.Miniland);
 
-                        if (minigame1 != null)
+                    if (destinationItem != null)
+                    {
+                        MinilandObject destinationObject =
+                            Session.Character.MinilandObjects.Find(
+                                item => item.ItemInstanceId == destinationItem.Id);
+
+                        if (destinationObject != null)
                         {
-                            MinilandObject minilandObject1 = Session.Character.MinilandObjects.Find(i => i.ItemInstanceId == minigame1.Id);
-
-                            if (minilandObject1 != null)
-                            {
-                                return;
-                            }
-                        }
-
-                        ItemInstance minigame2 = Session.Character.Inventory.LoadBySlotAndType(mviPacket.DestinationSlot, InventoryType.Miniland);
-
-                        if (minigame2 != null)
-                        {
-                            MinilandObject minilandObject2 = Session.Character.MinilandObjects.Find(i => i.ItemInstanceId == minigame2.Id);
-
-                            if (minilandObject2 != null)
-                            {
-                                return;
-                            }
+                            return;
                         }
                     }
+                }
+                Logger.Info("===== CLIENT MVI HANDLER =====");
+                Logger.Info($"PACKET TYPE = {mviPacket.GetType().FullName}");
+                Logger.Info($"HANDLER ASSEMBLY = {typeof(MviPacketHandler).Assembly.Location}");
+                // actually move the item from source to destination
+                Session.Character.Inventory.MoveItem(
+                    mviPacket.InventoryType,
+                    mviPacket.InventoryType,
+                    mviPacket.Slot,
+                    mviPacket.Amount,
+                    mviPacket.DestinationSlot,
+                    out var previousInventory,
+                    out var newInventory);
 
-                    if (mviPacket.InventoryType == InventoryType.Equipment && mviPacket.Amount > 1)
-                    {
-                        ItemInstance item = Session.Character.Inventory.LoadBySlotAndType(mviPacket.Slot, mviPacket.InventoryType);
-                        return;
-                    }
+                if (newInventory == null)
+                {
+                    return;
+                }
 
-                    // check if the character is allowed to move the item
-                    if (Session.Character.InExchangeOrTrade)
-                    {
-                        return;
-                    }
+                string sourcePacket;
 
-                    // actually move the item from source to destination
-                    Session.Character.Inventory.MoveItem(mviPacket.InventoryType, mviPacket.InventoryType,
-                        mviPacket.Slot, mviPacket.Amount, mviPacket.DestinationSlot, out var previousInventory,
-                        out var newInventory);
-                    if (newInventory == null)
-                    {
-                        return;
-                    }
-
-                    Session.SendPacket(newInventory.GenerateInventoryAdd());
-
-                    Session.SendPacket(previousInventory != null
+                // Cliente moderno: Equipment se vacía usando VNum 0 y seis campos.
+                if (mviPacket.InventoryType == InventoryType.Equipment)
+                {
+                    sourcePacket = previousInventory != null
                         ? previousInventory.GenerateInventoryAdd()
-                        : UserInterfaceHelper.Instance.GenerateInventoryRemove(mviPacket.InventoryType,
-                            mviPacket.Slot));
+                        : $"ivn 0 {mviPacket.Slot}.0.0.0.0.0";
+                }
+                else
+                {
+                    sourcePacket = previousInventory != null
+                        ? previousInventory.GenerateInventoryAdd()
+                        : UserInterfaceHelper.Instance.GenerateInventoryRemove(
+                            mviPacket.InventoryType,
+                            mviPacket.Slot);
+                }
+
+                string destinationPacket = newInventory.GenerateInventoryAdd();
+
+                Logger.Info("===== CUSTOM MVI ACTIVE =====");
+                Logger.Info($"MVI SOURCE: {sourcePacket}");
+                Logger.Info($"MVI DESTINATION: {destinationPacket}");
+                Logger.Info($"SOURCE FINAL = {sourcePacket}");
+                Logger.Info($"DESTINATION FINAL = {destinationPacket}");
+                Logger.Info("===== NUEVO MVI HANDLER EJECUTADO =====");
+                Logger.Info($"ASSEMBLY: {typeof(MviPacketHandler).Assembly.Location}");
+                Logger.Info($"TYPE: {(byte)mviPacket.InventoryType}");
+                Logger.Info($"SOURCE SLOT: {mviPacket.Slot}");
+                Logger.Info($"PREVIOUS NULL: {previousInventory == null}");
+                Logger.Info($"SOURCE PACKET: {sourcePacket}");
+                Logger.Info($"DESTINATION PACKET: {destinationPacket}");
+
+                // El oficial limpia primero el origen.
+                Session.SendPacket(sourcePacket);
+
+                // Luego actualiza el destino.
+                Session.SendPacket(destinationPacket);
+
+                if (mviPacket.InventoryType == InventoryType.Equipment)
+                {
+                    Session.SendPacket(
+                        $"eff 1 {Session.Character.CharacterId} 4545");
                 }
             }
         }

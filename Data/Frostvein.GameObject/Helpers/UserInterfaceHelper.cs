@@ -224,7 +224,8 @@ namespace Frostvein.GameObject.Helpers
             return BazaarHttpClient.Instance.GenerateRcbList(new GetRcbListQuery { Packet = packet });
         }
 
-        public static string GenerateRemovePacket(short slot) => $"{slot}.-1.0.0.0";
+        public static string GenerateRemovePacket(short slot)
+            => $"{slot}.0.0.0.0.0";
 
         public static string GenerateRl(byte type)
         {
@@ -261,7 +262,15 @@ namespace Frostvein.GameObject.Helpers
 
         public string GenerateFStashRemove(short slot) => $"f_stash {GenerateRemovePacket(slot)}";
 
-        public string GenerateInventoryRemove(InventoryType Type, short Slot) => $"ivn {(byte)Type} {GenerateRemovePacket(Slot)}";
+        public string GenerateInventoryRemove(InventoryType type, short slot)
+        {
+            if (type == InventoryType.Equipment)
+            {
+                return $"ivn 0 {slot}.0.0.0.0.0";
+            }
+
+            return $"ivn {(byte)type} {GenerateRemovePacket(slot)}";
+        }
 
         public string GeneratePStashRemove(short slot) => $"pstash {GenerateRemovePacket(slot)}";
 
