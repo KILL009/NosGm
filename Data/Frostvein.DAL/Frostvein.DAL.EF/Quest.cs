@@ -19,9 +19,9 @@ namespace Frostvein.DAL.EF
 
         public bool CanBeDoneOnlyOnce { get; set; }
 
-        public byte LevelMax { get; set; }
+        public int LevelMax { get; set; }
 
-        public byte LevelMin { get; set; }
+        public int LevelMin { get; set; }
 
         public long? NextQuestId { get; set; }
 

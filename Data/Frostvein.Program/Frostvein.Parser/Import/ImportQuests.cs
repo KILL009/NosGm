@@ -2,6 +2,7 @@
 using Frostvein.DAL;
 using Frostvein.Data;
 using Frostvein.Domain;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -35,7 +36,12 @@ namespace Frostvein.Parser.Import
             {
                 while ((line = questRewardStream.ReadLine()) != null)
                 {
-                    var currentLine = line.Split('\t');
+                    var currentLine = line
+       .Split('\t')
+       .Select(token => token
+           .Trim()
+           .Trim('\uFEFF', '\u200B', '\u00A0'))
+       .ToArray();
                     if (currentLine.Length <= 1 && currentLine[0] != "END")
                     {
                         continue;
@@ -114,11 +120,17 @@ namespace Frostvein.Parser.Import
             var currentObjectives = new List<QuestObjectiveDTO>();
 
             byte objectiveIndex = 0;
+            Logger.Log.Info(FileQuestDat);
             using (var questStream = new StreamReader(FileQuestDat, Encoding.GetEncoding(1252)))
             {
                 while ((line = questStream.ReadLine()) != null)
                 {
-                    var currentLine = line.Split('\t');
+                    var currentLine = line
+      .Split('\t')
+      .Select(token => token
+          .Trim()
+          .Trim('\uFEFF', '\u200B', '\u00A0'))
+      .ToArray();
                     if (currentLine.Length > 1 || currentLine[0] == "END")
                         switch (currentLine[0])
                         {
@@ -224,9 +236,46 @@ namespace Frostvein.Parser.Import
                                 break;
 
                             case "LEVEL":
-                                quest.LevelMin = byte.Parse(currentLine[1]);
-                                quest.LevelMax = byte.Parse(currentLine[2]);
-                                break;
+                                {
+                                    if (currentLine.Length < 3)
+                                    {
+                                        Logger.Log.Error($"LEVEL incompleto: {line}");
+                                        break;
+                                    }
+
+                                    string minimumText = currentLine[1]
+                                        .Trim()
+                                        .Trim('\uFEFF', '\u200B', '\u00A0');
+
+                                    string maximumText = currentLine[2]
+                                        .Trim()
+                                        .Trim('\uFEFF', '\u200B', '\u00A0');
+
+                                    if (!int.TryParse(minimumText, out int minimumLevel))
+                                    {
+                                        Logger.Log.Error(
+                                            $"LEVEL MIN inválido: '{minimumText}' | Línea: {line}");
+
+                                        break;
+                                    }
+
+                                    if (!int.TryParse(maximumText, out int maximumLevel))
+                                    {
+                                        Logger.Log.Error(
+                                            $"LEVEL MAX inválido: '{maximumText}' | Línea: {line}");
+
+                                        break;
+                                    }
+
+                                    quest.LevelMin = minimumLevel < 0
+                                     ? (int)0
+                                   : minimumLevel;
+                                    quest.LevelMax = maximumLevel;
+
+                                    // currentLine[3], cuando existe, pertenece al formato nuevo.
+                                    // Por ahora se ignora porque QuestDTO no tiene una propiedad asociada.
+                                    break;
+                                }
 
                             case "TALK":
 
@@ -503,7 +552,7 @@ namespace Frostvein.Parser.Import
                 Data = data,
                 Objective = objective ?? 1,
                 SpecialData = specialData < 0 ? null : specialData,
-                DropRate = secondSpecialData < 0 ? null : specialData,
+                DropRate = secondSpecialData < 0 ? null : secondSpecialData,
                 ObjectiveIndex = objectiveIndex,
                 QuestId = (int)quest.QuestId
             });
