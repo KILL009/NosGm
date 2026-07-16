@@ -22,6 +22,8 @@
         SeventhPartnerInventory = 19,
         EighthPartnerInventory = 20,
         NinthPartnerInventory = 21,
-        TenthPartnerInventory = 22
+        TenthPartnerInventory = 22,
+        Raid = 23,
+
     }
 }

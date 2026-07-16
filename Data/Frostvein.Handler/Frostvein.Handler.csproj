@@ -301,10 +301,13 @@
     <Compile Include="PacketHandler\Inventory\ExchangeRequestPacketHandler.cs" />
     <Compile Include="PacketHandler\Inventory\ExcListPacketHandler.cs" />
     <Compile Include="PacketHandler\Inventory\GetPacketHandler.cs" />
+    <Compile Include="PacketHandler\Inventory\Mve2PacketHandler.cs" />
     <Compile Include="PacketHandler\Inventory\MvePacketHandler.cs" />
+    <Compile Include="PacketHandler\Inventory\MviexPacketHandler.cs" />
     <Compile Include="PacketHandler\Inventory\MviPacketHandler.cs" />
     <Compile Include="PacketHandler\Inventory\PaSucPacketHandler.cs" />
     <Compile Include="PacketHandler\Inventory\PutPacketHandler.cs" />
+    <Compile Include="PacketHandler\Inventory\RaidOpenPacketHandler.cs" />
     <Compile Include="PacketHandler\Inventory\RemovePacketHandler.cs" />
     <Compile Include="PacketHandler\Inventory\ReposPacketHandler.cs" />
     <Compile Include="PacketHandler\Inventory\SortOpenPacketHandler.cs" />

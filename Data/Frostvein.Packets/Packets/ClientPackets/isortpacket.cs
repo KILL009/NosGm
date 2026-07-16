@@ -12,7 +12,7 @@ namespace Frostvein.Packets.Packets.ClientPackets
 
 
         [PacketIndex(0)]
-        public InventoryType Type { get; set; }
+        public byte Type { get; set; }
 
         #endregion
     }

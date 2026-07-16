@@ -11,6 +11,7 @@ using Frostvein.GameObject.Service;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text;
 using System.Threading.Tasks;
 
 
@@ -243,10 +244,11 @@ namespace Frostvein.GameObject
                 if (newItem.Type != InventoryType.Bazaar &&
                     (newItem.Item.Type == InventoryType.Etc || newItem.Item.Type == InventoryType.Main))
                 {
-                    var slotNotFull = Where(i =>
-                        i.Type != InventoryType.Bazaar && i.Type != InventoryType.PetWarehouse &&
-                        i.Type != InventoryType.Warehouse && i.Type != InventoryType.FamilyWareHouse &&
-                        i.ItemVNum.Equals(newItem.ItemVNum) && i.Amount < MAX_ITEM_AMOUNT);
+                    var slotNotFull = Where(item =>
+    item.Type == newItem.Type &&
+    item.ItemVNum == newItem.ItemVNum &&
+    item.Amount > 0 &&
+    item.Amount < MAX_ITEM_AMOUNT);
                     var freeslot = BackpackSize() - CountLinq(s => s.Type == newItem.Type);
                     if (freeslot < 0) freeslot = 0;
                     if (newItem.Amount <= freeslot * MAX_ITEM_AMOUNT + slotNotFull.Sum(s => MAX_ITEM_AMOUNT - s.Amount))
@@ -353,32 +355,81 @@ namespace Frostvein.GameObject
         /// <param name="type"></param>
         /// <param name="slot"></param>
         /// <returns></returns>
-        public ItemInstance AddToInventoryWithSlotAndType(ItemInstance itemInstance, InventoryType type, short slot)
+        public ItemInstance AddToInventoryWithSlotAndType(
+     ItemInstance itemInstance,
+     InventoryType type,
+     short slot)
         {
-            if (Owner != null)
+            if (Owner == null || itemInstance == null)
             {
-                //LOGGER($"[ITEM] {Owner.Name} | ItemVNum: {itemInstance.ItemVNum} | Amount: {itemInstance.Amount} | Status: Successfull");
-                //ADD MONGODB LOG
-
-                itemInstance.Slot = slot;
-                itemInstance.Type = type;
-                itemInstance.CharacterId = Owner.CharacterId;
-
-                if (ContainsKey(itemInstance.Id))
-                {
-                    ////LOGGERServerErrorLog($"Cannot add the same ItemInstance twice to inventory");
-                    return null;
-                }
-
-                var inventoryPacket = itemInstance.GenerateInventoryAdd();
-                if (!string.IsNullOrEmpty(inventoryPacket)) Owner.Session?.SendPacket(inventoryPacket);
-
-                if (Any(s => s.Slot == slot && s.Type == type)) return null;
-                this[itemInstance.Id] = itemInstance;
-                return itemInstance;
+                return null;
             }
 
-            return null;
+            itemInstance.Slot = slot;
+            itemInstance.Type = type;
+            itemInstance.CharacterId = Owner.CharacterId;
+
+            if (ContainsKey(itemInstance.Id))
+            {
+                return null;
+            }
+
+            if (Any(item =>
+                item.Slot == slot &&
+                item.Type == type))
+            {
+                return null;
+            }
+
+            // Primero se añade al inventario real.
+            this[itemInstance.Id] = itemInstance;
+
+            // Raid debe enviarse siempre como lista completa.
+            if (type == InventoryType.Raid)
+            {
+                SendRaidInventory();
+            }
+            else
+            {
+                string inventoryPacket =
+                    itemInstance.GenerateInventoryAdd();
+
+                if (!string.IsNullOrWhiteSpace(inventoryPacket))
+                {
+                    Owner.Session?.SendPacket(inventoryPacket);
+                }
+            }
+
+            return itemInstance;
+        }
+
+        public void SendRaidInventory()
+        {
+            if (Owner?.Session == null)
+            {
+                return;
+            }
+
+            var raidItems = Where(item =>
+                    item != null &&
+                    item.Type == InventoryType.Raid &&
+                    item.Amount > 0 &&
+                    item.Slot >= 0 &&
+                    item.Slot < 28)
+                .OrderBy(item => item.Slot)
+                .ToList();
+
+            var packetBuilder =
+                new StringBuilder("inv 10");
+
+            foreach (ItemInstance item in raidItems)
+            {
+                packetBuilder.Append(
+                    $" {item.Slot}.{item.ItemVNum}.{item.Amount}");
+            }
+
+            Owner.Session.SendPacket(
+                packetBuilder.ToString());
         }
 
         public int BackpackSize()
@@ -891,33 +942,77 @@ namespace Frostvein.GameObject
         /// </summary>
         /// <param name="session"></param>
         /// <param name="inventoryType"></param>
-        public void Reorder(ClientSession session, InventoryType inventoryType)
+        public void Reorder(
+    ClientSession session,
+    InventoryType inventoryType)
         {
-            var itemsByInventoryType = new List<ItemInstance>();
+            if (session?.Character?.Inventory == null)
+            {
+                return;
+            }
+
+            List<ItemInstance> itemsByInventoryType;
+
             switch (inventoryType)
             {
                 case InventoryType.Costume:
-                    itemsByInventoryType =
-                        Where(s => s.Type == InventoryType.Costume).OrderBy(s => s.ItemVNum).ToList();
+                    itemsByInventoryType = Where(item =>
+                            item.Type == InventoryType.Costume)
+                        .OrderBy(item => item.ItemVNum)
+                        .ToList();
                     break;
 
                 case InventoryType.Specialist:
-                    itemsByInventoryType = Where(s => s.Type == InventoryType.Specialist)
-                        .OrderBy(s => s.Item.LevelJobMinimum).ToList();
+                    itemsByInventoryType = Where(item =>
+                            item.Type == InventoryType.Specialist)
+                        .OrderBy(item => item.Item.LevelJobMinimum)
+                        .ToList();
+                    break;
+
+                case InventoryType.Raid:
+                    itemsByInventoryType = Where(item =>
+                            item.Type == InventoryType.Raid)
+                        .OrderBy(item => item.ItemVNum)
+                        .ToList();
                     break;
 
                 default:
-                    itemsByInventoryType = Where(s => s.Type == inventoryType).OrderBy(s => s.Item.Price).ToList();
+                    itemsByInventoryType = Where(item =>
+                            item.Type == inventoryType)
+                        .OrderBy(item => item.Item.Price)
+                        .ToList();
                     break;
             }
 
-            generateClearInventory(inventoryType);
-            for (short i = 0; i < itemsByInventoryType.Count; i++)
+            for (short slot = 0;
+                 slot < itemsByInventoryType.Count;
+                 slot++)
             {
-                var item = itemsByInventoryType[i];
-                item.Slot = i;
-                this[item.Id].Slot = i;
-                session.SendPacket(item.GenerateInventoryAdd());
+                ItemInstance item =
+                    itemsByInventoryType[slot];
+
+                item.Slot = slot;
+                this[item.Id].Slot = slot;
+            }
+
+            // Raid se manda completo una sola vez.
+            if (inventoryType == InventoryType.Raid)
+            {
+                SendRaidInventory();
+                return;
+            }
+
+            generateClearInventory(inventoryType);
+
+            foreach (ItemInstance item in itemsByInventoryType)
+            {
+                string packet =
+                    item.GenerateInventoryAdd();
+
+                if (!string.IsNullOrWhiteSpace(packet))
+                {
+                    session.SendPacket(packet);
+                }
             }
         }
 
@@ -928,10 +1023,25 @@ namespace Frostvein.GameObject
 
         private void generateClearInventory(InventoryType type)
         {
-            if (Owner != null)
-                for (short i = 0; i < BackpackSize(); i++)
-                    if (LoadBySlotAndType(i, type) != null)
-                        Owner.Session.SendPacket(UserInterfaceHelper.Instance.GenerateInventoryRemove(type, i));
+            if (Owner == null)
+            {
+                return;
+            }
+
+            int maxSlots = type == InventoryType.Raid
+                ? 28
+                : type == InventoryType.Miniland
+                    ? 50
+                    : BackpackSize();
+
+            for (short i = 0; i < maxSlots; i++)
+            {
+                if (LoadBySlotAndType(i, type) != null)
+                {
+                    Owner.Session.SendPacket(
+                        UserInterfaceHelper.Instance.GenerateInventoryRemove(type, i));
+                }
+            }
         }
 
         /// <summary>
@@ -941,16 +1051,36 @@ namespace Frostvein.GameObject
         /// <returns>short?; based on given inventory type</returns>
         public short? getFreeSlot(InventoryType type)
         {
-            var itemInstanceSlotsByType = Where(i => i.Type == type).OrderBy(i => i.Slot).Select(i => (int)i.Slot);
-            IEnumerable<int> instanceSlotsByType =
-                itemInstanceSlotsByType as int[] ?? itemInstanceSlotsByType.ToArray();
-            var backpackSize = BackpackSize();
-            var maxRange = (type != InventoryType.Miniland ? backpackSize : 50) + 1;
-            var nextFreeSlot = instanceSlotsByType.Any()
-                ? Enumerable.Range(0, maxRange).Except(instanceSlotsByType).Cast<int?>().FirstOrDefault()
-                : 0;
-            return (short?)nextFreeSlot < (type != InventoryType.Miniland ? backpackSize : 50)
-                ? (short?)nextFreeSlot
+            int inventorySize;
+
+            switch (type)
+            {
+                case InventoryType.Raid:
+                    inventorySize = 28;
+                    break;
+
+                case InventoryType.Miniland:
+                    inventorySize = 50;
+                    break;
+
+                default:
+                    inventorySize = BackpackSize();
+                    break;
+            }
+
+            var usedSlots = Where(item => item.Type == type)
+                .Select(item => (int)item.Slot)
+                .Where(slot => slot >= 0 && slot < inventorySize)
+                .Distinct()
+                .ToArray();
+
+            int? freeSlot = Enumerable.Range(0, inventorySize)
+                .Except(usedSlots)
+                .Cast<int?>()
+                .FirstOrDefault();
+
+            return freeSlot.HasValue
+                ? (short?)freeSlot.Value
                 : null;
         }
 

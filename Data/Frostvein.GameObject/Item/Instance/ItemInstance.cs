@@ -996,6 +996,9 @@ namespace Frostvein.GameObject
 
                 case InventoryType.Costume:
                     return $"ivn 7 {Slot}.{ItemVNum}.{Rare}.{Upgrade}.0";
+
+                case InventoryType.Raid:
+                    return $"inv 10 {Slot}.{ItemVNum}.{Amount}.0";
             }
 
             return "";

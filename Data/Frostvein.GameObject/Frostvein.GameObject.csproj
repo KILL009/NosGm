@@ -116,6 +116,7 @@
     <Compile Include="Characters\EventArguments\TalkEventArgs.cs" />
     <Compile Include="Characters\EventArguments\UpgradeEquipmentEvent.cs" />
     <Compile Include="Characters\EventArguments\UpgradeRuneEvent.cs" />
+    <Compile Include="Helpers\RaidInventoryHelper.cs" />
     <Compile Include="Item\Items\SpecialItems\13201.cs" />
     <Compile Include="Plugin\Event\Handler\GameEvent\ArenaOfTalent\ArenaEvent.cs" />
     <Compile Include="Plugin\Event\Handler\GameEvent\Duel\DuelEvent.cs" />

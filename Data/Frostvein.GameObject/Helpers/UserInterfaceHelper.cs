@@ -262,14 +262,21 @@ namespace Frostvein.GameObject.Helpers
 
         public string GenerateFStashRemove(short slot) => $"f_stash {GenerateRemovePacket(slot)}";
 
-        public string GenerateInventoryRemove(InventoryType type, short slot)
+        public string GenerateInventoryRemove(
+            InventoryType type,
+            short slot)
         {
-            if (type == InventoryType.Equipment)
+            switch (type)
             {
-                return $"ivn 0 {slot}.0.0.0.0.0";
-            }
+                case InventoryType.Equipment:
+                    return $"ivn 0 {slot}.0.0.0.0.0";
 
-            return $"ivn {(byte)type} {GenerateRemovePacket(slot)}";
+                case InventoryType.Raid:
+                    return $"inv 10 {slot}.0.0.0";
+
+                default:
+                    return $"ivn {(byte)type} {GenerateRemovePacket(slot)}";
+            }
         }
 
         public string GeneratePStashRemove(short slot) => $"pstash {GenerateRemovePacket(slot)}";
