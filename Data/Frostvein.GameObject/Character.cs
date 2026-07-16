@@ -1124,6 +1124,15 @@ namespace Frostvein.GameObject
             return DAOFactory.QuestLogDAO.LoadByCharacterId(this.CharacterId).FirstOrDefault(x => x.QuestId == questId) != null;
         }
 
+        public string GenerateNowTime()
+        {
+            DateTime now = DateTime.Now;
+
+            return $"nowtime {now.Hour} {now.Minute} {now.Second}";
+        }
+
+
+
         public bool AddPet(Mate mate)
         {
             if (CanAddMate(mate) || mate.IsTemporalMate)

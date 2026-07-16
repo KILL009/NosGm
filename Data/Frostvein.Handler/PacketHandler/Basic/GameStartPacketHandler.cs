@@ -138,6 +138,7 @@ namespace Frostvein.Handler.PacketHandler.Basic
                 Session.Character.LoadSpeed();
                 Session.Character.LoadSkills();
                 Session.Character.LoadPartnerSkills();
+                Session.SendPacket(Session.Character.GenerateNowTime());
                 Session.SendPacket(Session.Character.GenerateSpPoint());
                 Session.SendPacket("rsfi 1 1 0 9 0 9");
 
