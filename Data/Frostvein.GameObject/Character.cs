@@ -2587,7 +2587,7 @@ namespace Frostvein.GameObject
                         {
                             spType = 3;
                         }
-                        else if (specialist.Item.Morph > 16 && specialist.Item.Morph < 55)
+                        else if (specialist.Item.Morph > 16 && specialist.Item.Morph < 60)
                         {
                             spType = 2;
                         }

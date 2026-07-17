@@ -1913,6 +1913,9 @@ namespace Frostvein.GameObject.Battle
                         case 559 when indicator.Card.Duration == 0:
                             buffTime = ServerManager.RandomNumber(250, 450);
                             break;
+                        case 4369 when indicator.Card.Duration == 0:
+                            buffTime = ServerManager.RandomNumber(150, 450);
+                            break;
 
                         case 336 when indicator.Card.Duration == 0:
                             if (Character.VehicleItem != null)
@@ -3409,7 +3412,9 @@ namespace Frostvein.GameObject.Battle
                                     s.SubType.Equals((byte)AdditionalTypes.FalconSkill.Hide))
                          || indicator.Card.BCards.Any(s =>
                                     s.Type == (byte)CardType.FalconSkill &&
-                                    s.SubType.Equals((byte)AdditionalTypes.FalconSkill.Ambush)))
+                                    s.SubType.Equals((byte)AdditionalTypes.FalconSkill.Ambush)) || indicator.Card.BCards.Any(s =>
+                                    s.Type == (byte)CardType.SummonedMonsterAttack &&
+                                    s.SubType.Equals((byte)AdditionalTypes.SummonedMonsterAttack.Invisible)))
                         {
                             Character.Invisible = false;
                             foreach (var teamMate in Character.Mates?.Where(m => m != null && m.IsTeamMember))
