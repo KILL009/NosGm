@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <root>
   <!-- 
     Microsoft ResX Schema 
@@ -17,7 +17,8 @@
     <resheader name="version">2.0</resheader>
     <resheader name="reader">System.Resources.ResXResourceReader, System.Windows.Forms, ...</resheader>
     <resheader name="writer">System.Resources.ResXResourceWriter, System.Windows.Forms, ...</resheader>
-    <data name="LANGUAGE_CHANGED" xml:space="preserve">
+    -->
+  <data name="LANGUAGE_CHANGED" xml:space="preserve">
     <value>言語を{0}に変更しました。今後のサーバーメッセージにはこの言語が使用されます。</value>
   </data>
   <data name="LANGUAGE_NOT_SUPPORTED" xml:space="preserve">
