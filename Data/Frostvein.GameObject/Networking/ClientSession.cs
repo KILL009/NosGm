@@ -677,27 +677,35 @@ namespace Frostvein.GameObject
                         {
                             using (Language.Instance.UseCulture(LanguageCode))
                             {
-                            // call actual handler method
-                            if (methodReference.PacketDefinitionParameterType != null)
-                            {
-                                //check for the correct authority
-                                if (!IsAuthenticated || Account.Authority >= methodReference.Authority || ignoreAuthority)
+                                // Call the handler with the account culture available to
+                                // both explicit and legacy localization lookups.
+                                if (methodReference.PacketDefinitionParameterType != null)
                                 {
-                                    PacketDefinition deserializedPacket = PacketFactory.Deserialize(packet, methodReference.PacketDefinitionParameterType, IsAuthenticated);
-                                    if (deserializedPacket != null || methodReference.PassNonParseablePacket)
+                                    // Check for the correct authority.
+                                    if (!IsAuthenticated || Account.Authority >= methodReference.Authority || ignoreAuthority)
                                     {
-                                        methodReference.HandlerMethod(methodReference.ParentHandler, deserializedPacket);
-                                    }
-                                    else
-                                    {
-                                        Logger.Warn(string.Format(Language.Instance.GetMessageFromKey("CORRUPT_PACKET"), packetHeader, packet));
+                                        PacketDefinition deserializedPacket = PacketFactory.Deserialize(
+                                            packet,
+                                            methodReference.PacketDefinitionParameterType,
+                                            IsAuthenticated);
+
+                                        if (deserializedPacket != null || methodReference.PassNonParseablePacket)
+                                        {
+                                            methodReference.HandlerMethod(methodReference.ParentHandler, deserializedPacket);
+                                        }
+                                        else
+                                        {
+                                            Logger.Warn(string.Format(
+                                                Language.Instance.GetMessageFromKey("CORRUPT_PACKET"),
+                                                packetHeader,
+                                                packet));
+                                        }
                                     }
                                 }
-                            }
-                            else
-                            {
-                                methodReference.HandlerMethod(methodReference.ParentHandler, packet);
-                            }
+                                else
+                                {
+                                    methodReference.HandlerMethod(methodReference.ParentHandler, packet);
+                                }
                             }
                         }
                     }
