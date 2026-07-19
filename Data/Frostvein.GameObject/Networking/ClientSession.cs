@@ -88,6 +88,17 @@ namespace Frostvein.GameObject
 
         public Account Account { get; private set; }
 
+        /// <summary>
+        /// Culture selected for this account. Invalid or empty legacy values use the
+        /// configured server default.
+        /// </summary>
+        public string LanguageCode => Language.Instance.NormalizeCulture(Account?.Language);
+
+        public string GetMessageFromKey(string key)
+        {
+            return Language.Instance.GetMessageFromKey(key, LanguageCode);
+        }
+
         public string ParsedAddress
         {
             get
@@ -606,7 +617,7 @@ namespace Frostvein.GameObject
                 Character.CharacterId != loggedInCharacter.Item1)
             {
                 _client.SendPacket(Character.GenerateSay(
-                    string.Format(Language.Instance.GetMessageFromKey("CHARACTER_LOGGED_IN"), loggedInCharacter.Item2),
+                    string.Format(GetMessageFromKey("CHARACTER_LOGGED_IN"), loggedInCharacter.Item2),
                     10));
                 _client.SendPacket(Character.GenerateFinfo(loggedInCharacter.Item1, true));
             }
@@ -615,9 +626,9 @@ namespace Frostvein.GameObject
 
             if (chara != null && loggedInCharacter.Item1 != Character?.CharacterId)
                 _client.SendPacket(Character.GenerateSay(
-                    string.Format(Language.Instance.GetMessageFromKey("CHARACTER_FAMILY_LOGGED_IN"),
+                    string.Format(GetMessageFromKey("CHARACTER_FAMILY_LOGGED_IN"),
                         loggedInCharacter.Item2,
-                        Language.Instance.GetMessageFromKey(chara.Authority.ToString().ToUpper())), 10));
+                        GetMessageFromKey(chara.Authority.ToString().ToUpper())), 10));
         }
 
         private void OnOtherCharacterDisconnected(object sender, EventArgs e)
@@ -631,7 +642,7 @@ namespace Frostvein.GameObject
 
             if (Character.IsFriendOfCharacter(loggedOutCharacter.Item1) && Character != null && Character.CharacterId != loggedOutCharacter.Item1)
             {
-                _client.SendPacket(Character.GenerateSay(string.Format(Language.Instance.GetMessageFromKey("CHARACTER_LOGGED_OUT"), loggedOutCharacter.Item2), 10));
+                _client.SendPacket(Character.GenerateSay(string.Format(GetMessageFromKey("CHARACTER_LOGGED_OUT"), loggedOutCharacter.Item2), 10));
                 _client.SendPacket(Character.GenerateFinfo(loggedOutCharacter.Item1, false));
             }
         }
