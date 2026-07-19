@@ -1,4 +1,5 @@
-﻿using Frostvein.Configuration;
+using Frostvein.Configuration;
+using System;
 using System.Collections.Concurrent;
 using System.Globalization;
 using System.IO;
@@ -7,12 +8,33 @@ using System.Resources;
 
 namespace Frostvein.Core
 {
-    public class Language
+    /// <summary>
+    /// Resolves server messages for a specific player culture.
+    /// The neutral resource file is English and satellite resources (for example fr)
+    /// override only the keys they translate.
+    /// </summary>
+    public sealed class Language
     {
-        #region Instantiation
+        private static readonly string[] SupportedCultures = { "en", "fr" };
+
+        private static readonly Lazy<Language> LazyInstance =
+            new Lazy<Language>(() => new Language());
+
+        private readonly ConcurrentDictionary<string, string> _language =
+            new ConcurrentDictionary<string, string>();
+
+        private readonly ConcurrentDictionary<string, byte> _missingLanguage =
+            new ConcurrentDictionary<string, byte>();
+
+        private readonly string _defaultCultureName;
+        private readonly ResourceManager _manager;
+        private readonly object _streamWriterLock = new object();
+        private readonly StreamWriter _streamWriter;
 
         private Language()
         {
+            _defaultCultureName = NormalizeKnownCulture(ServerConfiguration.Language) ?? "en";
+
             try
             {
                 _streamWriter = new StreamWriter("MissingLanguage.txt", true)
@@ -22,54 +44,126 @@ namespace Frostvein.Core
             }
             catch
             {
+                // A read-only working directory must not prevent the server from starting.
             }
 
-            _resourceCulture = new CultureInfo(ServerConfiguration.Language);
-
-            if (Assembly.GetEntryAssembly() != null)
+            var entryAssembly = Assembly.GetEntryAssembly();
+            if (entryAssembly != null)
+            {
                 _manager = new ResourceManager(
-                    Assembly.GetEntryAssembly().GetName().Name + ".Resource.LocalizedResources",
-                    Assembly.GetEntryAssembly());
+                    entryAssembly.GetName().Name + ".Resource.LocalizedResources",
+                    entryAssembly);
+            }
         }
 
-        #endregion
+        public static Language Instance => LazyInstance.Value;
 
-        #region Properties
+        public string DefaultCultureName => _defaultCultureName;
 
-        public static Language Instance => _instance ?? (_instance = new Language());
-
-        #endregion
-
-        #region Methods
+        public string SupportedCultureList => string.Join(", ", SupportedCultures);
 
         public string GetMessageFromKey(string key)
         {
-            return _language.GetOrAdd(key, name =>
-            {
-                var value = _manager?.GetString(name, _resourceCulture);
+            return GetMessageFromKey(key, _defaultCultureName);
+        }
 
-                if (string.IsNullOrEmpty(value))
+        public string GetMessageFromKey(string key, string cultureName)
+        {
+            if (string.IsNullOrWhiteSpace(key))
+            {
+                return string.Empty;
+            }
+
+            var normalizedCulture = NormalizeCulture(cultureName);
+            var cacheKey = normalizedCulture + "|" + key;
+
+            return _language.GetOrAdd(cacheKey, ignored =>
+            {
+                string value = null;
+
+                try
                 {
-                    _streamWriter?.WriteLine(name);
-                    return $"{key} ";
+                    value = _manager?.GetString(key, CultureInfo.GetCultureInfo(normalizedCulture));
+
+                    if (string.IsNullOrEmpty(value) && normalizedCulture != _defaultCultureName)
+                    {
+                        value = _manager?.GetString(key, CultureInfo.GetCultureInfo(_defaultCultureName));
+                    }
+                }
+                catch (MissingManifestResourceException)
+                {
+                    // Missing resources are reported below without crashing the World Server.
                 }
 
-                return value;
+                if (!string.IsNullOrEmpty(value))
+                {
+                    return value;
+                }
+
+                LogMissing(normalizedCulture, key);
+                return key + " ";
             });
         }
 
-        #endregion
+        public string NormalizeCulture(string cultureName)
+        {
+            return NormalizeKnownCulture(cultureName) ?? _defaultCultureName;
+        }
 
-        #region Members
+        public bool TryNormalizeCulture(string cultureName, out string normalizedCulture)
+        {
+            normalizedCulture = NormalizeKnownCulture(cultureName);
+            return normalizedCulture != null;
+        }
 
-        private static Language _instance;
+        private static string NormalizeKnownCulture(string cultureName)
+        {
+            if (string.IsNullOrWhiteSpace(cultureName))
+            {
+                return null;
+            }
 
-        private readonly ResourceManager _manager;
-        private readonly CultureInfo _resourceCulture;
-        private readonly StreamWriter _streamWriter;
+            var candidate = cultureName.Trim().Replace('_', '-').ToLowerInvariant();
 
-        private readonly ConcurrentDictionary<string, string> _language = new ConcurrentDictionary<string, string>();
+            // Older Frostvein configurations used "uk" to mean UK English.
+            if (candidate == "uk" || candidate == "gb")
+            {
+                candidate = "en";
+            }
 
-        #endregion
+            if (candidate == "english" || candidate.StartsWith("en-"))
+            {
+                candidate = "en";
+            }
+            else if (candidate == "french" || candidate == "français" ||
+                     candidate == "francais" || candidate.StartsWith("fr-"))
+            {
+                candidate = "fr";
+            }
+
+            foreach (var supportedCulture in SupportedCultures)
+            {
+                if (candidate == supportedCulture)
+                {
+                    return supportedCulture;
+                }
+            }
+
+            return null;
+        }
+
+        private void LogMissing(string cultureName, string key)
+        {
+            var missingKey = cultureName + "|" + key;
+            if (!_missingLanguage.TryAdd(missingKey, 0) || _streamWriter == null)
+            {
+                return;
+            }
+
+            lock (_streamWriterLock)
+            {
+                _streamWriter.WriteLine(missingKey);
+            }
+        }
     }
 }
