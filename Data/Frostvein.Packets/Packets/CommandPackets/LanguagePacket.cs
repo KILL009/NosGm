@@ -9,6 +9,6 @@ namespace Frostvein.Packets.Packets.CommandPackets
         [PacketIndex(0)]
         public string Culture { get; set; }
 
-        public static string ReturnHelp() => "$Language <en|fr>";
+        public static string ReturnHelp() => "$Language <en|es|de|fr|it|pl|cs|ru|ja|zh>";
     }
 }
