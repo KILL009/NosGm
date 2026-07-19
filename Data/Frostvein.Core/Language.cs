@@ -5,6 +5,7 @@ using System.Globalization;
 using System.IO;
 using System.Reflection;
 using System.Resources;
+using System.Threading;
 
 namespace Frostvein.Core
 {
@@ -19,6 +20,8 @@ namespace Frostvein.Core
 
         private static readonly Lazy<Language> LazyInstance =
             new Lazy<Language>(() => new Language());
+
+        private readonly AsyncLocal<string> _ambientCulture = new AsyncLocal<string>();
 
         private readonly ConcurrentDictionary<string, string> _language =
             new ConcurrentDictionary<string, string>();
@@ -64,7 +67,18 @@ namespace Frostvein.Core
 
         public string GetMessageFromKey(string key)
         {
-            return GetMessageFromKey(key, _defaultCultureName);
+            return GetMessageFromKey(key, _ambientCulture.Value ?? _defaultCultureName);
+        }
+
+        /// <summary>
+        /// Makes legacy GetMessageFromKey(key) calls use the current player's
+        /// culture for the lifetime of a packet handler invocation.
+        /// </summary>
+        public IDisposable UseCulture(string cultureName)
+        {
+            var previousCulture = _ambientCulture.Value;
+            _ambientCulture.Value = NormalizeCulture(cultureName);
+            return new CultureScope(this, previousCulture);
         }
 
         public string GetMessageFromKey(string key, string cultureName)
@@ -163,6 +177,30 @@ namespace Frostvein.Core
             lock (_streamWriterLock)
             {
                 _streamWriter.WriteLine(missingKey);
+            }
+        }
+
+        private sealed class CultureScope : IDisposable
+        {
+            private readonly Language _owner;
+            private readonly string _previousCulture;
+            private bool _disposed;
+
+            public CultureScope(Language owner, string previousCulture)
+            {
+                _owner = owner;
+                _previousCulture = previousCulture;
+            }
+
+            public void Dispose()
+            {
+                if (_disposed)
+                {
+                    return;
+                }
+
+                _owner._ambientCulture.Value = _previousCulture;
+                _disposed = true;
             }
         }
     }
