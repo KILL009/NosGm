@@ -37,9 +37,15 @@ namespace Frostvein.Configuration
 
         private static string GetWorldMode()
         {
-            string value = GetEnvironmentString("NOSGM_WORLD_MODE", "PVE")
+            string value = GetEnvironmentString("NOSGM_WORLD_MODE", "STANDARD")
                 .Trim().ToUpperInvariant();
-            return value == "PVP" ? "PVP" : "PVE";
+
+            if (value == "PVE" || value == "PVP")
+            {
+                return value;
+            }
+
+            return "STANDARD";
         }
 
         private static string GetEnvironmentString(string name, string defaultValue)
