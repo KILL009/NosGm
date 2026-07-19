@@ -6746,7 +6746,7 @@ namespace Frostvein.GameObject
                     GetBuff(CardType.Dracula, (byte)AdditionalTypes.Dracula.ExpHeroIncrease)[0] / 100D);
 
 
-            GenerateLevelXpLevelUp();
+            GenerateHeroXpLevelUp();
             Session.SendPacket(GenerateLev());
         }
 
@@ -9836,7 +9836,7 @@ namespace Frostvein.GameObject
                     int multiplier = specialist.SpLevel < 10 ? 10 : specialist.SpLevel < 19 ? 5 : 1;
 
                     var bonusXp = (int)(GetJXP(monster, grp) * expDamageRate * (multiplier + (GetBuff(CardType.Item, (byte)AdditionalTypes.Item.EXPIncreased)[0] / 100D + (GetBuff(CardType.Item, (byte)AdditionalTypes.Item.IncreaseSPXP)[0] / 100D))));
-                    specialist.XP += bonusXp * GameConfiguration.JobLevelRate;
+                    specialist.XP += bonusXp;
                 }
 
                 if (!WorldPolicyConfiguration.DisableHeroExperience &&
