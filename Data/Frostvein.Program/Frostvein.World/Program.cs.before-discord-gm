@@ -86,7 +86,6 @@ namespace Frostvein.World
         private static bool _ignoreTelemetry;
         private static bool _isDebug = false;
         private static int _port;
-        private static DiscordGmBridge _discordGmBridge;
 
         #endregion
 
@@ -247,7 +246,7 @@ namespace Frostvein.World
                 ServerManager.Instance.Configuration = ConfigurationServiceClient.Instance.GetConfigurationObject();
                 ServerManager.Instance.MallApi = new MallAPIHelper(ServerConfiguration.MallBaseURL);
                 ServerManager.Instance.SynchronizeSheduling();
-                _discordGmBridge = DiscordGmBridge.StartFromEnvironment();
+
                 AntiSpamModule.Instance.RunBlacklistTask();
                 if (ServerConfiguration.StartGlacernonAutomaticly)
                 {
@@ -267,8 +266,6 @@ namespace Frostvein.World
                 Console.ReadKey();
             }
 
-
-          
 
             Console.Title = $"Frostvein - World Server [Channel {ServerManager.Instance.ChannelId} | {PlayerCountThread.PlayerCount} Players online]";
         }
@@ -325,7 +322,6 @@ namespace Frostvein.World
 
             //TODO: Review Unregister process since it mainly caused the crash
             CommunicationServiceClient.Instance.UnregisterWorldServer(ServerManager.Instance.WorldId);
-            _discordGmBridge?.Dispose();
             Thread.Sleep(30000);
             return false;
         }

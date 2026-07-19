@@ -79,7 +79,6 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Program.cs" />
-    <Compile Include="DiscordGmBridge.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="Resource\LocalizedResources.Designer.cs">
       <AutoGen>True</AutoGen>
@@ -114,10 +113,6 @@
     </EmbeddedResource>
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\..\Frostvein.ChickenAPI\ChickenAPI.DAL\ChickenAPI.DAL.csproj">
-      <Project>{8d199c92-d754-461f-89b0-83c2b4e6df9f}</Project>
-      <Name>ChickenAPI.DAL</Name>
-    </ProjectReference>
     <ProjectReference Include="..\..\Frostvein.ChickenAPI\ChickenAPI.Events\ChickenAPI.Events.csproj">
       <Project>{decb5668-600c-49f1-a5c8-cde5a12c9f5a}</Project>
       <Name>ChickenAPI.Events</Name>
@@ -126,21 +121,9 @@
       <Project>{a8289e58-4507-4614-8a28-9ff936bee009}</Project>
       <Name>ChickenAPI.Plugins</Name>
     </ProjectReference>
-    <ProjectReference Include="..\..\Frostvein.DAL\Frostvein.DAL.DAO\Frostvein.DAL.DAO.csproj">
-      <Project>{b438a1df-0cfb-4854-82b5-2751793279bf}</Project>
-      <Name>Frostvein.DAL.DAO</Name>
-    </ProjectReference>
     <ProjectReference Include="..\..\Frostvein.DAL\Frostvein.DAL.EF\Frostvein.DAL.EF.csproj">
       <Project>{4AECC47D-098A-4493-8E1E-D10EDBB7A189}</Project>
       <Name>Frostvein.DAL.EF</Name>
-    </ProjectReference>
-    <ProjectReference Include="..\..\Frostvein.DAL\Frostvein.DAL.Interface\Frostvein.DAL.Interface.csproj">
-      <Project>{175c851b-8dc8-43a5-af93-af32d106cd77}</Project>
-      <Name>Frostvein.DAL.Interface</Name>
-    </ProjectReference>
-    <ProjectReference Include="..\..\Frostvein.DAL\Frostvein.DAL\Frostvein.DAL.csproj">
-      <Project>{D8C8A266-3D46-42C5-A492-28C75DB85BA8}</Project>
-      <Name>Frostvein.DAL</Name>
     </ProjectReference>
     <ProjectReference Include="..\..\Frostvein.DAL\Frostvein.Data\Frostvein.Data.csproj">
       <Project>{F1071DED-3D92-4416-9B9C-8664441ADE64}</Project>
@@ -149,10 +132,6 @@
     <ProjectReference Include="..\..\Frostvein.Configuration\Frostvein.Configuration.csproj">
       <Project>{011ee023-e1b8-4645-bbe9-94ac35b55390}</Project>
       <Name>Frostvein.Configuration</Name>
-    </ProjectReference>
-    <ProjectReference Include="..\..\Frostvein.DAL\Frostvein.Mapper\Frostvein.Mapper.csproj">
-      <Project>{057b5a6f-378a-4bd9-b17b-074c7f5c9fec}</Project>
-      <Name>Frostvein.Mapper</Name>
     </ProjectReference>
     <ProjectReference Include="..\..\Frostvein.Domain\Frostvein.Domain.csproj">
       <Project>{20ADDDDD-DAD9-44F3-9BEB-026C73090660}</Project>
