@@ -4,7 +4,7 @@ on:
   push:
     branches:
       - main
-      - fix/resx-localization-validation
+      - fix/resx-required-headers
   pull_request:
     branches:
       - main
@@ -28,14 +28,14 @@ jobs:
           python-version: "3.12"
 
       - name: Repair malformed catalogs on repair branch
-        if: (github.event_name == 'push' && github.ref == 'refs/heads/fix/resx-localization-validation') || (github.event_name == 'pull_request' && github.head_ref == 'fix/resx-localization-validation')
+        if: (github.event_name == 'push' && github.ref == 'refs/heads/fix/resx-required-headers') || (github.event_name == 'pull_request' && github.head_ref == 'fix/resx-required-headers')
         run: python tools/validate_resx.py --repair
 
       - name: Validate all catalogs
         run: python tools/validate_resx.py
 
       - name: Commit repaired catalogs
-        if: (github.event_name == 'push' && github.ref == 'refs/heads/fix/resx-localization-validation') || (github.event_name == 'pull_request' && github.head_ref == 'fix/resx-localization-validation')
+        if: (github.event_name == 'push' && github.ref == 'refs/heads/fix/resx-required-headers') || (github.event_name == 'pull_request' && github.head_ref == 'fix/resx-required-headers')
         run: |
           if git diff --quiet; then
             echo "No RESX repairs were needed."
@@ -44,7 +44,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add Data/Frostvein.Program/Frostvein.World/Resource/LocalizedResources.*.resx
-          git commit -m "fix(localization): repair malformed RESX comments"
+          git commit -m "fix(localization): add required RESX headers"
           if [ "${{ github.event_name }}" = "pull_request" ]; then
             git push origin HEAD:${{ github.head_ref }}
           else
