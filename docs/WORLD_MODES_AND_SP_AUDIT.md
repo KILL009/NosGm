@@ -65,12 +65,30 @@ At startup, search the World Server log for:
 
 - `[SP_AUDIT]`: number of loaded specialist cards, morphs, skills and BCard types;
 - `Specialist morphs without skills`: a card exists but no character skills were loaded for its morph;
-- `Specialist BCard types without runtime handlers`: the database/client data uses an effect the emulator currently ignores;
+- `Specialist BCard types without active plugin handlers`: the type is not registered as an active handler; some older types are passive and are evaluated directly by combat code;
 - `Missing +20 elemental buff cards`: one or more of cards 942–946 are absent;
 - `[BCARD_HANDLER_MISSING]`: the first live attempt to execute an unsupported effect;
 - `[BCARD_HANDLER_FAILED]`: a handler threw an exception instead of silently failing.
 
 This turns the SP1–SP12 review into a reproducible data-driven check. Run the server with the current client data and SQL database, then use these messages as the repair list.
+
+## Database audit result (20 July 2026)
+
+The supplied SQL snapshot was inspected without executing it and with the analysis restricted to `Item`, `Skill`, `BCard` and `Card`.
+
+- 60 player specialist-card item rows across 52 player morphs;
+- 614 specialist skills and 1,672 skill BCards;
+- no player specialist morph without skills;
+- no specialist BCard references a missing `Card` row;
+- all five +20 blessing cards (942–946) are present;
+- Achilles (morph 55): 11 skills / 43 BCards;
+- Admiral Yi (morph 56): 13 skills / 47 BCards;
+- Merlin (morph 57): 11 skills / 44 BCards;
+- Thor (morph 58): 11 skills / 39 BCards.
+
+This confirms that the SP12 data exists, but not that every mechanic executes. The current source has no active plugin handlers for modern resource mechanics 118–125 and 130. In particular, SP12 depends on type 124 (`TokenGauge`) on its regular attacks and type 130 (`DimensionalSynchronization`) on each ultimate. SP10 and SP11 also depend on several of the earlier resource types. These are now named explicitly and reported as `[SP_MECHANIC_UNIMPLEMENTED]`; naming and detecting a type is not the same as implementing it.
+
+A full server export also contains account and character data. Future audit exports must contain only `Item`, `Skill`, `BCard` and `Card`, with no account, character, mail or log tables.
 
 ## Current official compatibility notes
 
