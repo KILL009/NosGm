@@ -62,17 +62,17 @@ For broadcasts, resolve the message separately for each receiving session. A sin
 
 ## Catalog coverage and fallback
 
-The English neutral catalog has 693 string keys. The French satellite covers all 693. Other catalogs currently contain only translations whose key and format parameters were verified against NosGM:
+The English neutral catalog has 690 real string keys. The French satellite covers all 690. Other catalogs currently contain only translations whose key and format parameters were verified against NosGM:
 
 | Code | Verified server keys |
 | --- | ---: |
-| `es` | 491 |
-| `de` | 293 |
-| `fr` | 693 |
-| `it` | 431 |
-| `pl` | 399 |
-| `cs` | 31 |
-| `ru` | 32 |
+| `es` | 488 |
+| `de` | 290 |
+| `fr` | 690 |
+| `it` | 428 |
+| `pl` | 396 |
+| `cs` | 28 |
+| `ru` | 29 |
 | `ja` | 3 |
 | `zh` | 3 |
 
