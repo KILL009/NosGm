@@ -6735,7 +6735,8 @@ namespace Frostvein.GameObject
 
         public void GetHXp(long val, bool applyRate = true)
         {
-            if (HeroLevel >= GameConfiguration.MaxHeroLevel)
+            if (WorldPolicyConfiguration.DisableHeroExperience ||
+                HeroLevel >= GameConfiguration.MaxHeroLevel)
             {
                 return;
             }
@@ -7114,7 +7115,8 @@ namespace Frostvein.GameObject
 
         public void GetXp(long val, bool applyRate = true)
         {
-            if (Level >= GameConfiguration.MaxLevel)
+            if (WorldPolicyConfiguration.DisableNormalExperience ||
+                Level >= GameConfiguration.MaxLevel)
             {
                 return;
             }
@@ -9800,7 +9802,8 @@ namespace Frostvein.GameObject
                 int xp = (int)(GetXP(monster, grp) * expDamageRate * (isMonsterOwner ? 1 : 1f) * (1 + (GetBuff(CardType.Item, (byte)AdditionalTypes.Item.EXPIncreased)[0] / 100D)) * (1 + (GetBuff(CardType.MartialArts, (byte)AdditionalTypes.MartialArts.IncreaseBattleAndJobExperience)[0] / 100)));
 
 
-                if (Level < GameConfiguration.MaxLevel)
+                if (!WorldPolicyConfiguration.DisableNormalExperience &&
+                    Level < GameConfiguration.MaxLevel)
                 {
                     LevelXp += xp;
                 }
@@ -9836,7 +9839,8 @@ namespace Frostvein.GameObject
                     specialist.XP += bonusXp * GameConfiguration.JobLevelRate;
                 }
 
-                if (HeroLevel > 0 && HeroLevel < GameConfiguration.MaxHeroLevel)
+                if (!WorldPolicyConfiguration.DisableHeroExperience &&
+                    HeroLevel > 0 && HeroLevel < GameConfiguration.MaxHeroLevel)
                 {
                     HeroXp += (int)((GetHXP(monster, grp) * (isMonsterOwner ? 1 : 0.8f) * (1 + (GetBuff(CardType.Item, (byte)AdditionalTypes.Item.EXPIncreased)[0] / 100D) + (GetBuff(CardType.Dracula, (byte)AdditionalTypes.Dracula.ExpHeroIncrease)[0] / 100D))));
                 }
@@ -9908,7 +9912,8 @@ namespace Frostvein.GameObject
 
         private int GetHXP(MapMonster mapMonster, Group group)
         {
-            if (HeroLevel >= GameConfiguration.MaxHeroLevel)
+            if (WorldPolicyConfiguration.DisableHeroExperience ||
+                HeroLevel >= GameConfiguration.MaxHeroLevel)
             {
                 return 0;
             }
@@ -9993,6 +9998,11 @@ namespace Frostvein.GameObject
 
         private int GetXP(MapMonster mapMonster, Group group)
         {
+            if (WorldPolicyConfiguration.DisableNormalExperience)
+            {
+                return 0;
+            }
+
             NpcMonster npcMonster = mapMonster.Monster;
 
             int partySize = group?.GroupType == GroupType.Group
