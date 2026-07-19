@@ -145,7 +145,7 @@ namespace Frostvein.World
 
             CultureInfo.DefaultThreadCurrentUICulture = CultureInfo.GetCultureInfo("en-US");
             var ignoreStartupMessages = false;
-            _port = Convert.ToInt32(ServerConfiguration.WorldServerPort ); /*GlacernonServerPort dann solte act 4 auch gehen */
+            _port = Convert.ToInt32(WorldPolicyConfiguration.WorldPort); /*GlacernonServerPort dann solte act 4 auch gehen */
             var portArgIndex = Array.FindIndex(args, s => s == "--port");
             if (portArgIndex != -1
                 && args.Length >= portArgIndex + 1
@@ -202,6 +202,7 @@ namespace Frostvein.World
             PacketFactory.Initialize<HelpPacket>();
 
             PluginFacility.InitializeAll();
+            AuditSpecialistData();
 
             try
             {
@@ -236,7 +237,10 @@ namespace Frostvein.World
                 Environment.Exit(ex.ErrorCode);
             }
 
-            ServerManager.Instance.ServerGroup = ServerConfiguration.ServerGroup;
+            ServerManager.Instance.ServerGroup = WorldPolicyConfiguration.ServerGroup;
+            Logger.Info($"[WORLD_POLICY] Group={WorldPolicyConfiguration.ServerGroup} Mode={WorldPolicyConfiguration.WorldMode} " +
+                        $"NormalEXP={!WorldPolicyConfiguration.DisableNormalExperience} " +
+                        $"HeroEXP={!WorldPolicyConfiguration.DisableHeroExperience} Port={_port}");
             int sessionLimit = ServerConfiguration.SessionLimit;
             var newChannelId = CommunicationServiceClient.Instance.RegisterWorldServer(new SerializableWorldServer(ServerManager.Instance.WorldId, ipAddress, _port, sessionLimit,ServerManager.Instance.ServerGroup));
             if (newChannelId.HasValue)
@@ -273,6 +277,68 @@ namespace Frostvein.World
             Console.Title = $"Frostvein - World Server [Channel {ServerManager.Instance.ChannelId} | {PlayerCountThread.PlayerCount} Players online]";
         }
 
+
+
+        private static void AuditSpecialistData()
+        {
+            var specialistCards = ServerManager.Items
+                .Where(item => item != null &&
+                               item.EquipmentSlot == EquipmentType.Sp &&
+                               item.Morph > 0)
+                .ToList();
+
+            var specialistMorphs = new HashSet<int>(
+                specialistCards.Select(item => (int)item.Morph));
+
+            var specialistSkills = ServerManager.GetAllSkill()
+                .Where(skill => skill != null &&
+                                specialistMorphs.Contains(skill.UpgradeType) &&
+                                skill.SkillType == (byte)SkillType.CharacterSKill)
+                .ToList();
+
+            var morphsWithoutSkills = specialistMorphs
+                .Where(morph => !specialistSkills.Any(skill => skill.UpgradeType == morph))
+                .OrderBy(morph => morph)
+                .ToList();
+
+            var usedBCardTypes = specialistSkills
+                .SelectMany(skill => skill.BCards ?? new List<BCard>())
+                .Concat(specialistCards.SelectMany(item => item.BCards ?? new List<BCard>()))
+                .Select(bcard => (BCardType.CardType)bcard.Type)
+                .Distinct()
+                .OrderBy(type => (byte)type)
+                .ToList();
+
+            var missingBCardTypes = usedBCardTypes
+                .Where(type => !PluginFacility.HasBCardHandler(type))
+                .ToList();
+
+            short[] plus20BuffIds = { 942, 943, 944, 945, 946 };
+            var missingPlus20BuffIds = plus20BuffIds
+                .Where(cardId => ServerManager.GetCard(cardId) == null)
+                .ToList();
+
+            Logger.Info($"[SP_AUDIT] Cards={specialistCards.Count} Morphs={specialistMorphs.Count} " +
+                        $"Skills={specialistSkills.Count} BCardTypes={usedBCardTypes.Count} " +
+                        $"RegisteredHandlers={PluginFacility.RegisteredBCardTypes.Count}");
+
+            if (morphsWithoutSkills.Count > 0)
+            {
+                Logger.Warn($"[SP_AUDIT] Specialist morphs without skills: {string.Join(",", morphsWithoutSkills)}");
+            }
+
+            if (missingBCardTypes.Count > 0)
+            {
+                Logger.Warn("[SP_AUDIT] Specialist BCard types without runtime handlers: " +
+                            string.Join(", ", missingBCardTypes.Select(type => $"{(byte)type}:{type}")));
+            }
+
+            if (missingPlus20BuffIds.Count > 0)
+            {
+                Logger.Warn("[SP_AUDIT] Missing +20 elemental buff cards: " +
+                            string.Join(",", missingPlus20BuffIds));
+            }
+        }
 
         private static IContainer BuildCoreContainer()
         {

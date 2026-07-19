@@ -1,5 +1,3 @@
-﻿using System.Linq;
-using Frostvein.Core;
 using Frostvein.Domain;
 using Frostvein.GameObject.Helpers;
 using Frostvein.GameObject.Networking;
@@ -8,204 +6,74 @@ namespace Frostvein.GameObject.Extension.Inventory
 {
     public static class UpgradeDragonCardExtension
     {
-        #region Methods
+        private const short AngelFeatherVNum = 2282;
+        private const short FullMoonCrystalVNum = 1030;
+        private const short DragonGemVNum = 2630;
+        private const short DragonProtectionScrollVNum = 9287;
 
-        public static void UpgradeDragonCard(this ItemInstance e, ClientSession s, byte value)
+        // Index 0 upgrades +15 -> +16; index 4 upgrades +19 -> +20.
+        private static readonly double[] SuccessRates = { 1.2, 1.0, 0.8, 0.6, 0.4 };
+        private static readonly int[] GoldCosts = { 1250000, 1500000, 1750000, 2000000, 2250000 };
+        private static readonly short[] AngelFeatherCosts = { 80, 90, 100, 110, 120 };
+        private static readonly short[] FullMoonCosts = { 32, 34, 36, 38, 40 };
+        private static readonly short[] DragonGemCosts = { 2, 4, 6, 8, 10 };
+
+        public static void UpgradeDragonCard(this ItemInstance specialist, ClientSession session, byte value)
         {
-            if (e.Upgrade == 20)
+            // This route is the Dragon Card Protection Scroll upgrade flow.
+            // The scroll converts the official "soul destroyed" outcome into a normal failure.
+            if (specialist == null || session?.Character?.Inventory == null ||
+                specialist.Upgrade < 15 || specialist.Upgrade >= 20)
             {
                 return;
             }
 
-            switch (e.Upgrade)
+            int index = specialist.Upgrade - 15;
+            int goldCost = GoldCosts[index];
+            short featherCost = AngelFeatherCosts[index];
+            short fullMoonCost = FullMoonCosts[index];
+            short dragonGemCost = DragonGemCosts[index];
+
+            if (session.Character.Gold < goldCost ||
+                session.Character.Inventory.CountItem(AngelFeatherVNum) < featherCost ||
+                session.Character.Inventory.CountItem(FullMoonCrystalVNum) < fullMoonCost ||
+                session.Character.Inventory.CountItem(DragonGemVNum) < dragonGemCost ||
+                session.Character.Inventory.CountItem(DragonProtectionScrollVNum) < 1)
             {
-                case 15:
-                    #region Upgrade
-
-                    var rnd = ServerManager.RandomNumber();
-                    if (rnd < 1.2)
-                    {
-                        s.Character.Inventory.RemoveItemAmount(2282, 80);
-                        s.Character.Inventory.RemoveItemAmount(1030, 32);
-                        s.Character.Inventory.RemoveItemAmount(2630, 2);
-                        s.Character.Inventory.RemoveItemAmount(9287, 1);
-                        s.Character.Gold -= 1250000;
-                        s.SendPacket(s.Character.GenerateGold());
-                        s.CurrentMapInstance.Broadcast(StaticPacketHelper.GenerateEff(UserType.Player, s.Character.CharacterId, 3005), s.Character.PositionX, s.Character.PositionY);
-                        s.SendPacket("msg 4 Upgrade successful");
-                        s.SendPacket(s.Character.GenerateSay("The Specialist Upgrade was successful.", 12));
-                        e.Upgrade++;
-                        s.SendShopEnd();
-                        s.SendPacket(s.Character.GenerateEq());
-                        s.SendPacket(e.GenerateInventoryAdd());
-                    }
-                    if (rnd > 1.2)
-                    {
-                        s.Character.Inventory.RemoveItemAmount(2282, 80);
-                        s.Character.Inventory.RemoveItemAmount(1030, 32);
-                        s.Character.Inventory.RemoveItemAmount(2630, 2);
-                        s.Character.Inventory.RemoveItemAmount(9287, 1);
-                        s.Character.Gold -= 1250000;
-                        s.SendPacket("msg 4 Upgrade failed");
-                        s.SendPacket(s.Character.GenerateSay("The Specialist Upgrade failed.", 11));
-                        s.SendShopEnd();
-                        s.SendPacket(s.Character.GenerateEq());
-                        s.SendPacket(s.Character.GenerateGold());
-                    }
-
-                    #endregion 
-                    break;
-
-                case 16:
-                    #region Upgrade
-
-                    var rnd2 = ServerManager.RandomNumber();
-                    if (rnd2 < 1)
-                    {
-                        s.Character.Inventory.RemoveItemAmount(2282, 90);
-                        s.Character.Inventory.RemoveItemAmount(1030, 34);
-                        s.Character.Inventory.RemoveItemAmount(2630, 4);
-                        s.Character.Inventory.RemoveItemAmount(9287, 1);
-                        s.Character.Gold -= 1500000;
-                        s.SendPacket(s.Character.GenerateGold());
-                        s.CurrentMapInstance.Broadcast(StaticPacketHelper.GenerateEff(UserType.Player, s.Character.CharacterId, 3005), s.Character.PositionX, s.Character.PositionY);
-                        s.SendPacket("msg 4 Upgrade successful");
-                        s.SendPacket(s.Character.GenerateSay("The Specialist Upgrade was successful.", 12));
-                        e.Upgrade++;
-                        s.SendShopEnd();
-                        s.SendPacket(s.Character.GenerateEq());
-                        s.SendPacket(e.GenerateInventoryAdd());
-                    }
-                    if (rnd2 > 1)
-                    {
-                        s.Character.Inventory.RemoveItemAmount(2282, 90);
-                        s.Character.Inventory.RemoveItemAmount(1030, 34);
-                        s.Character.Inventory.RemoveItemAmount(2630, 4);
-                        s.Character.Inventory.RemoveItemAmount(9287, 1);
-                        s.Character.Gold -= 1500000;
-                        s.SendPacket("msg 4 Upgrade failed");
-                        s.SendPacket(s.Character.GenerateSay("The Specialist Upgrade failed.", 11));
-                        s.SendShopEnd();
-                        s.SendPacket(s.Character.GenerateEq());
-                        s.SendPacket(s.Character.GenerateGold());
-                    }
-
-                    #endregion 
-                    break;
-
-                case 17:
-                    #region Upgrade
-
-                    var rnd3 = ServerManager.RandomNumber();
-                    if (rnd3 < 0.8)
-                    {
-                        s.Character.Inventory.RemoveItemAmount(2282, 100);
-                        s.Character.Inventory.RemoveItemAmount(1030, 36);
-                        s.Character.Inventory.RemoveItemAmount(2630, 6);
-                        s.Character.Inventory.RemoveItemAmount(9287, 1);
-                        s.Character.Gold -= 1750000;
-                        s.SendPacket(s.Character.GenerateGold());
-                        s.CurrentMapInstance.Broadcast(StaticPacketHelper.GenerateEff(UserType.Player, s.Character.CharacterId, 3005), s.Character.PositionX, s.Character.PositionY);
-                        s.SendPacket("msg 4 Upgrade successful");
-                        s.SendPacket(s.Character.GenerateSay("The Specialist Upgrade was successful.", 12));
-                        e.Upgrade++;
-                        s.SendShopEnd();
-                        s.SendPacket(s.Character.GenerateEq());
-                        s.SendPacket(e.GenerateInventoryAdd());
-                    }
-                    if (rnd3 > 0.8)
-                    {
-                        s.Character.Inventory.RemoveItemAmount(2282, 100);
-                        s.Character.Inventory.RemoveItemAmount(1030, 36);
-                        s.Character.Inventory.RemoveItemAmount(2630, 6);
-                        s.Character.Inventory.RemoveItemAmount(9287, 1);
-                        s.Character.Gold -= 1750000;
-                        s.SendPacket("msg 4 Upgrade failed");
-                        s.SendPacket(s.Character.GenerateSay("The Specialist Upgrade failed.", 11));
-                        s.SendShopEnd();
-                        s.SendPacket(s.Character.GenerateEq());
-                        s.SendPacket(s.Character.GenerateGold());
-                    }
-
-                    #endregion 
-                    break;
-
-                case 18:
-                    #region Upgrade
-
-                    var rnd4 = ServerManager.RandomNumber();
-                    if (rnd4 < 0.6)
-                    {
-                        s.Character.Inventory.RemoveItemAmount(2282, 110);
-                        s.Character.Inventory.RemoveItemAmount(1030, 38);
-                        s.Character.Inventory.RemoveItemAmount(2630, 8);
-                        s.Character.Inventory.RemoveItemAmount(9287, 1);
-                        s.Character.Gold -= 2000000;
-                        s.SendPacket(s.Character.GenerateGold());
-                        s.CurrentMapInstance.Broadcast(StaticPacketHelper.GenerateEff(UserType.Player, s.Character.CharacterId, 3005), s.Character.PositionX, s.Character.PositionY);
-                        s.SendPacket("msg 4 Upgrade successful");
-                        s.SendPacket(s.Character.GenerateSay("The Specialist Upgrade was successful.", 12));
-                        e.Upgrade++;
-                        s.SendShopEnd();
-                        s.SendPacket(s.Character.GenerateEq());
-                        s.SendPacket(e.GenerateInventoryAdd());
-                    }
-                    if (rnd4 > 0.6)
-                    {
-                        s.Character.Inventory.RemoveItemAmount(2282, 110);
-                        s.Character.Inventory.RemoveItemAmount(1030, 38);
-                        s.Character.Inventory.RemoveItemAmount(2630, 8);
-                        s.Character.Inventory.RemoveItemAmount(9287, 1);
-                        s.Character.Gold -= 2000000;
-                        s.SendPacket("msg 4 Upgrade failed");
-                        s.SendPacket(s.Character.GenerateSay("The Specialist Upgrade failed.", 11));
-                        s.SendShopEnd();
-                        s.SendPacket(s.Character.GenerateEq());
-                        s.SendPacket(s.Character.GenerateGold());
-                    }
-
-                    #endregion 
-                    break;
-
-                case 19:
-                    #region Upgrade
-
-                    var rnd5 = ServerManager.RandomNumber();
-                    if (rnd5 < 0.4)
-                    {
-                        s.Character.Inventory.RemoveItemAmount(2282, 120);
-                        s.Character.Inventory.RemoveItemAmount(1030, 40);
-                        s.Character.Inventory.RemoveItemAmount(2630, 10);
-                        s.Character.Inventory.RemoveItemAmount(9287, 1);
-                        s.Character.Gold -= 2250000;
-                        s.SendPacket(s.Character.GenerateGold());
-                        s.CurrentMapInstance.Broadcast(StaticPacketHelper.GenerateEff(UserType.Player, s.Character.CharacterId, 3005), s.Character.PositionX, s.Character.PositionY);
-                        s.SendPacket("msg 4 Upgrade successful");
-                        s.SendPacket(s.Character.GenerateSay("The Specialist Upgrade was successful.", 12));
-                        e.Upgrade++;
-                        s.SendShopEnd();
-                        s.SendPacket(s.Character.GenerateEq());
-                        s.SendPacket(e.GenerateInventoryAdd());
-                    }
-                    if (rnd5 > 0.4)
-                    {
-                        s.Character.Inventory.RemoveItemAmount(2282, 120);
-                        s.Character.Inventory.RemoveItemAmount(1030, 40);
-                        s.Character.Inventory.RemoveItemAmount(2630, 10);
-                        s.Character.Inventory.RemoveItemAmount(9287, 1);
-                        s.Character.Gold -= 2250000;
-                        s.SendPacket("msg 4 Upgrade failed");
-                        s.SendPacket(s.Character.GenerateSay("The Specialist Upgrade failed.", 11));
-                        s.SendShopEnd();
-                        s.SendPacket(s.Character.GenerateEq());
-                        s.SendPacket(s.Character.GenerateGold());
-                    }
-
-                    #endregion 
-                    break;
+                session.SendPacket(session.Character.GenerateSay(
+                    "Not enough gold or materials for the specialist upgrade.", 10));
+                return;
             }
 
+            session.Character.Inventory.RemoveItemAmount(AngelFeatherVNum, featherCost);
+            session.Character.Inventory.RemoveItemAmount(FullMoonCrystalVNum, fullMoonCost);
+            session.Character.Inventory.RemoveItemAmount(DragonGemVNum, dragonGemCost);
+            session.Character.Inventory.RemoveItemAmount(DragonProtectionScrollVNum, 1);
+            session.Character.Gold -= goldCost;
+            session.SendPacket(session.Character.GenerateGold());
+
+            double roll = ServerManager.NextDoubleLinear(0, 100);
+            if (roll < SuccessRates[index])
+            {
+                specialist.Upgrade++;
+                session.CurrentMapInstance?.Broadcast(
+                    StaticPacketHelper.GenerateEff(UserType.Player,
+                        session.Character.CharacterId, 3005),
+                    session.Character.PositionX, session.Character.PositionY);
+                session.SendPacket("msg 4 Upgrade successful");
+                session.SendPacket(session.Character.GenerateSay(
+                    "The Specialist Upgrade was successful.", 12));
+            }
+            else
+            {
+                session.SendPacket("msg 4 Upgrade failed");
+                session.SendPacket(session.Character.GenerateSay(
+                    "The Specialist Upgrade failed.", 11));
+            }
+
+            session.SendShopEnd();
+            session.SendPacket(session.Character.GenerateEq());
+            session.SendPacket(specialist.GenerateInventoryAdd());
         }
-        #endregion
     }
 }

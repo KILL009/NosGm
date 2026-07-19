@@ -2073,6 +2073,24 @@ namespace Frostvein.GameObject.Battle
         {
             if (receiver != null && this != receiver && (Hp > 0 || isOwnerCheck) && (receiver.Hp > 0 || isOwnerCheck))
             {
+                if (EntityType == EntityType.Player && receiver.EntityType == EntityType.Player)
+                {
+                    bool isDedicatedPvpInstance =
+                        MapInstance.MapInstanceType == MapInstanceType.ArenaInstance ||
+                        MapInstance.MapInstanceType == MapInstanceType.TalentArenaMapInstance ||
+                        MapInstance.MapInstanceType == MapInstanceType.IceBreakerInstance ||
+                        MapInstance.MapInstanceType == MapInstanceType.RainbowBattleInstance ||
+                        MapInstance.MapInstanceType == MapInstanceType.PVPInstance ||
+                        MapInstance.MapInstanceType == MapInstanceType.Act4Instance ||
+                        MapInstance.MapInstanceType == MapInstanceType.CaligorInstance;
+
+                    if (WorldPolicyConfiguration.IsPveWorld &&
+                        (!WorldPolicyConfiguration.AllowDedicatedPvpInPveWorld || !isDedicatedPvpInstance))
+                    {
+                        return false;
+                    }
+                }
+
                 if (MapMonster != null && CantAttackEntitiesList.Contains(MapMonster.MonsterVNum))
                 {
                     return false;
@@ -2166,6 +2184,9 @@ namespace Frostvein.GameObject.Battle
                                         }
                                         else if (MapInstance.Map.MapTypes.Any(m =>
                                                 m.MapTypeId == (short)MapTypeEnum.PVPMap) || MapInstance.IsPVP
+                                                                                           || WorldPolicyConfiguration.IsPvpWorld &&
+                                                                                              MapInstance.MapInstanceType == MapInstanceType.BaseMapInstance &&
+                                                                                              !WorldPolicyConfiguration.IsPvpSafeMap(MapInstance.Map.MapId)
                                                                                            || HasBuff(CardType.SpecialEffects,
                                                                                                (byte)AdditionalTypes
                                                                                                    .SpecialEffects
