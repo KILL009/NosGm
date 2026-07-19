@@ -675,6 +675,8 @@ namespace Frostvein.GameObject
                     {
                         if (HasSelectedCharacter || methodReference.IsCharScreen)
                         {
+                            using (Language.Instance.UseCulture(LanguageCode))
+                            {
                             // call actual handler method
                             if (methodReference.PacketDefinitionParameterType != null)
                             {
@@ -695,6 +697,7 @@ namespace Frostvein.GameObject
                             else
                             {
                                 methodReference.HandlerMethod(methodReference.ParentHandler, packet);
+                            }
                             }
                         }
                     }
