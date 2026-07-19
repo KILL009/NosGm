@@ -119,9 +119,26 @@
             Tattoos = 108,
 
             IncreaseHpMp = 110,
-            WhenHeatingActive = 119, //Also counts how much Heating Points you have
-            UseHeatPoints = 120, //Will consume Heat Points and increase Damage based on how much
-            Heat = 122,
+
+            // Modern specialist mechanics. Keep these explicit so startup diagnostics
+            // never collapse valid client data into unnamed numeric enum values.
+            PinpointSkill = 118,
+            WhenHeatingActive = 119,
+            UseResourcePoints = 120,
+            ConditionalResourceEffects = 121,
+            ResourcePointEffects = 122,
+            PetTrainerSkills = 123,
+            TokenGauge = 124,
+            TokenSpecialistEffects = 125,
+            PartnerAndRaidRewards = 126,
+            RaidAndBatteryEffects = 127,
+            Act4AndDimensionEffects = 128,
+            NezarunAndExperienceRules = 129,
+            DimensionalSynchronization = 130,
+
+            // Backwards-compatible aliases used by existing code.
+            UseHeatPoints = UseResourcePoints,
+            Heat = ResourcePointEffects,
         }
 
         #endregion
