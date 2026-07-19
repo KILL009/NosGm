@@ -76,6 +76,8 @@ This turns the SP1–SP12 review into a reproducible data-driven check. Run the 
 
 The July 2026 SP12 set consists of Achilles (Swordsman), Admiral Yi (Archer), Merlin (Mage) and Thor (Martial Artist). The current official patch also caps attack-skill cooldown reset effects at 80%; the combat code now applies that cap.
 
+The +16 to +20 upgrade path now uses fractional rolls and the official success rates (1.2%, 1.0%, 0.8%, 0.6% and 0.4%), validates all gold/material requirements before consuming anything, and consumes one Dragon Card Protection Scroll. The protection scroll converts soul destruction into an ordinary failure, matching the protected upgrade flow.
+
 References:
 
 - https://forum.nostale.gameforge.com/forum/thread/5672-act-10-part-2-sp12-patch-notes/
