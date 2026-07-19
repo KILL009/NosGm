@@ -1,0 +1,29 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <!-- 
+    Microsoft ResX Schema 
+    
+    Version 2.0
+    
+    The primary goals of this format is to allow a simple XML format 
+    that is mostly human readable. The generation and parsing of the 
+    various data types are done through the TypeConverter classes 
+    associated with the data types.
+    
+    Example:
+    
+    ... ado.net/XML headers & schema ...
+    <resheader name="resmimetype">text/microsoft-resx</resheader>
+    <resheader name="version">2.0</resheader>
+    <resheader name="reader">System.Resources.ResXResourceReader, System.Windows.Forms, ...</resheader>
+    <resheader name="writer">System.Resources.ResXResourceWriter, System.Windows.Forms, ...</resheader>
+    <data name="LANGUAGE_CHANGED" xml:space="preserve">
+    <value>语言已更改为 {0}。之后的服务器消息将使用此语言。</value>
+  </data>
+  <data name="LANGUAGE_NOT_SUPPORTED" xml:space="preserve">
+    <value>不支持该语言。可用语言：{0}。</value>
+  </data>
+  <data name="LANGUAGE_SAVE_ERROR" xml:space="preserve">
+    <value>无法保存语言。请稍后重试。</value>
+  </data>
+</root>
