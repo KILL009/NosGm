@@ -324,6 +324,7 @@
     <Compile Include="Packets\CommandPackets\TeleportToPacket.cs" />
     <Compile Include="Packets\CommandPackets\TestCommandPacket.cs" />
     <Compile Include="Packets\CommandPackets\TitanShield.cs" />
+    <Compile Include="Packets\CommandPackets\LanguagePacket.cs" />
     <Compile Include="Packets\CommandPackets\TranslatePacket.cs" />
     <Compile Include="Packets\CommandPackets\UnbanPacket.cs" />
     <Compile Include="Packets\CommandPackets\UndercoverPacket.cs" />
