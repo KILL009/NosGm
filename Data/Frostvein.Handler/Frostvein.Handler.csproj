@@ -260,6 +260,7 @@
     <Compile Include="PacketHandler\Command\SummonHandler.cs" />
     <Compile Include="PacketHandler\Command\TeamPacketHandler.cs" />
     <Compile Include="PacketHandler\Command\TeleportHandler.cs" />
+    <Compile Include="PacketHandler\Command\LanguagePacketHandler.cs" />
     <Compile Include="PacketHandler\Command\TranslatePacketHandler.cs" />
     <Compile Include="PacketHandler\Command\UnbanHandler.cs" />
     <Compile Include="PacketHandler\Command\UndercoverHandler.cs" />

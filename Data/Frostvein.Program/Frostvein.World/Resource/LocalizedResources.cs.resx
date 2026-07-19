@@ -1,0 +1,143 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <!-- 
+    Microsoft ResX Schema 
+    
+    Version 2.0
+    
+    The primary goals of this format is to allow a simple XML format 
+    that is mostly human readable. The generation and parsing of the 
+    various data types are done through the TypeConverter classes 
+    associated with the data types.
+    
+    Example:
+    
+    ... ado.net/XML headers & schema ...
+    <resheader name="resmimetype">text/microsoft-resx</resheader>
+    <resheader name="version">2.0</resheader>
+    <resheader name="reader">System.Resources.ResXResourceReader, System.Windows.Forms, ...</resheader>
+    <resheader name="writer">System.Resources.ResXResourceWriter, System.Windows.Forms, ...</resheader>
+  <data name="ACCOUNT_ARRIVED" xml:space="preserve">
+    <value>Účet se SessionID {0} se připojil</value>
+  </data>
+  <data name="ADMINISTRATOR" xml:space="preserve">
+    <value>Administrátor</value>
+  </data>
+  <data name="BAD_DROP_AMOUNT" xml:space="preserve">
+    <value>Špatné množství k vyhození!</value>
+  </data>
+  <data name="CLIENT_ARRIVED" xml:space="preserve">
+    <value>Uživatel se připojil, SessionId: {0} </value>
+  </data>
+  <data name="CLIENT_DISCONNECTED" xml:space="preserve">
+    <value>Klient se Odpojil</value>
+  </data>
+  <data name="CORRUPTED_KEEPALIVE" xml:space="preserve">
+    <value>Poškozený KeepAlive vna klientovi {0}</value>
+  </data>
+  <data name="DATABASE_INITIALIZED" xml:space="preserve">
+    <value>Databáze byla Initializována</value>
+  </data>
+  <data name="DONE" xml:space="preserve">
+    <value>Parsování dokončeno</value>
+  </data>
+  <data name="HANDLER_NOT_FOUND" xml:space="preserve">
+    <value>Nelze najít Obsluhu implementace pro balíček s hlavičkou {0}</value>
+  </data>
+  <data name="NO_MAP" xml:space="preserve">
+    <value>Nebyly nalezeny žádné mapy. K chodu serveru potřebujete minimálně mapu Nosville.</value>
+  </data>
+  <data name="NPCMONSTERS_LOADED" xml:space="preserve">
+    <value>{0} NpcMonsters Nahrána!</value>
+  </data>
+  <data name="USER_NOT_CONNECTED" xml:space="preserve">
+    <value>Uživatel není připojen</value>
+  </data>
+  <data name="ALREADY_EXCHANGE" xml:space="preserve">
+    <value>Již jste ve výměně.</value>
+  </data>
+  <data name="DATABASE_NOT_UPTODATE" xml:space="preserve">
+    <value>Databáze nemusí být aktuální. Zvažte aktualizaci</value>
+  </data>
+  <data name="ASK_BIND" xml:space="preserve">
+    <value>Chceš spojit tyto položky</value>
+  </data>
+  <data name="SAVING_ALL" xml:space="preserve">
+    <value>Ukládání všeho!</value>
+  </data>
+  <data name="ITEM_NOT_FOUND" xml:space="preserve">
+    <value>Item not found.</value>
+  </data>
+  <data name="CORRUPT_PACKET" xml:space="preserve">
+    <value>Paket s hlavičkou {0} je poškozen nebo definice paketu je neplatná. Obsah: {1}</value>
+  </data>
+  <data name="SHOPSKILLS_LOADED" xml:space="preserve">
+    <value>{0} Shop Skills loaded.</value>
+  </data>
+  <data name="MAPS_LOADED" xml:space="preserve">
+    <value>{0}  Mapy Načteny</value>
+  </data>
+  <data name="MAPMONSTERS_LOADED" xml:space="preserve">
+    <value>{0} MAPMONSTERS načteny</value>
+  </data>
+  <data name="SP_NOPOINTS" xml:space="preserve">
+    <value>Nemáš dostatek SP Bodů pro změnu.</value>
+  </data>
+  <data name="DROP_MAP_FULL" xml:space="preserve">
+    <value>Mapa je plná předmětů více jich zde nemůže být!</value>
+  </data>
+  <data name="CHANNEL" xml:space="preserve">
+    <value>Kanál</value>
+  </data>
+  <data name="QUESTS_LOADED" xml:space="preserve">
+    <value>{0} Quests loaded.</value>
+  </data>
+  <data name="LANGUAGE_CHANGED" xml:space="preserve">
+    <value>Jazyk byl změněn na {0}. Další zprávy serveru budou používat tento jazyk.</value>
+  </data>
+  <data name="LANGUAGE_NOT_SUPPORTED" xml:space="preserve">
+    <value>Nepodporovaný jazyk. Dostupné jazyky: {0}.</value>
+  </data>
+  <data name="LANGUAGE_SAVE_ERROR" xml:space="preserve">
+    <value>Jazyk se nepodařilo uložit. Zkus to prosím za chvíli znovu.</value>
+  </data>
+  <data name="AMMO_LOADED_ADVENTURER" xml:space="preserve">
+    <value>Náboje nabity!</value>
+  </data>
+  <data name="AMMO_LOADED_ARCHER" xml:space="preserve">
+    <value>Šíp připraven!</value>
+  </data>
+  <data name="AMMO_LOADED_SWORDSMAN" xml:space="preserve">
+    <value>Šíp připraven v kuši!</value>
+  </data>
+  <data name="MINILAND_INFO_CHANGED" xml:space="preserve">
+    <value>Mini-land info změněno</value>
+  </data>
+  <data name="MINILAND_WELCOME_MESSAGE" xml:space="preserve">
+    <value>Vítejte!</value>
+  </data>
+  <data name="PERFECTSP_ATTACK" xml:space="preserve">
+    <value>Útok</value>
+  </data>
+  <data name="PERFECTSP_DEFENSE" xml:space="preserve">
+    <value>Obrana</value>
+  </data>
+  <data name="PERFECTSP_ELEMENT" xml:space="preserve">
+    <value>Element</value>
+  </data>
+  <data name="PERFECTSP_FIRE" xml:space="preserve">
+    <value>Oheň</value>
+  </data>
+  <data name="PERFECTSP_HPMP" xml:space="preserve">
+    <value>HP/MP</value>
+  </data>
+  <data name="PERFECTSP_LIGHT" xml:space="preserve">
+    <value>Světlo</value>
+  </data>
+  <data name="PERFECTSP_SHADOW" xml:space="preserve">
+    <value>Stín</value>
+  </data>
+  <data name="PERFECTSP_WATER" xml:space="preserve">
+    <value>Voda</value>
+  </data>
+</root>

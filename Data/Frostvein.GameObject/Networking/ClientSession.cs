@@ -88,6 +88,17 @@ namespace Frostvein.GameObject
 
         public Account Account { get; private set; }
 
+        /// <summary>
+        /// Culture selected for this account. Invalid or empty legacy values use the
+        /// configured server default.
+        /// </summary>
+        public string LanguageCode => Language.Instance.NormalizeCulture(Account?.Language);
+
+        public string GetMessageFromKey(string key)
+        {
+            return Language.Instance.GetMessageFromKey(key, LanguageCode);
+        }
+
         public string ParsedAddress
         {
             get
@@ -606,7 +617,7 @@ namespace Frostvein.GameObject
                 Character.CharacterId != loggedInCharacter.Item1)
             {
                 _client.SendPacket(Character.GenerateSay(
-                    string.Format(Language.Instance.GetMessageFromKey("CHARACTER_LOGGED_IN"), loggedInCharacter.Item2),
+                    string.Format(GetMessageFromKey("CHARACTER_LOGGED_IN"), loggedInCharacter.Item2),
                     10));
                 _client.SendPacket(Character.GenerateFinfo(loggedInCharacter.Item1, true));
             }
@@ -615,9 +626,9 @@ namespace Frostvein.GameObject
 
             if (chara != null && loggedInCharacter.Item1 != Character?.CharacterId)
                 _client.SendPacket(Character.GenerateSay(
-                    string.Format(Language.Instance.GetMessageFromKey("CHARACTER_FAMILY_LOGGED_IN"),
+                    string.Format(GetMessageFromKey("CHARACTER_FAMILY_LOGGED_IN"),
                         loggedInCharacter.Item2,
-                        Language.Instance.GetMessageFromKey(chara.Authority.ToString().ToUpper())), 10));
+                        GetMessageFromKey(chara.Authority.ToString().ToUpper())), 10));
         }
 
         private void OnOtherCharacterDisconnected(object sender, EventArgs e)
@@ -631,7 +642,7 @@ namespace Frostvein.GameObject
 
             if (Character.IsFriendOfCharacter(loggedOutCharacter.Item1) && Character != null && Character.CharacterId != loggedOutCharacter.Item1)
             {
-                _client.SendPacket(Character.GenerateSay(string.Format(Language.Instance.GetMessageFromKey("CHARACTER_LOGGED_OUT"), loggedOutCharacter.Item2), 10));
+                _client.SendPacket(Character.GenerateSay(string.Format(GetMessageFromKey("CHARACTER_LOGGED_OUT"), loggedOutCharacter.Item2), 10));
                 _client.SendPacket(Character.GenerateFinfo(loggedOutCharacter.Item1, false));
             }
         }
@@ -664,26 +675,37 @@ namespace Frostvein.GameObject
                     {
                         if (HasSelectedCharacter || methodReference.IsCharScreen)
                         {
-                            // call actual handler method
-                            if (methodReference.PacketDefinitionParameterType != null)
+                            using (Language.Instance.UseCulture(LanguageCode))
                             {
-                                //check for the correct authority
-                                if (!IsAuthenticated || Account.Authority >= methodReference.Authority || ignoreAuthority)
+                                // Call the handler with the account culture available to
+                                // both explicit and legacy localization lookups.
+                                if (methodReference.PacketDefinitionParameterType != null)
                                 {
-                                    PacketDefinition deserializedPacket = PacketFactory.Deserialize(packet, methodReference.PacketDefinitionParameterType, IsAuthenticated);
-                                    if (deserializedPacket != null || methodReference.PassNonParseablePacket)
+                                    // Check for the correct authority.
+                                    if (!IsAuthenticated || Account.Authority >= methodReference.Authority || ignoreAuthority)
                                     {
-                                        methodReference.HandlerMethod(methodReference.ParentHandler, deserializedPacket);
-                                    }
-                                    else
-                                    {
-                                        Logger.Warn(string.Format(Language.Instance.GetMessageFromKey("CORRUPT_PACKET"), packetHeader, packet));
+                                        PacketDefinition deserializedPacket = PacketFactory.Deserialize(
+                                            packet,
+                                            methodReference.PacketDefinitionParameterType,
+                                            IsAuthenticated);
+
+                                        if (deserializedPacket != null || methodReference.PassNonParseablePacket)
+                                        {
+                                            methodReference.HandlerMethod(methodReference.ParentHandler, deserializedPacket);
+                                        }
+                                        else
+                                        {
+                                            Logger.Warn(string.Format(
+                                                Language.Instance.GetMessageFromKey("CORRUPT_PACKET"),
+                                                packetHeader,
+                                                packet));
+                                        }
                                     }
                                 }
-                            }
-                            else
-                            {
-                                methodReference.HandlerMethod(methodReference.ParentHandler, packet);
+                                else
+                                {
+                                    methodReference.HandlerMethod(methodReference.ParentHandler, packet);
+                                }
                             }
                         }
                     }
