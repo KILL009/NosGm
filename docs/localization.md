@@ -35,4 +35,10 @@ For broadcasts, resolve the message separately for each receiving session. A sin
 4. Leave untranslated keys out of the satellite resource so the neutral English resource is used.
 5. Replace hard-coded player-facing strings with resource keys and the session-aware resolver.
 
-The initial French catalog was adapted from the archived OpenNos French resources. Only keys that still exist in NosGM and have compatible format tokens are included.
+The French catalog was adapted from the archived OpenNos resources and later compatible community catalogs. NosGM keeps only keys that still exist, rejects duplicate entries and requires identical format tokens before a translation is accepted.
+
+## Current French coverage
+
+The World Server catalog contains a French entry for every non-empty neutral resource key (693 of 693). The legacy `Color1` resource is empty in the neutral catalog and is intentionally omitted.
+
+This covers messages that already use the resource system. Static item, skill, map and interface names are client-side and come from the player's French client files. Player-facing strings still hard-coded directly in C# must be migrated to resource keys as those features are revised.
