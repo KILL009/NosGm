@@ -281,10 +281,14 @@ namespace Frostvein.World
 
         private static void AuditSpecialistData()
         {
+            // Partner specialist cards use the same equipment slot, but Class == 0
+            // and their skills are not CharacterSkill rows. Excluding them prevents
+            // false "morph without skills" warnings.
             var specialistCards = ServerManager.Items
                 .Where(item => item != null &&
                                item.EquipmentSlot == EquipmentType.Sp &&
-                               item.Morph > 0)
+                               item.Morph > 0 &&
+                               item.Class != 0)
                 .ToList();
 
             var specialistMorphs = new HashSet<int>(
@@ -309,7 +313,25 @@ namespace Frostvein.World
                 .OrderBy(type => (byte)type)
                 .ToList();
 
-            var missingBCardTypes = usedBCardTypes
+            var typesWithoutPluginHandlers = usedBCardTypes
+                .Where(type => !PluginFacility.HasBCardHandler(type))
+                .ToList();
+
+            var modernSpecialistMechanics = new HashSet<BCardType.CardType>
+            {
+                BCardType.CardType.PinpointSkill,
+                BCardType.CardType.WhenHeatingActive,
+                BCardType.CardType.UseResourcePoints,
+                BCardType.CardType.ConditionalResourceEffects,
+                BCardType.CardType.ResourcePointEffects,
+                BCardType.CardType.PetTrainerSkills,
+                BCardType.CardType.TokenGauge,
+                BCardType.CardType.TokenSpecialistEffects,
+                BCardType.CardType.DimensionalSynchronization
+            };
+
+            var unimplementedModernMechanics = usedBCardTypes
+                .Where(modernSpecialistMechanics.Contains)
                 .Where(type => !PluginFacility.HasBCardHandler(type))
                 .ToList();
 
@@ -318,19 +340,57 @@ namespace Frostvein.World
                 .Where(cardId => ServerManager.GetCard(cardId) == null)
                 .ToList();
 
-            Logger.Info($"[SP_AUDIT] Cards={specialistCards.Count} Morphs={specialistMorphs.Count} " +
+            Logger.Info($"[SP_AUDIT] PlayerCards={specialistCards.Count} Morphs={specialistMorphs.Count} " +
                         $"Skills={specialistSkills.Count} BCardTypes={usedBCardTypes.Count} " +
                         $"RegisteredHandlers={PluginFacility.RegisteredBCardTypes.Count}");
 
-            if (morphsWithoutSkills.Count > 0)
+            var expectedSp12 = new Dictionary<int, string>
             {
-                Logger.Warn($"[SP_AUDIT] Specialist morphs without skills: {string.Join(",", morphsWithoutSkills)}");
+                { 55, "Achilles" },
+                { 56, "Admiral Yi" },
+                { 57, "Merlin" },
+                { 58, "Thor" }
+            };
+
+            foreach (var specialist in expectedSp12)
+            {
+                var cards = specialistCards
+                    .Where(card => card.Morph == specialist.Key)
+                    .ToList();
+                int skillCount = specialistSkills.Count(skill => skill.UpgradeType == specialist.Key);
+                int bcardCount = specialistSkills
+                    .Where(skill => skill.UpgradeType == specialist.Key)
+                    .SelectMany(skill => skill.BCards ?? new List<BCard>())
+                    .Count();
+
+                if (cards.Count == 0 || skillCount < 11)
+                {
+                    Logger.Warn($"[SP_AUDIT] SP12 {specialist.Value} incomplete: " +
+                                $"Morph={specialist.Key} Cards={cards.Count} Skills={skillCount} BCards={bcardCount}");
+                }
+                else
+                {
+                    Logger.Info($"[SP_AUDIT] SP12 {specialist.Value}: " +
+                                $"Morph={specialist.Key} Cards={cards.Count} Skills={skillCount} BCards={bcardCount}");
+                }
             }
 
-            if (missingBCardTypes.Count > 0)
+            if (morphsWithoutSkills.Count > 0)
             {
-                Logger.Warn("[SP_AUDIT] Specialist BCard types without runtime handlers: " +
-                            string.Join(", ", missingBCardTypes.Select(type => $"{(byte)type}:{type}")));
+                Logger.Warn($"[SP_AUDIT] Player specialist morphs without skills: {string.Join(",", morphsWithoutSkills)}");
+            }
+
+            if (typesWithoutPluginHandlers.Count > 0)
+            {
+                Logger.Warn("[SP_AUDIT] Specialist BCard types without active plugin handlers " +
+                            "(some may be passive effects evaluated by combat code): " +
+                            string.Join(", ", typesWithoutPluginHandlers.Select(type => $"{(byte)type}:{type}")));
+            }
+
+            if (unimplementedModernMechanics.Count > 0)
+            {
+                Logger.Warn("[SP_MECHANIC_UNIMPLEMENTED] Modern specialist resource/token mechanics: " +
+                            string.Join(", ", unimplementedModernMechanics.Select(type => $"{(byte)type}:{type}")));
             }
 
             if (missingPlus20BuffIds.Count > 0)
