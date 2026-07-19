@@ -23,6 +23,8 @@ Session.GetMessageFromKey("ITEM_ACQUIRED")
 
 Use `Language.Instance.GetMessageFromKey(key)` only for server logs or messages that do not have a recipient.
 
+Packet handlers automatically establish the current session culture, so legacy calls made directly inside a handler are also resolved for that player. New code should still prefer `Session.GetMessageFromKey` because it remains explicit and works in callbacks.
+
 For broadcasts, resolve the message separately for each receiving session. A single pre-rendered broadcast cannot display different languages to different players.
 
 ## Adding a language
