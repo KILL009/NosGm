@@ -1967,4 +1967,136 @@ Veux-tu continuer ?</value>
 <data name="YOU_HAVE_LIFE" xml:space="preserve">
     <value>Tu possèdes encore une vie.</value>
   </data>
+  <data name="NO_HANDLER_ITEM" xml:space="preserve">
+    <value>Aucun gestionnaire trouvé pour cet objet dans cette classe {0}, ItemVNum : {1}, Effet : {2}, Valeur de l'effet : {3}</value>
+  </data>
+  <data name="GROUP_JOIN" xml:space="preserve">
+    <value>Tu as rejoint un groupe.</value>
+  </data>
+  <data name="DROPPED_ITEM" xml:space="preserve">
+    <value>(Groupe) [{0}], Priorité : tous les membres du groupe</value>
+  </data>
+  <data name="ITEM_BOUND_TO" xml:space="preserve">
+    <value>(Groupe) [{0}], Priorité : {1}</value>
+  </data>
+  <data name="ITEM_GIFTED" xml:space="preserve">
+    <value>Tu as reçu : {0} x{1}</value>
+  </data>
+  <data name="MONSTER_REMOVED" xml:space="preserve">
+    <value>Monstre supprimé (MapMonsterId : {0}, Nom : {1}, MapId : {2}, MapX : {3}, MapY : {4})</value>
+  </data>
+  <data name="NOT_ENOUGH_ITEMS" xml:space="preserve">
+    <value>Il faut au moins {0} x {1}</value>
+  </data>
+  <data name="ACCEPTED_SHARE" xml:space="preserve">
+    <value>Tu as changé le point de retour commun des membres du groupe.</value>
+  </data>
+  <data name="YOU_GET_PET" xml:space="preserve">
+    <value>Tu as reçu un NosMate appelé : {0}.</value>
+  </data>
+  <data name="MUTED_SINGULAR" xml:space="preserve">
+    <value>Tu as été réduit au silence pendant 1 minute.</value>
+  </data>
+  <data name="BAZAAR_LOADED" xml:space="preserve">
+    <value>{0} objets du NosBazar chargés.</value>
+  </data>
+  <data name="RECIPELISTS_LOADED" xml:space="preserve">
+    <value>{0} listes de recettes chargées !</value>
+  </data>
+  <data name="RAID_JOIN" xml:space="preserve">
+    <value>Tu as rejoint le raid.</value>
+  </data>
+  <data name="ACT4_PVP_DEATH1" xml:space="preserve">
+    <value>Le pouvoir de protection de {0} a été volé par un gardien des démons.</value>
+  </data>
+  <data name="ACT4_PVP_DEATH2" xml:space="preserve">
+    <value>Le pouvoir de protection de {0} a été volé par un gardien des anges.</value>
+  </data>
+  <data name="ACT4_PVP_KILL1" xml:space="preserve">
+    <value>{0} a volé le pouvoir de protection d'un gardien des anges.</value>
+  </data>
+  <data name="ACT4_PVP_KILL2" xml:space="preserve">
+    <value>{0} a volé le pouvoir de protection d'un gardien des démons.</value>
+  </data>
+  <data name="TS_PENALTY" xml:space="preserve">
+    <value>Tu dois attendre {0} jour(s).</value>
+  </data>
+  <data name="ICEBREAKER_ASK" xml:space="preserve">
+    <value>Souhaites-tu entrer ?</value>
+  </data>
+  <data name="ASK_ENTER_GOLD_NORM" xml:space="preserve">
+    <value>500 pièces d'or sont nécessaires pour entrer. Continuer ?</value>
+  </data>
+  <data name="ASK_ENTER_GOLD_FAM" xml:space="preserve">
+    <value>1 000 pièces d'or sont nécessaires pour entrer. Continuer ?</value>
+  </data>
+  <data name="REPUT_DECREASED" xml:space="preserve">
+    <value>Réputation diminuée : -{0}</value>
+  </data>
+  <data name="ITEM_ACQUIRED_LOD" xml:space="preserve">
+    <value>Tu as reçu cet objet -</value>
+  </data>
+  <data name="ARENA_NOT_OPEN" xml:space="preserve">
+    <value>Les horaires de l'Arène des talents sont : {0}.</value>
+  </data>
+  <data name="BAZAAR_ITEM_SOLD" xml:space="preserve">
+    <value>{0} a acheté {1} x{2} dans ton NosBazar.</value>
+  </data>
+  <data name="EXCHANGE_NOT_ALLOWED_IN_RAID" xml:space="preserve">
+    <value>Les échanges ne sont pas autorisés dans les raids.</value>
+  </data>
+  <data name="SACRIFICES_THEMSELVES" xml:space="preserve">
+    <value>{0} se sacrifie pour {1}.</value>
+  </data>
+  <data name="SACRIFICE_OUT_OF_RANGE" xml:space="preserve">
+    <value>L'effet de sacrifice a été annulé car le joueur sélectionné est hors de portée.</value>
+  </data>
+  <data name="CANT_DO_NOT_IN_ARENA" xml:space="preserve">
+    <value>Tu ne peux pas utiliser cet objet dans l'arène.</value>
+  </data>
+  <data name="CANT_DO_NOT_OUT_ARENA" xml:space="preserve">
+    <value>Tu ne peux utiliser ces objets que dans l'arène.</value>
+  </data>
+  <data name="TALENT_ARENA_NOT_BCARDS" xml:space="preserve">
+    <value>Les buffs et debuffs ne sont pas disponibles car ils ne sont pas équilibrés.</value>
+  </data>
+  <data name="TOURNAMENT_FINISHED" xml:space="preserve">
+    <value>Félicitations ! Le tournoi est terminé ! Tu seras téléporté à NosVille dans {0} seconde(s).</value>
+  </data>
+  <data name="TOURNAMENT_MINUTES" xml:space="preserve">
+    <value>Le jeu de la Météorite commence dans {0} minute(s) !</value>
+  </data>
+  <data name="TOURNAMENT_ROUND" xml:space="preserve">
+    <value>Félicitations ! Tu as terminé la manche {0} du tournoi.</value>
+  </data>
+  <data name="TOURNAMENT_SECONDS" xml:space="preserve">
+    <value>Le jeu de la Météorite commence dans {0} seconde(s) !</value>
+  </data>
+  <data name="TOURNAMENT_STARTED" xml:space="preserve">
+    <value>Le tournoi a commencé !</value>
+  </data>
+  <data name="RAINBOWBATTLE_LEADER" xml:space="preserve">
+    <value>Le joueur {0} est le chef !</value>
+  </data>
+  <data name="RAINBOWBATTLE_OPEN_GROUP" xml:space="preserve">
+    <value>L'équipe de la Bataille arc-en-ciel a été créée !</value>
+  </data>
+  <data name="NPC_INFORMATIONS" xml:space="preserve">
+    <value>Informations PNJ / monstre : (NpcMonsterId : {0}, Nom : {1}, VNum : {2}, MapId : {3}, MapX : {4}, MapY : {5})</value>
+  </data>
+  <data name="AMULET_DESTROYED" xml:space="preserve">
+    <value>ATTENTION ! Ton objet magique a disparu !</value>
+  </data>
+  <data name="OPEN_BANK" xml:space="preserve">
+    <value>Désactivé pendant la bêta.</value>
+  </data>
+  <data name="FAMILYHEAD" xml:space="preserve">
+    <value>Chef de famille</value>
+  </data>
+  <data name="CALIGOR_LOCKED" xml:space="preserve">
+    <value>Les portails du royaume de Caligor ont été verrouillés.</value>
+  </data>
+  <data name="FAMILYRAID_SUCCESS" xml:space="preserve">
+    <value>Ta famille a remporté le donjon de l'Acte 4.</value>
+  </data>
 </root>
