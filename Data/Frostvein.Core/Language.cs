@@ -16,7 +16,10 @@ namespace Frostvein.Core
     /// </summary>
     public sealed class Language
     {
-        private static readonly string[] SupportedCultures = { "en", "fr" };
+        private static readonly string[] SupportedCultures =
+        {
+            "en", "es", "de", "fr", "it", "pl", "cs", "ru", "ja", "zh"
+        };
 
         private static readonly Lazy<Language> LazyInstance =
             new Lazy<Language>(() => new Language());
@@ -139,20 +142,62 @@ namespace Frostvein.Core
 
             var candidate = cultureName.Trim().Replace('_', '-').ToLowerInvariant();
 
-            // Older Frostvein configurations used "uk" to mean UK English.
-            if (candidate == "uk" || candidate == "gb")
+            // Accept culture tags, English display names, native names and
+            // aliases commonly used by launchers and older NosTale tools.
+            if (candidate == "uk" || candidate == "gb" || candidate == "english" ||
+                candidate.StartsWith("en-"))
             {
                 candidate = "en";
             }
-
-            if (candidate == "english" || candidate.StartsWith("en-"))
+            else if (candidate == "spanish" || candidate == "español" ||
+                     candidate == "espanol" || candidate.StartsWith("es-"))
             {
-                candidate = "en";
+                candidate = "es";
+            }
+            else if (candidate == "german" || candidate == "deutsch" ||
+                     candidate.StartsWith("de-"))
+            {
+                candidate = "de";
             }
             else if (candidate == "french" || candidate == "français" ||
                      candidate == "francais" || candidate.StartsWith("fr-"))
             {
                 candidate = "fr";
+            }
+            else if (candidate == "italian" || candidate == "italiano" ||
+                     candidate.StartsWith("it-"))
+            {
+                candidate = "it";
+            }
+            else if (candidate == "polish" || candidate == "polski" ||
+                     candidate.StartsWith("pl-"))
+            {
+                candidate = "pl";
+            }
+            else if (candidate == "cz" || candidate == "czech" ||
+                     candidate == "čeština" || candidate == "cestina" ||
+                     candidate.StartsWith("cs-") || candidate.StartsWith("cz-"))
+            {
+                candidate = "cs";
+            }
+            else if (candidate == "russian" || candidate == "русский" ||
+                     candidate.StartsWith("ru-"))
+            {
+                candidate = "ru";
+            }
+            else if (candidate == "jp" || candidate == "japanese" ||
+                     candidate == "日本語" || candidate.StartsWith("ja-") ||
+                     candidate.StartsWith("jp-"))
+            {
+                candidate = "ja";
+            }
+            else if (candidate == "cn" || candidate == "chinese" ||
+                     candidate == "中文" || candidate.StartsWith("zh-") ||
+                     candidate.StartsWith("cn-"))
+            {
+                // The first Chinese catalog is Simplified Chinese. Region-specific
+                // aliases deliberately share it until a Traditional catalog exists.
+                candidate = "zh";
             }
 
             foreach (var supportedCulture in SupportedCultures)
