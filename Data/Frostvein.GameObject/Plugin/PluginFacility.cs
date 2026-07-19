@@ -1,5 +1,6 @@
 ﻿using Game.Configuration.BCards;
 using Frostvein.Packets.Packets.ClientPackets;
+using Frostvein.Core;
 using Frostvein.Domain;
 using Frostvein.GameObject;
 using Frostvein.GameObject._plugins;
@@ -19,7 +20,16 @@ namespace Game.Configuration
         private static IDictionary<NRunType[], Action<ClientSession, NRunPacket>> _nrunHandler;
         private static IDictionary<GuriType[], Action<ClientSession, GuriPacket>> _guriHandler;
         private static IDictionary<CardType, Action<BCardEvent>> _bcardHandler;
+        private static readonly HashSet<CardType> MissingBCardWarnings = new HashSet<CardType>();
+        private static readonly object MissingBCardWarningsLock = new object();
+
         public static bool IsInitialized { get; set; }
+
+        public static bool HasBCardHandler(CardType type) =>
+            _bcardHandler != null && _bcardHandler.ContainsKey(type);
+
+        public static IReadOnlyCollection<CardType> RegisteredBCardTypes =>
+            _bcardHandler?.Keys.ToList() ?? new List<CardType>();
 
         public static void InitializeAll()
         {
@@ -60,30 +70,32 @@ namespace Game.Configuration
       
         public static void HandleBCard(BCardEvent evnt)
         {
+            if (evnt?.Caster == null || evnt.Target == null || evnt.BCard == null)
+            {
+                return;
+            }
+
+            var cardType = (CardType)evnt.BCard.Type;
+            if (_bcardHandler == null || !_bcardHandler.TryGetValue(cardType, out Action<BCardEvent> action))
+            {
+                lock (MissingBCardWarningsLock)
+                {
+                    if (MissingBCardWarnings.Add(cardType))
+                    {
+                        Logger.Warn($"[BCARD_HANDLER_MISSING] Type={(byte)cardType} Name={cardType}");
+                    }
+                }
+
+                return;
+            }
+
             try
             {
-                if (evnt.Caster == null)
-                {
-                    return;
-                }
-
-                if (evnt.Target == null)
-                {
-                    return;
-                }
-
-                if (!_bcardHandler.Any(h => h.Key.Equals((CardType)evnt.BCard.Type)))
-                {
-                    //Logger.Log.Debug($"[HANDLER_NOT_FOUND] CardType : {packet.Runner} ");
-                    return;
-                }
-
-                var action = _bcardHandler.FirstOrDefault(h => h.Key.Equals((CardType)evnt.BCard.Type));
-                action.Value(evnt);
+                action(evnt);
             }
-            catch
+            catch (Exception exception)
             {
-
+                Logger.Error($"[BCARD_HANDLER_FAILED] Type={(byte)cardType} Name={cardType}", exception);
             }
         }
 
