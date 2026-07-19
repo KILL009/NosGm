@@ -2971,8 +2971,9 @@ namespace Frostvein.Extension.Extension.Packet
 
                         // This will reset skill's cooldown if you have fairy wings
                         int[] fairyWings = Session.Character.GetBuff(CardType.EffectSummon, 11);
+                        int cooldownResetChance = Math.Min(fairyWings[0], 80);
                         int random = ServerManager.RandomNumber();
-                        if (fairyWings[0] > random)
+                        if (cooldownResetChance > random)
                         {
                             Observable.Timer(TimeSpan.FromSeconds(1)).Subscribe(o =>
                             {
