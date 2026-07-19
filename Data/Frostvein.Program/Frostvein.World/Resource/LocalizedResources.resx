@@ -2178,4 +2178,13 @@
   <data name="FAMILYRAID_SUCCESS" xml:space="preserve">
     <value>Your Family has won the Act4 Dungeon.</value>
   </data>
+  <data name="LANGUAGE_CHANGED" xml:space="preserve">
+    <value>Language changed to {0}. Future server messages will use this language.</value>
+  </data>
+  <data name="LANGUAGE_NOT_SUPPORTED" xml:space="preserve">
+    <value>Unsupported language. Available languages: {0}.</value>
+  </data>
+  <data name="LANGUAGE_SAVE_ERROR" xml:space="preserve">
+    <value>The language could not be saved. Please try again in a moment.</value>
+  </data>
 </root>
