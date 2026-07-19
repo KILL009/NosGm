@@ -67,11 +67,11 @@ The English neutral catalog has 690 real string keys. The French satellite cover
 | Code | Verified server keys |
 | --- | ---: |
 | `es` | 488 |
-| `de` | 290 |
+| `de` | 291 |
 | `fr` | 690 |
 | `it` | 428 |
-| `pl` | 396 |
-| `cs` | 28 |
+| `pl` | 397 |
+| `cs` | 41 |
 | `ru` | 29 |
 | `ja` | 3 |
 | `zh` | 3 |
