@@ -1211,4 +1211,7 @@
   <data name="LANGUAGE_SAVE_ERROR" xml:space="preserve">
     <value>Nie udało się zapisać języka. Spróbuj ponownie za chwilę.</value>
   </data>
+  <data name="MINILAND_INFO_CHANGED" xml:space="preserve">
+    <value>Zmieniono wiadomość powitalną Mini-Landu.</value>
+  </data>
 </root>
