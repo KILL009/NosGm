@@ -58,6 +58,7 @@
     <Compile Include="ModulesConfiguration.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="ServerConfiguration.cs" />
+    <Compile Include="WorldPolicyConfiguration.cs" />
     <Compile Include="StaticAPIData.cs" />
     <Compile Include="Utilities\DependencyContainer.cs" />
   </ItemGroup>
