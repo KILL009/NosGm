@@ -887,4 +887,7 @@
   <data name="LANGUAGE_SAVE_ERROR" xml:space="preserve">
     <value>Die Sprache konnte nicht gespeichert werden. Bitte versuche es gleich noch einmal.</value>
   </data>
+  <data name="MINILAND_INFO_CHANGED" xml:space="preserve">
+    <value>Deine Beschreibung wurde aktualisiert.</value>
+  </data>
 </root>
