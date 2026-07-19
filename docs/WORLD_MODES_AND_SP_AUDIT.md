@@ -19,7 +19,7 @@ Job EXP and specialist EXP are intentionally not disabled by the zero-EXP flags.
 | `NOSGM_SERVER_GROUP` | Existing server group | Separates the worlds shown in the login list |
 | `NOSGM_SERVER_NAME` | Existing server name | Reserved per-process display name |
 | `NOSGM_WORLD_PORT` | Existing world port | Listening port for the World Server process |
-| `NOSGM_WORLD_MODE` | `PVE` | Accepts `PVE` or `PVP` |
+| `NOSGM_WORLD_MODE` | `STANDARD` | Accepts `STANDARD`, `PVE` or `PVP`; STANDARD preserves existing behavior |
 | `NOSGM_DISABLE_NORMAL_EXP` | `false` | Disables normal combat/quest EXP |
 | `NOSGM_DISABLE_HERO_EXP` | `false` | Disables hero combat/quest EXP |
 | `NOSGM_PVE_ALLOW_INSTANCED_PVP` | `true` | Keeps Arena, Ice Breaker, Rainbow Battle and other dedicated PvP instances enabled |
