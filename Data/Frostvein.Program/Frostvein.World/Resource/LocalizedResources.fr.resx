@@ -1412,4 +1412,559 @@ Veux-tu continuer ?</value>
   <data name="LANGUAGE_SAVE_ERROR" xml:space="preserve">
     <value>Impossible d'enregistrer la langue. Réessaie dans quelques instants.</value>
   </data>
+<data name="ACT4_BITOREN_RAID_OPEN" xml:space="preserve">
+    <value>Le portail central de la Toundra Bitoren est maintenant ouvert !</value>
+  </data>
+<data name="ACT4_OFFLINE" xml:space="preserve">
+    <value>La couronne de glace est actuellement indisponible.</value>
+  </data>
+<data name="ACT4_RAID_ENTER" xml:space="preserve">
+    <value>{0} points de réputation sont requis. Veux-tu entrer ?</value>
+  </data>
+<data name="ACT4_RAID_EXIT" xml:space="preserve">
+    <value>Voulez-vous revenir à Toundra Bitoren ?</value>
+  </data>
+<data name="AEGIR_THE_ANGRY" xml:space="preserve">
+    <value>Aegir</value>
+  </data>
+<data name="ALREADY_GOT_BUFF" xml:space="preserve">
+    <value>Tu subis déjà l'effet : {0}.</value>
+  </data>
+<data name="ALREADY_HAVE_MAX_AMOUNT" xml:space="preserve">
+    <value>Tu as atteint la limite.</value>
+  </data>
+<data name="AMON" xml:space="preserve">
+    <value>Amon</value>
+  </data>
+<data name="AMORA" xml:space="preserve">
+    <value>Cupidia</value>
+  </data>
+<data name="ARCHDAEMON_AMON" xml:space="preserve">
+    <value>Archidémon^Amon</value>
+  </data>
+<data name="ARENA_PENALTY_NOTICE" xml:space="preserve">
+    <value>Vous avez une équipe. Êtes-vous sûr de vouloir partir ?</value>
+  </data>
+<data name="ASK_JOIN_TEAM_TS" xml:space="preserve">
+    <value>Voulez-vous rejoindre votre groupe dans l'Espace-temps ?</value>
+  </data>
+<data name="ASK_PET_MAX" xml:space="preserve">
+    <value>Voulez-vous élargir les emplacements pour animaux de compagnie ?</value>
+  </data>
+<data name="ASK_REVIVE_CALIGOR" xml:space="preserve">
+    <value>Voulez-vous revivre dans le royaume de Caligor ?</value>
+  </data>
+<data name="ASK_REVIVE_LOD" xml:space="preserve">
+    <value>Voulez-vous utiliser une potion du sauveur ?</value>
+  </data>
+<data name="ASK_REVIVE_TS" xml:space="preserve">
+    <value>Voulez-vous continuer ?</value>
+  </data>
+<data name="ASK_STORE_PET" xml:space="preserve">
+    <value>Voulez-vous garder le partenaire / animal de compagnie dans la perle ?</value>
+  </data>
+<data name="ASK_TRADE" xml:space="preserve">
+    <value>Veux-tu procéder à l'échange ?</value>
+  </data>
+<data name="BACK_TO_MINILAND" xml:space="preserve">
+    <value>Votre animal est mort et a été envoyé au Mini-pays !</value>
+  </data>
+<data name="BARNI_THE_CLEVER" xml:space="preserve">
+    <value>Barni</value>
+  </data>
+<data name="BONE_WARRIOR_RAGNAR" xml:space="preserve">
+    <value>Guerrier^Squelettique^Ragnar</value>
+  </data>
+<data name="BOUND_TO_YOU" xml:space="preserve">
+    <value>Cet objet est maintenant lié à votre personnage</value>
+  </data>
+<data name="BOX_ITEMS_LOADED" xml:space="preserve">
+    <value>{0} Boites d'objets chargées.</value>
+  </data>
+<data name="CALIGOR_CLOSED" xml:space="preserve">
+    <value>Les portails du royaume de Caligor sont fermés !</value>
+  </data>
+<data name="CALIGOR_END" xml:space="preserve">
+    <value>L'attaque du royaume de Caligor est terminée !</value>
+  </data>
+<data name="CALIGOR_OPEN" xml:space="preserve">
+    <value>Les portails vers le royaume de Caligor sont ouverts !</value>
+  </data>
+<data name="CALIGOR_RAID_ENTER" xml:space="preserve">
+    <value>Voulez-vous entrer dans le royaume de Caligor ?</value>
+  </data>
+<data name="CALIGOR_RAID_EXIT" xml:space="preserve">
+    <value>Voulez-vous aller à la terre inconnue ?</value>
+  </data>
+<data name="CANNOT_TRADE_LIMITED_ACCOUNT" xml:space="preserve">
+    <value>Vous ne pouvez pas échanger avec un membre de l'équipe du jeu.</value>
+  </data>
+<data name="CANNOT_USE" xml:space="preserve">
+    <value>Tu ne peux pas utiliser cet objet.</value>
+  </data>
+<data name="CANT_BLACKLIST_TEAM" xml:space="preserve">
+    <value>Vous ne pouvez pas mettre un membre de l'équipe sur la liste noire.</value>
+  </data>
+<data name="CANT_CHANGE_PARTNER_NAME" xml:space="preserve">
+    <value>Vous ne pouvez pas changer le nom de votre partenaire.</value>
+  </data>
+<data name="CANT_DELETE_COUPLE" xml:space="preserve">
+    <value>Vous ne pouvez pas supprimer votre partenaire de la liste d'amis.</value>
+  </data>
+<data name="CANT_DO_THAT" xml:space="preserve">
+    <value>Tu ne peux pas effectuer cette action.</value>
+  </data>
+<data name="CANT_DO_VEHICLED" xml:space="preserve">
+    <value>Tu ne peux utiliser que les potions HP / MP lorsque tu utilises une monture.</value>
+  </data>
+<data name="CANT_RELATION_YOURSELF" xml:space="preserve">
+    <value>Vous ne pouvez pas commencer une relation avec vous-même.</value>
+  </data>
+<data name="CANT_TRASFORM_WITH_DEBUFFS" xml:space="preserve">
+    <value>Tu ne peux pas être transformé en raison des effets secondaires.</value>
+  </data>
+<data name="CANT_UNTRASFORM_WITH_DEBUFFS" xml:space="preserve">
+    <value>La transformation ne peut pas être annulée en raison d'effets secondaires.</value>
+  </data>
+<data name="CAPTURING" xml:space="preserve">
+    <value>: Capture</value>
+  </data>
+<data name="CATCH_FAIL" xml:space="preserve">
+    <value>La capture a échoué.</value>
+  </data>
+<data name="CATCH_SUCCESS" xml:space="preserve">
+    <value>Capture réussie.</value>
+  </data>
+<data name="CHANGE_NOT_PERMITTED" xml:space="preserve">
+    <value>Vous devez attendre un jour pour changer à nouveau de factions.</value>
+  </data>
+<data name="CHANGE_NOT_PERMITTED_ACT4" xml:space="preserve">
+    <value>Vous ne pouvez pas changer de faction sur ce canal.</value>
+  </data>
+<data name="CHEONGBI" xml:space="preserve">
+    <value>Cheongbi</value>
+  </data>
+<data name="COWGIRL_CHLOE" xml:space="preserve">
+    <value>Chloé^la^cowgirl</value>
+  </data>
+<data name="CURRENT_HP_TOO_HIGH" xml:space="preserve">
+    <value>Vous ne pouvez capturer que des animaux dont les HP sont inférieurs à 50%.</value>
+  </data>
+<data name="DAILY_REWARD" xml:space="preserve">
+    <value>Tu as acquis une récompense quotidienne.</value>
+  </data>
+<data name="DANIEL_DUCATS" xml:space="preserve">
+    <value>Daniel^Ducat</value>
+  </data>
+<data name="ENCASED_BURNING_SWORD" xml:space="preserve">
+    <value>La chaleur de l'épée brulante réduit ta vitalitée...</value>
+  </data>
+<data name="EXCHANGE_REFUSED" xml:space="preserve">
+    <value>{0} a rejeté votre demande d'échange.</value>
+  </data>
+<data name="FAIRY_SAVED" xml:space="preserve">
+    <value>La fée a été stockée dans la perle.</value>
+  </data>
+<data name="FAMILYDEPUTY" xml:space="preserve">
+    <value>Assistant</value>
+  </data>
+<data name="FAMILYKEEPER" xml:space="preserve">
+    <value>Gardien</value>
+  </data>
+<data name="FAMILY_BLOCKED" xml:space="preserve">
+    <value>L'utilisateur ne souhaite pas recevoir les demandes de la famille.</value>
+  </data>
+<data name="FIGHTER_ALREADY_EXISTING" xml:space="preserve">
+    <value>Un artiste martial existe déjà sur ce compte !</value>
+  </data>
+<data name="FIONA" xml:space="preserve">
+    <value>Fiona</value>
+  </data>
+<data name="FIRST_ROOM_START" xml:space="preserve">
+    <value>Voulez-vous entrer dans la première salle ?</value>
+  </data>
+<data name="FOXY" xml:space="preserve">
+    <value>Foxy</value>
+  </data>
+<data name="FREYA_THE_FATEFUL" xml:space="preserve">
+    <value>Freya</value>
+  </data>
+<data name="GIFT_SENT" xml:space="preserve">
+    <value>Cadeau envoyé !</value>
+  </data>
+<data name="GROUP_DENIED" xml:space="preserve">
+    <value>L'utilisateur a rejeté la demande de groupe.</value>
+  </data>
+<data name="GUARDIAN_LUCIFER" xml:space="preserve">
+    <value>Gardien^Lucifer</value>
+  </data>
+<data name="HARLEQUIN" xml:space="preserve">
+    <value>Arlequin</value>
+  </data>
+<data name="HONGBI" xml:space="preserve">
+    <value>Hongbi</value>
+  </data>
+<data name="HP_TOO_HIGH" xml:space="preserve">
+    <value>Les HP de l'ennemis sont trop élevés.</value>
+  </data>
+<data name="HUNTING" xml:space="preserve">
+    <value>: Chasse</value>
+  </data>
+<data name="ICE_PRINCESS_ELIZA" xml:space="preserve">
+    <value>Princesse^des^glaces^Éliza</value>
+  </data>
+<data name="INSTANCE_ENTRIES" xml:space="preserve">
+    <value>{0} entrées restantes.</value>
+  </data>
+<data name="INSTANCE_NO_MORE_ENTRIES" xml:space="preserve">
+    <value>L'équipe est complète.</value>
+  </data>
+<data name="INVALID_NAME" xml:space="preserve">
+    <value>Nom invalide.</value>
+  </data>
+<data name="INVITE_RAID" xml:space="preserve">
+    <value>{0} vous a invité au raid.</value>
+  </data>
+<data name="IN_FAMILY" xml:space="preserve">
+    <value>Vous êtes déjà dans une famille, vous ne pouvez pas appartenir à une faction différente.</value>
+  </data>
+<data name="ITEM_IN_USE" xml:space="preserve">
+    <value>Cet objet est déjà en cours d'utilisation.</value>
+  </data>
+<data name="ITEM_IS_HEROIC" xml:space="preserve">
+    <value>Veuillez utiliser l'amulette pour équipement héroïque.</value>
+  </data>
+<data name="ITEM_IS_NOT_FIXED" xml:space="preserve">
+    <value>L'équipement n'est pas fixé.</value>
+  </data>
+<data name="ITEM_NOT_EQUIPPED" xml:space="preserve">
+    <value>L'objet {0} n'est pas équipé.</value>
+  </data>
+<data name="JINN" xml:space="preserve">
+    <value>Djinn</value>
+  </data>
+<data name="JOIN_TEAM" xml:space="preserve">
+    <value>{0} a rejoint le groupe.</value>
+  </data>
+<data name="KENKO_CATCHED" xml:space="preserve">
+    <value>Kenko a été capturé.</value>
+  </data>
+<data name="KICK_RAID" xml:space="preserve">
+    <value>Vous avez été expulsé du raid.</value>
+  </data>
+<data name="LEFT_RAID" xml:space="preserve">
+    <value>Vous avez quitté le raid.</value>
+  </data>
+<data name="LEVEL_LOWER_THAN_MONSTER" xml:space="preserve">
+    <value>Vous ne pouvez capturer que des animaux d'un niveau inférieur au vôtre.</value>
+  </data>
+<data name="LIMITED_ACCOUNT" xml:space="preserve">
+    <value>Compte limité</value>
+  </data>
+<data name="LITTLE_PRINCESS_VENUS" xml:space="preserve">
+    <value>Princesse Vénus</value>
+  </data>
+<data name="LOTUS_THE_GRATEFUL" xml:space="preserve">
+    <value>Lotus</value>
+  </data>
+<data name="LOW_LVL_30" xml:space="preserve">
+    <value>Vous ne pouvez pas faire cela avant d'avoir atteint le niveau 30.</value>
+  </data>
+<data name="LOW_LVL_MAP" xml:space="preserve">
+    <value>Vous ne pouvez pas accéder à cette carte car votre niveau n'est pas compris entre {0} et {1}.</value>
+  </data>
+<data name="LUCIFER" xml:space="preserve">
+    <value>Archange^Lucifer</value>
+  </data>
+<data name="LUCY_LOPEARS" xml:space="preserve">
+    <value>Lucie^Longoreil</value>
+  </data>
+<data name="MAD_MARCH_HARE" xml:space="preserve">
+    <value>Lapin^de^Pâques^fou</value>
+  </data>
+<data name="MAGIC_STUDENT_YUNA" xml:space="preserve">
+    <value>Yuna^l^Ensorceleuse</value>
+  </data>
+<data name="MAINTENANCE_PLANNED" xml:space="preserve">
+    <value>Maintenance planifiée détectée, déconnection des utilisateurs.</value>
+  </data>
+<data name="MALL_ACCOUNT_NOT_EXISTING" xml:space="preserve">
+    <value>Vous n'avez pas de compte dans le NosMall.</value>
+  </data>
+<data name="MALL_CURRENCY_RECEIVE" xml:space="preserve">
+    <value>Vous avez {0} NosDollar !</value>
+  </data>
+<data name="MALL_UNKNOWN_ERROR" xml:space="preserve">
+    <value>Erreur de connexion au NosMall. Veuillez réessayer plus tard.</value>
+  </data>
+<data name="MAP_NOT_FOUND" xml:space="preserve">
+    <value>La carte n'existe pas.</value>
+  </data>
+<data name="MARU" xml:space="preserve">
+    <value>Maru</value>
+  </data>
+<data name="MARU_THE_MOTHERS_FUR" xml:space="preserve">
+    <value>Maru^avec^les^habits^de^maman</value>
+  </data>
+<data name="MATE_ATTACK_CHANGED" xml:space="preserve">
+    <value>L'attaque du compagnon a été modifiée : Attaque + {0}.</value>
+  </data>
+<data name="MATE_ATTACK_EQUAL" xml:space="preserve">
+    <value>L'attaque du compagnon n'a pas changé.</value>
+  </data>
+<data name="MATE_DEFENCE_CHANGED" xml:space="preserve">
+    <value>La défense du compagnon a été modifiée : Défense + {0}</value>
+  </data>
+<data name="MATE_DEFENCE_EQUAL" xml:space="preserve">
+    <value>La défense du compagnon n'a pas changé.</value>
+  </data>
+<data name="MATE_LOYALTY_ZERO" xml:space="preserve">
+    <value>La loyauté de votre animal est tombée à 0 !</value>
+  </data>
+<data name="MATE_NEED_FEED" xml:space="preserve">
+    <value>Nourrissez votre animal ou allez au Mini-pays.</value>
+  </data>
+<data name="MAX_OPTIONS" xml:space="preserve">
+    <value>Ce bijoux possède déjà le nombre maximum d'options.</value>
+  </data>
+<data name="METEORITE_MINUTES" xml:space="preserve">
+    <value>Le jeu Méteorite commencera dans {0} minute(s) !</value>
+  </data>
+<data name="METEORITE_ROUND" xml:space="preserve">
+    <value>Félicitations ! Vous avez terminé {0} du jeu Météorite. Préparez-vous pour le prochain tour !</value>
+  </data>
+<data name="METEORITE_SECONDS" xml:space="preserve">
+    <value>Le jeu du Méteor commencera dans {0} seconde(s) !</value>
+  </data>
+<data name="METEORITE_STARTED" xml:space="preserve">
+    <value>Le jeu de Météorites a commencé !</value>
+  </data>
+<data name="MONSTER_CANT_BE_CAPTURED" xml:space="preserve">
+    <value>Ce monstre ne peut pas être capturé.</value>
+  </data>
+<data name="MOUNT_SAVED" xml:space="preserve">
+    <value>La monture a été stockée dans la perle.</value>
+  </data>
+<data name="MUST_BE_FRIENDS" xml:space="preserve">
+    <value>Vous devez être amis pour pouvoir vous marier.</value>
+  </data>
+<data name="MUST_USE_ITEM" xml:space="preserve">
+    <value>Tu dois utiliser {0}.</value>
+  </data>
+<data name="NEED_FRAGANCE" xml:space="preserve">
+    <value>Vous ne pouvez pas changer de rune, l'équipement est lié à quelqu'un d'autre.</value>
+  </data>
+<data name="NELIA_NYMPH" xml:space="preserve">
+    <value>Nélia^Nymphe</value>
+  </data>
+<data name="NOT_ALLOWED_IN_GROUP" xml:space="preserve">
+    <value>Vous devez quitter le groupe pour faire cela !</value>
+  </data>
+<data name="NOT_ENOUGH_INGREDIENTS" xml:space="preserve">
+    <value>Tu n'as pas les ingrédients requis pour procéder à l'échange.</value>
+  </data>
+<data name="NOT_IN_MINILAND" xml:space="preserve">
+    <value>Vous devez être dans votre Mini-pays pour effectuer cette action !</value>
+  </data>
+<data name="NOT_TEAM_LEADER" xml:space="preserve">
+    <value>Seul le chef d'équipe peut commencer le raid.</value>
+  </data>
+<data name="NO_FAMILY_HEAD" xml:space="preserve">
+    <value>Seul le chef de la famille peut effectuer cette action.</value>
+  </data>
+<data name="NO_HANDLER_GURI" xml:space="preserve">
+    <value>Aucune implémentation pour guri : {0}</value>
+  </data>
+<data name="NO_ITEM_REQUIRED" xml:space="preserve">
+    <value>Vous avez besoin de : {0}.</value>
+  </data>
+<data name="NO_PSP" xml:space="preserve">
+    <value>Vous partenaire n'a aucune Carte de Spécialiste équipée.</value>
+  </data>
+<data name="NPCMONSTER_NOT_FOUND" xml:space="preserve">
+    <value>Monstre introuvable !</value>
+  </data>
+<data name="NPCMONSTER_REMOVED" xml:space="preserve">
+    <value>NPC supprimé (MapNpcId: {0}, Nom: {1}, MapId: {2}, MapX: {3}, MapY: {4})</value>
+  </data>
+<data name="OBJECT_MOD_IN_BAZAAR" xml:space="preserve">
+    <value>Le prix de vente a été corrigé : Or {0}.</value>
+  </data>
+<data name="OPTION_DELETE" xml:space="preserve">
+    <value>L'effet a été supprimé.</value>
+  </data>
+<data name="OPTION_FAIL" xml:space="preserve">
+    <value>L'amélioration a échoué.</value>
+  </data>
+<data name="OPTION_IDENTIFIED" xml:space="preserve">
+    <value>La rune a été identifié.</value>
+  </data>
+<data name="OPTION_SUCCESS" xml:space="preserve">
+    <value>L'amélioration réussie.</value>
+  </data>
+<data name="ORKANI_THE_TURBULENT" xml:space="preserve">
+    <value>Orkani</value>
+  </data>
+<data name="OTHER_PLAYER_IN_GROUP" xml:space="preserve">
+    <value>Le joueur est déjà membre d'un groupe.</value>
+  </data>
+<data name="PALINA_PUPPET_MASTER" xml:space="preserve">
+    <value>Marion^Marionnettiste</value>
+  </data>
+<data name="PARTNER_AUTO_RELIVE_DISABLED" xml:space="preserve">
+    <value>Ton partenaire retournera au mini-pays si il meurt.</value>
+  </data>
+<data name="PARTNER_AUTO_RELIVE_ENABLED" xml:space="preserve">
+    <value>Ton partenaire sera ressuscité si il meurt et que tu as assez de graine du pouvoir.</value>
+  </data>
+<data name="PARTY_MEMBER_HAS_PENALTY" xml:space="preserve">
+    <value>Un des membres du groupe doit attendre 24h avant de pouvoir rejoindre ou crée une famille.</value>
+  </data>
+<data name="PARTY_MEMBER_IN_FAMILY" xml:space="preserve">
+    <value>Un des membres de votre groupe est déjà dans une autre famille.</value>
+  </data>
+<data name="PERTI_DEPLUMAY" xml:space="preserve">
+    <value>Perti^Déplumay</value>
+  </data>
+<data name="PET_AUTO_RELIVE_DISABLED" xml:space="preserve">
+    <value>Ton compagnon retournera au mini-pays après sa mort.</value>
+  </data>
+<data name="PET_AUTO_RELIVE_ENABLED" xml:space="preserve">
+    <value>Ton compagnon retournera à la vie si il meurt.</value>
+  </data>
+<data name="PET_DIED" xml:space="preserve">
+    <value>Votre partenaire est décédé ! La mission a échoué.</value>
+  </data>
+<data name="PET_SLOT_FULL" xml:space="preserve">
+    <value>Tu possèdes déjà le nombre maximal d'animeaux de compagnie.</value>
+  </data>
+<data name="PLAYER_LOW_LVL_30" xml:space="preserve">
+    <value>Tu dois d'abord atteindre le niveau 30.</value>
+  </data>
+<data name="PORTAL_CLOSED" xml:space="preserve">
+    <value>Le portail est fermé.</value>
+  </data>
+<data name="PROFESSOR_MAVACITY" xml:space="preserve">
+    <value>Objet^de^test^du^Dr^Miaou fou</value>
+  </data>
+<data name="PSP_SKILL_LEARNED" xml:space="preserve">
+    <value>Ton partenaire a appris une nouvelle compétence.</value>
+  </data>
+<data name="PVP_ACTIVE" xml:space="preserve">
+    <value>PvP activé !</value>
+  </data>
+<data name="PVP_ACTIVED_ON_MAP" xml:space="preserve">
+    <value>Le PvP est maintenant possible.</value>
+  </data>
+<data name="PVP_KILL" xml:space="preserve">
+    <value>[{1}] a été tué par : [{0}]</value>
+  </data>
+<data name="QUESTS_LOADED" xml:space="preserve">
+    <value>{0} Quêtes chargées!</value>
+  </data>
+<data name="QUEST_ALREADY_DONE" xml:space="preserve">
+    <value>Vous avez déjà fait cette mission !</value>
+  </data>
+<data name="QUEST_ALREADY_DONE_TODAY" xml:space="preserve">
+    <value>Vous avez déjà fait cette mission aujourd'hui.</value>
+  </data>
+<data name="QUEST_CATCH_FAIL" xml:space="preserve">
+    <value>La capture a échoué. Attendez 30 secondes pour réessayer.</value>
+  </data>
+<data name="QUEST_OBJECTIVE_PARSED" xml:space="preserve">
+    <value>{0} Objectifs de quête analysés.</value>
+  </data>
+<data name="QUEST_PARSED" xml:space="preserve">
+    <value>{0} Quêtes analysés.</value>
+  </data>
+<data name="QUEST_REWARD_PARSED" xml:space="preserve">
+    <value>{0} Récompenses de quêtes analysés.</value>
+  </data>
+<data name="RAID_ALREADY_STARTED" xml:space="preserve">
+    <value>Vous ne pouvez pas rejoindre le groupe d'un raid déjà commencé.</value>
+  </data>
+<data name="RAID_LEADER" xml:space="preserve">
+    <value>Vous êtes le chef du raid.</value>
+  </data>
+<data name="RAID_START_QUESTION" xml:space="preserve">
+    <value>Voulez-vous commencer le raid?</value>
+  </data>
+<data name="RARIFY_DOWNGRADE_SUCCESS" xml:space="preserve">
+    <value>La qualité a été ramenée à un niveau de rareté inférieur : {0}</value>
+  </data>
+<data name="REFUSED_GROUP_REQUEST" xml:space="preserve">
+    <value>{0} a rejeté votre demande groupe.</value>
+  </data>
+<data name="REMOVE_FAIRY_WHILE_USING_BOOSTER" xml:space="preserve">
+    <value>Vous ne pouvez pas retirer votre fée tant que l'effet : Renforcement féerique est activé !</value>
+  </data>
+<data name="REPUTATION_RATE_CHANGED" xml:space="preserve">
+    <value>Le taux de réputation a augmenté.</value>
+  </data>
+<data name="REPUTATION_RATE_NOW" xml:space="preserve">
+    <value>Taux de réputation</value>
+  </data>
+<data name="REPUT_DECREASE" xml:space="preserve">
+    <value>Réputation diminuée : - {0}</value>
+  </data>
+<data name="REPUT_INCREASE" xml:space="preserve">
+    <value>Réputation : + {0}</value>
+  </data>
+<data name="SELL_ITEM_VALID" xml:space="preserve">
+    <value>Vendu: {0} &lt;{1}: pièce&gt;</value>
+  </data>
+<data name="SHERRIF_CHLOE" xml:space="preserve">
+    <value>Chloé^shérif</value>
+  </data>
+<data name="SHINOBI_THE_SILENT" xml:space="preserve">
+    <value>Shinobi</value>
+  </data>
+<data name="SKILL_NEED_COOLDOWN" xml:space="preserve">
+    <value>La compétence a besoin d'un temps de rechargement.</value>
+  </data>
+<data name="SP_POINTS_FULL" xml:space="preserve">
+    <value>Les points SP sont au maximum.</value>
+  </data>
+<data name="TALENTARENA_OPEN" xml:space="preserve">
+    <value>L'Arène des talents est ouverte.</value>
+  </data>
+<data name="TALENT_ARENA_OPENED" xml:space="preserve">
+    <value>L'Arène des Talents a commencé ! Ouverte sur le canal :  {0}</value>
+  </data>
+<data name="TEAM_LEADER_CHANGE" xml:space="preserve">
+    <value>Le chef d'équipe a changé. {0} est le nouveau chef.</value>
+  </data>
+<data name="TOO_HIGH_LVL" xml:space="preserve">
+    <value>Ton niveau est trop élevé pour pouvoir effectuer cette action.</value>
+  </data>
+<data name="TOO_LOW_LVL" xml:space="preserve">
+    <value>Ton niveau n'est pas assez élevé pour effectuer cette action.</value>
+  </data>
+<data name="UPDATE_SHOP_ERROR" xml:space="preserve">
+    <value>Erreur lors de l'insertion ou de la mise à jour du magasin {0}, {1}</value>
+  </data>
+<data name="USER_NOT_FOUND_IN_ARENA" xml:space="preserve">
+    <value>Aucun joueur n'a été trouvé dans l'arène.</value>
+  </data>
+<data name="VICTORUOS_ERENIA" xml:space="preserve">
+    <value>L'équipe Erenia a remporté le combat !</value>
+  </data>
+<data name="WANT_TO_GO_BASE" xml:space="preserve">
+    <value>Voulez-vous aller à la base ?</value>
+  </data>
+<data name="WILL_BE_BACK" xml:space="preserve">
+    <value>{0} est mort ! Il sera de retour dans 3 mins.</value>
+  </data>
+<data name="WIN_FXP" xml:space="preserve">
+    <value>Vous avez acquis {0} points d'expérience familiale !</value>
+  </data>
+<data name="WITCH_LAURENA" xml:space="preserve">
+    <value>Lauréna</value>
+  </data>
+<data name="WRONG_PORTAL" xml:space="preserve">
+    <value>Mauvais portail.</value>
+  </data>
+<data name="YOU_HAVE_LIFE" xml:space="preserve">
+    <value>Tu possèdes encore une vie.</value>
+  </data>
 </root>
