@@ -101,4 +101,43 @@
   <data name="LANGUAGE_SAVE_ERROR" xml:space="preserve">
     <value>Jazyk se nepodařilo uložit. Zkus to prosím za chvíli znovu.</value>
   </data>
+  <data name="AMMO_LOADED_ADVENTURER" xml:space="preserve">
+    <value>Náboje nabity!</value>
+  </data>
+  <data name="AMMO_LOADED_ARCHER" xml:space="preserve">
+    <value>Šíp připraven!</value>
+  </data>
+  <data name="AMMO_LOADED_SWORDSMAN" xml:space="preserve">
+    <value>Šíp připraven v kuši!</value>
+  </data>
+  <data name="MINILAND_INFO_CHANGED" xml:space="preserve">
+    <value>Mini-land info změněno</value>
+  </data>
+  <data name="MINILAND_WELCOME_MESSAGE" xml:space="preserve">
+    <value>Vítejte!</value>
+  </data>
+  <data name="PERFECTSP_ATTACK" xml:space="preserve">
+    <value>Útok</value>
+  </data>
+  <data name="PERFECTSP_DEFENSE" xml:space="preserve">
+    <value>Obrana</value>
+  </data>
+  <data name="PERFECTSP_ELEMENT" xml:space="preserve">
+    <value>Element</value>
+  </data>
+  <data name="PERFECTSP_FIRE" xml:space="preserve">
+    <value>Oheň</value>
+  </data>
+  <data name="PERFECTSP_HPMP" xml:space="preserve">
+    <value>HP/MP</value>
+  </data>
+  <data name="PERFECTSP_LIGHT" xml:space="preserve">
+    <value>Světlo</value>
+  </data>
+  <data name="PERFECTSP_SHADOW" xml:space="preserve">
+    <value>Stín</value>
+  </data>
+  <data name="PERFECTSP_WATER" xml:space="preserve">
+    <value>Voda</value>
+  </data>
 </root>
