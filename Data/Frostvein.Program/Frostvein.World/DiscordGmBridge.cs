@@ -239,8 +239,14 @@ namespace Frostvein.World
                         if (logs.Count == 0) return Response.Ok(request.requestId, "No penalties found for " + character.Name + ".", new Dictionary<string, object> { { "penalties", new List<object>() } });
                         var lines = logs.Select(p => "• " + p.Penalty + " | " + p.DateStart.ToString("yyyy-MM-dd HH:mm") + " → " + p.DateEnd.ToString("yyyy-MM-dd HH:mm") +
                                                          " | " + OneLine(p.Reason, 100) + " | " + OneLine(p.AdminName, 60)).ToList();
+                        var dataPenalties = logs.Select(p => (object)new Dictionary<string, object>
+                    {
+                        { "penalty", p.Penalty.ToString() }, { "start", p.DateStart.ToString("yyyy-MM-dd HH:mm") },
+                        { "end", p.DateEnd.ToString("yyyy-MM-dd HH:mm") }, { "reason", OneLine(p.Reason, 100) },
+                        { "admin", OneLine(p.AdminName, 60) }
+                    }).ToList();
                         return Response.Ok(request.requestId, character.Name + " penalties (latest " + logs.Count + "):\n" + string.Join("\n", lines),
-                            new Dictionary<string, object> { { "count", logs.Count } });
+                            new Dictionary<string, object> { { "count", logs.Count }, { "penalties", dataPenalties } });
                     }
                 case "announce":
                     {
@@ -297,6 +303,22 @@ namespace Frostvein.World
                         EndPenalty(character, PenaltyType.Banned, "Character is not banned.");
                         ServerManager.Instance.BannedCharacters.Remove(character.CharacterId);
                         return Response.Ok(request.requestId, "Active ban removed.");
+                    }
+                case "link-challenge":
+                    {
+                        var target = Text(args, "target", 1, 32);
+                        var code = Text(args, "code", 8, 8).ToUpperInvariant();
+                        if (code.Any(c => !(c >= 'A' && c <= 'Z') && !(c >= '0' && c <= '9')))
+                            throw new BridgeException(400, "Invalid link code.");
+                        var session = ServerManager.Instance.GetSessionByCharacterName(target);
+                        if (session == null || session.Character == null) throw new BridgeException(404, "Character is not online.");
+                        session.SendPacket(UserInterfaceHelper.GenerateMsg("[NosGM Link] Discord verification code: " + code, 0));
+                        return Response.Ok(request.requestId, "Verification code sent privately in-game.", new Dictionary<string, object>
+                    {
+                        { "characterId", session.Character.CharacterId }, { "name", session.Character.Name },
+                        { "level", session.Character.Level }, { "heroLevel", session.Character.HeroLevel },
+                        { "jobLevel", session.Character.JobLevel }, { "class", session.Character.Class.ToString() }, { "online", true }
+                    });
                     }
                 case "give-item":
                     throw new BridgeException(503, "Item delivery is disabled until persistent idempotency is configured.");
