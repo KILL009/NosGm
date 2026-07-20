@@ -54,6 +54,7 @@
     <Compile Include="BazaarAuditDAO.cs" />
     <Compile Include="BazaarItemDAO.cs" />
     <Compile Include="BazaarListingDAO.cs" />
+    <Compile Include="BazaarListingLiveStateDAO.cs" />
     <Compile Include="BazaarPriceChangeDAO.cs" />
     <Compile Include="BazaarPurchaseDAO.cs" />
     <Compile Include="BazaarRecollectDAO.cs" />
