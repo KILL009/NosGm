@@ -1,4 +1,4 @@
-﻿using Frostvein.Packets.Packets.ClientPackets;
+using Frostvein.Packets.Packets.ClientPackets;
 using Frostvein.Core;
 using Frostvein.DAL;
 using Frostvein.Data;
@@ -38,32 +38,30 @@ namespace Frostvein.Handler.PacketHandler.Basic
                     Session.SendPacket("info You have to wait 2 Minutes before doing that again");
                     return;
                 }
+
                 var receiver = DAOFactory.CharacterDAO.LoadByName(pstPacket.Receiver);
                 if (receiver != null)
                 {
                     var datasplit = pstPacket.Data.Split(' ');
-
-                    if (datasplit.Length < 2)
+                    if (datasplit.Length < 2 || datasplit[1].Length > 250)
                     {
                         return;
                     }
-
-                    if (datasplit[1].Length > 250)
-                    {
-                        return;
-                    }
-
 
                     var headWearable =
                         Session.Character.Inventory.LoadBySlotAndType((byte)EquipmentType.Hat, InventoryType.Wear);
                     var color = headWearable?.Item.IsColored == true
                         ? (byte)headWearable.Design
                         : (byte)Session.Character.HairColor;
+                    var deliveryOperationId = Guid.NewGuid();
+
                     var mailcopy = new MailDTO
                     {
                         AttachmentAmount = 0,
                         IsOpened = false,
                         Date = DateTime.Now,
+                        DeliveryOperationId = deliveryOperationId,
+                        DeliverySource = ItemTraceSource.Mail,
                         Title = datasplit[0],
                         Message = datasplit[1],
                         ReceiverId = receiver.CharacterId,
@@ -83,6 +81,8 @@ namespace Frostvein.Handler.PacketHandler.Basic
                         AttachmentAmount = 0,
                         IsOpened = false,
                         Date = DateTime.Now,
+                        DeliveryOperationId = deliveryOperationId,
+                        DeliverySource = ItemTraceSource.Mail,
                         Title = datasplit[0],
                         Message = datasplit[1],
                         ReceiverId = receiver.CharacterId,
@@ -101,18 +101,16 @@ namespace Frostvein.Handler.PacketHandler.Basic
                     MailServiceClient.Instance.SendMail(mailcopy);
                     MailServiceClient.Instance.SendMail(mail);
 
-                    //Session.Character.MailList.Add((Session.Character.MailList.Count > 0 ? Session.Character.MailList.OrderBy(s => s.Key).Last().Key : 0) + 1, mailcopy);
                     Session.SendPacket(Session.Character.GenerateSay(Language.Instance.GetMessageFromKey("MAILED"), 11));
                     Session.Character.LastNoteSent = DateTime.Now;
-
-                    //Session.SendPacket(Session.Character.GeneratePost(mailcopy, 2));
                 }
                 else
                 {
                     Session.SendPacket(Session.Character.GenerateSay(Language.Instance.GetMessageFromKey("USER_NOT_FOUND"), 10));
                 }
             }
-            else if (pstPacket != null && int.TryParse(pstPacket.Id.ToString(), out var id) && byte.TryParse(pstPacket.Type.ToString(), out var type))
+            else if (pstPacket != null && int.TryParse(pstPacket.Id.ToString(), out var id) &&
+                     byte.TryParse(pstPacket.Type.ToString(), out var type))
             {
                 if (pstPacket.Argument == 3)
                 {
@@ -139,7 +137,6 @@ namespace Frostvein.Handler.PacketHandler.Basic
                         {
                             DAOFactory.MailDAO.DeleteById(mail.MailId);
                         }
-
 
                         if (Session.Character.MailList.ContainsKey(id))
                         {
