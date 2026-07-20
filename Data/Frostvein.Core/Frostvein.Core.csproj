@@ -74,6 +74,7 @@
   <ItemGroup>
     <Compile Include="AnonymousHttpClientFactory.cs" />
     <Compile Include="CryptoRandom.cs" />
+    <Compile Include="Diagnostics\PacketSecurityMonitor.cs" />
     <Compile Include="Diagnostics\ServerPerformanceMonitor.cs" />
     <Compile Include="Extension.cs" />
     <Compile Include="Extensions\AssemblyExtension.cs" />
