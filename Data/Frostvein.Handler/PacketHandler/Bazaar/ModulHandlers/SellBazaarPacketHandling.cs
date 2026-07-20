@@ -1,4 +1,4 @@
-﻿using Frostvein.Packets.Packets.ClientPackets;
+using Frostvein.Packets.Packets.ClientPackets;
 using Frostvein.Core;
 using Frostvein.DAL;
 using Frostvein.Data;
@@ -9,264 +9,385 @@ using Frostvein.GameObject.HttpClients;
 using Frostvein.GameObject.Modules.Bazaar.Commands;
 using Frostvein.GameObject.Networking;
 using System;
-using System.Linq;
 
 namespace Frostvein.Handler.Bazaar
 {
     public class SellBazaarPacketHandling : IPacketHandler
     {
-        #region Instantiation
+        private static readonly KeepAliveClient KeepAliveClient = KeepAliveClient.Instance;
+        private static readonly BazaarHttpClient BazaarClient = BazaarHttpClient.Instance;
 
         public SellBazaarPacketHandling(ClientSession session) => Session = session;
 
-        #endregion Instantiation
-
-        #region Properties
-
         private ClientSession Session { get; }
 
-        private static readonly KeepAliveClient _keepAliveClient = KeepAliveClient.Instance;
-
-
-        #endregion Properties
-
-        #region Methods
-
-        public void SellBazaar(CRegPacket cRegPacket)
+        public void SellBazaar(CRegPacket packet)
         {
-
-            if (!_keepAliveClient.IsBazaarOnline())
-            {
-                Session.SendPacket(UserInterfaceHelper.GenerateInfo("Uh oh, it looks like the bazaar server is offline ! Please inform a staff member about it as soon as possible !"));
-                return;
-            }
-
-            if (ServerManager.Instance.InShutdown)
+            if (packet == null || Session?.Character?.Inventory == null || Session.Account == null)
             {
                 return;
             }
 
-            if (Session.Character == null || Session.Character.InExchangeOrTrade || Session.Character.HasShopOpened)
+            if (!CanUseBazaar())
             {
                 return;
             }
 
-            InventoryType currentInventoryType = cRegPacket.Inventory == 4 ? InventoryType.Equipment : (InventoryType)cRegPacket.Inventory;
-
-            InventoryType[] allowedInventoryTypes = { InventoryType.Equipment, InventoryType.Main, InventoryType.Etc };
-
-            if (allowedInventoryTypes.All(s => s != currentInventoryType))
+            if (!TryResolvePacket(packet, out InventoryType inventoryType, out short duration))
             {
+                LogRejectedPacket(packet, "Invalid packet fields");
                 return;
+            }
+
+            BazaarListingDTO committedPlan;
+            lock (Session.Character.Inventory)
+            {
+                ItemInstance source = Session.Character.Inventory.LoadBySlotAndType(packet.Slot, inventoryType);
+                if (!IsValidSource(source, packet.Amount))
+                {
+                    SendInvalidItem();
+                    return;
+                }
+
+                BazaarListingDTO plan = BuildPlan(source, packet, duration);
+                BazaarListingResult result = BazaarListingService.Instance.Commit(plan);
+                if (result != BazaarListingResult.Success &&
+                    result != BazaarListingResult.AlreadyCommitted)
+                {
+                    SendFailure(result);
+                    return;
+                }
+
+                ApplyPlan(plan);
+                RecordTrace(plan);
+                committedPlan = plan;
+            }
+
+            RefreshBazaarCache(committedPlan.Listing);
+            UpdatePersonalCache(committedPlan.Listing);
+            SendSuccess();
+
+            Logger.LogUserEvent("BAZAAR_INSERT_COMMIT", Session.GenerateIdentity(),
+                $"OperationId={committedPlan.OperationId} BazaarId={committedPlan.Listing.BazaarItemId} " +
+                $"ItemInstanceId={committedPlan.BazaarItemAfter.Id} VNum={committedPlan.BazaarItemAfter.ItemVNum} " +
+                $"Amount={committedPlan.BazaarItemAfter.Amount} UnitPrice={committedPlan.Listing.Price} " +
+                $"Tax={committedPlan.Tax} Duration={committedPlan.Listing.Duration}");
+            Logger.LogUserEvent("BAZAAR_INSERT_PACKET", Session.GenerateIdentity(),
+                $"Packet string: {packet.OriginalContent}");
+        }
+
+        private bool CanUseBazaar()
+        {
+            if (ServerManager.Instance.InShutdown ||
+                Session.Character.InExchangeOrTrade ||
+                Session.Character.HasShopOpened ||
+                Session.Character.IsShopping ||
+                Session.Character.ExchangeInfo?.ExchangeList.Count > 0)
+            {
+                return false;
+            }
+
+            if (!KeepAliveClient.IsBazaarOnline())
+            {
+                Session.SendPacket(UserInterfaceHelper.GenerateInfo(
+                    "The bazaar server is offline. Please inform a staff member."));
+                return false;
             }
 
             if (!Session.Character.CanUseNosBazaar())
             {
-                Session.SendPacket(UserInterfaceHelper.GenerateInfo(Language.Instance.GetMessageFromKey("INFO_BAZAAR")));
-                return;
+                Session.SendPacket(UserInterfaceHelper.GenerateInfo(
+                    Language.Instance.GetMessageFromKey("INFO_BAZAAR")));
+                return false;
             }
 
-            if (cRegPacket.Type == 9)
+            return true;
+        }
+
+        private static bool TryResolvePacket(
+            CRegPacket packet,
+            out InventoryType inventoryType,
+            out short duration)
+        {
+            inventoryType = packet.Inventory == 4
+                ? InventoryType.Equipment
+                : (InventoryType)packet.Inventory;
+            duration = 0;
+
+            if (packet.Type == 9 ||
+                packet.Inventory != 0 && packet.Inventory != 1 &&
+                packet.Inventory != 2 && packet.Inventory != 4 ||
+                packet.Amount <= 0 ||
+                packet.Price <= 0 ||
+                packet.Price > 2000000000 ||
+                packet.Taxes < 1 ||
+                packet.Taxes > 2000000000)
             {
-                return;
+                return false;
             }
 
-            if (cRegPacket.Inventory == 9)
-            {
-                Logger.Log.Info($"{Session.Character.Name} tried to dupe via bazar");
-                ServerManager.Instance.Kick(Session.Character.Name);
-                return;
-            }
-
-            if (cRegPacket.Inventory < 0 || cRegPacket.Inventory >= 9 || cRegPacket.Inventory > 4 || cRegPacket.Inventory == 3 || cRegPacket.Taxes < 1 || cRegPacket.Taxes > 2000000000 || cRegPacket.Price < 1 || cRegPacket.Price > 2000000000 || cRegPacket.Durability > 4 || cRegPacket.Durability < 1)
-            {
-                Logger.Log.Info($"{Session.Character.Name} tried to dupe via bazar");
-                ServerManager.Instance.Kick(Session.Character.Name);
-                Logger.LogUserEvent("BAZAAR_CHEAT_TRY", Session.GenerateIdentity(), $"Packet string: {cRegPacket.OriginalContent.ToString()}");
-                return;
-            }
-
-            if (cRegPacket.Inventory != 0 && cRegPacket.Inventory != 1 && cRegPacket.Inventory != 2 && cRegPacket.Inventory != 4)
-            {
-                foreach (var team in ServerManager.Instance.Sessions.Where(s => s.Account.Authority >= AuthorityType.GM))
-                {
-                    if (team.HasSelectedCharacter)
-                    {
-                        team.SendPacket(team.Character.GenerateSay($"User {Session.Character.Name} Try dup in Bazaar LMAO !", 12));
-                    }
-                }
-
-                PenaltyLogDTO log = new()
-                {
-                    AccountId = Session.Account.AccountId,
-                    Reason = "Attempted Bazaar Dupe",
-                    Penalty = PenaltyType.Banned,
-                    DateStart = DateTime.Now,
-                    DateEnd = DateTime.Now.AddYears(20),
-                    AdminName = "NosMoon SYSTEM"
-                };
-                Character.InsertOrUpdatePenalty(log);
-                Session.Disconnect();
-                return;
-            }
-
-            StaticBonusDTO medal = Session.Character.StaticBonusList.Find(s =>
-                s.StaticBonusType == StaticBonusType.BazaarMedalGold
-                || s.StaticBonusType == StaticBonusType.BazaarMedalSilver);
-
-            long price = cRegPacket.Price * cRegPacket.Amount;
-            long taxmax = price > 100000 ? price / 200 : 500;
-            long taxmin = price >= 4000
-                ? (60 + ((price - 4000) / 2000 * 30) > 10000 ? 10000 : 60 + ((price - 4000) / 2000 * 30))
-                : 50;
-            long tax = medal == null ? taxmax : taxmin;
-            long maxGold = ServerManager.Instance.Configuration.MaxGold;
-            if (Session.Character.Gold < tax || cRegPacket.Amount <= 0
-                || Session.Character.ExchangeInfo?.ExchangeList.Count > 0 || Session.Character.IsShopping)
-            {
-                return;
-            }
-
-            ItemInstance it = Session.Character.Inventory.LoadBySlotAndType(cRegPacket.Slot,
-                currentInventoryType);
-
-            if (it == null || !it.Item.IsSoldable || !it.Item.IsTradable || it.IsBound || it.ItemDeleteTime != null || it.Amount < 1)
-            {
-                return;
-            }
-
-            if (it.Item.SellToNpcPrice * cRegPacket.Amount > 1000000000) // If price exceeds 6250 x shining blue soul for example
-            {
-                PenaltyLogDTO log = new PenaltyLogDTO
-                {
-                    AccountId = Session.Account.AccountId,
-                    Reason = "Attempted Bazaar Dupe",
-                    Penalty = PenaltyType.Banned,
-                    DateStart = DateTime.Now,
-                    DateEnd = DateTime.Now.AddYears(20),
-                    AdminName = "Frostvein SYSTEM"
-                };
-                Character.InsertOrUpdatePenalty(log);
-                Session.Disconnect();
-                return;
-            }
-
-            if (it.Item.SellToNpcPrice * cRegPacket.Amount > 500000000)
-            {
-                foreach (var team in ServerManager.Instance.Sessions.Where(s => s.Account.Authority >= AuthorityType.ADMIN))
-                {
-                    if (team.HasSelectedCharacter)
-                    {
-                        team.SendPacket(team.Character.GenerateSay($"User {Session.Character.Name} Might be trying to dupe, please be careful. (c_reg packet, bazaar)", 12));
-                    }
-                }
-            }
-
-            if (Session.Character.Inventory.CountItemInAnInventory(InventoryType.Bazaar) >= 10 * (medal == null ? 2 : 10))
-            {
-                Session.SendPacket(
-                    UserInterfaceHelper.GenerateMsg(Language.Instance.GetMessageFromKey("LIMIT_EXCEEDED"), 0));
-                return;
-            }
-
-            if (cRegPacket.Price >= (medal == null ? 1000000 : maxGold))
-            {
-                Session.SendPacket(UserInterfaceHelper.GenerateMsg(Language.Instance.GetMessageFromKey("PRICE_EXCEEDED"), 0));
-                return;
-            }
-
-            if (cRegPacket.Amount > 1 && cRegPacket.Amount * cRegPacket.Price >= maxGold)
-            {
-                Session.SendPacket(UserInterfaceHelper.GenerateMsg(Language.Instance.GetMessageFromKey("PRICE_EXCEEDED"), 0));
-                return;
-            }
-
-
-            if (cRegPacket.Price <= 0)
-            {
-                return;
-            }
-
-            ItemInstance bazaar = Session.Character.Inventory.AddIntoBazaarInventory(
-                currentInventoryType, cRegPacket.Slot,
-                cRegPacket.Amount);
-            if (bazaar == null)
-            {
-                return;
-            }
-
-            short duration;
-            switch (cRegPacket.Durability)
+            switch (packet.Durability)
             {
                 case 1:
                     duration = 24;
                     break;
-
                 case 2:
                     duration = 168;
                     break;
-
                 case 3:
                     duration = 360;
                     break;
-
                 case 4:
                     duration = 720;
                     break;
-
                 default:
-                    return;
+                    return false;
             }
 
-            DAOFactory.ItemInstanceDAO.InsertOrUpdate(bazaar);
+            return inventoryType == InventoryType.Equipment ||
+                   inventoryType == InventoryType.Main ||
+                   inventoryType == InventoryType.Etc;
+        }
 
-            BazaarItemDTO bazaarItem = new BazaarItemDTO
+        private static bool IsValidSource(ItemInstance source, short requestedAmount)
+        {
+            if (source?.Item == null ||
+                requestedAmount <= 0 ||
+                requestedAmount > source.Amount ||
+                !source.Item.IsSoldable ||
+                !source.Item.IsTradable ||
+                source.IsBound ||
+                source.ItemDeleteTime != null)
             {
-                Amount = bazaar.Amount,
-                DateStart = DateTime.Now,
-                Duration = duration,
-                IsPackage = cRegPacket.IsPackage != 0,
-                MedalUsed = medal != null,
-                Price = cRegPacket.Price,
-                SellerId = Session.Character.CharacterId,
-                ItemInstanceId = bazaar.Id,
+                return false;
+            }
+
+            return source.Type != InventoryType.Equipment || requestedAmount == source.Amount;
+        }
+
+        private BazaarListingDTO BuildPlan(ItemInstance source, CRegPacket packet, short duration)
+        {
+            ItemInstance sourceBefore = source.DeepCopy();
+            ItemInstance sourceAfter = null;
+            ItemInstance bazaarAfter;
+
+            if (packet.Amount == source.Amount)
+            {
+                bazaarAfter = source.DeepCopy();
+            }
+            else
+            {
+                sourceAfter = source.DeepCopy();
+                sourceAfter.Amount -= packet.Amount;
+
+                bazaarAfter = source.DeepCopy();
+                bazaarAfter.Id = Guid.NewGuid();
+                bazaarAfter.EquipmentSerialId = Guid.NewGuid();
+                bazaarAfter.Amount = packet.Amount;
+            }
+
+            bazaarAfter.CharacterId = Session.Character.CharacterId;
+            bazaarAfter.Type = InventoryType.Bazaar;
+            bazaarAfter.Slot = 0;
+
+            return new BazaarListingDTO
+            {
+                OperationId = Guid.NewGuid(),
+                SellerAccountId = Session.Account.AccountId,
+                SellerCharacterId = Session.Character.CharacterId,
+                GoldBefore = Session.Character.Gold,
+                GoldAfter = Session.Character.Gold,
+                MaximumGold = ServerManager.Instance.Configuration.MaxGold,
+                SourceBefore = sourceBefore,
+                SourceAfter = sourceAfter,
+                BazaarItemAfter = bazaarAfter,
+                Listing = new BazaarItemDTO
+                {
+                    AccountId = Session.Account.AccountId,
+                    RegistrationIP = Session.Account.RegistrationIP,
+                    CurrentIp = Session.Character.CurrentIp,
+                    Amount = packet.Amount,
+                    Duration = duration,
+                    IsPackage = packet.IsPackage != 0,
+                    Price = packet.Price,
+                    SellerId = Session.Character.CharacterId,
+                    ItemInstanceId = bazaarAfter.Id
+                }
             };
+        }
 
-            var itemId = BazaarHttpClient.Instance.InsertOrUpdateBazaar(new InsertOrUpdateBazaarItemCommand() { BazaarItem = bazaarItem });
+        private void ApplyPlan(BazaarListingDTO plan)
+        {
+            Session.Character.Inventory.Remove(plan.SourceBefore.Id);
 
-            if (bazaar is ItemInstance instance)
+            if (plan.SourceAfter != null)
             {
-                instance.ShellEffects.ForEach(s =>
-                {
-                    s.EquipmentSerialId = instance.EquipmentSerialId;
-                    DAOFactory.ShellEffectDAO.InsertOrUpdate(s);
-                });
-
-                instance.CellonOptions.ForEach(s =>
-                {
-                    s.EquipmentSerialId = instance.EquipmentSerialId;
-                    DAOFactory.CellonOptionDAO.InsertOrUpdate(s);
-                });
+                var sourceAfter = new ItemInstance(plan.SourceAfter);
+                Session.Character.Inventory[sourceAfter.Id] = sourceAfter;
+                Session.SendPacket(sourceAfter.GenerateInventoryAdd());
+            }
+            else
+            {
+                Session.SendPacket(UserInterfaceHelper.Instance.GenerateInventoryRemove(
+                    plan.SourceBefore.Type,
+                    plan.SourceBefore.Slot));
             }
 
-            var item = ServerManager.GetItem(bazaar.ItemVNum);
+            var bazaarItem = new ItemInstance(plan.BazaarItemAfter);
+            Session.Character.Inventory[bazaarItem.Id] = bazaarItem;
 
-            Session.Character.Gold -= tax;
+            Session.Character.Gold = plan.GoldAfter;
             Session.SendPacket(Session.Character.GenerateGold());
+        }
 
-            Session.Character.BazaarItems.TryAdd(itemId, bazaarItem);
+        private void RecordTrace(BazaarListingDTO plan)
+        {
+            try
+            {
+                int sequence = 0;
+                if (plan.SourceAfter == null)
+                {
+                    ItemTraceService.Instance.Record(
+                        plan.OperationId,
+                        sequence,
+                        ItemTraceAction.Transferred,
+                        ItemTraceSource.Bazaar,
+                        plan.SourceBefore,
+                        plan.BazaarItemAfter,
+                        Session.Account.AccountId,
+                        Session.Character.CharacterId,
+                        Session.Character.Name,
+                        "Atomic bazaar listing full transfer",
+                        new
+                        {
+                            plan.Listing.BazaarItemId,
+                            plan.Listing.Price,
+                            plan.Listing.Duration,
+                            plan.Listing.IsPackage,
+                            plan.Tax
+                        });
+                }
+                else
+                {
+                    ItemTraceService.Instance.Record(
+                        plan.OperationId,
+                        sequence++,
+                        ItemTraceAction.StackChanged,
+                        ItemTraceSource.Bazaar,
+                        plan.SourceBefore,
+                        plan.SourceAfter,
+                        Session.Account.AccountId,
+                        Session.Character.CharacterId,
+                        Session.Character.Name,
+                        "Atomic bazaar listing source split",
+                        new { plan.Listing.BazaarItemId, plan.BazaarItemAfter.Amount });
 
-            Session.SendPacket(Session.Character.GenerateSay(Language.Instance.GetMessageFromKey("OBJECT_IN_BAZAAR"),
-                10));
-            Session.SendPacket(UserInterfaceHelper.GenerateMsg(Language.Instance.GetMessageFromKey("OBJECT_IN_BAZAAR"),
-                0));
+                    ItemTraceService.Instance.Record(
+                        plan.OperationId,
+                        sequence,
+                        ItemTraceAction.Created,
+                        ItemTraceSource.Bazaar,
+                        null,
+                        plan.BazaarItemAfter,
+                        Session.Account.AccountId,
+                        Session.Character.CharacterId,
+                        Session.Character.Name,
+                        "Atomic bazaar listing split item",
+                        new
+                        {
+                            plan.Listing.BazaarItemId,
+                            plan.Listing.Price,
+                            plan.Listing.Duration,
+                            plan.Listing.IsPackage,
+                            plan.Tax
+                        });
+                }
+            }
+            catch (Exception exception)
+            {
+                Logger.LogUserEventError("BAZAAR_LISTING_TRACE", Session.GenerateIdentity(),
+                    $"Unable to record bazaar listing operation {plan.OperationId}.", exception);
+            }
+        }
 
-            Logger.LogUserEvent("BAZAAR_INSERT", Session.GenerateIdentity(),
-                $"BazaarId: {bazaarItem.BazaarItemId}, IIId: {bazaarItem.ItemInstanceId} VNum: {bazaar.ItemVNum} Amount: {cRegPacket.Amount} Price: {cRegPacket.Price} Time: {duration}");
-            Logger.LogUserEvent("BAZAAR_INSERT_PACKET", Session.GenerateIdentity(), $"Packet string: {cRegPacket.OriginalContent.ToString()}");
+        private static void RefreshBazaarCache(BazaarItemDTO listing)
+        {
+            try
+            {
+                BazaarClient.InsertOrUpdateBazaar(new InsertOrUpdateBazaarItemCommand
+                {
+                    BazaarItem = listing,
+                    RefreshOnly = true
+                });
+            }
+            catch (Exception exception)
+            {
+                Logger.Error($"Unable to refresh bazaar cache for item {listing.BazaarItemId}.", exception);
+            }
+        }
+
+        private void UpdatePersonalCache(BazaarItemDTO listing)
+        {
+            if (!Session.Character.BazaarItems.TryAdd(listing.BazaarItemId, listing))
+            {
+                Session.Character.BazaarItems[listing.BazaarItemId] = listing;
+            }
+        }
+
+        private void SendSuccess()
+        {
+            Session.SendPacket(Session.Character.GenerateSay(
+                Language.Instance.GetMessageFromKey("OBJECT_IN_BAZAAR"), 10));
+            Session.SendPacket(UserInterfaceHelper.GenerateMsg(
+                Language.Instance.GetMessageFromKey("OBJECT_IN_BAZAAR"), 0));
             Session.SendPacket("rc_reg 1");
         }
 
-        #endregion Methods
+        private void SendFailure(BazaarListingResult result)
+        {
+            switch (result)
+            {
+                case BazaarListingResult.NotEnoughGold:
+                    Session.SendPacket(UserInterfaceHelper.GenerateMsg(
+                        Language.Instance.GetMessageFromKey("NOT_ENOUGH_MONEY"), 0));
+                    break;
+
+                case BazaarListingResult.ListingLimitReached:
+                    Session.SendPacket(UserInterfaceHelper.GenerateMsg(
+                        Language.Instance.GetMessageFromKey("LIMIT_EXCEEDED"), 0));
+                    break;
+
+                case BazaarListingResult.InvalidPrice:
+                    Session.SendPacket(UserInterfaceHelper.GenerateMsg(
+                        Language.Instance.GetMessageFromKey("PRICE_EXCEEDED"), 0));
+                    break;
+
+                case BazaarListingResult.InvalidItem:
+                    SendInvalidItem();
+                    break;
+
+                case BazaarListingResult.MissingSchema:
+                    Session.SendPacket(UserInterfaceHelper.GenerateInfo(
+                        "The bazaar listing database migration is missing. Please contact an administrator."));
+                    break;
+
+                default:
+                    Session.SendPacket(UserInterfaceHelper.GenerateModal(
+                        Language.Instance.GetMessageFromKey("STATE_CHANGED"), 1));
+                    break;
+            }
+        }
+
+        private void SendInvalidItem()
+        {
+            Session.SendPacket(UserInterfaceHelper.GenerateInfo(
+                "This item cannot be registered in the bazaar."));
+        }
+
+        private void LogRejectedPacket(CRegPacket packet, string reason)
+        {
+            Logger.LogUserEvent("BAZAAR_INSERT_REJECTED", Session.GenerateIdentity(),
+                $"{reason}. Packet={packet.OriginalContent}");
+        }
     }
 }
