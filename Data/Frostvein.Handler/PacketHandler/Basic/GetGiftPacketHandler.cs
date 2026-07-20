@@ -5,6 +5,7 @@ using Frostvein.Data.Enums;
 using Frostvein.Domain;
 using Frostvein.GameObject;
 using Frostvein.GameObject.Helpers;
+using Frostvein.GameObject.Networking;
 using System;
 using System.Globalization;
 using System.Linq;
@@ -85,17 +86,23 @@ namespace Frostvein.Handler.PacketHandler.Basic
                     var occupied = inventory.LoadBySlotAndType(itemInstance.Slot, itemInstance.Type);
                     if (occupied == null)
                     {
-                        inventory.AddToInventoryWithSlotAndType(itemInstance, itemInstance.Type, itemInstance.Slot);
+                        if (inventory.AddToInventoryWithSlotAndType(itemInstance, itemInstance.Type, itemInstance.Slot) == null)
+                        {
+                            Session.SendPacket(UserInterfaceHelper.GenerateMsg(
+                                "The saved parcel item could not be restored. Relog and try again.", 0));
+                            return;
+                        }
                     }
                     else if (occupied.Id != itemInstance.Id)
                     {
                         Session.SendPacket(UserInterfaceHelper.GenerateMsg(
                             "The parcel was already saved, but its slot is busy. Relog to refresh the inventory.", 0));
+                        return;
                     }
                 }
                 else
                 {
-                    itemInstance = Inventory.InstantiateItemInstance(
+                    itemInstance = Frostvein.GameObject.Inventory.InstantiateItemInstance(
                         itemVNum,
                         Session.Character.CharacterId,
                         mail.AttachmentAmount > 0 ? mail.AttachmentAmount : (short)1);
