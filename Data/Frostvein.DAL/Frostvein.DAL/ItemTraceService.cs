@@ -1,3 +1,5 @@
+using Frostvein.DAL.DAO;
+using Frostvein.DAL.Interface;
 using Frostvein.Data;
 using Frostvein.Domain;
 using Newtonsoft.Json;
@@ -13,10 +15,13 @@ namespace Frostvein.DAL
     public sealed class ItemTraceService
     {
         private static readonly Lazy<ItemTraceService> LazyInstance =
-            new Lazy<ItemTraceService>(() => new ItemTraceService());
+            new Lazy<ItemTraceService>(() => new ItemTraceService(new ItemTraceDAO()));
 
-        private ItemTraceService()
+        private readonly IItemTraceDAO _traceDao;
+
+        internal ItemTraceService(IItemTraceDAO traceDao)
         {
+            _traceDao = traceDao ?? throw new ArgumentNullException(nameof(traceDao));
         }
 
         public static ItemTraceService Instance => LazyInstance.Value;
@@ -88,17 +93,20 @@ namespace Frostvein.DAL
                 IsSuspicious = isSuspicious
             };
 
-            return DAOFactory.ItemTraceDAO.InsertIfMissing(trace);
+            return _traceDao.InsertIfMissing(trace);
         }
 
         public IEnumerable<ItemTraceDTO> GetHistory(Guid itemInstanceId, int take = 100) =>
-            DAOFactory.ItemTraceDAO.LoadByItemInstanceId(itemInstanceId, take);
+            _traceDao.LoadByItemInstanceId(itemInstanceId, take);
 
         public IEnumerable<ItemTraceDTO> GetSerialHistory(Guid equipmentSerialId, int take = 100) =>
-            DAOFactory.ItemTraceDAO.LoadByEquipmentSerialId(equipmentSerialId, take);
+            _traceDao.LoadByEquipmentSerialId(equipmentSerialId, take);
 
         public IEnumerable<ItemTraceDTO> GetOperation(Guid operationId) =>
-            DAOFactory.ItemTraceDAO.LoadByOperationId(operationId);
+            _traceDao.LoadByOperationId(operationId);
+
+        public IEnumerable<ItemTraceDTO> GetSuspicious(int take = 100) =>
+            _traceDao.LoadSuspicious(take);
 
         private static string SerializeMetadata(object metadata)
         {
