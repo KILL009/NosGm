@@ -76,6 +76,7 @@
     <Compile Include="BankActionType.cs" />
     <Compile Include="BattlePassQuestType.cs" />
     <Compile Include="BattlePassTimeType.cs" />
+    <Compile Include="BazaarAuditType.cs" />
     <Compile Include="BazaarListType.cs" />
     <Compile Include="BuffType.cs" />
     <Compile Include="Act6TeamType.cs" />
