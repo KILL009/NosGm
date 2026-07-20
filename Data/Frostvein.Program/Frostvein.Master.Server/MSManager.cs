@@ -1,4 +1,5 @@
-﻿using Frostvein.Core;
+﻿using Frostvein.Configuration;
+using Frostvein.Core;
 using Frostvein.Master.Library.Data;
 using Frostvein.SCS.Communication.ScsServices.Service;
 using System;
@@ -26,7 +27,7 @@ namespace Frostvein.Master.Server
             AuthentificatedClients = new ThreadSafeGenericLockedList<long>();
             ConfigurationObject = new ConfigurationObject
             {
-
+                MaxGold = GameConfiguration.MaxGold
             };
         }
 
