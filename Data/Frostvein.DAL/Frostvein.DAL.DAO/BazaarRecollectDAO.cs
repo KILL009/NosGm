@@ -127,7 +127,7 @@ namespace Frostvein.DAL.DAO
 
                         if (request.RemainingAmount == 0)
                         {
-                            if (!ValidateFullySoldPlan(request, source, beforeById, afterById))
+                            if (!ValidateFullySoldPlan(request, beforeById, afterById))
                             {
                                 transaction.Rollback();
                                 return BazaarRecollectResult.StateChanged;
@@ -213,7 +213,6 @@ namespace Frostvein.DAL.DAO
 
         private static bool ValidateFullySoldPlan(
             BazaarRecollectDTO request,
-            EfItemInstance source,
             IDictionary<Guid, ItemInstanceDTO> beforeById,
             IDictionary<Guid, ItemInstanceDTO> afterById)
         {
@@ -225,8 +224,9 @@ namespace Frostvein.DAL.DAO
                 return false;
             }
 
-            // The authoritative source row was already validated under the listing lock.
-            // Accept either no transport snapshot or the exact zero-amount source snapshot.
+            // The authoritative SQL source row was already validated while holding the
+            // listing lock. The transport snapshot is optional and must not reject a
+            // completed sale merely because old non-equipment rows carry a legacy serial.
             if (beforeById.Count == 0)
             {
                 return true;
@@ -236,8 +236,7 @@ namespace Frostvein.DAL.DAO
                    sourceBefore.CharacterId == request.SellerCharacterId &&
                    sourceBefore.ItemVNum == request.ItemVNum &&
                    sourceBefore.Type == InventoryType.Bazaar &&
-                   sourceBefore.Amount == 0 &&
-                   SameState(source, sourceBefore, request.SellerCharacterId);
+                   sourceBefore.Amount == 0;
         }
 
         private static bool ValidateInventoryPlan(
@@ -300,14 +299,14 @@ namespace Frostvein.DAL.DAO
                 ItemInstanceDTO before = beforeById[after.Id];
                 if (before.Id != request.BazaarItemInstanceId &&
                     (before.Type != after.Type || before.Slot != after.Slot ||
-                     before.EquipmentSerialId != after.EquipmentSerialId ||
+                     !SerialsCompatible(before.EquipmentSerialId, after.EquipmentSerialId) ||
                      after.Amount < before.Amount))
                 {
                     return false;
                 }
 
                 if (before.Id == request.BazaarItemInstanceId &&
-                    before.EquipmentSerialId != after.EquipmentSerialId)
+                    !SerialsCompatible(before.EquipmentSerialId, after.EquipmentSerialId))
                 {
                     return false;
                 }
@@ -324,7 +323,14 @@ namespace Frostvein.DAL.DAO
                    entity.Amount == dto.Amount &&
                    entity.Type == dto.Type &&
                    entity.Slot == dto.Slot &&
-                   (entity.EquipmentSerialId ?? Guid.Empty) == dto.EquipmentSerialId;
+                   SerialsCompatible(entity.EquipmentSerialId ?? Guid.Empty, dto.EquipmentSerialId);
+        }
+
+        private static bool SerialsCompatible(Guid storedSerial, Guid transportedSerial)
+        {
+            return storedSerial == Guid.Empty ||
+                   transportedSerial == Guid.Empty ||
+                   storedSerial == transportedSerial;
         }
 
         private static int AcquireLock(FrostveinContext context, string resource)
