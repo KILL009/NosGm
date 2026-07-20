@@ -1,6 +1,7 @@
 ﻿using Frostvein.Extension.Extension.Command;
 using Frostvein.Packets.Packets.CommandPackets;
 using Frostvein.Core;
+using Frostvein.Domain;
 using Frostvein.GameObject;
 
 namespace Frostvein.Handler.PacketHandler.Command
@@ -28,7 +29,13 @@ namespace Frostvein.Handler.PacketHandler.Command
         {
             if (mutePacket != null)
             {
-                //Session.AddLogsCmd(mutePacket);
+                if (Session.Account?.Authority < AuthorityType.DEV)
+                {
+                    Session.SendPacket(Session.Character.GenerateSay(
+                        "Direct mutes are disabled. Use $Sanction preview <CaseId> mute <minutes> <Character> <reason>.", 11));
+                    return;
+                }
+
                 if (mutePacket.Duration == 0) mutePacket.Duration = 60;
 
                 mutePacket.Reason = mutePacket.Reason?.Trim();
