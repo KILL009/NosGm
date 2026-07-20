@@ -2,20 +2,28 @@ using Frostvein.Core.Threading;
 using Frostvein.DAL;
 using Frostvein.Data;
 using Frostvein.GameObject;
+using Frostvein.GameObject.Plugin.Load;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
-using System.Threading;
-using System.Threading.Tasks;
-using Frostvein.GameObject.Plugin.Load;
 
 namespace NosTale.Module.Bazaar
 {
     public class BazaarManager
     {
+        private sealed class CachedCommitResponse
+        {
+            public DateTime CreatedAtUtc { get; set; }
+
+            public BazaarListingCommitResponseDTO Response { get; set; }
+        }
+
         private readonly ConcurrentDictionary<long, object> _itemLocks =
             new ConcurrentDictionary<long, object>();
+
+        private readonly ConcurrentDictionary<Guid, CachedCommitResponse> _listingCommitResponses =
+            new ConcurrentDictionary<Guid, CachedCommitResponse>();
 
         public BazaarManager()
         {
@@ -110,6 +118,54 @@ namespace NosTale.Module.Bazaar
         {
             BazaarItems.TryRemove(bazaarItemId, out _);
             BazaarItemLinks.TryRemove(bazaarItemId, out _);
+        }
+
+        public bool TryGetCommitResponse(
+            Guid operationId,
+            out BazaarListingCommitResponseDTO response)
+        {
+            response = null;
+            if (operationId == Guid.Empty ||
+                !_listingCommitResponses.TryGetValue(operationId, out CachedCommitResponse cached))
+            {
+                return false;
+            }
+
+            if (cached.CreatedAtUtc < DateTime.UtcNow.AddMinutes(-10))
+            {
+                _listingCommitResponses.TryRemove(operationId, out _);
+                return false;
+            }
+
+            response = cached.Response;
+            return response != null;
+        }
+
+        public void RememberCommitResponse(
+            Guid operationId,
+            BazaarListingCommitResponseDTO response)
+        {
+            if (operationId == Guid.Empty || response == null)
+            {
+                return;
+            }
+
+            _listingCommitResponses[operationId] = new CachedCommitResponse
+            {
+                CreatedAtUtc = DateTime.UtcNow,
+                Response = response
+            };
+
+            if (_listingCommitResponses.Count <= 1000)
+            {
+                return;
+            }
+
+            DateTime cutoff = DateTime.UtcNow.AddMinutes(-10);
+            foreach (var pair in _listingCommitResponses.Where(pair => pair.Value.CreatedAtUtc < cutoff))
+            {
+                _listingCommitResponses.TryRemove(pair.Key, out _);
+            }
         }
 
         private static bool TryBuildLink(
