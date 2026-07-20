@@ -1,0 +1,131 @@
+name: Windows .NET Framework build
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-build-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: MSBuild Release / Any CPU
+    runs-on: windows-2022
+    timeout-minutes: 45
+
+    env:
+      SOLUTION: NosGm.sln
+      CONFIGURATION: Release
+      PLATFORM: Any CPU
+      ARTIFACTS: artifacts
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Visual Studio MSBuild
+        uses: microsoft/setup-msbuild@v3
+        with:
+          vs-version: '[17.0,18.0)'
+          msbuild-architecture: x64
+
+      - name: Show build tools
+        shell: pwsh
+        run: |
+          msbuild -version
+          nuget help | Select-Object -First 1
+
+      - name: Restore NuGet packages
+        shell: pwsh
+        run: nuget restore "$env:SOLUTION" -NonInteractive -Verbosity normal
+
+      - name: Validate World RESX resources with MSBuild
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path "$env:ARTIFACTS" | Out-Null
+          $output = & msbuild "Data\Frostvein.Program\Frostvein.World\Frostvein.World.csproj" `
+            /t:PrepareResources `
+            /m `
+            /nologo `
+            /nr:false `
+            /v:minimal `
+            /p:Configuration="$env:CONFIGURATION" `
+            /p:Platform=AnyCPU `
+            /bl:"$env:ARTIFACTS\resx.binlog" `
+            /fl `
+            /flp:"logfile=$env:ARTIFACTS\resx.log;verbosity=normal" 2>&1
+          $exitCode = $LASTEXITCODE
+          $output | ForEach-Object { Write-Host $_ }
+          if ($exitCode -ne 0) { exit $exitCode }
+
+      - name: Build complete solution
+        shell: pwsh
+        run: |
+          $output = & msbuild "$env:SOLUTION" `
+            /t:Build `
+            /m `
+            /nologo `
+            /nr:false `
+            /v:minimal `
+            /p:Configuration="$env:CONFIGURATION" `
+            /p:Platform="$env:PLATFORM" `
+            /bl:"$env:ARTIFACTS\build.binlog" `
+            /fl `
+            /flp:"logfile=$env:ARTIFACTS\build.log;verbosity=normal" 2>&1
+          $exitCode = $LASTEXITCODE
+          $output | ForEach-Object { Write-Host $_ }
+          if ($exitCode -ne 0) { exit $exitCode }
+
+      - name: Upload build diagnostics
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: windows-msbuild-diagnostics
+          path: artifacts/
+          if-no-files-found: warn
+          retention-days: 14
+
+  diagnostics:
+    name: Concise MSBuild failure report
+    needs: build
+    if: failure()
+    runs-on: windows-2022
+    timeout-minutes: 10
+
+    steps:
+      - name: Download build diagnostics
+        uses: actions/download-artifact@v7
+        with:
+          name: windows-msbuild-diagnostics
+          path: diagnostics
+
+      - name: Print relevant errors
+        shell: pwsh
+        run: |
+          $logs = Get-ChildItem diagnostics -Filter *.log -Recurse | Sort-Object Name
+          if (-not $logs) { Write-Error "No MSBuild text logs were uploaded."; exit 1 }
+          $found = $false
+          foreach ($log in $logs) {
+            $matches = Select-String -Path $log.FullName -Pattern "error [A-Z]+[0-9]+|error MSB[0-9]+|MSB[0-9]+:|ResX|resheader" -Context 1,2
+            if ($matches) {
+              $found = $true
+              Write-Host "=== $($log.Name) ==="
+              $matches | Select-Object -First 40 | ForEach-Object { Write-Host $_.ToString() }
+            }
+          }
+          if (-not $found) {
+            foreach ($log in $logs) {
+              Write-Host "=== $($log.Name) (tail) ==="
+              Get-Content $log.FullName -Tail 80
+            }
+          }
+          exit 1
