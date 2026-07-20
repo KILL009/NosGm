@@ -41,19 +41,16 @@ namespace Frostvein.Handler.Bazaar
             BazaarItemDTO listing = DAOFactory.BazaarItemDAO.LoadById(packet.BazaarId);
             if (listing == null)
             {
+                LogReject("ListingMissing", packet, null, null, null);
                 SendEmptyResult();
                 RemoveBazaarCache(packet.BazaarId);
                 return;
             }
 
             ItemInstanceDTO sourceDto = DAOFactory.ItemInstanceDAO.LoadById(listing.ItemInstanceId);
-            if (sourceDto == null ||
-                listing.SellerId != Session.Character.CharacterId ||
-                sourceDto.CharacterId != Session.Character.CharacterId ||
-                sourceDto.Type != InventoryType.Bazaar ||
-                sourceDto.ItemVNum != packet.VNum ||
-                listing.Price != packet.Price)
+            if (!IsAuthoritativeStateValid(listing, sourceDto))
             {
+                LogReject("StateChangedBeforePlan", packet, listing, sourceDto, null);
                 SendStateChanged();
                 return;
             }
@@ -64,6 +61,7 @@ namespace Frostvein.Handler.Bazaar
                 if (!TryBuildPlan(listing, sourceDto, out BazaarRecollectPlan plan,
                         out BazaarRecollectResult planningResult))
                 {
+                    LogReject("PlanRejected", packet, listing, sourceDto, planningResult);
                     SendFailure(planningResult, listing, sourceDto);
                     return;
                 }
@@ -72,6 +70,7 @@ namespace Frostvein.Handler.Bazaar
                 if (result != BazaarRecollectResult.Success &&
                     result != BazaarRecollectResult.AlreadyCommitted)
                 {
+                    LogReject("CommitRejected", packet, listing, sourceDto, result);
                     SendFailure(result, listing, sourceDto);
                     return;
                 }
@@ -91,6 +90,17 @@ namespace Frostvein.Handler.Bazaar
                 $"ItemInstanceId={listing.ItemInstanceId} ItemVNum={committedPlan.Commit.ItemVNum} " +
                 $"Remaining={committedPlan.Commit.RemainingAmount} Sold={committedPlan.Commit.SoldAmount} " +
                 $"Proceeds={committedPlan.Commit.Proceeds}");
+        }
+
+        private bool IsAuthoritativeStateValid(BazaarItemDTO listing, ItemInstanceDTO sourceDto)
+        {
+            return listing != null &&
+                   sourceDto != null &&
+                   listing.SellerId == Session.Character.CharacterId &&
+                   sourceDto.CharacterId == listing.SellerId &&
+                   sourceDto.Type == InventoryType.Bazaar &&
+                   sourceDto.ItemVNum > 0 &&
+                   listing.Price > 0;
         }
 
         private bool CanUseBazaar()
@@ -414,6 +424,24 @@ namespace Frostvein.Handler.Bazaar
                 Session.SendPacket(UserInterfaceHelper.GenerateBazarRecollect(
                     listing.Price, 0, listing.Amount, 0, 0, name));
             }
+        }
+
+        private void LogReject(
+            string reason,
+            CScalcPacket packet,
+            BazaarItemDTO listing,
+            ItemInstanceDTO source,
+            BazaarRecollectResult? result)
+        {
+            Logger.LogUserEvent("BAZAAR_RECOLLECT_REJECTED", Session.GenerateIdentity(),
+                $"Reason={reason} Result={result?.ToString() ?? "None"} " +
+                $"PacketBazaarId={packet?.BazaarId ?? 0} PacketVNum={packet?.VNum ?? 0} " +
+                $"PacketAmount={packet?.Amount ?? 0} PacketMaxAmount={packet?.MaxAmount ?? 0} " +
+                $"PacketPrice={packet?.Price ?? 0} ListingId={listing?.BazaarItemId ?? 0} " +
+                $"ListingSeller={listing?.SellerId ?? 0} ListingPrice={listing?.Price ?? 0} " +
+                $"ListingAmount={listing?.Amount ?? 0} SourceId={source?.Id.ToString() ?? "None"} " +
+                $"SourceOwner={source?.CharacterId ?? 0} SourceVNum={source?.ItemVNum ?? 0} " +
+                $"SourceAmount={source?.Amount ?? 0} SourceType={source?.Type.ToString() ?? "None"}");
         }
 
         private void SendEmptyResult()
