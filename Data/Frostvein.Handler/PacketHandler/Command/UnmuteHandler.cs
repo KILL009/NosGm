@@ -30,7 +30,13 @@ namespace Frostvein.Handler.PacketHandler.Command
         {
             if (unmutePacket != null)
             {
-                //Session.AddLogsCmd(unmutePacket);
+                if (Session.Account?.Authority < AuthorityType.DEV)
+                {
+                    Session.SendPacket(Session.Character.GenerateSay(
+                        "Direct unmutes are disabled. Use $Sanction preview <CaseId> unmute 0 <Character> <reason>.", 11));
+                    return;
+                }
+
                 var name = unmutePacket.CharacterName;
                 var chara = DAOFactory.CharacterDAO.LoadByName(name);
                 if (chara != null)
@@ -48,7 +54,7 @@ namespace Frostvein.Handler.PacketHandler.Command
                             Character.InsertOrUpdatePenalty(log);
                         }
 
-        MessageExtension.SendGrey(Session, "[Server]: Command executed successfully");
+                        MessageExtension.SendGrey(Session, "[Server]: Command executed successfully");
                     }
                     else
                     {
