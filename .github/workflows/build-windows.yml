@@ -46,36 +46,54 @@ jobs:
 
       - name: Restore NuGet packages
         shell: pwsh
-        run: nuget restore "$env:SOLUTION" -NonInteractive -Verbosity detailed
+        run: nuget restore "$env:SOLUTION" -NonInteractive -Verbosity normal
 
       - name: Validate World RESX resources with MSBuild
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path "$env:ARTIFACTS" | Out-Null
-          msbuild "Data\Frostvein.Program\Frostvein.World\Frostvein.World.csproj" `
+          $output = & msbuild "Data\Frostvein.Program\Frostvein.World\Frostvein.World.csproj" `
             /t:GenerateResource `
             /m `
             /nologo `
             /nr:false `
+            /v:minimal `
             /p:Configuration="$env:CONFIGURATION" `
             /p:Platform=AnyCPU `
             /bl:"$env:ARTIFACTS\resx.binlog" `
             /fl `
-            /flp:"logfile=$env:ARTIFACTS\resx.log;verbosity=normal"
+            /flp:"logfile=$env:ARTIFACTS\resx.log;verbosity=normal" 2>&1
+          $exitCode = $LASTEXITCODE
+          $output | ForEach-Object { Write-Host $_ }
+          if ($exitCode -ne 0) {
+            Write-Host "::group::Concise RESX/MSBuild errors"
+            $output | Select-String -Pattern "error|MSB[0-9]{4}|ResX|resheader" | ForEach-Object { Write-Host $_.Line }
+            Write-Host "::endgroup::"
+            exit $exitCode
+          }
 
       - name: Build complete solution
         shell: pwsh
         run: |
-          msbuild "$env:SOLUTION" `
+          $output = & msbuild "$env:SOLUTION" `
             /t:Build `
             /m `
             /nologo `
             /nr:false `
+            /v:minimal `
             /p:Configuration="$env:CONFIGURATION" `
             /p:Platform="$env:PLATFORM" `
             /bl:"$env:ARTIFACTS\build.binlog" `
             /fl `
-            /flp:"logfile=$env:ARTIFACTS\build.log;verbosity=normal"
+            /flp:"logfile=$env:ARTIFACTS\build.log;verbosity=normal" 2>&1
+          $exitCode = $LASTEXITCODE
+          $output | ForEach-Object { Write-Host $_ }
+          if ($exitCode -ne 0) {
+            Write-Host "::group::Concise solution build errors"
+            $output | Select-String -Pattern "error|MSB[0-9]{4}|CS[0-9]{4}" | ForEach-Object { Write-Host $_.Line }
+            Write-Host "::endgroup::"
+            exit $exitCode
+          }
 
       - name: Upload build diagnostics
         if: always()
