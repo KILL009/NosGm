@@ -84,6 +84,8 @@
     <Compile Include="ICardDAO.cs" />
     <Compile Include="ICharacterQuestDAO.cs" />
     <Compile Include="ICharacterTitleDAO.cs" />
+    <Compile Include="IGmCaseDAO.cs" />
+    <Compile Include="IGmSanctionDAO.cs" />
     <Compile Include="IItemTraceDAO.cs" />
     <Compile Include="IMultiAccountExceptionDAO.cs" />
     <Compile Include="IRaidboxDAO.cs" />
