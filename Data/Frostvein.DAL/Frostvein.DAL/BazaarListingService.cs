@@ -7,11 +7,11 @@ namespace Frostvein.DAL
     public sealed class BazaarListingService
     {
         private static readonly Lazy<BazaarListingService> LazyInstance =
-            new Lazy<BazaarListingService>(() => new BazaarListingService(new BazaarListingDAO()));
+            new Lazy<BazaarListingService>(() => new BazaarListingService(new BazaarListingLiveStateDAO()));
 
-        private readonly BazaarListingDAO _dao;
+        private readonly BazaarListingLiveStateDAO _dao;
 
-        internal BazaarListingService(BazaarListingDAO dao)
+        internal BazaarListingService(BazaarListingLiveStateDAO dao)
         {
             _dao = dao ?? throw new ArgumentNullException(nameof(dao));
         }
