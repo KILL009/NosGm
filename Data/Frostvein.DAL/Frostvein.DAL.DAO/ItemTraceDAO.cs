@@ -92,12 +92,10 @@ WHERE EquipmentSerialId = @Value ORDER BY OccurredAtUtc DESC, Sequence DESC;",
 WHERE OperationId = @Value ORDER BY Sequence ASC;", new SqlParameter("@Value", operationId));
         }
 
-        public IEnumerable<ItemTraceDTO> LoadSuspicious(int take = 100)
-        {
-            return Query<ItemTraceDTO>(@"SELECT TOP (@Take) * FROM dbo.ItemTrace
+        public IEnumerable<ItemTraceDTO> LoadSuspicious(int take = 100) =>
+            Query<ItemTraceDTO>(@"SELECT TOP (@Take) * FROM dbo.ItemTrace
 WHERE IsSuspicious = 1 ORDER BY OccurredAtUtc DESC, Sequence DESC;",
                 new SqlParameter("@Take", ClampTake(take)));
-        }
 
         public IEnumerable<DuplicateEquipmentSerialItemDTO> LoadCurrentItemsByEquipmentSerialId(
             Guid equipmentSerialId,
@@ -185,25 +183,22 @@ WHERE OperationId = @OperationId AND Sequence = @Sequence;";
             }
         }
 
-        private static object[] Parameters(ItemTraceDTO trace)
+        private static object[] Parameters(ItemTraceDTO trace) => new object[]
         {
-            return new object[]
-            {
-                Parameter("@Id", trace.Id), Parameter("@OperationId", trace.OperationId),
-                Parameter("@Sequence", trace.Sequence), Parameter("@OccurredAtUtc", trace.OccurredAtUtc),
-                Parameter("@Action", (int)trace.Action), Parameter("@Source", (int)trace.Source),
-                Parameter("@ItemInstanceId", trace.ItemInstanceId), Parameter("@EquipmentSerialId", trace.EquipmentSerialId),
-                Parameter("@ItemVNum", trace.ItemVNum), Parameter("@AmountBefore", trace.AmountBefore),
-                Parameter("@AmountAfter", trace.AmountAfter), Parameter("@OwnerCharacterIdBefore", trace.OwnerCharacterIdBefore),
-                Parameter("@OwnerCharacterIdAfter", trace.OwnerCharacterIdAfter),
-                Parameter("@InventoryTypeBefore", trace.InventoryTypeBefore.HasValue ? (int?)trace.InventoryTypeBefore.Value : null),
-                Parameter("@InventoryTypeAfter", trace.InventoryTypeAfter.HasValue ? (int?)trace.InventoryTypeAfter.Value : null),
-                Parameter("@SlotBefore", trace.SlotBefore), Parameter("@SlotAfter", trace.SlotAfter),
-                Parameter("@ActorAccountId", trace.ActorAccountId), Parameter("@ActorCharacterId", trace.ActorCharacterId),
-                Parameter("@ActorName", trace.ActorName), Parameter("@Reason", trace.Reason),
-                Parameter("@Metadata", trace.Metadata), Parameter("@IsSuspicious", trace.IsSuspicious)
-            };
-        }
+            Parameter("@Id", trace.Id), Parameter("@OperationId", trace.OperationId),
+            Parameter("@Sequence", trace.Sequence), Parameter("@OccurredAtUtc", trace.OccurredAtUtc),
+            Parameter("@Action", (int)trace.Action), Parameter("@Source", (int)trace.Source),
+            Parameter("@ItemInstanceId", trace.ItemInstanceId), Parameter("@EquipmentSerialId", trace.EquipmentSerialId),
+            Parameter("@ItemVNum", trace.ItemVNum), Parameter("@AmountBefore", trace.AmountBefore),
+            Parameter("@AmountAfter", trace.AmountAfter), Parameter("@OwnerCharacterIdBefore", trace.OwnerCharacterIdBefore),
+            Parameter("@OwnerCharacterIdAfter", trace.OwnerCharacterIdAfter),
+            Parameter("@InventoryTypeBefore", trace.InventoryTypeBefore.HasValue ? (int?)trace.InventoryTypeBefore.Value : null),
+            Parameter("@InventoryTypeAfter", trace.InventoryTypeAfter.HasValue ? (int?)trace.InventoryTypeAfter.Value : null),
+            Parameter("@SlotBefore", trace.SlotBefore), Parameter("@SlotAfter", trace.SlotAfter),
+            Parameter("@ActorAccountId", trace.ActorAccountId), Parameter("@ActorCharacterId", trace.ActorCharacterId),
+            Parameter("@ActorName", trace.ActorName), Parameter("@Reason", trace.Reason),
+            Parameter("@Metadata", trace.Metadata), Parameter("@IsSuspicious", trace.IsSuspicious)
+        };
 
         private static SqlParameter Parameter(string name, object value) =>
             new SqlParameter(name, value ?? DBNull.Value);
@@ -218,10 +213,6 @@ WHERE OperationId = @OperationId AND Sequence = @Sequence;";
         }
     }
 
-    /// <summary>
-    /// Raw-SQL append-only ledger for staff command execution. No foreign keys are
-    /// used so audit history survives account or character deletion.
-    /// </summary>
     public sealed class GmCommandAuditDAO : IGmCommandAuditDAO
     {
         private const int MaximumTake = 100;
@@ -326,27 +317,17 @@ WHERE Outcome = @Value ORDER BY OccurredAtUtc DESC, AuditId DESC;",
             }
         }
 
-        private static object[] Parameters(GmCommandAuditDTO audit)
+        private static object[] Parameters(GmCommandAuditDTO audit) => new object[]
         {
-            return new object[]
-            {
-                Parameter("@CorrelationId", audit.CorrelationId),
-                Parameter("@OccurredAtUtc", audit.OccurredAtUtc),
-                Parameter("@AccountId", audit.AccountId),
-                Parameter("@CharacterId", audit.CharacterId),
-                Parameter("@CharacterName", audit.CharacterName),
-                Parameter("@Authority", (short)audit.Authority),
-                Parameter("@CommandHeader", audit.CommandHeader),
-                Parameter("@CommandText", audit.CommandText),
-                Parameter("@RequiredAuthority", (short)audit.RequiredAuthority),
-                Parameter("@Outcome", (byte)audit.Outcome),
-                Parameter("@IpAddress", audit.IpAddress),
-                Parameter("@ChannelId", audit.ChannelId),
-                Parameter("@MapId", audit.MapId),
-                Parameter("@SessionId", audit.SessionId),
-                Parameter("@Failure", audit.Failure)
-            };
-        }
+            Parameter("@CorrelationId", audit.CorrelationId), Parameter("@OccurredAtUtc", audit.OccurredAtUtc),
+            Parameter("@AccountId", audit.AccountId), Parameter("@CharacterId", audit.CharacterId),
+            Parameter("@CharacterName", audit.CharacterName), Parameter("@Authority", (short)audit.Authority),
+            Parameter("@CommandHeader", audit.CommandHeader), Parameter("@CommandText", audit.CommandText),
+            Parameter("@RequiredAuthority", (short)audit.RequiredAuthority), Parameter("@Outcome", (byte)audit.Outcome),
+            Parameter("@IpAddress", audit.IpAddress), Parameter("@ChannelId", audit.ChannelId),
+            Parameter("@MapId", audit.MapId), Parameter("@SessionId", audit.SessionId),
+            Parameter("@Failure", audit.Failure)
+        };
 
         private static SqlParameter Parameter(string name, object value) =>
             new SqlParameter(name, value ?? DBNull.Value);
@@ -360,6 +341,130 @@ WHERE Outcome = @Value ORDER BY OccurredAtUtc DESC, AuditId DESC;",
             if (!normalized.StartsWith("$", StringComparison.Ordinal)) normalized = "$" + normalized;
             return Limit(normalized, 64);
         }
+
+        private static string Limit(string value, int maximumLength)
+        {
+            if (string.IsNullOrWhiteSpace(value)) return null;
+            string trimmed = value.Trim();
+            return trimmed.Length <= maximumLength ? trimmed : trimmed.Substring(0, maximumLength);
+        }
+
+        private static void LogFailureOnce(string message, Exception exception)
+        {
+            if (Interlocked.Exchange(ref _failureLogged, 1) == 0)
+            {
+                Logger.Error(message, exception);
+            }
+        }
+    }
+
+    public sealed class StaffPermissionDAO : IStaffPermissionDAO
+    {
+        private static int _failureLogged;
+
+        public bool IsAvailable()
+        {
+            try
+            {
+                using (var context = DataAccessHelper.CreateContext())
+                {
+                    return context.Database.SqlQuery<int>(
+                        "SELECT CASE WHEN OBJECT_ID(N'dbo.StaffPermissionProfile', N'U') IS NULL THEN 0 ELSE 1 END;")
+                        .FirstOrDefault() == 1;
+                }
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        public StaffPermissionProfileDTO LoadByAccountId(long accountId)
+        {
+            try
+            {
+                using (var context = DataAccessHelper.CreateContext())
+                {
+                    return context.Database.SqlQuery<StaffPermissionProfileDTO>(@"
+SELECT TOP (1) AccountId, PermissionMask, IsEnabled, UpdatedAtUtc,
+       UpdatedByAccountId, UpdatedByCharacterId, Reason
+FROM dbo.StaffPermissionProfile
+WHERE AccountId = @AccountId;", new SqlParameter("@AccountId", accountId)).FirstOrDefault();
+                }
+            }
+            catch (SqlException exception) when (exception.Number == 208)
+            {
+                return null;
+            }
+            catch (Exception exception)
+            {
+                LogFailureOnce("Unable to load StaffPermissionProfile.", exception);
+                return null;
+            }
+        }
+
+        public StaffPermissionProfileDTO Save(
+            long accountId,
+            long permissionMask,
+            bool isEnabled,
+            long? updatedByAccountId,
+            long? updatedByCharacterId,
+            string reason)
+        {
+            reason = Limit(reason, 500);
+            const string sql = @"
+SET NOCOUNT ON;
+SET XACT_ABORT ON;
+BEGIN TRANSACTION;
+UPDATE dbo.StaffPermissionProfile WITH (UPDLOCK, HOLDLOCK)
+SET PermissionMask = @PermissionMask,
+    IsEnabled = @IsEnabled,
+    UpdatedAtUtc = SYSUTCDATETIME(),
+    UpdatedByAccountId = @UpdatedByAccountId,
+    UpdatedByCharacterId = @UpdatedByCharacterId,
+    Reason = @Reason
+WHERE AccountId = @AccountId;
+IF @@ROWCOUNT = 0
+BEGIN
+    INSERT INTO dbo.StaffPermissionProfile
+    (AccountId, PermissionMask, IsEnabled, UpdatedAtUtc,
+     UpdatedByAccountId, UpdatedByCharacterId, Reason)
+    VALUES
+    (@AccountId, @PermissionMask, @IsEnabled, SYSUTCDATETIME(),
+     @UpdatedByAccountId, @UpdatedByCharacterId, @Reason);
+END
+COMMIT TRANSACTION;
+SELECT TOP (1) AccountId, PermissionMask, IsEnabled, UpdatedAtUtc,
+       UpdatedByAccountId, UpdatedByCharacterId, Reason
+FROM dbo.StaffPermissionProfile
+WHERE AccountId = @AccountId;";
+
+            try
+            {
+                using (var context = DataAccessHelper.CreateContext())
+                {
+                    return context.Database.SqlQuery<StaffPermissionProfileDTO>(sql,
+                        new SqlParameter("@AccountId", accountId),
+                        new SqlParameter("@PermissionMask", permissionMask),
+                        new SqlParameter("@IsEnabled", isEnabled),
+                        Parameter("@UpdatedByAccountId", updatedByAccountId),
+                        Parameter("@UpdatedByCharacterId", updatedByCharacterId),
+                        Parameter("@Reason", reason)).SingleOrDefault();
+                }
+            }
+            catch (SqlException exception) when (exception.Number == 208)
+            {
+                return null;
+            }
+            catch (Exception exception)
+            {
+                LogFailureOnce("Unable to save StaffPermissionProfile.", exception);
+                return null;
+            }
+        }
+
+        private static SqlParameter Parameter(string name, object value) =>
+            new SqlParameter(name, value ?? DBNull.Value);
 
         private static string Limit(string value, int maximumLength)
         {
