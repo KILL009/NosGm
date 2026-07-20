@@ -70,7 +70,7 @@ namespace Frostvein.Domain
         private static readonly HashSet<string> InvestigationCommands = Set(
             "$perf", "$serverinfo", "$searchitem", "$searchmonster", "$monsterinfo",
             "$npcinfo", "$mapstats", "$stat", "$charstat", "$usercount", "$position",
-            "$channelinfo", "$penaltylog", "$raidboxinfo", "$drops", "$channel");
+            "$channelinfo", "$penaltylog", "$raidboxinfo", "$drops", "$channel", "$bazaaraudit");
 
         private static readonly HashSet<string> ModerationCommands = Set(
             "$ban", "$unban", "$mute", "$unmute", "$kick", "$kicksession", "$warning",
