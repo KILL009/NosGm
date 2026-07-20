@@ -14,4 +14,14 @@ namespace Frostvein.Packets.Packets.CommandPackets
         public static string ReturnHelp() =>
             "$ItemTrace <item|serial|operation|duplicates|suspicious> <Guid?> [take]";
     }
+
+    [PacketHeader("$StaffPerm", PassNonParseablePacket = true, Authority = AuthorityType.ADMIN)]
+    public class StaffPermissionPacket : PacketDefinition
+    {
+        [PacketIndex(0, SerializeToEnd = true)]
+        public string Contents { get; set; }
+
+        public static string ReturnHelp() =>
+            "$StaffPerm <status|categories|show|enable|disable|grant|revoke> [account] [permission] [reason]";
+    }
 }
