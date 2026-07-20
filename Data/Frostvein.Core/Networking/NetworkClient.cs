@@ -1,4 +1,5 @@
-﻿using Frostvein.Core.Networking.Communication.Scs.Communication;
+﻿using Frostvein.Core.Diagnostics;
+using Frostvein.Core.Networking.Communication.Scs.Communication;
 using Frostvein.Core.Networking.Communication.Scs.Communication.Channels;
 using Frostvein.Core.Networking.Communication.Scs.Communication.Messages;
 using Frostvein.Core.Networking.Communication.Scs.Server;
@@ -13,6 +14,8 @@ namespace Frostvein.Core
 
         public NetworkClient(ICommunicationChannel communicationChannel) : base(communicationChannel)
         {
+            MessageReceived += RecordReceivedMessage;
+            MessageSent += RecordSentMessage;
         }
 
         #endregion
@@ -77,6 +80,22 @@ namespace Frostvein.Core
         public void SetClientSession(object clientSession)
         {
             _session = clientSession;
+        }
+
+        private static void RecordReceivedMessage(object sender, MessageEventArgs eventArgs)
+        {
+            if (eventArgs?.Message is ScsRawDataMessage rawMessage)
+            {
+                ServerPerformanceMonitor.Instance.RecordReceived(rawMessage.MessageData?.Length ?? 0);
+            }
+        }
+
+        private static void RecordSentMessage(object sender, MessageEventArgs eventArgs)
+        {
+            if (eventArgs?.Message is ScsRawDataMessage rawMessage)
+            {
+                ServerPerformanceMonitor.Instance.RecordSent(rawMessage.MessageData?.Length ?? 0);
+            }
         }
 
         #endregion
