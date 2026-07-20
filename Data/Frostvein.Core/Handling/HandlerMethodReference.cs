@@ -34,7 +34,12 @@ namespace Frostvein.Core.Handling
             Identification = HandlerMethodAttribute.Header;
             PassNonParseablePacket = false;
             Authority = AuthorityType.User;
-            HandlerMethod = Wrap(handlerMethod, ResolveMetricHeader(Identification));
+            string header = ResolveMetricHeader(Identification);
+            HandlerMethod = Wrap(
+                handlerMethod,
+                ParentHandler,
+                header,
+                new HandlerPacketRateGuard(header));
         }
 
         public HandlerMethodReference(
@@ -53,7 +58,12 @@ namespace Frostvein.Core.Handling
             Authority = headerAttribute?.Authority ?? AuthorityType.User;
             IsCharScreen = headerAttribute?.IsCharScreen ?? false;
             Amount = headerAttribute?.Amount ?? 1;
-            HandlerMethod = Wrap(handlerMethod, ResolveMetricHeader(Identification));
+            string header = ResolveMetricHeader(Identification);
+            HandlerMethod = Wrap(
+                handlerMethod,
+                ParentHandler,
+                header,
+                new HandlerPacketRateGuard(header));
         }
 
         #endregion
@@ -85,15 +95,40 @@ namespace Frostvein.Core.Handling
 
         #endregion
 
-        private static Action<object, object> Wrap(Action<object, object> handlerMethod, string header)
+        private static Action<object, object> Wrap(
+            Action<object, object> handlerMethod,
+            IPacketHandler parentHandler,
+            string header,
+            HandlerPacketRateGuard rateGuard)
         {
             if (handlerMethod == null)
             {
                 throw new ArgumentNullException(nameof(handlerMethod));
             }
 
+            if (rateGuard == null)
+            {
+                throw new ArgumentNullException(nameof(rateGuard));
+            }
+
             return (handler, packet) =>
             {
+                PacketRateDecision decision = rateGuard.Check();
+                if (!decision.Allowed)
+                {
+                    if (decision.ShouldLog)
+                    {
+                        Logger.Warn(
+                            $"Packet guard blocked handler {header} because {decision.Reason}. Disconnect: {decision.Disconnect}.");
+                    }
+
+                    if (decision.Disconnect)
+                    {
+                        TryDisconnect(parentHandler);
+                    }
+                    return;
+                }
+
                 long started = Stopwatch.GetTimestamp();
                 bool succeeded = false;
                 try
@@ -109,6 +144,25 @@ namespace Frostvein.Core.Handling
                         succeeded);
                 }
             };
+        }
+
+        private static void TryDisconnect(IPacketHandler parentHandler)
+        {
+            try
+            {
+                object session = parentHandler?
+                    .GetType()
+                    .GetProperty("Session")?
+                    .GetValue(parentHandler);
+                session?
+                    .GetType()
+                    .GetMethod("Disconnect", Type.EmptyTypes)?
+                    .Invoke(session, null);
+            }
+            catch
+            {
+                // Security enforcement must never destabilize the packet loop.
+            }
         }
 
         private static string ResolveMetricHeader(string[] identification)
