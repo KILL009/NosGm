@@ -203,6 +203,15 @@ namespace Frostvein.Core.Networking.Communication.Scs.Server
             Disconnected?.Invoke(this, EventArgs.Empty);
         }
 
+        /// <summary>
+        ///     Raises MessageReceived event.
+        /// </summary>
+        /// <param name="message">Received message</param>
+        private void OnMessageReceived(IScsMessage message)
+        {
+            MessageReceived?.Invoke(this, new MessageEventArgs(message, DateTime.Now));
+        }
+
         #endregion
     }
 }
