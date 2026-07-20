@@ -71,11 +71,18 @@ namespace Frostvein.Handler.PacketHandler.Command
                     ShowMapMetrics();
                     break;
 
+                case "security":
+                case "guard":
+                case "flood":
+                    ShowSecurityMetrics();
+                    break;
+
                 case "reset":
                     ServerPerformanceMonitor.Instance.Reset();
-                    SendPerformanceLine("NosGM performance counters were reset.", 11);
+                    PacketSecurityMonitor.Instance.Reset();
+                    SendPerformanceLine("NosGM performance and packet guard counters were reset.", 11);
                     Logger.LogUserEvent("PERF_RESET", Session.GenerateIdentity(),
-                        "Runtime, network and packet handler counters reset.");
+                        "Runtime, network, packet handler and packet guard counters reset.");
                     break;
 
                 case "help":
@@ -95,6 +102,7 @@ namespace Frostvein.Handler.PacketHandler.Command
         {
             ServerManager manager = ServerManager.Instance;
             PerformanceSnapshot metrics = ServerPerformanceMonitor.Instance.Capture();
+            PacketSecuritySnapshot security = PacketSecurityMonitor.Instance.Capture();
             List<ClientSession> sessions = manager.Sessions.ToList();
             MapInstance[] mapInstances = ServerManager._mapinstances.Values
                 .Where(map => map != null)
@@ -128,13 +136,15 @@ namespace Frostvein.Handler.PacketHandler.Command
             SendPerformanceLine(
                 $"Lifetime handlers {metrics.HandledPackets:N0} | Avg {metrics.HandlerLifetimeAverageMilliseconds:N3} ms | Max {metrics.HandlerLifetimeMaximumMilliseconds:N3} ms | Errors {metrics.HandlerErrors:N0}");
             SendPerformanceLine(
+                $"Packet guard blocked transport {security.TransportBlocked:N0} | handlers {security.HandlerBlocked:N0} | disconnects {security.Disconnects:N0}");
+            SendPerformanceLine(
                 $"Threads {metrics.ProcessThreads} | Handles {metrics.HandleCount} | Pool worker {metrics.ThreadPoolBusyWorker}/{metrics.ThreadPoolMaximumWorker} | IO {metrics.ThreadPoolBusyIo}/{metrics.ThreadPoolMaximumIo}");
             SendPerformanceLine(
                 $"GC Gen0 {metrics.Gen0Collections} | Gen1 {metrics.Gen1Collections} | Gen2 {metrics.Gen2Collections}");
 
-            string health = BuildHealthSummary(metrics, sessions.Count, mapInstances.Length);
+            string health = BuildHealthSummary(metrics, security, sessions.Count, mapInstances.Length);
             SendPerformanceLine($"Health: {health}", health == "OK" ? (byte)10 : (byte)12);
-            SendPerformanceLine("Use $Perf packets, $Perf maps or $Perf help.", 11);
+            SendPerformanceLine("Use $Perf packets, $Perf maps, $Perf security or $Perf help.", 11);
         }
 
         private void ShowPacketMetrics(string sortArgument)
@@ -189,6 +199,34 @@ namespace Frostvein.Handler.PacketHandler.Command
             }
         }
 
+        private void ShowSecurityMetrics()
+        {
+            PacketSecuritySnapshot security = PacketSecurityMonitor.Instance.Capture();
+            IReadOnlyList<PacketSecurityBlockSnapshot> blocked =
+                PacketSecurityMonitor.Instance.GetTopBlocked(12);
+
+            SendPerformanceLine("===== Packet guard =====", 11);
+            SendPerformanceLine(
+                $"Accepted transport {security.TransportAccepted:N0} | handlers {security.HandlerAccepted:N0}");
+            SendPerformanceLine(
+                $"Blocked transport {security.TransportBlocked:N0} | handlers {security.HandlerBlocked:N0}");
+            SendPerformanceLine(
+                $"Oversized {security.OversizedMessages:N0} | Dropped {FormatBytes(security.DroppedBytes)} | Disconnects {security.Disconnects:N0}");
+
+            if (blocked.Count == 0)
+            {
+                SendPerformanceLine("No packet guard violations have been recorded.");
+                return;
+            }
+
+            int position = 1;
+            foreach (PacketSecurityBlockSnapshot metric in blocked)
+            {
+                SendPerformanceLine(
+                    $"{position++}. {metric.Key} | Blocks {metric.Count:N0} | Disconnects {metric.Disconnects:N0}");
+            }
+        }
+
         private void ShowPerformanceHelp()
         {
             SendPerformanceLine("========== $Perf help ==========", 11);
@@ -199,7 +237,8 @@ namespace Frostvein.Handler.PacketHandler.Command
             SendPerformanceLine("$Perf packets max: handlers with the slowest single call.");
             SendPerformanceLine("$Perf packets errors: handlers with the most exceptions.");
             SendPerformanceLine("$Perf maps: map instances ordered by players and entities.");
-            SendPerformanceLine("$Perf reset: clear lifetime counters and peaks.");
+            SendPerformanceLine("$Perf security: packet floods, blocked handlers and disconnects.");
+            SendPerformanceLine("$Perf reset: clear performance, security and peak counters.");
         }
 
         private static HandlerSort ParseHandlerSort(string argument)
@@ -225,6 +264,7 @@ namespace Frostvein.Handler.PacketHandler.Command
 
         private static string BuildHealthSummary(
             PerformanceSnapshot metrics,
+            PacketSecuritySnapshot security,
             int sessionCount,
             int mapCount)
         {
@@ -249,6 +289,10 @@ namespace Frostvein.Handler.PacketHandler.Command
             if (sessionCount > 0 && mapCount == 0)
             {
                 warnings.Add("NO MAPS");
+            }
+            if (security.Disconnects > 0)
+            {
+                warnings.Add("PACKET FLOOD");
             }
 
             return warnings.Count == 0 ? "OK" : string.Join(" | ", warnings);

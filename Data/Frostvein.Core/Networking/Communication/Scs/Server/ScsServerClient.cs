@@ -1,4 +1,5 @@
-﻿using Frostvein.Core.Networking.Communication.Scs.Communication;
+﻿using Frostvein.Core.Diagnostics;
+using Frostvein.Core.Networking.Communication.Scs.Communication;
 using Frostvein.Core.Networking.Communication.Scs.Communication.Channels;
 using Frostvein.Core.Networking.Communication.Scs.Communication.EndPoints;
 using Frostvein.Core.Networking.Communication.Scs.Communication.Messages;
@@ -20,6 +21,8 @@ namespace Frostvein.Core.Networking.Communication.Scs.Server
         /// </summary>
         private readonly ICommunicationChannel _communicationChannel;
 
+        private readonly ConnectionPacketRateGuard _packetRateGuard;
+
         #endregion
 
         #region Instantiation
@@ -33,6 +36,7 @@ namespace Frostvein.Core.Networking.Communication.Scs.Server
         public ScsServerClient(ICommunicationChannel communicationChannel)
         {
             _communicationChannel = communicationChannel;
+            _packetRateGuard = new ConnectionPacketRateGuard();
             _communicationChannel.MessageReceived += CommunicationChannel_MessageReceived;
             _communicationChannel.MessageSent += CommunicationChannel_MessageSent;
             _communicationChannel.Disconnected += CommunicationChannel_Disconnected;
@@ -156,6 +160,26 @@ namespace Frostvein.Core.Networking.Communication.Scs.Server
             {
                 _communicationChannel.SendMessage(new ScsPingMessage { RepliedMessageId = message.MessageId }, 10);
                 return;
+            }
+
+            if (message is ScsRawDataMessage rawMessage)
+            {
+                int byteCount = rawMessage.MessageData?.Length ?? 0;
+                PacketRateDecision decision = _packetRateGuard.Check(byteCount);
+                if (!decision.Allowed)
+                {
+                    if (decision.ShouldLog)
+                    {
+                        Logger.Warn(
+                            $"Packet guard blocked client {ClientId} ({RemoteEndPoint}) because {decision.Reason}. Bytes: {byteCount}. Disconnect: {decision.Disconnect}.");
+                    }
+
+                    if (decision.Disconnect)
+                    {
+                        Disconnect();
+                    }
+                    return;
+                }
             }
 
             OnMessageReceived(message);

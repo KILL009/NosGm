@@ -20,6 +20,6 @@ namespace Frostvein.Packets.Packets.CommandPackets
         [PacketIndex(0, SerializeToEnd = true)]
         public string Mode { get; set; }
 
-        public static string ReturnHelp() => "$Perf <?runtime|packets|maps|reset|help>";
+        public static string ReturnHelp() => "$Perf <?runtime|packets|maps|security|reset|help>";
     }
 }
