@@ -109,6 +109,10 @@
     <Compile Include="Migrations\202607160555516_02.Designer.cs">
       <DependentUpon>202607160555516_02.cs</DependentUpon>
     </Compile>
+    <Compile Include="Migrations\202607200130236_03.cs" />
+    <Compile Include="Migrations\202607200130236_03.Designer.cs">
+      <DependentUpon>202607200130236_03.cs</DependentUpon>
+    </Compile>
     <Compile Include="PartnerSkill.cs" />
     <Compile Include="Quest.cs" />
     <Compile Include="QuestLog.cs" />
@@ -209,6 +213,9 @@
     </EmbeddedResource>
     <EmbeddedResource Include="Migrations\202607160555516_02.resx">
       <DependentUpon>202607160555516_02.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Migrations\202607200130236_03.resx">
+      <DependentUpon>202607200130236_03.cs</DependentUpon>
     </EmbeddedResource>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
