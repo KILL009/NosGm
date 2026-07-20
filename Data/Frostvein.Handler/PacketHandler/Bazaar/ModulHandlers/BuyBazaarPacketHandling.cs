@@ -281,7 +281,6 @@ namespace Frostvein.Handler.Bazaar
                 destination.Type = destinationType;
                 destination.Slot = freeSlot.Value;
                 destination.Amount = chunkAmount;
-                RebindEquipmentData(destination);
 
                 working.Add(destination);
                 changedAfter[destination.Id] = destination.DeepCopy();
@@ -305,14 +304,6 @@ namespace Frostvein.Handler.Bazaar
             }
 
             return null;
-        }
-
-        private static void RebindEquipmentData(ItemInstance item)
-        {
-            item.ShellEffects.ForEach(effect => effect.EquipmentSerialId = item.EquipmentSerialId);
-            item.CellonOptions.ForEach(option => option.EquipmentSerialId = item.EquipmentSerialId);
-            item.RuneEffects.ForEach(effect => effect.EquipmentSerialId = item.EquipmentSerialId);
-            item.FairyEnchantments.ForEach(effect => effect.EquipmentSerialId = item.EquipmentSerialId);
         }
 
         private void ApplyPlan(BazaarPurchasePlan plan, string sellerName)
