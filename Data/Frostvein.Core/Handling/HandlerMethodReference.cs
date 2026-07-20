@@ -12,8 +12,11 @@
  * GNU General Public License for more details.
  */
 
+using Frostvein.Core.Diagnostics;
 using Frostvein.Domain;
 using System;
+using System.Diagnostics;
+using System.Linq;
 
 namespace Frostvein.Core.Handling
 {
@@ -21,28 +24,36 @@ namespace Frostvein.Core.Handling
     {
         #region Instantiation
 
-        public HandlerMethodReference(Action<object, object> handlerMethod, IPacketHandler parentHandler, PacketAttribute handlerMethodAttribute)
+        public HandlerMethodReference(
+            Action<object, object> handlerMethod,
+            IPacketHandler parentHandler,
+            PacketAttribute handlerMethodAttribute)
         {
-            HandlerMethod = handlerMethod;
             ParentHandler = parentHandler;
             HandlerMethodAttribute = handlerMethodAttribute;
             Identification = HandlerMethodAttribute.Header;
             PassNonParseablePacket = false;
             Authority = AuthorityType.User;
-            Console.WriteLine("Command or so, i dunno");
+            HandlerMethod = Wrap(handlerMethod, ResolveMetricHeader(Identification));
         }
 
-        public HandlerMethodReference(Action<object, object> handlerMethod, IPacketHandler parentHandler, Type packetBaseParameterType)
+        public HandlerMethodReference(
+            Action<object, object> handlerMethod,
+            IPacketHandler parentHandler,
+            Type packetBaseParameterType)
         {
-            HandlerMethod = handlerMethod;
             ParentHandler = parentHandler;
             PacketDefinitionParameterType = packetBaseParameterType;
-            PacketHeaderAttribute headerAttribute = (PacketHeaderAttribute)Array.Find(PacketDefinitionParameterType.GetCustomAttributes(true), ca => ca.GetType().Equals(typeof(PacketHeaderAttribute)));
+            PacketHeaderAttribute headerAttribute =
+                (PacketHeaderAttribute)Array.Find(
+                    PacketDefinitionParameterType.GetCustomAttributes(true),
+                    ca => ca.GetType().Equals(typeof(PacketHeaderAttribute)));
             Identification = headerAttribute?.Identification;
             PassNonParseablePacket = headerAttribute?.PassNonParseablePacket ?? false;
             Authority = headerAttribute?.Authority ?? AuthorityType.User;
             IsCharScreen = headerAttribute?.IsCharScreen ?? false;
             Amount = headerAttribute?.Amount ?? 1;
+            HandlerMethod = Wrap(handlerMethod, ResolveMetricHeader(Identification));
         }
 
         #endregion
@@ -73,5 +84,38 @@ namespace Frostvein.Core.Handling
         public AuthorityType Authority { get; set; }
 
         #endregion
+
+        private static Action<object, object> Wrap(Action<object, object> handlerMethod, string header)
+        {
+            if (handlerMethod == null)
+            {
+                throw new ArgumentNullException(nameof(handlerMethod));
+            }
+
+            return (handler, packet) =>
+            {
+                long started = Stopwatch.GetTimestamp();
+                bool succeeded = false;
+                try
+                {
+                    handlerMethod(handler, packet);
+                    succeeded = true;
+                }
+                finally
+                {
+                    ServerPerformanceMonitor.Instance.RecordHandler(
+                        header,
+                        Stopwatch.GetTimestamp() - started,
+                        succeeded);
+                }
+            };
+        }
+
+        private static string ResolveMetricHeader(string[] identification)
+        {
+            return identification?
+                       .FirstOrDefault(header => !string.IsNullOrWhiteSpace(header))
+                   ?? "<unidentified>";
+        }
     }
 }
