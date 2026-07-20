@@ -125,31 +125,47 @@ namespace Frostvein.DAL.DAO
                             .GroupBy(item => item.Id)
                             .ToDictionary(group => group.Key, group => group.First());
 
-                        if (!ValidateInventoryPlan(context, request, beforeById, afterById))
+                        if (request.RemainingAmount == 0)
                         {
-                            transaction.Rollback();
-                            return BazaarRecollectResult.NoInventorySpace;
-                        }
-
-                        foreach (Guid removedId in beforeById.Keys.Except(afterById.Keys).ToList())
-                        {
-                            EfItemInstance entity = context.ItemInstance.FirstOrDefault(item => item.Id == removedId);
-                            if (entity != null)
-                            {
-                                context.ItemInstance.Remove(entity);
-                            }
-                        }
-
-                        foreach (ItemInstanceDTO after in afterById.Values)
-                        {
-                            EfItemInstance entity = context.ItemInstance.FirstOrDefault(item => item.Id == after.Id);
-                            if (entity == null || entity.CharacterId != request.SellerCharacterId)
+                            if (!ValidateFullySoldPlan(request, source, beforeById, afterById))
                             {
                                 transaction.Rollback();
                                 return BazaarRecollectResult.StateChanged;
                             }
 
-                            ItemInstanceMapper.ToItemInstance(after, entity);
+                            // A completely sold listing restores no item and therefore requires no
+                            // inventory slot. Delete the zero-amount bazaar row directly instead of
+                            // sending it through the generic inventory-space validator.
+                            context.ItemInstance.Remove(source);
+                        }
+                        else
+                        {
+                            if (!ValidateInventoryPlan(context, request, beforeById, afterById))
+                            {
+                                transaction.Rollback();
+                                return BazaarRecollectResult.NoInventorySpace;
+                            }
+
+                            foreach (Guid removedId in beforeById.Keys.Except(afterById.Keys).ToList())
+                            {
+                                EfItemInstance entity = context.ItemInstance.FirstOrDefault(item => item.Id == removedId);
+                                if (entity != null)
+                                {
+                                    context.ItemInstance.Remove(entity);
+                                }
+                            }
+
+                            foreach (ItemInstanceDTO after in afterById.Values)
+                            {
+                                EfItemInstance entity = context.ItemInstance.FirstOrDefault(item => item.Id == after.Id);
+                                if (entity == null || entity.CharacterId != request.SellerCharacterId)
+                                {
+                                    transaction.Rollback();
+                                    return BazaarRecollectResult.StateChanged;
+                                }
+
+                                ItemInstanceMapper.ToItemInstance(after, entity);
+                            }
                         }
 
                         context.BazaarItem.Remove(listing);
@@ -193,6 +209,35 @@ namespace Frostvein.DAL.DAO
                    request.Proceeds >= 0 &&
                    request.GoldBefore >= 0 &&
                    request.GoldAfter >= request.GoldBefore;
+        }
+
+        private static bool ValidateFullySoldPlan(
+            BazaarRecollectDTO request,
+            EfItemInstance source,
+            IDictionary<Guid, ItemInstanceDTO> beforeById,
+            IDictionary<Guid, ItemInstanceDTO> afterById)
+        {
+            if (request.RemainingAmount != 0 ||
+                request.SoldAmount != request.ListingAmount ||
+                afterById.Count != 0 ||
+                beforeById.Count > 1)
+            {
+                return false;
+            }
+
+            // The authoritative source row was already validated under the listing lock.
+            // Accept either no transport snapshot or the exact zero-amount source snapshot.
+            if (beforeById.Count == 0)
+            {
+                return true;
+            }
+
+            return beforeById.TryGetValue(request.BazaarItemInstanceId, out ItemInstanceDTO sourceBefore) &&
+                   sourceBefore.CharacterId == request.SellerCharacterId &&
+                   sourceBefore.ItemVNum == request.ItemVNum &&
+                   sourceBefore.Type == InventoryType.Bazaar &&
+                   sourceBefore.Amount == 0 &&
+                   SameState(source, sourceBefore, request.SellerCharacterId);
         }
 
         private static bool ValidateInventoryPlan(
