@@ -73,6 +73,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="DAOFactory.cs" />
+    <Compile Include="BazaarAuditService.cs" />
     <Compile Include="BazaarListingService.cs" />
     <Compile Include="BazaarPriceChangeService.cs" />
     <Compile Include="BazaarPurchaseService.cs" />
