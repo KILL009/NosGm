@@ -1,0 +1,87 @@
+name: Windows .NET Framework build
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-build-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: MSBuild Release / Any CPU
+    runs-on: windows-2022
+    timeout-minutes: 45
+
+    env:
+      SOLUTION: NosGm.sln
+      CONFIGURATION: Release
+      PLATFORM: Any CPU
+      ARTIFACTS: artifacts
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Visual Studio MSBuild
+        uses: microsoft/setup-msbuild@v3
+        with:
+          vs-version: '[17.0,18.0)'
+          msbuild-architecture: x64
+
+      - name: Show build tools
+        shell: pwsh
+        run: |
+          msbuild -version
+          nuget help | Select-Object -First 1
+
+      - name: Restore NuGet packages
+        shell: pwsh
+        run: nuget restore "$env:SOLUTION" -NonInteractive -Verbosity detailed
+
+      - name: Validate World RESX resources with MSBuild
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path "$env:ARTIFACTS" | Out-Null
+          msbuild "Data\Frostvein.Program\Frostvein.World\Frostvein.World.csproj" `
+            /t:GenerateResource `
+            /m `
+            /nologo `
+            /nr:false `
+            /p:Configuration="$env:CONFIGURATION" `
+            /p:Platform=AnyCPU `
+            /bl:"$env:ARTIFACTS\resx.binlog" `
+            /fl `
+            /flp:"logfile=$env:ARTIFACTS\resx.log;verbosity=normal"
+
+      - name: Build complete solution
+        shell: pwsh
+        run: |
+          msbuild "$env:SOLUTION" `
+            /t:Build `
+            /m `
+            /nologo `
+            /nr:false `
+            /p:Configuration="$env:CONFIGURATION" `
+            /p:Platform="$env:PLATFORM" `
+            /bl:"$env:ARTIFACTS\build.binlog" `
+            /fl `
+            /flp:"logfile=$env:ARTIFACTS\build.log;verbosity=normal"
+
+      - name: Upload build diagnostics
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: windows-msbuild-diagnostics
+          path: artifacts/
+          if-no-files-found: warn
+          retention-days: 14
