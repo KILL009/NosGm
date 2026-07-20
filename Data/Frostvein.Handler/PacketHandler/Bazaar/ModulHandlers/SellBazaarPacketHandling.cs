@@ -54,8 +54,6 @@ namespace Frostvein.Handler.Bazaar
                     return;
                 }
 
-                // The object is resolved from this character's live inventory. The dedicated
-                // NosBazaar service still validates identity, owner and duplicate conflicts.
                 source.CharacterId = Session.Character.CharacterId;
                 source.Type = inventoryType;
                 source.Slot = packet.Slot;
@@ -73,9 +71,15 @@ namespace Frostvein.Handler.Bazaar
                     Plan = requestedPlan
                 });
 
-                if (response == null ||
-                    response.Result != BazaarListingResult.Success ||
-                    !TryValidateCommittedPlan(requestedPlan, response.Plan, out string validationFailure))
+                string validationFailure = null;
+                bool responseIsValid = response != null &&
+                                       response.Result == BazaarListingResult.Success &&
+                                       TryValidateCommittedPlan(
+                                           requestedPlan,
+                                           response.Plan,
+                                           out validationFailure);
+
+                if (!responseIsValid)
                 {
                     BazaarListingResult result = response?.Result ?? BazaarListingResult.Error;
                     string failure = response?.Message;
@@ -154,8 +158,6 @@ namespace Frostvein.Handler.Bazaar
                 : (InventoryType)packet.Inventory;
             duration = 0;
 
-            // Type, Unknown1, Unknown2, Taxes and MedalUsed are client hints or legacy
-            // fields. The service recalculates tax and medal from authoritative data.
             if (packet.Inventory != 0 && packet.Inventory != 1 &&
                 packet.Inventory != 2 && packet.Inventory != 4 ||
                 packet.Amount <= 0 ||
@@ -419,26 +421,21 @@ namespace Frostvein.Handler.Bazaar
                     Session.SendPacket(UserInterfaceHelper.GenerateMsg(
                         Language.Instance.GetMessageFromKey("NOT_ENOUGH_MONEY"), 0));
                     break;
-
                 case BazaarListingResult.ListingLimitReached:
                     Session.SendPacket(UserInterfaceHelper.GenerateMsg(
                         Language.Instance.GetMessageFromKey("LIMIT_EXCEEDED"), 0));
                     break;
-
                 case BazaarListingResult.InvalidPrice:
                     Session.SendPacket(UserInterfaceHelper.GenerateMsg(
                         Language.Instance.GetMessageFromKey("PRICE_EXCEEDED"), 0));
                     break;
-
                 case BazaarListingResult.InvalidItem:
                     SendInvalidItem();
                     break;
-
                 case BazaarListingResult.MissingSchema:
                     Session.SendPacket(UserInterfaceHelper.GenerateInfo(
                         "The bazaar listing database migration is missing. Please contact an administrator."));
                     break;
-
                 default:
                     Session.SendPacket(UserInterfaceHelper.GenerateModal(
                         Language.Instance.GetMessageFromKey("STATE_CHANGED"), 1));
