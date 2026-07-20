@@ -79,6 +79,7 @@ namespace Frostvein.Handler.Bazaar
                 return;
             }
 
+            BazaarPurchasePlan committedPlan;
             lock (Session.Character.Inventory)
             {
                 if (!TryBuildPlan(listing, sourceDto, packet.Amount, totalPrice, out BazaarPurchasePlan plan,
@@ -95,17 +96,18 @@ namespace Frostvein.Handler.Bazaar
                     return;
                 }
 
-                ApplyPlan(plan);
+                ApplyPlan(plan, seller.Name);
                 RecordTrace(plan);
-                RefreshBazaarCache(listing);
-                UpdateOnlineSellerInventory(listing.SellerId, listing.ItemInstanceId, plan.SourceAfter.Amount);
-                NotifySeller(listing.SellerId, seller.Name, plan.SourceBefore, packet.Amount);
-
-                Logger.LogUserEvent("BAZAAR_BUY_COMMIT", Session.GenerateIdentity(),
-                    $"OperationId={plan.Commit.OperationId} BazaarId={packet.BazaarId} " +
-                    $"SellerId={listing.SellerId} ItemVNum={sourceDto.ItemVNum} Amount={packet.Amount} " +
-                    $"UnitPrice={packet.Price} Total={totalPrice}");
+                committedPlan = plan;
             }
+
+            RefreshBazaarCache(listing);
+            NotifySeller(listing.SellerId, committedPlan.SourceBefore, packet.Amount);
+
+            Logger.LogUserEvent("BAZAAR_BUY_COMMIT", Session.GenerateIdentity(),
+                $"OperationId={committedPlan.Commit.OperationId} BazaarId={packet.BazaarId} " +
+                $"SellerId={listing.SellerId} ItemVNum={sourceDto.ItemVNum} Amount={packet.Amount} " +
+                $"UnitPrice={packet.Price} Total={totalPrice}");
         }
 
         private bool CanUseBazaar()
@@ -313,7 +315,7 @@ namespace Frostvein.Handler.Bazaar
             item.FairyEnchantments.ForEach(effect => effect.EquipmentSerialId = item.EquipmentSerialId);
         }
 
-        private void ApplyPlan(BazaarPurchasePlan plan)
+        private void ApplyPlan(BazaarPurchasePlan plan, string sellerName)
         {
             foreach (ItemInstance before in plan.BuyerBefore)
             {
@@ -324,17 +326,17 @@ namespace Frostvein.Handler.Bazaar
             {
                 ItemInstance applied = after.DeepCopy();
                 Session.Character.Inventory[applied.Id] = applied;
-                string packet = applied.GenerateInventoryAdd();
-                if (!string.IsNullOrWhiteSpace(packet))
+                string inventoryPacket = applied.GenerateInventoryAdd();
+                if (!string.IsNullOrWhiteSpace(inventoryPacket))
                 {
-                    Session.SendPacket(packet);
+                    Session.SendPacket(inventoryPacket);
                 }
             }
 
             Session.Character.Gold = plan.Commit.BuyerGoldAfter;
             Session.Character.GoldBank = plan.Commit.BuyerGoldBankAfter;
             Session.SendPacket(Session.Character.GenerateGold());
-            Session.SendPacket($"rc_buy 1 {plan.Commit.ItemVNum} {plan.Commit.SellerCharacterId} " +
+            Session.SendPacket($"rc_buy 1 {plan.Commit.ItemVNum} {sellerName} " +
                                $"{plan.Commit.Amount} {plan.Commit.UnitPrice} 0 0 0");
             Session.SendPacket(Session.Character.GenerateSay(
                 $"{Language.Instance.GetMessageFromKey("ITEM_ACQUIRED")}: " +
@@ -396,25 +398,7 @@ namespace Frostvein.Handler.Bazaar
             }
         }
 
-        private static void UpdateOnlineSellerInventory(long sellerId, Guid itemInstanceId, short amountAfter)
-        {
-            ClientSession sellerSession = ServerManager.Instance.GetSessionByCharacterId(sellerId);
-            if (sellerSession?.Character?.Inventory == null)
-            {
-                return;
-            }
-
-            lock (sellerSession.Character.Inventory)
-            {
-                ItemInstance liveItem = sellerSession.Character.Inventory.GetItemInstanceById(itemInstanceId);
-                if (liveItem != null)
-                {
-                    liveItem.Amount = amountAfter;
-                }
-            }
-        }
-
-        private void NotifySeller(long sellerId, string sellerName, ItemInstance source, short amount)
+        private void NotifySeller(long sellerId, ItemInstance source, short amount)
         {
             CommunicationServiceClient.Instance.SendMessageToCharacter(new SCSCharacterMessage
             {
