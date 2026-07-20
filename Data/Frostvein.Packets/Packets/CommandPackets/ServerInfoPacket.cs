@@ -17,6 +17,9 @@ namespace Frostvein.Packets.Packets.CommandPackets
     [PacketHeader("$Perf", PassNonParseablePacket = true, Authority = AuthorityType.ADMIN)]
     public class PerformancePacket : PacketDefinition
     {
-        public static string ReturnHelp() => "$Perf";
+        [PacketIndex(0, SerializeToEnd = true)]
+        public string Mode { get; set; }
+
+        public static string ReturnHelp() => "$Perf <?runtime|packets|maps|reset|help>";
     }
 }
