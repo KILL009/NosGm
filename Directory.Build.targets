@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="14.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <!--
+    NosGM uses legacy non-SDK project files with explicit Compile lists.
+    Keep the first item-tracing slice isolated here so every involved project
+    sees the new files without broad, unrelated csproj rewrites.
+  -->
+  <ItemGroup Condition="'$(MSBuildProjectName)' == 'Frostvein.Domain'">
+    <Compile Include="$(MSBuildThisFileDirectory)Data\Frostvein.Domain\ItemTraceType.cs" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(MSBuildProjectName)' == 'Frostvein.Data'">
+    <Compile Include="$(MSBuildThisFileDirectory)Data\Frostvein.DAL\Frostvein.Data\ItemTraceDTO.cs" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(MSBuildProjectName)' == 'Frostvein.DAL.Interface'">
+    <Compile Include="$(MSBuildThisFileDirectory)Data\Frostvein.DAL\Frostvein.DAL.Interface\IItemTraceDAO.cs" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(MSBuildProjectName)' == 'Frostvein.DAL.DAO'">
+    <Compile Include="$(MSBuildThisFileDirectory)Data\Frostvein.DAL\Frostvein.DAL.DAO\ItemTraceDAO.cs" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(MSBuildProjectName)' == 'Frostvein.DAL'">
+    <Compile Include="$(MSBuildThisFileDirectory)Data\Frostvein.DAL\Frostvein.DAL\ItemTraceService.cs" />
+    <ProjectReference Include="$(MSBuildThisFileDirectory)Data\Frostvein.DAL\Frostvein.Data\Frostvein.Data.csproj">
+      <Project>{F1071DED-3D92-4416-9B9C-8664441ADE64}</Project>
+      <Name>Frostvein.Data</Name>
+    </ProjectReference>
+    <ProjectReference Include="$(MSBuildThisFileDirectory)Data\Frostvein.Domain\Frostvein.Domain.csproj">
+      <Project>{20ADDDDD-DAD9-44F3-9BEB-026C73090660}</Project>
+      <Name>Frostvein.Domain</Name>
+    </ProjectReference>
+  </ItemGroup>
+</Project>
