@@ -4,49 +4,27 @@ on:
   push:
     branches:
       - main
-      - fix/resx-required-headers
   pull_request:
     branches:
       - main
+  workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   validate-resx:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
+
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.ref || github.ref_name }}
+        uses: actions/checkout@v6
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.12"
 
-      - name: Repair malformed catalogs on repair branch
-        if: (github.event_name == 'push' && github.ref == 'refs/heads/fix/resx-required-headers') || (github.event_name == 'pull_request' && github.head_ref == 'fix/resx-required-headers')
-        run: python tools/validate_resx.py --repair
-
       - name: Validate all catalogs
         run: python tools/validate_resx.py
-
-      - name: Commit repaired catalogs
-        if: (github.event_name == 'push' && github.ref == 'refs/heads/fix/resx-required-headers') || (github.event_name == 'pull_request' && github.head_ref == 'fix/resx-required-headers')
-        run: |
-          if git diff --quiet; then
-            echo "No RESX repairs were needed."
-            exit 0
-          fi
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add Data/Frostvein.Program/Frostvein.World/Resource/LocalizedResources.*.resx
-          git commit -m "fix(localization): add required RESX headers"
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            git push origin HEAD:${{ github.head_ref }}
-          else
-            git push
-          fi
