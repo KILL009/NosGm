@@ -32,6 +32,8 @@ namespace Frostvein.Domain
         Assignment = 3,
         StatusChange = 4,
         PriorityChange = 5,
-        Opened = 6
+        Opened = 6,
+        SanctionApplied = 7,
+        SanctionReversed = 8
     }
 }
