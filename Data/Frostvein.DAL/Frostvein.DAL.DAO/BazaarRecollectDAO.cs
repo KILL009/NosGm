@@ -96,10 +96,11 @@ namespace Frostvein.DAL.DAO
 
                         long tax = listing.MedalUsed ? 0 : gross / 10;
                         long proceeds = gross - tax;
+                        long goldBefore = seller.Gold;
                         long goldAfter;
                         try
                         {
-                            goldAfter = checked(seller.Gold + proceeds);
+                            goldAfter = checked(goldBefore + proceeds);
                         }
                         catch (OverflowException)
                         {
@@ -107,14 +108,13 @@ namespace Frostvein.DAL.DAO
                             return BazaarRecollectResult.GoldLimit;
                         }
 
-                        if (seller.Gold != request.GoldBefore ||
-                            request.Tax != tax ||
-                            request.Proceeds != proceeds ||
-                            request.GoldAfter != goldAfter)
-                        {
-                            transaction.Rollback();
-                            return BazaarRecollectResult.StateChanged;
-                        }
+                        // SQL is authoritative for the seller balance and payout. The live World
+                        // session may be stale after another bazaar operation or a reconnect.
+                        // Normalize the mutable plan so the caller applies the exact committed values.
+                        request.Tax = tax;
+                        request.Proceeds = proceeds;
+                        request.GoldBefore = goldBefore;
+                        request.GoldAfter = goldAfter;
 
                         Dictionary<Guid, ItemInstanceDTO> beforeById = request.ItemsBefore
                             .Where(item => item != null && item.Id != Guid.Empty)
@@ -169,7 +169,7 @@ namespace Frostvein.DAL.DAO
                         }
 
                         context.BazaarItem.Remove(listing);
-                        seller.Gold = request.GoldAfter;
+                        seller.Gold = goldAfter;
                         context.SaveChanges();
                         InsertOperation(context, request);
                         transaction.Commit();
