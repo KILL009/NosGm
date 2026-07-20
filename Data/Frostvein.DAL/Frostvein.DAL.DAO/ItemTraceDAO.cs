@@ -1,4 +1,5 @@
 using Frostvein.Core;
+using Frostvein.DAL.EF;
 using Frostvein.DAL.EF.Helpers;
 using Frostvein.DAL.Interface;
 using Frostvein.Data;
@@ -9,10 +10,6 @@ using System.Linq;
 
 namespace Frostvein.DAL.DAO
 {
-    /// <summary>
-    /// Persists append-only item audit events independently from the mutable
-    /// ItemInstance Entity Framework graph.
-    /// </summary>
     public sealed class ItemTraceDAO : IItemTraceDAO
     {
         private const int MaximumTake = 500;
@@ -22,7 +19,6 @@ namespace Frostvein.DAL.DAO
             if (trace == null) throw new ArgumentNullException(nameof(trace));
             if (trace.ItemInstanceId == Guid.Empty)
                 throw new ArgumentException("An item trace requires a non-empty ItemInstanceId.", nameof(trace));
-
             if (trace.OperationId == Guid.Empty) trace.OperationId = Guid.NewGuid();
             if (trace.Id == Guid.Empty) trace.Id = Guid.NewGuid();
             if (trace.OccurredAtUtc == default(DateTime)) trace.OccurredAtUtc = DateTime.UtcNow;
@@ -32,34 +28,21 @@ namespace Frostvein.DAL.DAO
             trace.Metadata = Limit(trace.Metadata, 4000);
 
             const string sql = @"
-IF NOT EXISTS
-(
-    SELECT 1 FROM dbo.ItemTrace WITH (UPDLOCK, HOLDLOCK)
-    WHERE OperationId = @OperationId AND Sequence = @Sequence
-)
+IF NOT EXISTS (SELECT 1 FROM dbo.ItemTrace WITH (UPDLOCK, HOLDLOCK)
+               WHERE OperationId = @OperationId AND Sequence = @Sequence)
 BEGIN
     INSERT INTO dbo.ItemTrace
-    (
-        Id, OperationId, Sequence, OccurredAtUtc, Action, Source,
-        ItemInstanceId, EquipmentSerialId, ItemVNum,
-        AmountBefore, AmountAfter,
-        OwnerCharacterIdBefore, OwnerCharacterIdAfter,
-        InventoryTypeBefore, InventoryTypeAfter,
-        SlotBefore, SlotAfter,
-        ActorAccountId, ActorCharacterId, ActorName,
-        Reason, Metadata, IsSuspicious
-    )
+    (Id, OperationId, Sequence, OccurredAtUtc, Action, Source,
+     ItemInstanceId, EquipmentSerialId, ItemVNum, AmountBefore, AmountAfter,
+     OwnerCharacterIdBefore, OwnerCharacterIdAfter, InventoryTypeBefore,
+     InventoryTypeAfter, SlotBefore, SlotAfter, ActorAccountId,
+     ActorCharacterId, ActorName, Reason, Metadata, IsSuspicious)
     VALUES
-    (
-        @Id, @OperationId, @Sequence, @OccurredAtUtc, @Action, @Source,
-        @ItemInstanceId, @EquipmentSerialId, @ItemVNum,
-        @AmountBefore, @AmountAfter,
-        @OwnerCharacterIdBefore, @OwnerCharacterIdAfter,
-        @InventoryTypeBefore, @InventoryTypeAfter,
-        @SlotBefore, @SlotAfter,
-        @ActorAccountId, @ActorCharacterId, @ActorName,
-        @Reason, @Metadata, @IsSuspicious
-    );
+    (@Id, @OperationId, @Sequence, @OccurredAtUtc, @Action, @Source,
+     @ItemInstanceId, @EquipmentSerialId, @ItemVNum, @AmountBefore, @AmountAfter,
+     @OwnerCharacterIdBefore, @OwnerCharacterIdAfter, @InventoryTypeBefore,
+     @InventoryTypeAfter, @SlotBefore, @SlotAfter, @ActorAccountId,
+     @ActorCharacterId, @ActorName, @Reason, @Metadata, @IsSuspicious);
 END";
 
             try
@@ -114,7 +97,7 @@ WHERE IsSuspicious = 1 ORDER BY OccurredAtUtc DESC, Sequence DESC;",
                 new SqlParameter("@Take", ClampTake(take)));
         }
 
-        private static ItemTraceDTO LoadSingle(EF.FrostveinContext context, Guid operationId, int sequence)
+        private static ItemTraceDTO LoadSingle(FrostveinContext context, Guid operationId, int sequence)
         {
             const string sql = @"SELECT TOP (1) * FROM dbo.ItemTrace
 WHERE OperationId = @OperationId AND Sequence = @Sequence;";
