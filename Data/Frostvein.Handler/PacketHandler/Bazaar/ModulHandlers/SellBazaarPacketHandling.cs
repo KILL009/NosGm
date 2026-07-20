@@ -37,23 +37,30 @@ namespace Frostvein.Handler.Bazaar
             {
                 LogRejectedPacket(packet, "Invalid authoritative packet fields");
                 Session.SendPacket(UserInterfaceHelper.GenerateInfo(
-                    "The NosBazaar request could not be validated. Please select the item again."));
+                    "The NosBazaar request could not be validated. Please try selecting the item again."));
                 return;
             }
 
             BazaarListingDTO committedPlan;
-            BazaarListingCommitResponseDTO response;
-
             lock (Session.Character.Inventory)
             {
                 ItemInstance source = Session.Character.Inventory.LoadBySlotAndType(packet.Slot, inventoryType);
                 if (!IsValidSource(source, packet.Amount))
                 {
-                    LogRejectedPacket(packet, DescribeInvalidSource(source));
+                    LogRejectedPacket(packet,
+                        source == null
+                            ? "No live item exists at the requested inventory slot"
+                            : $"Live item rejected: id={source.Id} vnum={source.ItemVNum} amount={source.Amount} " +
+                              $"owner={source.CharacterId} type={source.Type} slot={source.Slot} " +
+                              $"soldable={source.Item?.IsSoldable} tradable={source.Item?.IsTradable} " +
+                              $"boundCharacterId={source.BoundCharacterId} deleteTime={source.ItemDeleteTime}");
                     SendInvalidItem();
                     return;
                 }
 
+                // The item was resolved from this character's live inventory by the requested
+                // type and slot. Normalize those mutable fields before building the atomic plan.
+                // Identity and ownership conflicts are still rejected inside the DAO transaction.
                 source.CharacterId = Session.Character.CharacterId;
                 source.Type = inventoryType;
                 source.Slot = packet.Slot;
@@ -65,57 +72,30 @@ namespace Frostvein.Handler.Bazaar
                     return;
                 }
 
-                BazaarListingDTO requestedPlan = BuildPlan(source, packet, duration);
-                response = BazaarClient.CommitListing(new CommitBazaarListingCommand
+                BazaarListingDTO plan = BuildPlan(source, packet, duration);
+                BazaarListingResult result = BazaarListingService.Instance.Commit(plan);
+                if (result != BazaarListingResult.Success &&
+                    result != BazaarListingResult.AlreadyCommitted)
                 {
-                    Plan = requestedPlan
-                });
-
-                string validationFailure = null;
-                bool responseIsValid = response != null &&
-                                       response.Result == BazaarListingResult.Success &&
-                                       TryValidateCommittedPlan(
-                                           requestedPlan,
-                                           response.Plan,
-                                           out validationFailure);
-
-                if (!responseIsValid)
-                {
-                    BazaarListingResult result = response?.Result ?? BazaarListingResult.Error;
-                    string failure = response?.Message;
-                    if (!string.IsNullOrWhiteSpace(validationFailure))
-                    {
-                        failure = string.IsNullOrWhiteSpace(failure)
-                            ? validationFailure
-                            : failure + " " + validationFailure;
-                    }
-
-                    LogCommitFailure(packet, source, requestedPlan, result, failure);
-                    SendFailure(result, failure);
+                    LogCommitFailure(packet, source, plan, result);
+                    SendFailure(result);
                     return;
                 }
 
-                committedPlan = response.Plan;
-                ApplyPlan(committedPlan);
-                RecordTrace(committedPlan);
+                ApplyPlan(plan);
+                RecordTrace(plan);
+                committedPlan = plan;
             }
 
+            RefreshBazaarCache(committedPlan.Listing);
             UpdatePersonalCache(committedPlan.Listing);
             SendSuccess();
-
-            if (!response.CacheRefreshed)
-            {
-                Logger.LogUserEvent("BAZAAR_CACHE_WARNING", Session.GenerateIdentity(),
-                    $"OperationId={committedPlan.OperationId} BazaarId={committedPlan.Listing.BazaarItemId} " +
-                    $"Message={response.Message}");
-            }
 
             Logger.LogUserEvent("BAZAAR_INSERT_COMMIT", Session.GenerateIdentity(),
                 $"OperationId={committedPlan.OperationId} BazaarId={committedPlan.Listing.BazaarItemId} " +
                 $"ItemInstanceId={committedPlan.BazaarItemAfter.Id} VNum={committedPlan.BazaarItemAfter.ItemVNum} " +
                 $"Amount={committedPlan.BazaarItemAfter.Amount} UnitPrice={committedPlan.Listing.Price} " +
-                $"Tax={committedPlan.Tax} Duration={committedPlan.Listing.Duration} " +
-                $"CacheRefreshed={response.CacheRefreshed}");
+                $"Tax={committedPlan.Tax} Duration={committedPlan.Listing.Duration}");
             Logger.LogUserEvent("BAZAAR_INSERT_PACKET", Session.GenerateIdentity(),
                 $"Packet string: {packet.OriginalContent}");
         }
@@ -134,7 +114,7 @@ namespace Frostvein.Handler.Bazaar
             if (!KeepAliveClient.IsBazaarOnline())
             {
                 Session.SendPacket(UserInterfaceHelper.GenerateInfo(
-                    "The NosBazaar service is offline. Please inform a staff member."));
+                    "The bazaar server is offline. Please inform a staff member."));
                 return false;
             }
 
@@ -158,6 +138,9 @@ namespace Frostvein.Handler.Bazaar
                 : (InventoryType)packet.Inventory;
             duration = 0;
 
+            // Type, Unknown1, Unknown2, Taxes and MedalUsed are client hints or legacy
+            // fields. They are deliberately not trusted for security decisions. The live
+            // inventory supplies the item and the transaction recalculates tax and medal.
             if (packet.Inventory != 0 && packet.Inventory != 1 &&
                 packet.Inventory != 2 && packet.Inventory != 4 ||
                 packet.Amount <= 0 ||
@@ -204,19 +187,6 @@ namespace Frostvein.Handler.Bazaar
             }
 
             return source.Type != InventoryType.Equipment || requestedAmount == source.Amount;
-        }
-
-        private static string DescribeInvalidSource(ItemInstance source)
-        {
-            if (source == null)
-            {
-                return "No live item exists at the requested inventory slot";
-            }
-
-            return $"Live item rejected: id={source.Id} vnum={source.ItemVNum} amount={source.Amount} " +
-                   $"owner={source.CharacterId} type={source.Type} slot={source.Slot} " +
-                   $"soldable={source.Item?.IsSoldable} tradable={source.Item?.IsTradable} " +
-                   $"boundCharacterId={source.BoundCharacterId} deleteTime={source.ItemDeleteTime}";
         }
 
         private BazaarListingDTO BuildPlan(ItemInstance source, CRegPacket packet, short duration)
@@ -268,38 +238,6 @@ namespace Frostvein.Handler.Bazaar
                     ItemInstanceId = bazaarAfter.Id
                 }
             };
-        }
-
-        private static bool TryValidateCommittedPlan(
-            BazaarListingDTO requested,
-            BazaarListingDTO committed,
-            out string failure)
-        {
-            failure = null;
-            if (requested == null || committed == null ||
-                committed.OperationId != requested.OperationId ||
-                committed.SellerAccountId != requested.SellerAccountId ||
-                committed.SellerCharacterId != requested.SellerCharacterId ||
-                committed.SourceBefore?.Id != requested.SourceBefore?.Id ||
-                committed.SourceBefore?.ItemVNum != requested.SourceBefore?.ItemVNum ||
-                committed.BazaarItemAfter == null ||
-                committed.BazaarItemAfter.Id != requested.BazaarItemAfter?.Id ||
-                committed.BazaarItemAfter.Type != InventoryType.Bazaar ||
-                committed.BazaarItemAfter.CharacterId != requested.SellerCharacterId ||
-                committed.BazaarItemAfter.Amount != requested.BazaarItemAfter?.Amount ||
-                committed.Listing == null ||
-                committed.Listing.BazaarItemId <= 0 ||
-                committed.Listing.ItemInstanceId != committed.BazaarItemAfter.Id ||
-                committed.Listing.SellerId != requested.SellerCharacterId ||
-                committed.GoldAfter < 0 ||
-                committed.GoldAfter > committed.GoldBefore ||
-                committed.Tax != committed.GoldBefore - committed.GoldAfter)
-            {
-                failure = "The NosBazaar service returned a plan that did not match the requested operation.";
-                return false;
-            }
-
-            return true;
         }
 
         private void ApplyPlan(BazaarListingDTO plan)
@@ -396,6 +334,22 @@ namespace Frostvein.Handler.Bazaar
             }
         }
 
+        private static void RefreshBazaarCache(BazaarItemDTO listing)
+        {
+            try
+            {
+                BazaarClient.InsertOrUpdateBazaar(new InsertOrUpdateBazaarItemCommand
+                {
+                    BazaarItem = listing,
+                    RefreshOnly = true
+                });
+            }
+            catch (Exception exception)
+            {
+                Logger.Error($"Unable to refresh bazaar cache for item {listing.BazaarItemId}.", exception);
+            }
+        }
+
         private void UpdatePersonalCache(BazaarItemDTO listing)
         {
             if (!Session.Character.BazaarItems.TryAdd(listing.BazaarItemId, listing))
@@ -413,7 +367,7 @@ namespace Frostvein.Handler.Bazaar
             Session.SendPacket("rc_reg 1");
         }
 
-        private void SendFailure(BazaarListingResult result, string message)
+        private void SendFailure(BazaarListingResult result)
         {
             switch (result)
             {
@@ -421,28 +375,29 @@ namespace Frostvein.Handler.Bazaar
                     Session.SendPacket(UserInterfaceHelper.GenerateMsg(
                         Language.Instance.GetMessageFromKey("NOT_ENOUGH_MONEY"), 0));
                     break;
+
                 case BazaarListingResult.ListingLimitReached:
                     Session.SendPacket(UserInterfaceHelper.GenerateMsg(
                         Language.Instance.GetMessageFromKey("LIMIT_EXCEEDED"), 0));
                     break;
+
                 case BazaarListingResult.InvalidPrice:
                     Session.SendPacket(UserInterfaceHelper.GenerateMsg(
                         Language.Instance.GetMessageFromKey("PRICE_EXCEEDED"), 0));
                     break;
+
                 case BazaarListingResult.InvalidItem:
                     SendInvalidItem();
                     break;
+
                 case BazaarListingResult.MissingSchema:
                     Session.SendPacket(UserInterfaceHelper.GenerateInfo(
                         "The bazaar listing database migration is missing. Please contact an administrator."));
                     break;
+
                 default:
                     Session.SendPacket(UserInterfaceHelper.GenerateModal(
                         Language.Instance.GetMessageFromKey("STATE_CHANGED"), 1));
-                    if (!string.IsNullOrWhiteSpace(message))
-                    {
-                        Session.SendPacket(UserInterfaceHelper.GenerateInfo(message));
-                    }
                     break;
             }
         }
@@ -457,15 +412,14 @@ namespace Frostvein.Handler.Bazaar
             CRegPacket packet,
             ItemInstance source,
             BazaarListingDTO plan,
-            BazaarListingResult result,
-            string failure)
+            BazaarListingResult result)
         {
             Logger.LogUserEvent("BAZAAR_INSERT_FAILED", Session.GenerateIdentity(),
                 $"Result={result} OperationId={plan.OperationId} ItemInstanceId={source.Id} " +
                 $"VNum={source.ItemVNum} Owner={source.CharacterId} Type={source.Type} Slot={source.Slot} " +
                 $"LiveAmount={source.Amount} RequestedAmount={packet.Amount} Price={packet.Price} " +
                 $"ClientType={packet.Type} ClientTaxes={packet.Taxes} Durability={packet.Durability} " +
-                $"Failure={failure} Packet={packet.OriginalContent}");
+                $"Packet={packet.OriginalContent}");
         }
 
         private void LogRejectedPacket(CRegPacket packet, string reason)
