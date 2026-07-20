@@ -70,7 +70,7 @@ END";
         public IEnumerable<ItemTraceDTO> LoadByItemInstanceId(Guid itemInstanceId, int take = 100)
         {
             if (itemInstanceId == Guid.Empty) return Enumerable.Empty<ItemTraceDTO>();
-            return Query(@"SELECT TOP (@Take) * FROM dbo.ItemTrace
+            return Query<ItemTraceDTO>(@"SELECT TOP (@Take) * FROM dbo.ItemTrace
 WHERE ItemInstanceId = @Value ORDER BY OccurredAtUtc DESC, Sequence DESC;",
                 new SqlParameter("@Take", ClampTake(take)), new SqlParameter("@Value", itemInstanceId));
         }
@@ -78,7 +78,7 @@ WHERE ItemInstanceId = @Value ORDER BY OccurredAtUtc DESC, Sequence DESC;",
         public IEnumerable<ItemTraceDTO> LoadByEquipmentSerialId(Guid equipmentSerialId, int take = 100)
         {
             if (equipmentSerialId == Guid.Empty) return Enumerable.Empty<ItemTraceDTO>();
-            return Query(@"SELECT TOP (@Take) * FROM dbo.ItemTrace
+            return Query<ItemTraceDTO>(@"SELECT TOP (@Take) * FROM dbo.ItemTrace
 WHERE EquipmentSerialId = @Value ORDER BY OccurredAtUtc DESC, Sequence DESC;",
                 new SqlParameter("@Take", ClampTake(take)), new SqlParameter("@Value", equipmentSerialId));
         }
@@ -86,15 +86,76 @@ WHERE EquipmentSerialId = @Value ORDER BY OccurredAtUtc DESC, Sequence DESC;",
         public IEnumerable<ItemTraceDTO> LoadByOperationId(Guid operationId)
         {
             if (operationId == Guid.Empty) return Enumerable.Empty<ItemTraceDTO>();
-            return Query(@"SELECT * FROM dbo.ItemTrace
+            return Query<ItemTraceDTO>(@"SELECT * FROM dbo.ItemTrace
 WHERE OperationId = @Value ORDER BY Sequence ASC;", new SqlParameter("@Value", operationId));
         }
 
         public IEnumerable<ItemTraceDTO> LoadSuspicious(int take = 100)
         {
-            return Query(@"SELECT TOP (@Take) * FROM dbo.ItemTrace
+            return Query<ItemTraceDTO>(@"SELECT TOP (@Take) * FROM dbo.ItemTrace
 WHERE IsSuspicious = 1 ORDER BY OccurredAtUtc DESC, Sequence DESC;",
                 new SqlParameter("@Take", ClampTake(take)));
+        }
+
+        public IEnumerable<DuplicateEquipmentSerialItemDTO> LoadCurrentItemsByEquipmentSerialId(
+            Guid equipmentSerialId,
+            int take = 100)
+        {
+            if (equipmentSerialId == Guid.Empty)
+                return Enumerable.Empty<DuplicateEquipmentSerialItemDTO>();
+
+            const string sql = @"
+SELECT TOP (@Take)
+       i.EquipmentSerialId,
+       COUNT(*) OVER (PARTITION BY i.EquipmentSerialId) AS InstanceCount,
+       i.Id AS ItemInstanceId,
+       i.ItemVNum,
+       i.Amount,
+       i.CharacterId,
+       CAST(i.Type AS int) AS InventoryTypeValue,
+       i.Slot,
+       i.Rare,
+       i.Upgrade
+FROM dbo.ItemInstance i
+WHERE i.EquipmentSerialId = @EquipmentSerialId
+ORDER BY i.CharacterId, i.Type, i.Slot, i.Id;";
+
+            return Query<DuplicateEquipmentSerialItemDTO>(sql,
+                new SqlParameter("@Take", ClampTake(take)),
+                new SqlParameter("@EquipmentSerialId", equipmentSerialId));
+        }
+
+        public IEnumerable<DuplicateEquipmentSerialItemDTO> LoadDuplicateEquipmentSerialItems(int takeGroups = 20)
+        {
+            const string sql = @"
+WITH DuplicateSerials AS
+(
+    SELECT TOP (@TakeGroups)
+           EquipmentSerialId,
+           COUNT(*) AS InstanceCount
+    FROM dbo.ItemInstance
+    WHERE EquipmentSerialId IS NOT NULL
+      AND EquipmentSerialId <> '00000000-0000-0000-0000-000000000000'
+    GROUP BY EquipmentSerialId
+    HAVING COUNT(*) > 1
+    ORDER BY COUNT(*) DESC, EquipmentSerialId
+)
+SELECT d.EquipmentSerialId,
+       d.InstanceCount,
+       i.Id AS ItemInstanceId,
+       i.ItemVNum,
+       i.Amount,
+       i.CharacterId,
+       CAST(i.Type AS int) AS InventoryTypeValue,
+       i.Slot,
+       i.Rare,
+       i.Upgrade
+FROM DuplicateSerials d
+INNER JOIN dbo.ItemInstance i ON i.EquipmentSerialId = d.EquipmentSerialId
+ORDER BY d.InstanceCount DESC, d.EquipmentSerialId, i.CharacterId, i.Type, i.Slot, i.Id;";
+
+            return Query<DuplicateEquipmentSerialItemDTO>(sql,
+                new SqlParameter("@TakeGroups", ClampTake(takeGroups)));
         }
 
         private static ItemTraceDTO LoadSingle(FrostveinContext context, Guid operationId, int sequence)
@@ -106,19 +167,19 @@ WHERE OperationId = @OperationId AND Sequence = @Sequence;";
                 new SqlParameter("@Sequence", sequence)).FirstOrDefault();
         }
 
-        private static IEnumerable<ItemTraceDTO> Query(string sql, params object[] parameters)
+        private static IEnumerable<T> Query<T>(string sql, params object[] parameters) where T : class
         {
             try
             {
                 using (var context = DataAccessHelper.CreateContext())
                 {
-                    return context.Database.SqlQuery<ItemTraceDTO>(sql, parameters).ToList();
+                    return context.Database.SqlQuery<T>(sql, parameters).ToList();
                 }
             }
             catch (Exception exception)
             {
-                Logger.Error("Unable to query ItemTrace history.", exception);
-                return Enumerable.Empty<ItemTraceDTO>();
+                Logger.Error($"Unable to query item integrity data for {typeof(T).Name}.", exception);
+                return Enumerable.Empty<T>();
             }
         }
 

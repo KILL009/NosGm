@@ -108,6 +108,14 @@ namespace Frostvein.DAL
         public IEnumerable<ItemTraceDTO> GetSuspicious(int take = 100) =>
             _traceDao.LoadSuspicious(take);
 
+        public IEnumerable<DuplicateEquipmentSerialItemDTO> GetCurrentItemsBySerial(
+            Guid equipmentSerialId,
+            int take = 100) =>
+            _traceDao.LoadCurrentItemsByEquipmentSerialId(equipmentSerialId, take);
+
+        public IEnumerable<DuplicateEquipmentSerialItemDTO> GetDuplicateEquipmentSerialItems(int takeGroups = 20) =>
+            _traceDao.LoadDuplicateEquipmentSerialItems(takeGroups);
+
         private static string SerializeMetadata(object metadata)
         {
             if (metadata == null) return null;

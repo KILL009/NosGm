@@ -15,5 +15,11 @@ namespace Frostvein.DAL.Interface
         IEnumerable<ItemTraceDTO> LoadByOperationId(Guid operationId);
 
         IEnumerable<ItemTraceDTO> LoadSuspicious(int take = 100);
+
+        IEnumerable<DuplicateEquipmentSerialItemDTO> LoadCurrentItemsByEquipmentSerialId(
+            Guid equipmentSerialId,
+            int take = 100);
+
+        IEnumerable<DuplicateEquipmentSerialItemDTO> LoadDuplicateEquipmentSerialItems(int takeGroups = 20);
     }
 }
