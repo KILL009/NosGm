@@ -1,179 +1,444 @@
-﻿using Frostvein.Configuration;
+using Frostvein.Configuration;
 using Frostvein.Packets.Packets.ClientPackets;
 using Frostvein.Core;
 using Frostvein.DAL;
+using Frostvein.Data;
+using Frostvein.Domain;
 using Frostvein.GameObject;
+using Frostvein.GameObject.Extension;
 using Frostvein.GameObject.Helpers;
 using Frostvein.GameObject.HttpClients;
 using Frostvein.GameObject.Modules.Bazaar.Commands;
-using Frostvein.GameObject.Modules.Bazaar.Queries;
 using Frostvein.GameObject.Networking;
 using Frostvein.Handler.World.Bazaar;
 using System;
+using System.Collections.Generic;
+using System.Linq;
 
 namespace Frostvein.Handler.Bazaar
 {
     public class GetBazaarPacketHandling : IPacketHandler
     {
-        #region Instantiation
+        private static readonly KeepAliveClient KeepAliveClient = KeepAliveClient.Instance;
+        private static readonly BazaarHttpClient BazaarClient = BazaarHttpClient.Instance;
 
         public GetBazaarPacketHandling(ClientSession session) => Session = session;
 
-        private static readonly KeepAliveClient KeepAliveClient = KeepAliveClient.Instance;
-        private static readonly BazaarHttpClient _bazaarClient = BazaarHttpClient.Instance;
-
-        #endregion Instantiation
-
-        #region Properties
-
         private ClientSession Session { get; }
 
-        private bool CanUseBazaar(long bazaarId)
+        public void GetBazaar(CScalcPacket packet)
         {
+            if (packet == null || Session?.Character?.Inventory == null)
+            {
+                return;
+            }
+
+            if (!CanUseBazaar())
+            {
+                return;
+            }
+
+            BazaarItemDTO listing = DAOFactory.BazaarItemDAO.LoadById(packet.BazaarId);
+            if (listing == null)
+            {
+                SendEmptyResult();
+                RemoveBazaarCache(packet.BazaarId);
+                return;
+            }
+
+            ItemInstanceDTO sourceDto = DAOFactory.ItemInstanceDAO.LoadById(listing.ItemInstanceId);
+            if (sourceDto == null ||
+                listing.SellerId != Session.Character.CharacterId ||
+                sourceDto.CharacterId != Session.Character.CharacterId ||
+                sourceDto.Type != InventoryType.Bazaar ||
+                sourceDto.ItemVNum != packet.VNum ||
+                listing.Price != packet.Price)
+            {
+                SendStateChanged();
+                return;
+            }
+
+            BazaarRecollectPlan committedPlan;
+            lock (Session.Character.Inventory)
+            {
+                if (!TryBuildPlan(listing, sourceDto, out BazaarRecollectPlan plan,
+                        out BazaarRecollectResult planningResult))
+                {
+                    SendFailure(planningResult, listing, sourceDto);
+                    return;
+                }
+
+                BazaarRecollectResult result = BazaarRecollectService.Instance.Commit(plan.Commit);
+                if (result != BazaarRecollectResult.Success &&
+                    result != BazaarRecollectResult.AlreadyCommitted)
+                {
+                    SendFailure(result, listing, sourceDto);
+                    return;
+                }
+
+                ApplyPlan(plan);
+                RecordTrace(plan);
+                committedPlan = plan;
+            }
+
+            RemoveBazaarCache(listing.BazaarItemId);
+            new RefreshPersonalListPacketHandler(Session)
+                .RefreshPersonalBazarList(new CSListPacket());
+            Session.SendPacket("rc_reg 1");
+
+            Logger.LogUserEvent("BAZAAR_RECOLLECT_COMMIT", Session.GenerateIdentity(),
+                $"OperationId={committedPlan.Commit.OperationId} BazaarId={listing.BazaarItemId} " +
+                $"ItemInstanceId={listing.ItemInstanceId} ItemVNum={committedPlan.Commit.ItemVNum} " +
+                $"Remaining={committedPlan.Commit.RemainingAmount} Sold={committedPlan.Commit.SoldAmount} " +
+                $"Proceeds={committedPlan.Commit.Proceeds}");
+        }
+
+        private bool CanUseBazaar()
+        {
+            if (ServerManager.Instance.InShutdown ||
+                Session.Character.InExchangeOrTrade ||
+                Session.Character.HasShopOpened)
+            {
+                return false;
+            }
+
             if (DateTime.Now < Session.Character.BazaarActionTimer.LastBuyAction.AddSeconds(2))
             {
-                Session.SendPacket(UserInterfaceHelper.GenerateInfo("You need to wait a few seconds before buying an item again."));
+                Session.SendPacket(UserInterfaceHelper.GenerateInfo(
+                    "You need to wait a few seconds before using the bazaar again."));
+                return false;
+            }
+
+            if (!KeepAliveClient.IsBazaarOnline())
+            {
+                Session.SendPacket(UserInterfaceHelper.GenerateInfo(
+                    "The bazaar server is offline. Please inform a staff member."));
                 return false;
             }
 
             Session.Character.BazaarActionTimer.LastBuyAction = DateTime.Now;
-
-            if (!KeepAliveClient.IsBazaarOnline())
-            {
-                Session.SendPacket(UserInterfaceHelper.GenerateInfo("Uh oh, it looks like the bazaar server is offline ! Please inform a staff member about it as soon as possible !"));
-                return false;
-            }
-
-            //if (_bazaarClient.GetItemState(new GetStateQuery { Id = bazaarId }))
-            //{
-            //    Session.SendPacket(UserInterfaceHelper.GenerateInfo("An error occurred while trying to update this item."));
-            //    return false;
-            //}
-
             return true;
         }
 
-        #endregion Properties
-
-        #region Methods
-
-        public void GetBazaar(CScalcPacket packet)
+        private bool TryBuildPlan(
+            BazaarItemDTO listing,
+            ItemInstanceDTO sourceDto,
+            out BazaarRecollectPlan plan,
+            out BazaarRecollectResult result)
         {
-            if (!CanUseBazaar(packet.BazaarId))
+            plan = null;
+            result = BazaarRecollectResult.StateChanged;
+
+            var source = new ItemInstance(sourceDto);
+            if (source.Item == null || source.Amount < 0 || listing.Amount < source.Amount)
             {
-                return;
+                return false;
             }
 
-            var bazaarItem = _bazaarClient.GetBazaarItem(new GetBazaarItemQuery() { Id = packet.BazaarId });
-
-            //if (!_bazaarClient.SetItemState(new SetStateCommand { Id = packet.BazaarId }))
-            //{
-            //    Session.SendPacket(UserInterfaceHelper.GenerateInfo("An error occurred while trying to get this item from the bazaar."));
-            //    return;
-            //}
-
-            if (Session.Character == null || Session.Character.InExchangeOrTrade)
+            short soldAmount = (short)(listing.Amount - source.Amount);
+            long gross;
+            long goldAfter;
+            try
             {
-                return;
+                gross = checked(listing.Price * soldAmount);
+                long tax = listing.MedalUsed ? 0 : gross / 10;
+                long proceeds = gross - tax;
+                goldAfter = checked(Session.Character.Gold + proceeds);
+
+                if (goldAfter > GameConfiguration.MaxGold)
+                {
+                    result = BazaarRecollectResult.GoldLimit;
+                    return false;
+                }
+
+                if (!TryBuildInventoryChanges(source,
+                        out List<ItemInstance> itemsBefore,
+                        out List<ItemInstance> itemsAfter))
+                {
+                    result = BazaarRecollectResult.NoInventorySpace;
+                    return false;
+                }
+
+                var commit = new BazaarRecollectDTO
+                {
+                    OperationId = Guid.NewGuid(),
+                    BazaarItemId = listing.BazaarItemId,
+                    SellerCharacterId = Session.Character.CharacterId,
+                    BazaarItemInstanceId = listing.ItemInstanceId,
+                    ItemVNum = source.ItemVNum,
+                    ListingAmount = listing.Amount,
+                    RemainingAmount = source.Amount,
+                    SoldAmount = soldAmount,
+                    UnitPrice = listing.Price,
+                    Tax = tax,
+                    Proceeds = proceeds,
+                    GoldBefore = Session.Character.Gold,
+                    GoldAfter = goldAfter
+                };
+                commit.ItemsBefore.AddRange(itemsBefore);
+                commit.ItemsAfter.AddRange(itemsAfter);
+
+                plan = new BazaarRecollectPlan
+                {
+                    Commit = commit,
+                    Listing = listing,
+                    SourceBefore = source.DeepCopy(),
+                    ItemsBefore = itemsBefore,
+                    ItemsAfter = itemsAfter
+                };
+                result = BazaarRecollectResult.Success;
+                return true;
+            }
+            catch (OverflowException)
+            {
+                result = BazaarRecollectResult.GoldLimit;
+                return false;
+            }
+        }
+
+        private bool TryBuildInventoryChanges(
+            ItemInstance source,
+            out List<ItemInstance> before,
+            out List<ItemInstance> after)
+        {
+            before = new List<ItemInstance> { source.DeepCopy() };
+            after = new List<ItemInstance>();
+
+            var working = Session.Character.Inventory.GetAllItems()
+                .Where(item => item != null && item.Id != source.Id)
+                .Select(item => item.DeepCopy())
+                .ToList();
+            var changedBefore = new Dictionary<Guid, ItemInstance>();
+            var changedAfter = new Dictionary<Guid, ItemInstance>();
+
+            int remaining = source.Amount;
+            InventoryType destinationType = source.Item.Type;
+            bool stackable = destinationType == InventoryType.Main ||
+                             destinationType == InventoryType.Etc;
+
+            if (!stackable && remaining > 1)
+            {
+                return false;
             }
 
-            if (ServerManager.Instance.InShutdown)
+            if (stackable)
             {
-                return;
+                foreach (ItemInstance stack in working
+                             .Where(item => item.Type == destinationType &&
+                                            item.ItemVNum == source.ItemVNum &&
+                                            item.Amount > 0 &&
+                                            item.Amount < InventoryConfigrationExtension.MaxItemPerSlot)
+                             .OrderBy(item => item.Slot)
+                             .ToList())
+                {
+                    if (!changedBefore.ContainsKey(stack.Id))
+                    {
+                        changedBefore[stack.Id] = stack.DeepCopy();
+                    }
+
+                    int moved = Math.Min(
+                        InventoryConfigrationExtension.MaxItemPerSlot - stack.Amount,
+                        remaining);
+                    stack.Amount += (short)moved;
+                    remaining -= moved;
+                    changedAfter[stack.Id] = stack.DeepCopy();
+                    if (remaining == 0)
+                    {
+                        break;
+                    }
+                }
             }
 
-            if (bazaarItem == null)
+            if (remaining > 0)
             {
-                Session.SendPacket(UserInterfaceHelper.GenerateBazarRecollect(0, 0, 0, 0, 0, "None"));
-                _bazaarClient.DeleteItemState(new DeleteStateCommand { Id = packet.BazaarId });
-                return;
-            }
-            var bazaarItemInstance = DAOFactory.ItemInstanceDAO.LoadById(bazaarItem.ItemInstanceId);
+                short? freeSlot = FindFreeSlot(working, destinationType);
+                if (!freeSlot.HasValue)
+                {
+                    return false;
+                }
 
-            if (bazaarItemInstance == null)
-            {
-                _bazaarClient.DeleteItemState(new DeleteStateCommand { Id = packet.BazaarId });
-                return;
-            }
-
-            var itemInstance = new ItemInstance(bazaarItemInstance);
-
-            if (bazaarItem.SellerId != Session.Character.CharacterId)
-            {
-                _bazaarClient.DeleteItemState(new DeleteStateCommand { Id = packet.BazaarId });
-                return;
+                ItemInstance restored = source.DeepCopy();
+                restored.Type = destinationType;
+                restored.Slot = freeSlot.Value;
+                restored.CharacterId = Session.Character.CharacterId;
+                restored.Amount = (short)remaining;
+                working.Add(restored);
+                changedAfter[restored.Id] = restored.DeepCopy();
             }
 
-            if ((bazaarItem.DateStart.AddHours(bazaarItem.Duration).AddDays(bazaarItem.MedalUsed ? 30 : 7) - DateTime.Now).TotalMinutes <= 0)
+            before.AddRange(changedBefore.Values
+                .OrderBy(item => item.Type)
+                .ThenBy(item => item.Slot));
+            after.AddRange(changedAfter.Values
+                .OrderBy(item => item.Type)
+                .ThenBy(item => item.Slot));
+            return true;
+        }
+
+        private short? FindFreeSlot(IEnumerable<ItemInstance> items, InventoryType type)
+        {
+            int capacity = type == InventoryType.Miniland
+                ? 50
+                : Session.Character.Inventory.BackpackSize();
+            for (short slot = 0; slot < capacity; slot++)
             {
-                _bazaarClient.DeleteItemState(new DeleteStateCommand { Id = packet.BazaarId });
-                return;
+                if (items.All(item => item.Type != type || item.Slot != slot))
+                {
+                    return slot;
+                }
             }
 
-            var soldAmount = bazaarItem.Amount - itemInstance.Amount;
-            var taxes = bazaarItem.MedalUsed ? 0 : (long)(bazaarItem.Price * 0.10 * soldAmount);
-            var price = (bazaarItem.Price * soldAmount) - taxes;
+            return null;
+        }
 
-            var name = itemInstance.Item?.Name ?? "None";
-
-            if (itemInstance.Amount != 0 && !Session.Character.Inventory.CanAddItem(itemInstance.ItemVNum))
+        private void ApplyPlan(BazaarRecollectPlan plan)
+        {
+            foreach (ItemInstance before in plan.ItemsBefore)
             {
-                Session.SendPacket(UserInterfaceHelper.GenerateInfo(Language.Instance.GetMessageFromKey("NOT_ENOUGH_PLACE")));
-                Session.SendPacket(UserInterfaceHelper.GenerateBazarRecollect(bazaarItem.Price, 0, bazaarItem.Amount, 0, 0, name));
-                _bazaarClient.DeleteItemState(new DeleteStateCommand { Id = packet.BazaarId });
-                return;
+                Session.Character.Inventory.Remove(before.Id);
             }
 
-            long Result = Session.Character.Gold + price;
-            if (Result > GameConfiguration.MaxGold)
+            foreach (ItemInstance after in plan.ItemsAfter)
             {
-                Session.SendPacket("msg 4 You have reached the Gold Limit");
-                Session.SendPacket(UserInterfaceHelper.GenerateBazarRecollect(bazaarItem.Price, 0, bazaarItem.Amount, 0, 0, name));
-                _bazaarClient.DeleteItemState(new DeleteStateCommand { Id = packet.BazaarId });
-                return;
+                ItemInstance applied = after.DeepCopy();
+                Session.Character.Inventory[applied.Id] = applied;
+                string inventoryPacket = applied.GenerateInventoryAdd();
+                if (!string.IsNullOrWhiteSpace(inventoryPacket))
+                {
+                    Session.SendPacket(inventoryPacket);
+                }
             }
 
-            Session.Character.Gold += price;
+            Session.Character.Gold = plan.Commit.GoldAfter;
             Session.SendPacket(Session.Character.GenerateGold());
-            Session.SendPacket(Session.Character.GenerateSay(string.Format(Language.Instance.GetMessageFromKey("REMOVE_FROM_BAZAAR"), price), 10));
+            Session.SendPacket(Session.Character.GenerateSay(
+                string.Format(Language.Instance.GetMessageFromKey("REMOVE_FROM_BAZAAR"),
+                    plan.Commit.Proceeds), 10));
+            Session.SendPacket(UserInterfaceHelper.GenerateBazarRecollect(
+                plan.Commit.UnitPrice,
+                plan.Commit.SoldAmount,
+                plan.Commit.ListingAmount,
+                plan.Commit.Tax,
+                plan.Commit.Proceeds,
+                plan.SourceBefore.Item?.Name ?? "None"));
 
-            // Edit this soo we dont generate new guid every single time we take
-            // something out.
-            if (itemInstance.Amount != 0)
+            Session.Character.BazaarItems.TryRemove(plan.Commit.BazaarItemId, out _);
+        }
+
+        private void RecordTrace(BazaarRecollectPlan plan)
+        {
+            try
             {
-                var newItemInstance = itemInstance.DeepCopy();
-                newItemInstance.Id = Guid.NewGuid();
-                newItemInstance.Type = newItemInstance.Item.Type;
+                var afterById = plan.ItemsAfter.ToDictionary(item => item.Id, item => item);
+                int sequence = 0;
+                foreach (ItemInstance before in plan.ItemsBefore)
+                {
+                    afterById.TryGetValue(before.Id, out ItemInstance after);
+                    ItemTraceAction action = before.Id == plan.Commit.BazaarItemInstanceId
+                        ? after == null ? ItemTraceAction.Deleted : ItemTraceAction.Transferred
+                        : ItemTraceAction.StackChanged;
 
-                newItemInstance.ShellEffects.AddRange(DAOFactory.ShellEffectDAO.LoadByEquipmentSerialId(itemInstance.Id));
-                newItemInstance.ShellEffects.ForEach(s => s.EquipmentSerialId = newItemInstance.Id);
-                newItemInstance.ShellEffects.ForEach(s => DAOFactory.ShellEffectDAO.InsertOrUpdate(s));
+                    ItemTraceService.Instance.Record(
+                        plan.Commit.OperationId,
+                        sequence++,
+                        action,
+                        ItemTraceSource.Bazaar,
+                        before,
+                        after,
+                        Session.Account?.AccountId,
+                        Session.Character.CharacterId,
+                        Session.Character.Name,
+                        "Atomic bazaar listing recollection",
+                        new
+                        {
+                            plan.Commit.BazaarItemId,
+                            plan.Commit.RemainingAmount,
+                            plan.Commit.SoldAmount,
+                            plan.Commit.Proceeds
+                        });
+                }
+            }
+            catch (Exception exception)
+            {
+                Logger.LogUserEventError("BAZAAR_RECOLLECT_TRACE", Session.GenerateIdentity(),
+                    $"Unable to record bazaar recollection {plan.Commit.OperationId}.", exception);
+            }
+        }
 
-                Session.Character.Inventory.AddToInventory(newItemInstance);
+        private static void RemoveBazaarCache(long bazaarItemId)
+        {
+            try
+            {
+                BazaarClient.DeleteBazaarItem(new DeleteBazaarItemCommand { Id = bazaarItemId });
+                BazaarClient.DeleteItemState(new DeleteStateCommand { Id = bazaarItemId });
+            }
+            catch (Exception exception)
+            {
+                Logger.Error($"Unable to remove bazaar cache entry {bazaarItemId}.", exception);
+            }
+        }
+
+        private void SendFailure(
+            BazaarRecollectResult result,
+            BazaarItemDTO listing,
+            ItemInstanceDTO source)
+        {
+            string name = source == null
+                ? "None"
+                : new ItemInstance(source).Item?.Name ?? "None";
+
+            switch (result)
+            {
+                case BazaarRecollectResult.NoInventorySpace:
+                    Session.SendPacket(UserInterfaceHelper.GenerateInfo(
+                        Language.Instance.GetMessageFromKey("NOT_ENOUGH_PLACE")));
+                    break;
+
+                case BazaarRecollectResult.GoldLimit:
+                    Session.SendPacket(UserInterfaceHelper.GenerateInfo(
+                        Language.Instance.GetMessageFromKey("MAX_GOLD")));
+                    break;
+
+                case BazaarRecollectResult.MissingSchema:
+                    Session.SendPacket(UserInterfaceHelper.GenerateInfo(
+                        "The bazaar recollection migration is missing. Please contact an administrator."));
+                    break;
+
+                default:
+                    SendStateChanged();
+                    break;
             }
 
-            Session.SendPacket(UserInterfaceHelper.GenerateBazarRecollect(bazaarItem.Price, soldAmount, bazaarItem.Amount, taxes, price, name));
-            if (Session.Character.BazaarItems.ContainsKey(packet.BazaarId))
+            if (listing != null)
             {
-                Session.Character.BazaarItems.TryRemove(packet.BazaarId, out _);
+                Session.SendPacket(UserInterfaceHelper.GenerateBazarRecollect(
+                    listing.Price, 0, listing.Amount, 0, 0, name));
             }
+        }
 
-            Logger.LogUserEvent("BAZAAR_REMOVE", Session.GenerateIdentity(), $"BazaarId: {packet.BazaarId}, IId: {itemInstance.Id} VNum: {itemInstance.ItemVNum} Amount: {bazaarItem.Amount} RemainingAmount: {itemInstance.Amount} Price: {bazaarItem.Price}");
+        private void SendEmptyResult()
+        {
+            Session.SendPacket(UserInterfaceHelper.GenerateBazarRecollect(
+                0, 0, 0, 0, 0, "None"));
+        }
 
-            var item = ServerManager.GetItem(bazaarItemInstance.ItemVNum);
+        private void SendStateChanged()
+        {
+            Session.SendPacket(UserInterfaceHelper.GenerateModal(
+                Language.Instance.GetMessageFromKey("STATE_CHANGED"), 1));
+        }
 
-            if (_bazaarClient.GetBazaarItem(new GetBazaarItemQuery() { Id = bazaarItem.BazaarItemId }) != null)
-            {
-                _bazaarClient.DeleteBazaarItem(new DeleteBazaarItemCommand() { Id = bazaarItem.BazaarItemId });
-            }
+        private sealed class BazaarRecollectPlan
+        {
+            public BazaarRecollectDTO Commit { get; set; }
 
-            DAOFactory.ItemInstanceDAO.Delete(itemInstance.Id);
-            Session.Character.Inventory.RemoveItemFromInventory(itemInstance.Id, itemInstance.Amount);
-            new RefreshPersonalListPacketHandler(Session).RefreshPersonalBazarList(new CSListPacket());
-            _bazaarClient.DeleteItemState(new DeleteStateCommand { Id = packet.BazaarId });
-            Session.SendPacket("rc_reg 1");
+            public BazaarItemDTO Listing { get; set; }
+
+            public ItemInstance SourceBefore { get; set; }
+
+            public List<ItemInstance> ItemsBefore { get; set; }
+
+            public List<ItemInstance> ItemsAfter { get; set; }
         }
     }
 }
-
-#endregion Methods

@@ -80,6 +80,8 @@
     <Compile Include="BattlePassQuestDTO.cs" />
     <Compile Include="BattlePassQuestProgressDTO.cs" />
     <Compile Include="BazaarItemDTO.cs" />
+    <Compile Include="BazaarPurchaseDTO.cs" />
+    <Compile Include="BazaarRecollectDTO.cs" />
     <Compile Include="BCardDTO.cs" />
     <Compile Include="CharacterExploitDTO.cs" />
     <Compile Include="CharacterFishDto.cs" />
