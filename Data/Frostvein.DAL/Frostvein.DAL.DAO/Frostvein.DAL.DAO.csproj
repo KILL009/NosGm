@@ -52,6 +52,7 @@
     <Compile Include="BattlePassQuestDAO.cs" />
     <Compile Include="BattlePassQuestProgressDAO.cs" />
     <Compile Include="BazaarItemDAO.cs" />
+    <Compile Include="BazaarPurchaseDAO.cs" />
     <Compile Include="BCardDAO.cs" />
     <Compile Include="CardDAO.cs" />
     <Compile Include="CellonOptionDAO.cs" />
