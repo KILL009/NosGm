@@ -28,8 +28,6 @@ namespace Frostvein.Handler.Bazaar
                 return;
             }
 
-            LogAttempt(packet);
-
             if (!CanUseBazaar())
             {
                 return;
@@ -55,7 +53,7 @@ namespace Frostvein.Handler.Bazaar
                             : $"Live item rejected: id={source.Id} vnum={source.ItemVNum} amount={source.Amount} " +
                               $"owner={source.CharacterId} type={source.Type} slot={source.Slot} " +
                               $"soldable={source.Item?.IsSoldable} tradable={source.Item?.IsTradable} " +
-                              $"bound={source.IsBound} deleteTime={source.ItemDeleteTime}");
+                              $"boundCharacterId={source.BoundCharacterId} deleteTime={source.ItemDeleteTime}");
                     SendInvalidItem();
                     return;
                 }
@@ -408,15 +406,6 @@ namespace Frostvein.Handler.Bazaar
         {
             Session.SendPacket(UserInterfaceHelper.GenerateInfo(
                 "This item cannot be registered in the bazaar."));
-        }
-
-        private void LogAttempt(CRegPacket packet)
-        {
-            Logger.LogUserEvent("BAZAAR_INSERT_ATTEMPT", Session.GenerateIdentity(),
-                $"Type={packet.Type} Inventory={packet.Inventory} Slot={packet.Slot} " +
-                $"Unknown1={packet.Unknown1} Unknown2={packet.Unknown2} Durability={packet.Durability} " +
-                $"IsPackage={packet.IsPackage} Amount={packet.Amount} Price={packet.Price} " +
-                $"ClientTaxes={packet.Taxes} MedalUsed={packet.MedalUsed} Packet={packet.OriginalContent}");
         }
 
         private void LogCommitFailure(
