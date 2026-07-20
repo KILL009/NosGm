@@ -381,7 +381,11 @@ namespace Frostvein.Handler.Bazaar
         {
             try
             {
-                BazaarClient.InsertOrUpdateBazaar(new InsertOrUpdateBazaarItemCommand { BazaarItem = listing });
+                BazaarClient.InsertOrUpdateBazaar(new InsertOrUpdateBazaarItemCommand
+                {
+                    BazaarItem = listing,
+                    RefreshOnly = true
+                });
             }
             catch (Exception exception)
             {
