@@ -90,6 +90,8 @@
     <Compile Include="FishPacketType.cs" />
     <Compile Include="FixedUpModeType.cs" />
     <Compile Include="GameConstString.cs" />
+    <Compile Include="GmCaseType.cs" />
+    <Compile Include="GmSanctionType.cs" />
     <Compile Include="GoldBankPacketType.cs" />
     <Compile Include="GroupAttackType.cs" />
     <Compile Include="GroupType.cs" />

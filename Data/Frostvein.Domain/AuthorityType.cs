@@ -74,8 +74,8 @@ namespace Frostvein.Domain
 
         private static readonly HashSet<string> ModerationCommands = Set(
             "$ban", "$unban", "$mute", "$unmute", "$kick", "$kicksession", "$warning",
-            "$userlog", "$adduserlog", "$removeuserlog", "$blockpm", "$undercover",
-            "$invisible", "$shout", "$shouthere", "$summon", "$teleport", "$gogo");
+            "$sanction", "$gmcase", "$userlog", "$adduserlog", "$removeuserlog", "$blockpm",
+            "$undercover", "$invisible", "$shout", "$shouthere", "$summon", "$teleport", "$gogo");
 
         private static readonly HashSet<string> EconomyCommands = Set(
             "$gold", "$bank", "$gift", "$createitem", "$cloneitem", "$itemrain",

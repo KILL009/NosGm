@@ -30,7 +30,13 @@ namespace Frostvein.Handler.PacketHandler.Command
         {
             if (unbanPacket != null)
             {
-                //Session.AddLogsCmd(unbanPacket);
+                if (Session.Account?.Authority < AuthorityType.DEV)
+                {
+                    Session.SendPacket(Session.Character.GenerateSay(
+                        "Direct unbans are disabled. Use $Sanction preview <CaseId> unban 0 <Character> <reason>.", 11));
+                    return;
+                }
+
                 var name = unbanPacket.CharacterName;
                 var chara = DAOFactory.CharacterDAO.LoadByName(name);
                 if (chara != null)

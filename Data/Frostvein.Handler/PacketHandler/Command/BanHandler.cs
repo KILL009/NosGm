@@ -1,6 +1,7 @@
 ﻿using Frostvein.Extension.Extension.Command;
 using Frostvein.Packets.Packets.CommandPackets;
 using Frostvein.Core;
+using Frostvein.Domain;
 using Frostvein.GameObject;
 
 namespace Frostvein.Handler.PacketHandler.Command
@@ -25,6 +26,13 @@ namespace Frostvein.Handler.PacketHandler.Command
         {
             if (banPacket != null)
             {
+                if (Session.Account?.Authority < AuthorityType.DEV)
+                {
+                    Session.SendPacket(Session.Character.GenerateSay(
+                        "Direct bans are disabled. Use $Sanction preview <CaseId> ban <days> <Character> <reason>.", 11));
+                    return;
+                }
+
                 Session.BanMethod(banPacket.CharacterName, banPacket.Duration, banPacket.Reason, banPacket.IsBanIp);
             }
             else
