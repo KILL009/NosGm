@@ -1,4 +1,4 @@
-﻿/*
+/*
  * This file is part of the Frostvein Emulator Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify
@@ -15,6 +15,7 @@
 using Frostvein.Configuration;
 using Frostvein.DAL;
 using Frostvein.Data;
+using Frostvein.Domain;
 using Frostvein.GameObject;
 using Frostvein.GameObject.Networking;
 using Frostvein.Master.Library.Data;
@@ -22,7 +23,6 @@ using Frostvein.Master.Library.Interface;
 using Frostvein.SCS.Communication.ScsServices.Service;
 using System;
 using System.Collections.Generic;
-using System.Configuration;
 
 namespace Frostvein.Master.Server
 {
@@ -45,6 +45,7 @@ namespace Frostvein.Master.Server
 
             return false;
         }
+
         //Api
         public IEnumerable<CharacterDTO> GetCharacters(long accountId)
         {
@@ -72,63 +73,56 @@ namespace Frostvein.Master.Server
             {
                 return null;
             }
+
             return DAOFactory.CharacterDAO.LoadById(characterId);
         }
 
-
         public void SendItem(long characterId, MallItem item)
         {
-            if (!MSManager.Instance.AuthentificatedClients.Any(s => s.Equals(CurrentClient.ClientId)))
+            if (!MSManager.Instance.AuthentificatedClients.Any(s => s.Equals(CurrentClient.ClientId)) || item == null)
             {
                 return;
             }
 
-            MailDTO mailDTO = new MailDTO
+            var operationId = item.OperationId == Guid.Empty ? Guid.NewGuid() : item.OperationId;
+            var mail = new MailDTO
             {
                 AttachmentAmount = (short)item.Amount,
+                AttachmentLevel = item.Level,
                 AttachmentRarity = item.Rare,
                 AttachmentUpgrade = item.Upgrade,
                 AttachmentDesign = item.Design,
                 AttachmentVNum = item.ItemVNum,
                 Date = DateTime.Now,
-                EqPacket = "",
+                DeliveryOperationId = operationId,
+                DeliverySource = ItemTraceSource.ItemMall,
+                EqPacket = string.Empty,
                 IsOpened = false,
                 IsSenderCopy = false,
-                Message = "",
+                Message = string.Empty,
                 ReceiverId = characterId,
                 SenderId = characterId,
                 Title = "ItemMall"
             };
 
-            DAOFactory.MailDAO.InsertOrUpdate(ref mailDTO);
+            DAOFactory.MailDAO.InsertOrUpdate(ref mail);
 
-            MailDTO mail = new MailDTO
+            // A repeated purchase operation may point to a parcel that was already claimed.
+            // In that case the delivery ledger deliberately prevents recreation and no second
+            // online notification is sent.
+            var persistedMail = mail.MailId > 0 ? DAOFactory.MailDAO.LoadById(mail.MailId) : null;
+            if (persistedMail == null)
             {
-                AttachmentAmount = mailDTO.AttachmentAmount,
-                AttachmentRarity = mailDTO.AttachmentRarity,
-                AttachmentUpgrade = mailDTO.AttachmentUpgrade,
-                AttachmentDesign = mailDTO.AttachmentDesign,
-                AttachmentVNum = mailDTO.AttachmentVNum,
-                Date = mailDTO.Date,
-                EqPacket = mailDTO.EqPacket,
-                IsOpened = mailDTO.IsOpened,
-                IsSenderCopy = mailDTO.IsSenderCopy,
-                MailId = mailDTO.MailId,
-                Message = mailDTO.Message,
-                ReceiverId = mailDTO.ReceiverId,
-                SenderClass = mailDTO.SenderClass,
-                SenderGender = mailDTO.SenderGender,
-                SenderHairColor = mailDTO.SenderHairColor,
-                SenderHairStyle = mailDTO.SenderHairStyle,
-                SenderId = mailDTO.SenderId,
-                SenderMorphId = mailDTO.SenderMorphId,
-                Title = mailDTO.Title
-            };
+                return;
+            }
 
-            AccountConnection account = MSManager.Instance.ConnectedAccounts.Find(a => a.CharacterId.Equals(mail.ReceiverId));
+            AccountConnection account = MSManager.Instance.ConnectedAccounts
+                .Find(a => a.CharacterId.Equals(persistedMail.ReceiverId));
             if (account?.ConnectedWorld != null)
             {
-                account.ConnectedWorld.MailServiceClient.GetClientProxy<IMailClient>().MailSent(mail);
+                account.ConnectedWorld.MailServiceClient
+                    .GetClientProxy<IMailClient>()
+                    .MailSent(persistedMail);
             }
         }
 
@@ -136,18 +130,14 @@ namespace Frostvein.Master.Server
 
         public AccountDTO ValidateAccount(string userName, string passHash)
         {
-            if (!MSManager.Instance.AuthentificatedClients.Any(s => s.Equals(CurrentClient.ClientId)) || string.IsNullOrEmpty(userName) || string.IsNullOrEmpty(passHash))
+            if (!MSManager.Instance.AuthentificatedClients.Any(s => s.Equals(CurrentClient.ClientId)) ||
+                string.IsNullOrEmpty(userName) || string.IsNullOrEmpty(passHash))
             {
                 return null;
             }
 
             AccountDTO account = DAOFactory.AccountDAO.LoadByName(userName);
-
-            if (account?.Password == passHash)
-            {
-                return account;
-            }
-            return null;
+            return account?.Password == passHash ? account : null;
         }
 
         #endregion
