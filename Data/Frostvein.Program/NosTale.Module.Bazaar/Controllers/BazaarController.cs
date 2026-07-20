@@ -53,6 +53,12 @@ namespace NosTale.Module.Bazaar.Controllers
             return Ok(await _mediator.Send(command));
         }
 
+        [HttpPost("CommitListing")]
+        public async Task<IActionResult> CommitBazaarListing([FromBody] CommitBazaarListingCommand command)
+        {
+            return Ok(await _mediator.Send(command));
+        }
+
         [HttpPost("Rcs")]
         public async Task<IActionResult> GenerateRcsList([FromBody] GetRcsListQuery command)
         {
