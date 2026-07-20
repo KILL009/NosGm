@@ -127,15 +127,15 @@ namespace Frostvein.DAL.DAO
 
                         if (request.RemainingAmount == 0)
                         {
-                            if (!ValidateFullySoldPlan(request, beforeById, afterById))
+                            if (!ValidateFullySoldPlan(request))
                             {
                                 transaction.Rollback();
                                 return BazaarRecollectResult.StateChanged;
                             }
 
                             // A completely sold listing restores no item and therefore requires no
-                            // inventory slot. Delete the zero-amount bazaar row directly instead of
-                            // sending it through the generic inventory-space validator.
+                            // inventory slot. The SQL row and sold amount were already validated under
+                            // the listing lock, so transport-only inventory snapshots are irrelevant.
                             context.ItemInstance.Remove(source);
                         }
                         else
@@ -211,32 +211,10 @@ namespace Frostvein.DAL.DAO
                    request.GoldAfter >= request.GoldBefore;
         }
 
-        private static bool ValidateFullySoldPlan(
-            BazaarRecollectDTO request,
-            IDictionary<Guid, ItemInstanceDTO> beforeById,
-            IDictionary<Guid, ItemInstanceDTO> afterById)
+        private static bool ValidateFullySoldPlan(BazaarRecollectDTO request)
         {
-            if (request.RemainingAmount != 0 ||
-                request.SoldAmount != request.ListingAmount ||
-                afterById.Count != 0 ||
-                beforeById.Count > 1)
-            {
-                return false;
-            }
-
-            // The authoritative SQL source row was already validated while holding the
-            // listing lock. The transport snapshot is optional and must not reject a
-            // completed sale merely because old non-equipment rows carry a legacy serial.
-            if (beforeById.Count == 0)
-            {
-                return true;
-            }
-
-            return beforeById.TryGetValue(request.BazaarItemInstanceId, out ItemInstanceDTO sourceBefore) &&
-                   sourceBefore.CharacterId == request.SellerCharacterId &&
-                   sourceBefore.ItemVNum == request.ItemVNum &&
-                   sourceBefore.Type == InventoryType.Bazaar &&
-                   sourceBefore.Amount == 0;
+            return request.RemainingAmount == 0 &&
+                   request.SoldAmount == request.ListingAmount;
         }
 
         private static bool ValidateInventoryPlan(
