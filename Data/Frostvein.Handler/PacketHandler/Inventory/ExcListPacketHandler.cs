@@ -1,10 +1,11 @@
-﻿using Frostvein.Extension.Extension.Packet;
-using Frostvein.Packets.Packets.ClientPackets;
 using Frostvein.Core;
 using Frostvein.Domain;
+using Frostvein.Extension.Extension.Packet;
 using Frostvein.GameObject;
 using Frostvein.GameObject.Helpers;
 using Frostvein.GameObject.Networking;
+using Frostvein.Packets.Packets.ClientPackets;
+using System;
 using System.Linq;
 using System.Threading.Tasks;
 
@@ -33,144 +34,134 @@ namespace Frostvein.Handler.PacketHandler.Inventory
         {
             if (Session.Account.IsLimited)
             {
-                Session.SendPacket(UserInterfaceHelper.GenerateInfo(Language.Instance.GetMessageFromKey("LIMITED_ACCOUNT")));
+                Session.SendPacket(UserInterfaceHelper.GenerateInfo(
+                    Language.Instance.GetMessageFromKey("LIMITED_ACCOUNT")));
                 return;
             }
 
             Logger.LogUserEvent("EXC_LIST", Session.GenerateIdentity(), $"Packet string: {packet}");
 
-            if (Session.Character.ExchangeInfo == null)
+            var exchange = Session.Character.ExchangeInfo;
+            if (exchange == null || exchange.OperationId == Guid.Empty || packet == null ||
+                string.IsNullOrWhiteSpace(packet.PacketData))
             {
                 return;
             }
 
-            if (Session.Character.ExchangeInfo.Gold != 0)
+            if (exchange.Gold != 0 || exchange.GoldBank != 0 ||
+                exchange.ExchangeList.Count > 0 || exchange.Validated || exchange.CommitStarted)
             {
                 return;
             }
 
-            if (Session.Character.ExchangeInfo.BankGold != 0)
-            {
-                return;
-            }
-
-            var targetSession = ServerManager.Instance.GetSessionByCharacterId(Session.Character.ExchangeInfo.TargetCharacterId);
-            if (Session.Character.HasShopOpened || targetSession?.Character.HasShopOpened == true)
+            var targetSession = ServerManager.Instance.GetSessionByCharacterId(exchange.TargetCharacterId);
+            var targetExchange = targetSession?.Character.ExchangeInfo;
+            if (targetSession == null || targetExchange == null ||
+                targetExchange.OperationId == Guid.Empty ||
+                targetExchange.OperationId != exchange.OperationId ||
+                targetExchange.TargetCharacterId != Session.Character.CharacterId ||
+                Session.Character.MapInstanceId != targetSession.Character.MapInstanceId)
             {
                 Session.CloseExchange(targetSession);
                 return;
             }
 
-            var packetsplit = packet.PacketData.Split(' ');
-            if (packetsplit.Length < 2)
+            if (Session.Character.HasShopOpened || targetSession.Character.HasShopOpened)
             {
-                Session.SendPacket("exc_close 0");
-                Session.CurrentMapInstance?.Broadcast(Session, "exc_close 0", ReceiverType.OnlySomeone, "", Session.Character.ExchangeInfo.TargetCharacterId);
-
-                if (targetSession != null) targetSession.Character.ExchangeInfo = null;
-                Session.Character.ExchangeInfo = null;
+                Session.CloseExchange(targetSession);
                 return;
             }
 
-            if (!long.TryParse(packetsplit[0], out var gold)) return;
+            var packetSplit = packet.PacketData.Split(new[] { ' ' },
+                StringSplitOptions.RemoveEmptyEntries);
+            if (packetSplit.Length < 2)
+            {
+                Session.CloseExchange(targetSession);
+                return;
+            }
 
-            if (!long.TryParse(packetsplit[1], out var bankGold)) return;
+            if (!long.TryParse(packetSplit[0], out var gold) ||
+                !long.TryParse(packetSplit[1], out var bankGold))
+            {
+                Session.CloseExchange(targetSession);
+                return;
+            }
+
+            if (gold < 0 || gold > Session.Character.Gold ||
+                bankGold < 0 || bankGold > Session.Character.GoldBank / 1000)
+            {
+                Session.CloseExchange(targetSession);
+                return;
+            }
 
             var type = new byte[10];
-            short[] slot = new short[10], qty = new short[10];
-            var packetList = "";
+            var slot = new short[10];
+            var quantity = new short[10];
+            var packetList = string.Empty;
 
-            if (gold < 0 || gold > Session.Character.Gold || Session.Character.ExchangeInfo == null || Session.Character.ExchangeInfo.ExchangeList.Count > 0)
+            for (int j = 4, i = 0; j < packetSplit.Length && i < 10; j += 3, i++)
             {
-                return;
-            }
-
-            if (bankGold < 0 || bankGold > Session.Character.GoldBank / 1000 || Session.Character.ExchangeInfo == null || Session.Character.ExchangeInfo.ExchangeList.Count > 0)
-            {
-                return;
-            }
-
-            if (gold < 0 || gold > Session.Character.Gold || bankGold < 0 || bankGold > Session.Character.GoldBank / 1000 ||
-                Session.Character.ExchangeInfo == null || Session.Character.ExchangeInfo.ExchangeList.Any())
-            {
-                return;
-            }
-
-            for (int j = 4, i = 0; j <= packetsplit.Length && i < 10; j += 3, i++)
-            {
-                byte.TryParse(packetsplit[j - 2], out type[i]);
-                short.TryParse(packetsplit[j - 1], out slot[i]);
-                short.TryParse(packetsplit[j], out qty[i]);
-                if ((InventoryType)type[i] == InventoryType.Bazaar)
+                if (!byte.TryParse(packetSplit[j - 2], out type[i]) ||
+                    !short.TryParse(packetSplit[j - 1], out slot[i]) ||
+                    !short.TryParse(packetSplit[j], out quantity[i]))
                 {
                     Session.CloseExchange(targetSession);
                     return;
                 }
 
-                var item = Session.Character.Inventory.LoadBySlotAndType(slot[i], (InventoryType)type[i]);
-                if (item == null)
-                {
-                    return;
-                }
-
-                if (item.ItemVNum >= 7185 && item.ItemVNum <= 7190 || item.ItemVNum >= 7412 && item.ItemVNum <= 7414)
-                {
-                    Session.SendPacket(UserInterfaceHelper.GenerateInfo("You can't Add Cash in Exchanger."));
-                    return;
-                }
-
-
-                if (item.Type == InventoryType.Bazaar || item.Type == InventoryType.FamilyWareHouse)
+                var inventoryType = (InventoryType)type[i];
+                if (inventoryType == InventoryType.Bazaar ||
+                    inventoryType == InventoryType.FamilyWareHouse)
                 {
                     Session.CloseExchange(targetSession);
                     return;
                 }
 
-                ItemInstance itemInstance = Session.Character.Inventory.LoadBySlotAndType(item.Slot, item.Type);
-                if (itemInstance == null)
+                var item = Session.Character.Inventory.LoadBySlotAndType(slot[i], inventoryType);
+                if (item == null || quantity[i] <= 0 || item.Amount < quantity[i])
                 {
+                    Session.CloseExchange(targetSession);
                     return;
                 }
 
-                if (qty[i] <= 0 || item.Amount < qty[i])
+                if ((item.ItemVNum >= 7185 && item.ItemVNum <= 7190) ||
+                    (item.ItemVNum >= 7412 && item.ItemVNum <= 7414))
                 {
+                    Session.SendPacket(UserInterfaceHelper.GenerateInfo(
+                        "You can't Add Cash in Exchanger."));
+                    Session.CloseExchange(targetSession);
                     return;
                 }
 
-                var it = item.DeepCopy();
-                if (it.Item.IsTradable && (!it.IsBound || (it.Item.Type == InventoryType.Equipment && (it.Item.ItemType == ItemType.Armor || it.Item.ItemType == ItemType.Weapon))))
+                var offeredItem = item.DeepCopy();
+                var tradable = offeredItem.Item.IsTradable &&
+                               (!offeredItem.IsBound ||
+                                (offeredItem.Item.Type == InventoryType.Equipment &&
+                                 (offeredItem.Item.ItemType == ItemType.Armor ||
+                                  offeredItem.Item.ItemType == ItemType.Weapon)));
+                if (!tradable)
                 {
-                    it.Amount = qty[i];
-                    Session.Character.ExchangeInfo.ExchangeList.Add(it);
-                    if (type[i] != 0)
-                    {
-                        packetList += $"{i}.{type[i]}.{it.ItemVNum}.{qty[i]} ";
-                    }
-                    else
-                    {
-                        packetList += $"{i}.{type[i]}.{it.ItemVNum}.{it.Rare}.{it.Upgrade} ";
-                    }
-                }
-                else if (it.IsBound)
-                {
-                    Session.SendPacket("exc_close 0");
-                    Session.CurrentMapInstance?.Broadcast(Session, "exc_close 0", ReceiverType.OnlySomeone, "", Session.Character.ExchangeInfo.TargetCharacterId);
-
-                    if (targetSession != null)
-                    {
-                        targetSession.Character.ExchangeInfo = null;
-                    }
-                    Session.Character.ExchangeInfo = null;
+                    Session.SendPacket(UserInterfaceHelper.GenerateInfo(
+                        Language.Instance.GetMessageFromKey("ITEM_NOT_TRADABLE")));
+                    Session.CloseExchange(targetSession);
                     return;
                 }
+
+                offeredItem.Amount = quantity[i];
+                exchange.ExchangeList.Add(offeredItem);
+                packetList += type[i] != 0
+                    ? $"{i}.{type[i]}.{offeredItem.ItemVNum}.{quantity[i]} "
+                    : $"{i}.{type[i]}.{offeredItem.ItemVNum}.{offeredItem.Rare}.{offeredItem.Upgrade} ";
             }
 
-            Session.Character.ExchangeInfo.Gold = gold;
-            Session.Character.ExchangeInfo.BankGold = bankGold * 1000;
+            exchange.Gold = gold;
+            exchange.GoldBank = bankGold * 1000;
+            exchange.Confirmed = false;
+            targetExchange.Confirmed = false;
             Session.CurrentMapInstance?.Broadcast(Session,
-                $"exc_list 1 {Session.Character.CharacterId} {gold} {bankGold} {packetList}", ReceiverType.OnlySomeone,
-                "", Session.Character.ExchangeInfo.TargetCharacterId);
-            Session.Character.ExchangeInfo.Validated = true;
+                $"exc_list 1 {Session.Character.CharacterId} {gold} {bankGold} {packetList}",
+                ReceiverType.OnlySomeone, "", exchange.TargetCharacterId);
+            exchange.Validated = true;
         }
 
         #endregion
