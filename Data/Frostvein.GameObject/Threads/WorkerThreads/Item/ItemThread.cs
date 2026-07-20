@@ -51,7 +51,7 @@ namespace Frostvein.GameObject.ItemThread
                     {
                         int secondChance = ServerManager.RandomNumber(1, 10);
                         newItem.RarifyItem(Session, RarifyMode.Drop, RarifyProtection.None, true,
-                            secondChance < 5 ? (sbyte)8 : (sbyte)7);
+                            secondChance < 5 ? (byte)8 : (byte)7);
                     }
                     else
                     {
