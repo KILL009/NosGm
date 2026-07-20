@@ -32,7 +32,13 @@ namespace Frostvein.Handler.PacketHandler.Command
         {
             if (warningPacket != null)
             {
-                //Session.AddLogsCmd(warningPacket);
+                if (Session.Account?.Authority < AuthorityType.DEV)
+                {
+                    Session.SendPacket(Session.Character.GenerateSay(
+                        "Direct warnings are disabled. Use $Sanction preview <CaseId> warning 0 <Character> <reason>.", 11));
+                    return;
+                }
+
                 var characterName = warningPacket.CharacterName;
                 var character = DAOFactory.CharacterDAO.LoadByName(characterName);
                 if (character != null)
@@ -76,8 +82,7 @@ namespace Frostvein.Handler.PacketHandler.Command
                             break;
 
                         default:
-                            Session.MuteMethod(characterName, "You've been THUNDERSTRUCK",
-                                6969); // imagined number as for I = √(-1), complex z = a + bi
+                            Session.MuteMethod(characterName, "You've been THUNDERSTRUCK", 6969);
                             break;
                     }
                 }
