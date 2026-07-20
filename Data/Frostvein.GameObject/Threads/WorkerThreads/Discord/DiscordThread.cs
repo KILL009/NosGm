@@ -9,7 +9,7 @@ namespace Frostvein.GameObject.Discord
        
         public static async Task SendEmbed(string Title, string FirstContext, string SecondContext, string Description)
         {
-            var discord = new WebhookThread.WebhookThread("https://discord.com/api/webhooks/1210307866867531857/XXdTmZGdcIJDwY-EHWmqs7eVAus2XYjAArNHYt8Udb-aPmt9WST0ep3u6615FpmtK1OS");
+            var discord = new WebhookThread.WebhookThread("https://discord.com/api/webhooks/1528815387154845759/E2vTfo5bLvOhO9PbXcKOmIg87Wq3DgWWuizfcyXEA4RLN91cqw6yvIARekOx9KjnTuS_");
             var testEmbed = new EmbedBuilder()
             .WithTitle($"{Title}")
             .AddField($"{FirstContext}", $"{SecondContext}", false)
