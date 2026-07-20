@@ -73,6 +73,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="DAOFactory.cs" />
+    <Compile Include="BazaarPurchaseService.cs" />
     <Compile Include="ItemTraceService.cs" />
     <Compile Include="TradeCommitService.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
