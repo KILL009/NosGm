@@ -95,6 +95,8 @@
     <Compile Include="FamilySkillMissionDTO.cs" />
     <Compile Include="FishingInformationsDto.cs" />
     <Compile Include="FishingPositionDto.cs" />
+    <Compile Include="GmCaseDTO.cs" />
+    <Compile Include="GmSanctionDTO.cs" />
     <Compile Include="ItemTraceDTO.cs" />
     <Compile Include="MaintenanceLogDTO.cs" />
     <Compile Include="MimicRotationDTO.cs" />
