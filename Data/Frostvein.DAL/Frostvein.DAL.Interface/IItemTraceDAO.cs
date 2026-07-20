@@ -40,4 +40,19 @@ namespace Frostvein.DAL.Interface
 
         IEnumerable<GmCommandAuditDTO> LoadByOutcome(GmCommandAuditOutcome outcome, int take = 30);
     }
+
+    public interface IStaffPermissionDAO
+    {
+        bool IsAvailable();
+
+        StaffPermissionProfileDTO LoadByAccountId(long accountId);
+
+        StaffPermissionProfileDTO Save(
+            long accountId,
+            long permissionMask,
+            bool isEnabled,
+            long? updatedByAccountId,
+            long? updatedByCharacterId,
+            string reason);
+    }
 }
