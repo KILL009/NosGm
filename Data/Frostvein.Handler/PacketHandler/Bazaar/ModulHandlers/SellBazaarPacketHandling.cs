@@ -28,6 +28,8 @@ namespace Frostvein.Handler.Bazaar
                 return;
             }
 
+            LogAttempt(packet);
+
             if (!CanUseBazaar())
             {
                 return;
@@ -35,7 +37,9 @@ namespace Frostvein.Handler.Bazaar
 
             if (!TryResolvePacket(packet, out InventoryType inventoryType, out short duration))
             {
-                LogRejectedPacket(packet, "Invalid packet fields");
+                LogRejectedPacket(packet, "Invalid authoritative packet fields");
+                Session.SendPacket(UserInterfaceHelper.GenerateInfo(
+                    "The NosBazaar request could not be validated. Please try selecting the item again."));
                 return;
             }
 
@@ -45,6 +49,27 @@ namespace Frostvein.Handler.Bazaar
                 ItemInstance source = Session.Character.Inventory.LoadBySlotAndType(packet.Slot, inventoryType);
                 if (!IsValidSource(source, packet.Amount))
                 {
+                    LogRejectedPacket(packet,
+                        source == null
+                            ? "No live item exists at the requested inventory slot"
+                            : $"Live item rejected: id={source.Id} vnum={source.ItemVNum} amount={source.Amount} " +
+                              $"owner={source.CharacterId} type={source.Type} slot={source.Slot} " +
+                              $"soldable={source.Item?.IsSoldable} tradable={source.Item?.IsTradable} " +
+                              $"bound={source.IsBound} deleteTime={source.ItemDeleteTime}");
+                    SendInvalidItem();
+                    return;
+                }
+
+                // The item was resolved from this character's live inventory by the requested
+                // type and slot. Normalize those mutable fields before building the atomic plan.
+                // Identity and ownership conflicts are still rejected inside the DAO transaction.
+                source.CharacterId = Session.Character.CharacterId;
+                source.Type = inventoryType;
+                source.Slot = packet.Slot;
+
+                if (source.Id == Guid.Empty)
+                {
+                    LogRejectedPacket(packet, "Live item has an empty ItemInstanceId");
                     SendInvalidItem();
                     return;
                 }
@@ -54,6 +79,7 @@ namespace Frostvein.Handler.Bazaar
                 if (result != BazaarListingResult.Success &&
                     result != BazaarListingResult.AlreadyCommitted)
                 {
+                    LogCommitFailure(packet, source, plan, result);
                     SendFailure(result);
                     return;
                 }
@@ -114,14 +140,14 @@ namespace Frostvein.Handler.Bazaar
                 : (InventoryType)packet.Inventory;
             duration = 0;
 
-            if (packet.Type == 9 ||
-                packet.Inventory != 0 && packet.Inventory != 1 &&
+            // Type, Unknown1, Unknown2, Taxes and MedalUsed are client hints or legacy
+            // fields. They are deliberately not trusted for security decisions. The live
+            // inventory supplies the item and the transaction recalculates tax and medal.
+            if (packet.Inventory != 0 && packet.Inventory != 1 &&
                 packet.Inventory != 2 && packet.Inventory != 4 ||
                 packet.Amount <= 0 ||
                 packet.Price <= 0 ||
-                packet.Price > 2000000000 ||
-                packet.Taxes < 1 ||
-                packet.Taxes > 2000000000)
+                packet.Price > 2000000000)
             {
                 return false;
             }
@@ -384,10 +410,36 @@ namespace Frostvein.Handler.Bazaar
                 "This item cannot be registered in the bazaar."));
         }
 
+        private void LogAttempt(CRegPacket packet)
+        {
+            Logger.LogUserEvent("BAZAAR_INSERT_ATTEMPT", Session.GenerateIdentity(),
+                $"Type={packet.Type} Inventory={packet.Inventory} Slot={packet.Slot} " +
+                $"Unknown1={packet.Unknown1} Unknown2={packet.Unknown2} Durability={packet.Durability} " +
+                $"IsPackage={packet.IsPackage} Amount={packet.Amount} Price={packet.Price} " +
+                $"ClientTaxes={packet.Taxes} MedalUsed={packet.MedalUsed} Packet={packet.OriginalContent}");
+        }
+
+        private void LogCommitFailure(
+            CRegPacket packet,
+            ItemInstance source,
+            BazaarListingDTO plan,
+            BazaarListingResult result)
+        {
+            Logger.LogUserEvent("BAZAAR_INSERT_FAILED", Session.GenerateIdentity(),
+                $"Result={result} OperationId={plan.OperationId} ItemInstanceId={source.Id} " +
+                $"VNum={source.ItemVNum} Owner={source.CharacterId} Type={source.Type} Slot={source.Slot} " +
+                $"LiveAmount={source.Amount} RequestedAmount={packet.Amount} Price={packet.Price} " +
+                $"ClientType={packet.Type} ClientTaxes={packet.Taxes} Durability={packet.Durability} " +
+                $"Packet={packet.OriginalContent}");
+        }
+
         private void LogRejectedPacket(CRegPacket packet, string reason)
         {
             Logger.LogUserEvent("BAZAAR_INSERT_REJECTED", Session.GenerateIdentity(),
-                $"{reason}. Packet={packet.OriginalContent}");
+                $"{reason}. Type={packet.Type} Inventory={packet.Inventory} Slot={packet.Slot} " +
+                $"Unknown1={packet.Unknown1} Unknown2={packet.Unknown2} Durability={packet.Durability} " +
+                $"IsPackage={packet.IsPackage} Amount={packet.Amount} Price={packet.Price} " +
+                $"ClientTaxes={packet.Taxes} MedalUsed={packet.MedalUsed} Packet={packet.OriginalContent}");
         }
     }
 }
