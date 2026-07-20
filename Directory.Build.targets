@@ -1,15 +1,36 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="14.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <!--
-    Legacy projects now declare the core item-trace domain, DTO, DAO and service
-    files directly in their own csproj files. Only the optional GM command slices
-    remain here until their large project files are normalized separately.
+    Legacy projects still use explicit Compile items. Cross-cutting feature slices are
+    included here until the project files are normalized separately.
   -->
+  <ItemGroup Condition="'$(MSBuildProjectName)' == 'Frostvein.Domain'">
+    <Compile Include="$(MSBuildThisFileDirectory)Data\Frostvein.Domain\GmCaseType.cs" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(MSBuildProjectName)' == 'Frostvein.Data'">
+    <Compile Include="$(MSBuildThisFileDirectory)Data\Frostvein.DAL\Frostvein.Data\GmCaseDTO.cs" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(MSBuildProjectName)' == 'Frostvein.DAL.Interface'">
+    <Compile Include="$(MSBuildThisFileDirectory)Data\Frostvein.DAL\Frostvein.DAL.Interface\IGmCaseDAO.cs" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(MSBuildProjectName)' == 'Frostvein.DAL.DAO'">
+    <Compile Include="$(MSBuildThisFileDirectory)Data\Frostvein.DAL\Frostvein.DAL.DAO\GmCaseDAO.cs" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(MSBuildProjectName)' == 'Frostvein.DAL'">
+    <Compile Include="$(MSBuildThisFileDirectory)Data\Frostvein.DAL\Frostvein.DAL\GmCaseService.cs" />
+  </ItemGroup>
+
   <ItemGroup Condition="'$(MSBuildProjectName)' == 'Frostvein.Packets'">
     <Compile Include="$(MSBuildThisFileDirectory)Data\Frostvein.Packets\Packets\CommandPackets\ItemTracePacket.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Data\Frostvein.Packets\Packets\CommandPackets\GmCasePacket.cs" />
   </ItemGroup>
 
   <ItemGroup Condition="'$(MSBuildProjectName)' == 'Frostvein.Handler'">
     <Compile Include="$(MSBuildThisFileDirectory)Data\Frostvein.Handler\PacketHandler\Command\ItemTraceHandler.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Data\Frostvein.Handler\PacketHandler\Command\GmCaseHandler.cs" />
   </ItemGroup>
 </Project>
