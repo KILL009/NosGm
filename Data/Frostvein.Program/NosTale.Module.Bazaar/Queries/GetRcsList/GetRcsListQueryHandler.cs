@@ -4,6 +4,7 @@ using Frostvein.Domain;
 using Frostvein.GameObject;
 using Frostvein.GameObject.Modules.Bazaar.Queries;
 using Frostvein.GameObject.Networking;
+using NosTale.Module.Bazaar;
 using System;
 using System.Linq;
 using System.Threading;
@@ -46,12 +47,12 @@ namespace NosTale.Module.Bazaar.Queries.GetRcsList
                     var itm = bz.Item.Item ?? ServerManager.GetItem(bz.Item.ItemVNum);
 
                     string info = "";
-                    if (itm.Type == InventoryType.Equipment)
+                    if (itm?.Type == InventoryType.Equipment)
                     {
-                        info = bz.Item?.GenerateEInfo().Replace(' ', '^').Replace("e_info^", string.Empty);
+                        info = BazaarEquipmentInfoGenerator.Generate(bz.Item);
                     }
                     if (request.Model.Packet.Filter == 0 || request.Model.Packet.Filter == Status)
-                    {            
+                    {
                         list += $"{bz.BazaarItem.BazaarItemId}|{bz.BazaarItem.SellerId}|{bz.Item.ItemVNum}|{soldedAmount}|{amount}|{(package ? 1 : 0)}|{price}|{Status}|{minutesLeft}|{(isNosbazar ? 1 : 0)}|0|{bz.Item.Rare}|{bz.Item.Upgrade}|0|0|{info} ";
                     }
                 }
