@@ -96,6 +96,30 @@ namespace Frostvein.Data
         public string Failure { get; set; }
     }
 
+    /// <summary>
+    /// Optional capability profile for one staff account. Disabled or missing profiles
+    /// preserve the legacy AuthorityType behavior.
+    /// </summary>
+    [Serializable]
+    public sealed class StaffPermissionProfileDTO
+    {
+        public long AccountId { get; set; }
+
+        public long PermissionMask { get; set; }
+
+        public bool IsEnabled { get; set; }
+
+        public DateTime UpdatedAtUtc { get; set; }
+
+        public long? UpdatedByAccountId { get; set; }
+
+        public long? UpdatedByCharacterId { get; set; }
+
+        public string Reason { get; set; }
+
+        public StaffPermission Permissions => (StaffPermission)PermissionMask;
+    }
+
     public enum TradeCommitResult
     {
         Success = 0,

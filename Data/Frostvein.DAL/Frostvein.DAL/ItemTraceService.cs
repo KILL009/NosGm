@@ -4,6 +4,7 @@ using Frostvein.Data;
 using Frostvein.Domain;
 using Newtonsoft.Json;
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 
 namespace Frostvein.DAL
@@ -199,6 +200,9 @@ namespace Frostvein.DAL
         public IEnumerable<GmCommandAuditDTO> GetFailed(int take = 30) =>
             _auditDao.LoadByOutcome(GmCommandAuditOutcome.Failed, take);
 
+        public IEnumerable<GmCommandAuditDTO> GetDenied(int take = 30) =>
+            _auditDao.LoadByOutcome(GmCommandAuditOutcome.Denied, take);
+
         private static string SanitizeCommand(string header, string commandText)
         {
             string normalized = NormalizeWhitespace(commandText);
@@ -243,6 +247,186 @@ namespace Frostvein.DAL
             if (string.IsNullOrWhiteSpace(value)) return null;
             string trimmed = value.Trim();
             return trimmed.Length <= maximumLength ? trimmed : trimmed.Substring(0, maximumLength);
+        }
+    }
+
+    /// <summary>
+    /// Cached authorization service. Missing or disabled profiles preserve legacy
+    /// AuthorityType checks; enabled profiles only narrow access and never elevate it.
+    /// </summary>
+    public sealed class StaffPermissionService
+    {
+        private static readonly Lazy<StaffPermissionService> LazyInstance =
+            new Lazy<StaffPermissionService>(() => new StaffPermissionService(new StaffPermissionDAO()));
+
+        private static readonly TimeSpan CacheLifetime = TimeSpan.FromSeconds(30);
+        private readonly IStaffPermissionDAO _permissionDao;
+        private readonly ConcurrentDictionary<long, CacheEntry> _cache =
+            new ConcurrentDictionary<long, CacheEntry>();
+
+        internal StaffPermissionService(IStaffPermissionDAO permissionDao)
+        {
+            _permissionDao = permissionDao ?? throw new ArgumentNullException(nameof(permissionDao));
+        }
+
+        public static StaffPermissionService Instance => LazyInstance.Value;
+
+        public bool IsAvailable() => _permissionDao.IsAvailable();
+
+        public StaffAuthorizationResult Authorize(
+            long accountId,
+            AuthorityType authority,
+            string commandHeader,
+            AuthorityType requiredAuthority)
+        {
+            var requiredPermission = StaffPermissionCatalog.Resolve(commandHeader, requiredAuthority);
+            bool legacyAllowed = authority >= requiredAuthority;
+
+            if (!legacyAllowed)
+            {
+                return Deny(false, requiredPermission, StaffPermission.None,
+                    $"Legacy authority {authority} is below {requiredAuthority}.");
+            }
+
+            if (authority >= AuthorityType.DEV ||
+                (StaffPermissionCatalog.IsManagementCommand(commandHeader) && authority >= AuthorityType.ADMIN))
+            {
+                return Allow(false, requiredPermission, StaffPermission.All);
+            }
+
+            StaffPermissionProfileDTO profile = GetProfile(accountId);
+            if (profile == null || !profile.IsEnabled)
+            {
+                return Allow(false, requiredPermission, StaffPermission.None);
+            }
+
+            StaffPermission granted = profile.Permissions & StaffPermission.All;
+            bool allowed = requiredPermission == StaffPermission.None ||
+                           (granted & requiredPermission) == requiredPermission;
+            return allowed
+                ? Allow(true, requiredPermission, granted)
+                : Deny(true, requiredPermission, granted,
+                    $"Granular profile requires {requiredPermission}; granted: {StaffPermissionCatalog.Format(granted)}.");
+        }
+
+        public StaffPermissionProfileDTO GetProfile(long accountId, bool forceRefresh = false)
+        {
+            if (!forceRefresh && _cache.TryGetValue(accountId, out CacheEntry cached) &&
+                DateTime.UtcNow - cached.LoadedAtUtc <= CacheLifetime)
+            {
+                return cached.Profile;
+            }
+
+            StaffPermissionProfileDTO profile = _permissionDao.LoadByAccountId(accountId);
+            _cache[accountId] = new CacheEntry(profile, DateTime.UtcNow);
+            return profile;
+        }
+
+        public StaffPermissionProfileDTO SetEnabled(
+            long accountId,
+            bool isEnabled,
+            long? actorAccountId,
+            long? actorCharacterId,
+            string reason)
+        {
+            StaffPermissionProfileDTO current = GetProfile(accountId, true);
+            long mask = current?.PermissionMask ?? 0L;
+            return Save(accountId, mask, isEnabled, actorAccountId, actorCharacterId, reason);
+        }
+
+        public StaffPermissionProfileDTO Grant(
+            long accountId,
+            StaffPermission permission,
+            long? actorAccountId,
+            long? actorCharacterId,
+            string reason)
+        {
+            StaffPermissionProfileDTO current = GetProfile(accountId, true);
+            StaffPermission existing = current?.Permissions ?? StaffPermission.None;
+            long mask = (long)((existing | permission) & StaffPermission.All);
+            return Save(accountId, mask, true, actorAccountId, actorCharacterId, reason);
+        }
+
+        public StaffPermissionProfileDTO Revoke(
+            long accountId,
+            StaffPermission permission,
+            long? actorAccountId,
+            long? actorCharacterId,
+            string reason)
+        {
+            StaffPermissionProfileDTO current = GetProfile(accountId, true);
+            StaffPermission existing = current?.Permissions ?? StaffPermission.None;
+            long mask = permission == StaffPermission.All
+                ? 0L
+                : (long)(existing & ~permission & StaffPermission.All);
+            bool enabled = current?.IsEnabled ?? true;
+            return Save(accountId, mask, enabled, actorAccountId, actorCharacterId, reason);
+        }
+
+        public void Invalidate(long accountId) => _cache.TryRemove(accountId, out _);
+
+        private StaffPermissionProfileDTO Save(
+            long accountId,
+            long mask,
+            bool enabled,
+            long? actorAccountId,
+            long? actorCharacterId,
+            string reason)
+        {
+            StaffPermissionProfileDTO saved = _permissionDao.Save(
+                accountId,
+                mask & (long)StaffPermission.All,
+                enabled,
+                actorAccountId,
+                actorCharacterId,
+                reason);
+
+            if (saved != null)
+            {
+                _cache[accountId] = new CacheEntry(saved, DateTime.UtcNow);
+            }
+            else
+            {
+                Invalidate(accountId);
+            }
+            return saved;
+        }
+
+        private static StaffAuthorizationResult Allow(
+            bool profileEnabled,
+            StaffPermission required,
+            StaffPermission granted) => new StaffAuthorizationResult
+        {
+            Allowed = true,
+            ProfileEnabled = profileEnabled,
+            RequiredPermission = required,
+            GrantedPermissions = granted
+        };
+
+        private static StaffAuthorizationResult Deny(
+            bool profileEnabled,
+            StaffPermission required,
+            StaffPermission granted,
+            string reason) => new StaffAuthorizationResult
+        {
+            Allowed = false,
+            ProfileEnabled = profileEnabled,
+            RequiredPermission = required,
+            GrantedPermissions = granted,
+            Reason = reason
+        };
+
+        private sealed class CacheEntry
+        {
+            public CacheEntry(StaffPermissionProfileDTO profile, DateTime loadedAtUtc)
+            {
+                Profile = profile;
+                LoadedAtUtc = loadedAtUtc;
+            }
+
+            public StaffPermissionProfileDTO Profile { get; }
+
+            public DateTime LoadedAtUtc { get; }
         }
     }
 }
