@@ -79,6 +79,7 @@
     <Compile Include="BattlePassPrizeDTO.cs" />
     <Compile Include="BattlePassQuestDTO.cs" />
     <Compile Include="BattlePassQuestProgressDTO.cs" />
+    <Compile Include="BazaarAuditDTO.cs" />
     <Compile Include="BazaarItemDTO.cs" />
     <Compile Include="BazaarListingDTO.cs" />
     <Compile Include="BazaarPriceChangeDTO.cs" />
