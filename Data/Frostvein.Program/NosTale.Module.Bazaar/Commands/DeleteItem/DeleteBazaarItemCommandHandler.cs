@@ -1,11 +1,8 @@
-﻿using FluentValidation;
+using FluentValidation;
 using MediatR;
 using Frostvein.GameObject.Modules.Bazaar.Commands;
 using System;
 using Frostvein.DAL;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -25,24 +22,20 @@ namespace NosTale.Module.Bazaar.Commands.DeleteItem
         {
             await _commandValidator.ValidateAndThrowAsync(command);
 
-            var exists = _manager.BazaarItems.ContainsKey(command.Id);
-
-            if (!exists)
+            lock (_manager.GetItemLock(command.Id))
             {
-                return false;
+                var oldItemCount = _manager.BazaarItems.Count;
+                var oldLinkCount = _manager.BazaarItemLinks.Count;
+
+                _manager.BazaarItems.TryRemove(command.Id, out _);
+                _manager.BazaarItemLinks.TryRemove(command.Id, out _);
+                DAOFactory.BazaarItemDAO.Delete(command.Id);
+
+                Console.WriteLine($"Removed bazaar cache entry {command.Id}. " +
+                                  $"Items: {oldItemCount}->{_manager.BazaarItems.Count}, " +
+                                  $"Links: {oldLinkCount}->{_manager.BazaarItemLinks.Count}");
+                return true;
             }
-
-            var oldItemCount = _manager.BazaarItems.Count;
-            var oldLinkCount = _manager.BazaarItemLinks.Count;
-
-            _manager.BazaarItems.TryRemove(command.Id, out _);
-            _manager.BazaarItemLinks.TryRemove(command.Id, out _);
-
-            DAOFactory.BazaarItemDAO.Delete(command.Id);
-            Console.WriteLine($"Removed items successfully. Old count: {oldItemCount} | new count: {_manager.BazaarItems.Count}");
-            Console.WriteLine($"Removed links successfully. Old count: {oldLinkCount} | new count: {_manager.BazaarItemLinks.Count}");
-
-            return true;
         }
     }
 }
