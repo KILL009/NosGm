@@ -102,12 +102,6 @@ jobs:
     timeout-minutes: 10
 
     steps:
-      - name: Check out diagnostic script
-        uses: actions/checkout@v6
-        with:
-          sparse-checkout: tools/print_msbuild_errors.ps1
-          sparse-checkout-cone-mode: false
-
       - name: Download build diagnostics
         uses: actions/download-artifact@v7
         with:
@@ -116,4 +110,22 @@ jobs:
 
       - name: Print relevant errors
         shell: pwsh
-        run: ./tools/print_msbuild_errors.ps1 -Path diagnostics
+        run: |
+          $logs = Get-ChildItem diagnostics -Filter *.log -Recurse | Sort-Object Name
+          if (-not $logs) { Write-Error "No MSBuild text logs were uploaded."; exit 1 }
+          $found = $false
+          foreach ($log in $logs) {
+            $matches = Select-String -Path $log.FullName -Pattern "error [A-Z]+[0-9]+|error MSB[0-9]+|MSB[0-9]+:|ResX|resheader" -Context 1,2
+            if ($matches) {
+              $found = $true
+              Write-Host "=== $($log.Name) ==="
+              $matches | Select-Object -First 40 | ForEach-Object { Write-Host $_.ToString() }
+            }
+          }
+          if (-not $found) {
+            foreach ($log in $logs) {
+              Write-Host "=== $($log.Name) (tail) ==="
+              Get-Content $log.FullName -Tail 80
+            }
+          }
+          exit 1
