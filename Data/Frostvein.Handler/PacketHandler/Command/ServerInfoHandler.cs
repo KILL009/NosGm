@@ -1,7 +1,10 @@
 ﻿using Frostvein.Packets.Packets.CommandPackets;
 using Frostvein.Core;
 using Frostvein.Core.Diagnostics;
+using Frostvein.Core.Handling;
 using Frostvein.DAL;
+using Frostvein.Data;
+using Frostvein.Domain;
 using Frostvein.GameObject;
 using Frostvein.GameObject.Networking;
 using Frostvein.Master.Library.Client;
@@ -9,12 +12,18 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
+using System.Reflection;
+using System.Threading;
 
 namespace Frostvein.Handler.PacketHandler.Command
 {
     public class ServerInfoHandler : IPacketHandler
     {
-        public ServerInfoHandler(ClientSession session) => Session = session;
+        public ServerInfoHandler(ClientSession session)
+        {
+            Session = session;
+            GmCommandAuditBootstrap.EnsureConfigured();
+        }
 
         public ClientSession Session { get; }
 
@@ -96,6 +105,157 @@ namespace Frostvein.Handler.PacketHandler.Command
                     ShowRuntimeSummary();
                     break;
             }
+        }
+
+        public void GmAudit(GmAuditPacket packet)
+        {
+            if (packet == null || Session?.Character == null)
+            {
+                SendAuditHelp();
+                return;
+            }
+
+            string[] arguments = (packet.Contents ?? string.Empty)
+                .Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+            string mode = arguments.FirstOrDefault()?.ToLowerInvariant() ?? "recent";
+
+            switch (mode)
+            {
+                case "recent":
+                case "list":
+                    WriteAuditRows(GmCommandAuditService.Instance.GetRecent(ReadTake(arguments, 1)));
+                    return;
+
+                case "failed":
+                case "errors":
+                    WriteAuditRows(GmCommandAuditService.Instance.GetFailed(ReadTake(arguments, 1)));
+                    return;
+
+                case "account":
+                    ShowAccountAudit(arguments);
+                    return;
+
+                case "character":
+                case "char":
+                    ShowCharacterAudit(arguments);
+                    return;
+
+                case "command":
+                case "cmd":
+                    if (arguments.Length < 2)
+                    {
+                        SendAuditHelp();
+                        return;
+                    }
+                    WriteAuditRows(GmCommandAuditService.Instance.GetByCommand(
+                        arguments[1], ReadTake(arguments, 2)));
+                    return;
+
+                case "status":
+                    SendAuditLine(
+                        GmCommandAuditService.Instance.IsAvailable()
+                            ? "GM command audit table is available and recording."
+                            : "GM command audit table is missing or unavailable. Apply Database/Migrations/20260720_GmCommandAudit.sql.",
+                        GmCommandAuditService.Instance.IsAvailable() ? (byte)10 : (byte)11);
+                    return;
+
+                case "help":
+                case "?":
+                default:
+                    SendAuditHelp();
+                    return;
+            }
+        }
+
+        private void ShowAccountAudit(string[] arguments)
+        {
+            if (arguments.Length < 2)
+            {
+                SendAuditHelp();
+                return;
+            }
+
+            long accountId;
+            if (!long.TryParse(arguments[1], out accountId))
+            {
+                AccountDTO account = DAOFactory.AccountDAO.LoadByName(arguments[1]);
+                if (account == null)
+                {
+                    SendAuditLine("Account not found.", 11);
+                    return;
+                }
+                accountId = account.AccountId;
+            }
+
+            WriteAuditRows(GmCommandAuditService.Instance.GetByAccountId(
+                accountId, ReadTake(arguments, 2)));
+        }
+
+        private void ShowCharacterAudit(string[] arguments)
+        {
+            if (arguments.Length < 2)
+            {
+                SendAuditHelp();
+                return;
+            }
+
+            long characterId;
+            if (!long.TryParse(arguments[1], out characterId))
+            {
+                CharacterDTO character = DAOFactory.CharacterDAO.LoadByName(arguments[1]);
+                if (character == null)
+                {
+                    SendAuditLine("Character not found.", 11);
+                    return;
+                }
+                characterId = character.CharacterId;
+            }
+
+            WriteAuditRows(GmCommandAuditService.Instance.GetByCharacterId(
+                characterId, ReadTake(arguments, 2)));
+        }
+
+        private void WriteAuditRows(IEnumerable<GmCommandAuditDTO> source)
+        {
+            List<GmCommandAuditDTO> rows = source?.ToList() ?? new List<GmCommandAuditDTO>();
+            SendAuditLine("===== GM command audit =====", 12);
+            if (rows.Count == 0)
+            {
+                SendAuditLine("No matching audit events were found.", 11);
+                return;
+            }
+
+            foreach (GmCommandAuditDTO row in rows)
+            {
+                string actor = !string.IsNullOrWhiteSpace(row.CharacterName)
+                    ? row.CharacterName
+                    : row.CharacterId?.ToString(CultureInfo.InvariantCulture)
+                      ?? row.AccountId?.ToString(CultureInfo.InvariantCulture)
+                      ?? "unknown";
+                string location = row.MapId.HasValue ? $"map={row.MapId.Value}" : "map=-";
+                string command = LimitDisplay(row.CommandText, 150);
+                SendAuditLine(
+                    $"{row.OccurredAtUtc:yyyy-MM-dd HH:mm:ss}Z {row.Outcome} {row.CommandHeader} " +
+                    $"actor={actor} account={FormatNullable(row.AccountId)} auth={row.Authority} " +
+                    $"required={row.RequiredAuthority} ch={row.ChannelId} {location} ip={row.IpAddress ?? "-"} | {command}",
+                    row.Outcome == GmCommandAuditOutcome.Failed ? (byte)11 : (byte)10);
+
+                if (!string.IsNullOrWhiteSpace(row.Failure))
+                {
+                    SendAuditLine($"  failure: {LimitDisplay(row.Failure, 180)}", 11);
+                }
+            }
+        }
+
+        private void SendAuditHelp()
+        {
+            SendAuditLine(GmAuditPacket.ReturnHelp(), 10);
+            SendAuditLine("$GmAudit recent [take]", 10);
+            SendAuditLine("$GmAudit failed [take]", 10);
+            SendAuditLine("$GmAudit account <AccountId|AccountName> [take]", 10);
+            SendAuditLine("$GmAudit character <CharacterId|CharacterName> [take]", 10);
+            SendAuditLine("$GmAudit command <$Header> [take]", 10);
+            SendAuditLine("$GmAudit status", 10);
         }
 
         private void ShowRuntimeSummary()
@@ -301,6 +461,30 @@ namespace Frostvein.Handler.PacketHandler.Command
         private void SendPerformanceLine(string message, byte type = 10) =>
             Session.SendPacket(Session.Character.GenerateSay(message, type));
 
+        private void SendAuditLine(string message, byte type = 10) =>
+            Session.SendPacket(Session.Character.GenerateSay(message, type));
+
+        private static int ReadTake(string[] arguments, int index, int defaultValue = 15)
+        {
+            if (arguments.Length <= index || !int.TryParse(arguments[index], out int take))
+            {
+                return defaultValue;
+            }
+            return Math.Max(1, Math.Min(50, take));
+        }
+
+        private static string LimitDisplay(string value, int maximumLength)
+        {
+            if (string.IsNullOrWhiteSpace(value)) return "-";
+            string normalized = value.Replace('\r', ' ').Replace('\n', ' ').Trim();
+            return normalized.Length <= maximumLength
+                ? normalized
+                : normalized.Substring(0, maximumLength) + "...";
+        }
+
+        private static string FormatNullable(long? value) =>
+            value.HasValue ? value.Value.ToString(CultureInfo.InvariantCulture) : "-";
+
         private static double ToMegabytes(long bytes) => bytes / 1024d / 1024d;
 
         private static string FormatBytes(long bytes)
@@ -318,5 +502,69 @@ namespace Frostvein.Handler.PacketHandler.Command
 
         private static string FormatDuration(TimeSpan duration) =>
             $"{(int)duration.TotalDays}d {duration.Hours:00}h {duration.Minutes:00}m {duration.Seconds:00}s";
+    }
+
+    internal static class GmCommandAuditBootstrap
+    {
+        private static int _configured;
+
+        public static void EnsureConfigured()
+        {
+            if (Interlocked.Exchange(ref _configured, 1) == 0)
+            {
+                GmCommandAuditBridge.Configure(Record);
+            }
+        }
+
+        private static void Record(GmCommandExecutionEvent auditEvent)
+        {
+            try
+            {
+                ClientSession session = ResolveSession(auditEvent?.ParentHandler);
+                if (session == null)
+                {
+                    return;
+                }
+
+                Character character = session.HasSelectedCharacter ? session.Character : null;
+                PacketDefinition packet = auditEvent.Packet as PacketDefinition;
+                string commandText = packet?.OriginalContent ?? packet?.OriginalHeader ?? auditEvent.Header;
+                string ipAddress = null;
+                try
+                {
+                    ipAddress = session.CleanIpAddress;
+                }
+                catch
+                {
+                    ipAddress = session.IpAddress;
+                }
+
+                GmCommandAuditService.Instance.Record(
+                    session.Account?.AccountId,
+                    character?.CharacterId,
+                    character?.Name,
+                    session.Account?.Authority ?? AuthorityType.User,
+                    auditEvent.Header,
+                    commandText,
+                    auditEvent.RequiredAuthority,
+                    auditEvent.Outcome,
+                    ipAddress,
+                    ServerManager.Instance.ChannelId,
+                    character?.MapId,
+                    session.SessionId,
+                    auditEvent.Exception);
+            }
+            catch (Exception exception)
+            {
+                Logger.Error("Unable to record the GM command execution event.", exception);
+            }
+        }
+
+        private static ClientSession ResolveSession(object parentHandler)
+        {
+            if (parentHandler == null) return null;
+            PropertyInfo property = parentHandler.GetType().GetProperty("Session");
+            return property?.GetValue(parentHandler) as ClientSession;
+        }
     }
 }

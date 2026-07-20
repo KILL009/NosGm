@@ -3,10 +3,12 @@ using Frostvein.DAL.EF;
 using Frostvein.DAL.EF.Helpers;
 using Frostvein.DAL.Interface;
 using Frostvein.Data;
+using Frostvein.Domain;
 using System;
 using System.Collections.Generic;
 using System.Data.SqlClient;
 using System.Linq;
+using System.Threading;
 
 namespace Frostvein.DAL.DAO
 {
@@ -213,6 +215,165 @@ WHERE OperationId = @OperationId AND Sequence = @Sequence;";
             if (string.IsNullOrWhiteSpace(value)) return null;
             var trimmed = value.Trim();
             return trimmed.Length <= maximumLength ? trimmed : trimmed.Substring(0, maximumLength);
+        }
+    }
+
+    /// <summary>
+    /// Raw-SQL append-only ledger for staff command execution. No foreign keys are
+    /// used so audit history survives account or character deletion.
+    /// </summary>
+    public sealed class GmCommandAuditDAO : IGmCommandAuditDAO
+    {
+        private const int MaximumTake = 100;
+        private static int _failureLogged;
+
+        public bool IsAvailable()
+        {
+            try
+            {
+                using (var context = DataAccessHelper.CreateContext())
+                {
+                    return context.Database.SqlQuery<int>(
+                        "SELECT CASE WHEN OBJECT_ID(N'dbo.GmCommandAudit', N'U') IS NULL THEN 0 ELSE 1 END;")
+                        .FirstOrDefault() == 1;
+                }
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        public GmCommandAuditDTO Insert(GmCommandAuditDTO audit)
+        {
+            if (audit == null) throw new ArgumentNullException(nameof(audit));
+            if (audit.CorrelationId == Guid.Empty) audit.CorrelationId = Guid.NewGuid();
+            if (audit.OccurredAtUtc == default(DateTime)) audit.OccurredAtUtc = DateTime.UtcNow;
+
+            audit.CharacterName = Limit(audit.CharacterName, 64);
+            audit.CommandHeader = Limit(audit.CommandHeader, 64) ?? "<unknown>";
+            audit.CommandText = Limit(audit.CommandText, 1000);
+            audit.IpAddress = Limit(audit.IpAddress, 64);
+            audit.Failure = Limit(audit.Failure, 2000);
+
+            const string sql = @"
+INSERT INTO dbo.GmCommandAudit
+(CorrelationId, OccurredAtUtc, AccountId, CharacterId, CharacterName,
+ Authority, CommandHeader, CommandText, RequiredAuthority, Outcome,
+ IpAddress, ChannelId, MapId, SessionId, Failure)
+VALUES
+(@CorrelationId, @OccurredAtUtc, @AccountId, @CharacterId, @CharacterName,
+ @Authority, @CommandHeader, @CommandText, @RequiredAuthority, @Outcome,
+ @IpAddress, @ChannelId, @MapId, @SessionId, @Failure);
+SELECT CAST(SCOPE_IDENTITY() AS bigint);";
+
+            try
+            {
+                using (var context = DataAccessHelper.CreateContext())
+                {
+                    audit.AuditId = context.Database.SqlQuery<long>(sql, Parameters(audit)).Single();
+                    return audit;
+                }
+            }
+            catch (Exception exception)
+            {
+                LogFailureOnce("Unable to append GmCommandAudit event. Apply the GM audit migration.", exception);
+                return null;
+            }
+        }
+
+        public IEnumerable<GmCommandAuditDTO> LoadRecent(int take = 30) =>
+            Query(@"SELECT TOP (@Take) * FROM dbo.GmCommandAudit
+ORDER BY OccurredAtUtc DESC, AuditId DESC;", new SqlParameter("@Take", ClampTake(take)));
+
+        public IEnumerable<GmCommandAuditDTO> LoadByAccountId(long accountId, int take = 30) =>
+            Query(@"SELECT TOP (@Take) * FROM dbo.GmCommandAudit
+WHERE AccountId = @Value ORDER BY OccurredAtUtc DESC, AuditId DESC;",
+                new SqlParameter("@Take", ClampTake(take)), new SqlParameter("@Value", accountId));
+
+        public IEnumerable<GmCommandAuditDTO> LoadByCharacterId(long characterId, int take = 30) =>
+            Query(@"SELECT TOP (@Take) * FROM dbo.GmCommandAudit
+WHERE CharacterId = @Value ORDER BY OccurredAtUtc DESC, AuditId DESC;",
+                new SqlParameter("@Take", ClampTake(take)), new SqlParameter("@Value", characterId));
+
+        public IEnumerable<GmCommandAuditDTO> LoadByCommand(string commandHeader, int take = 30)
+        {
+            string normalized = NormalizeHeader(commandHeader);
+            if (normalized == null) return Enumerable.Empty<GmCommandAuditDTO>();
+            return Query(@"SELECT TOP (@Take) * FROM dbo.GmCommandAudit
+WHERE CommandHeader = @Value ORDER BY OccurredAtUtc DESC, AuditId DESC;",
+                new SqlParameter("@Take", ClampTake(take)), new SqlParameter("@Value", normalized));
+        }
+
+        public IEnumerable<GmCommandAuditDTO> LoadByOutcome(GmCommandAuditOutcome outcome, int take = 30) =>
+            Query(@"SELECT TOP (@Take) * FROM dbo.GmCommandAudit
+WHERE Outcome = @Value ORDER BY OccurredAtUtc DESC, AuditId DESC;",
+                new SqlParameter("@Take", ClampTake(take)), new SqlParameter("@Value", (byte)outcome));
+
+        private static IEnumerable<GmCommandAuditDTO> Query(string sql, params object[] parameters)
+        {
+            try
+            {
+                using (var context = DataAccessHelper.CreateContext())
+                {
+                    return context.Database.SqlQuery<GmCommandAuditDTO>(sql, parameters).ToList();
+                }
+            }
+            catch (Exception exception)
+            {
+                LogFailureOnce("Unable to query GmCommandAudit. Apply the GM audit migration.", exception);
+                return Enumerable.Empty<GmCommandAuditDTO>();
+            }
+        }
+
+        private static object[] Parameters(GmCommandAuditDTO audit)
+        {
+            return new object[]
+            {
+                Parameter("@CorrelationId", audit.CorrelationId),
+                Parameter("@OccurredAtUtc", audit.OccurredAtUtc),
+                Parameter("@AccountId", audit.AccountId),
+                Parameter("@CharacterId", audit.CharacterId),
+                Parameter("@CharacterName", audit.CharacterName),
+                Parameter("@Authority", (short)audit.Authority),
+                Parameter("@CommandHeader", audit.CommandHeader),
+                Parameter("@CommandText", audit.CommandText),
+                Parameter("@RequiredAuthority", (short)audit.RequiredAuthority),
+                Parameter("@Outcome", (byte)audit.Outcome),
+                Parameter("@IpAddress", audit.IpAddress),
+                Parameter("@ChannelId", audit.ChannelId),
+                Parameter("@MapId", audit.MapId),
+                Parameter("@SessionId", audit.SessionId),
+                Parameter("@Failure", audit.Failure)
+            };
+        }
+
+        private static SqlParameter Parameter(string name, object value) =>
+            new SqlParameter(name, value ?? DBNull.Value);
+
+        private static int ClampTake(int take) => take < 1 ? 1 : take > MaximumTake ? MaximumTake : take;
+
+        private static string NormalizeHeader(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value)) return null;
+            string normalized = value.Trim();
+            if (!normalized.StartsWith("$", StringComparison.Ordinal)) normalized = "$" + normalized;
+            return Limit(normalized, 64);
+        }
+
+        private static string Limit(string value, int maximumLength)
+        {
+            if (string.IsNullOrWhiteSpace(value)) return null;
+            string trimmed = value.Trim();
+            return trimmed.Length <= maximumLength ? trimmed : trimmed.Substring(0, maximumLength);
+        }
+
+        private static void LogFailureOnce(string message, Exception exception)
+        {
+            if (Interlocked.Exchange(ref _failureLogged, 1) == 0)
+            {
+                Logger.Error(message, exception);
+            }
         }
     }
 }
