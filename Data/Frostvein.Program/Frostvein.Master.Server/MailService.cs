@@ -1,4 +1,4 @@
-﻿/*
+/*
  * This file is part of the Frostvein Emulator Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify
@@ -13,15 +13,13 @@
  */
 
 using Frostvein.Configuration;
-
 using Frostvein.DAL;
 using Frostvein.Data;
+using Frostvein.Domain;
 using Frostvein.Master.Library.Data;
 using Frostvein.Master.Library.Interface;
 using Frostvein.SCS.Communication.ScsServices.Service;
 using System;
-using System.Configuration;
-using System.Threading.Tasks;
 
 namespace Frostvein.Master.Server
 {
@@ -45,6 +43,7 @@ namespace Frostvein.Master.Server
                 {
                     ws.MailServiceClient = CurrentClient;
                 }
+
                 return true;
             }
 
@@ -53,32 +52,54 @@ namespace Frostvein.Master.Server
 
         public void SendMail(MailDTO mail)
         {
-            if (!MSManager.Instance.AuthentificatedClients.Any(s => s.Equals(CurrentClient.ClientId)))
+            if (!MSManager.Instance.AuthentificatedClients.Any(s => s.Equals(CurrentClient.ClientId)) || mail == null)
             {
                 return;
             }
 
+            if (!mail.DeliveryOperationId.HasValue || mail.DeliveryOperationId.Value == Guid.Empty)
+            {
+                mail.DeliveryOperationId = Guid.NewGuid();
+            }
+
+            if (mail.DeliverySource == ItemTraceSource.Unknown)
+            {
+                mail.DeliverySource = ItemTraceSource.Mail;
+            }
+
             DAOFactory.MailDAO.InsertOrUpdate(ref mail);
 
-            if (mail.IsSenderCopy)
+            // When an already-completed operation is retried, the ledger returns its original
+            // MailId even though the parcel row was consumed. Do not recreate or re-notify it.
+            var persistedMail = mail.MailId > 0 ? DAOFactory.MailDAO.LoadById(mail.MailId) : null;
+            if (persistedMail == null)
             {
-                AccountConnection account = MSManager.Instance.ConnectedAccounts.Find(a => a.CharacterId.Equals(mail.SenderId));
+                return;
+            }
+
+            if (persistedMail.IsSenderCopy)
+            {
+                AccountConnection account = MSManager.Instance.ConnectedAccounts
+                    .Find(a => a.CharacterId.Equals(persistedMail.SenderId));
                 if (account?.ConnectedWorld != null)
                 {
-                    account.ConnectedWorld.MailServiceClient.GetClientProxy<IMailClient>().MailSent(mail);
+                    account.ConnectedWorld.MailServiceClient
+                        .GetClientProxy<IMailClient>()
+                        .MailSent(persistedMail);
                 }
             }
             else
             {
-                AccountConnection account = MSManager.Instance.ConnectedAccounts.Find(a => a.CharacterId.Equals(mail.ReceiverId));
+                AccountConnection account = MSManager.Instance.ConnectedAccounts
+                    .Find(a => a.CharacterId.Equals(persistedMail.ReceiverId));
                 if (account?.ConnectedWorld != null)
                 {
-                    account.ConnectedWorld.MailServiceClient.GetClientProxy<IMailClient>().MailSent(mail);
+                    account.ConnectedWorld.MailServiceClient
+                        .GetClientProxy<IMailClient>()
+                        .MailSent(persistedMail);
                 }
             }
         }
-
-       
 
         #endregion
     }
