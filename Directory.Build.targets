@@ -2,8 +2,8 @@
 <Project ToolsVersion="14.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <!--
     NosGM uses legacy non-SDK project files with explicit Compile lists.
-    Keep the first item-tracing slice isolated here so every involved project
-    sees the new files without broad, unrelated csproj rewrites.
+    Keep the item-tracing slices isolated here so every involved project sees
+    the new files without broad, unrelated csproj rewrites.
   -->
   <ItemGroup Condition="'$(MSBuildProjectName)' == 'Frostvein.Domain'">
     <Compile Include="$(MSBuildThisFileDirectory)Data\Frostvein.Domain\ItemTraceType.cs" />
@@ -11,6 +11,7 @@
 
   <ItemGroup Condition="'$(MSBuildProjectName)' == 'Frostvein.Data'">
     <Compile Include="$(MSBuildThisFileDirectory)Data\Frostvein.DAL\Frostvein.Data\ItemTraceDTO.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Data\Frostvein.DAL\Frostvein.Data\DuplicateEquipmentSerialItemDTO.cs" />
   </ItemGroup>
 
   <ItemGroup Condition="'$(MSBuildProjectName)' == 'Frostvein.DAL.Interface'">
@@ -31,5 +32,13 @@
       <Project>{20ADDDDD-DAD9-44F3-9BEB-026C73090660}</Project>
       <Name>Frostvein.Domain</Name>
     </ProjectReference>
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(MSBuildProjectName)' == 'Frostvein.Packets'">
+    <Compile Include="$(MSBuildThisFileDirectory)Data\Frostvein.Packets\Packets\CommandPackets\ItemTracePacket.cs" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(MSBuildProjectName)' == 'Frostvein.Handler'">
+    <Compile Include="$(MSBuildThisFileDirectory)Data\Frostvein.Handler\PacketHandler\Command\ItemTraceHandler.cs" />
   </ItemGroup>
 </Project>
