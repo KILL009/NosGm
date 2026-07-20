@@ -57,13 +57,16 @@ namespace Frostvein.DAL.DAO
                             .FirstOrDefault(item => item.BazaarItemId == request.BazaarItemId);
                         Character buyer = context.Character
                             .FirstOrDefault(character => character.CharacterId == request.BuyerCharacterId);
+                        Character seller = context.Character
+                            .FirstOrDefault(character => character.CharacterId == request.SellerCharacterId);
 
-                        if (listing == null || buyer == null ||
+                        if (listing == null || buyer == null || seller == null ||
                             listing.SellerId != request.SellerCharacterId ||
                             listing.ItemInstanceId != request.BazaarItemInstanceId ||
                             listing.Price != request.UnitPrice ||
                             buyer.AccountId != request.BuyerAccountId ||
                             listing.SellerId == buyer.CharacterId ||
+                            seller.AccountId == buyer.AccountId ||
                             listing.DateStart.AddHours(listing.Duration) <= DateTime.Now)
                         {
                             transaction.Rollback();
@@ -214,19 +217,35 @@ namespace Frostvein.DAL.DAO
             {
                 expectedGold -= totalPrice;
             }
-            else if (buyer.GoldBank >= totalPrice)
-            {
-                expectedBank -= totalPrice;
-            }
             else
             {
-                return BazaarPurchaseResult.NotEnoughGold;
+                long bankDebit;
+                try
+                {
+                    long remainder = totalPrice % 1000;
+                    bankDebit = remainder == 0
+                        ? totalPrice
+                        : checked(totalPrice + (1000 - remainder));
+                }
+                catch (OverflowException)
+                {
+                    return BazaarPurchaseResult.StateChanged;
+                }
+
+                if (buyer.GoldBank < bankDebit)
+                {
+                    return BazaarPurchaseResult.NotEnoughGold;
+                }
+
+                expectedBank -= bankDebit;
             }
 
-            return request.BuyerGoldAfter == expectedGold &&
-                   request.BuyerGoldBankAfter == expectedBank
-                ? BazaarPurchaseResult.Success
-                : BazaarPurchaseResult.StateChanged;
+            // GoldBank is represented to the client in units of 1,000. Normalize the
+            // authoritative after-state here so purchases can never create hidden bank
+            // remainders that later corrupt exchange or bank packet calculations.
+            request.BuyerGoldAfter = expectedGold;
+            request.BuyerGoldBankAfter = expectedBank;
+            return BazaarPurchaseResult.Success;
         }
 
         private static bool ValidateInventoryPlan(
@@ -272,6 +291,7 @@ namespace Frostvein.DAL.DAO
                 .Select(item => new { item.Type, item.Slot })
                 .ToList()
                 .Select(item => ((int)item.Type) + ":" + item.Slot));
+            var newSerials = new HashSet<Guid>();
 
             foreach (ItemInstanceDTO after in afterById.Values)
             {
@@ -290,6 +310,7 @@ namespace Frostvein.DAL.DAO
 
                 if (!beforeById.ContainsKey(after.Id) &&
                     (after.EquipmentSerialId == Guid.Empty ||
+                     !newSerials.Add(after.EquipmentSerialId) ||
                      context.ItemInstance.Any(item => item.Id == after.Id) ||
                      context.ItemInstance.Any(item => item.EquipmentSerialId == after.EquipmentSerialId)))
                 {
