@@ -56,6 +56,46 @@ namespace Frostvein.Data
         public bool IsSuspicious { get; set; }
     }
 
+    /// <summary>
+    /// Append-only record emitted centrally for every staff command that reaches a
+    /// handler. It deliberately stores bounded, sanitized command text.
+    /// </summary>
+    [Serializable]
+    public sealed class GmCommandAuditDTO
+    {
+        public long AuditId { get; set; }
+
+        public Guid CorrelationId { get; set; }
+
+        public DateTime OccurredAtUtc { get; set; }
+
+        public long? AccountId { get; set; }
+
+        public long? CharacterId { get; set; }
+
+        public string CharacterName { get; set; }
+
+        public AuthorityType Authority { get; set; }
+
+        public string CommandHeader { get; set; }
+
+        public string CommandText { get; set; }
+
+        public AuthorityType RequiredAuthority { get; set; }
+
+        public GmCommandAuditOutcome Outcome { get; set; }
+
+        public string IpAddress { get; set; }
+
+        public int ChannelId { get; set; }
+
+        public short? MapId { get; set; }
+
+        public int? SessionId { get; set; }
+
+        public string Failure { get; set; }
+    }
+
     public enum TradeCommitResult
     {
         Success = 0,
