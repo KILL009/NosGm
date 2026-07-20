@@ -23,4 +23,29 @@ namespace Frostvein.GameObject.Modules.Bazaar.Commands
             RuleFor(m => m.BazaarItem).NotNull();
         }
     }
+
+    /// <summary>
+    /// Sends the complete server-side listing plan to the dedicated NosBazaar service.
+    /// The service owns the SQL transaction and cache refresh; the World applies the
+    /// returned plan to live memory only after a successful response.
+    /// </summary>
+    public sealed class CommitBazaarListingCommand : IRequest<BazaarListingCommitResponseDTO>
+    {
+        public BazaarListingDTO Plan { get; set; }
+    }
+
+    public sealed class CommitBazaarListingCommandValidator : AbstractValidator<CommitBazaarListingCommand>
+    {
+        public CommitBazaarListingCommandValidator()
+        {
+            RuleFor(command => command).NotNull();
+            RuleFor(command => command.Plan).NotNull();
+            RuleFor(command => command.Plan.OperationId).NotEmpty();
+            RuleFor(command => command.Plan.SellerAccountId).GreaterThan(0);
+            RuleFor(command => command.Plan.SellerCharacterId).GreaterThan(0);
+            RuleFor(command => command.Plan.SourceBefore).NotNull();
+            RuleFor(command => command.Plan.BazaarItemAfter).NotNull();
+            RuleFor(command => command.Plan.Listing).NotNull();
+        }
+    }
 }

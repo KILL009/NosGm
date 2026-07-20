@@ -43,4 +43,20 @@ namespace Frostvein.Data
 
         public BazaarItemDTO Listing { get; set; }
     }
+
+    /// <summary>
+    /// Result returned by the dedicated NosBazaar service after it commits a listing
+    /// and refreshes its authoritative cache. The World server must not mutate the
+    /// live inventory before receiving a successful response.
+    /// </summary>
+    public sealed class BazaarListingCommitResponseDTO
+    {
+        public BazaarListingResult Result { get; set; } = BazaarListingResult.Error;
+
+        public BazaarListingDTO Plan { get; set; }
+
+        public bool CacheRefreshed { get; set; }
+
+        public string Message { get; set; }
+    }
 }
