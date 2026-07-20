@@ -1,5 +1,6 @@
 ﻿using MediatR;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Frostvein.GameObject.Modules.Bazaar.Queries;
 using NosTale.Module.Bazaar.Queries.GetRcbList;
 using System;
@@ -13,7 +14,10 @@ namespace NosTale.Module.Bazaar.Extensions
         {
             Console.WriteLine("Initializing bazaar module");
             services.AddMediatR(cfg => cfg.RegisterServicesFromAssemblies(Assembly.GetExecutingAssembly()));
-            services.AddTransient<IPipelineBehavior<GetRcbListQuery, string>, GetRcbListFallbackBehavior>();
+
+            services.RemoveAll<IRequestHandler<GetRcbListQuery, string>>();
+            services.AddTransient<IRequestHandler<GetRcbListQuery, string>, GetRcbListAuthoritativeQueryHandler>();
+
             return services;
         }
     }
