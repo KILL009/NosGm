@@ -1,15 +1,16 @@
-﻿
-
+using Frostvein.Configuration;
 using Frostvein.Core;
+using Frostvein.DAL;
+using Frostvein.Data;
 using Frostvein.Domain;
 using Frostvein.GameObject;
 using Frostvein.GameObject.Helpers;
 using Frostvein.GameObject.Networking;
+using Frostvein.GameObject.Service;
 using System;
+using System.Collections.Generic;
 using System.Linq;
-using System.Runtime.Remoting.Channels;
 using System.Threading.Tasks;
-
 
 namespace Frostvein.Extension.Extension.Packet
 {
@@ -22,6 +23,7 @@ namespace Frostvein.Extension.Extension.Packet
                 targetSession.SendPacket("exc_close 0");
                 targetSession.Character.ExchangeInfo = null;
                 targetSession.Character.TradeRequests.Clear();
+                targetSession.Character.IsExchanging = false;
             }
 
             if (session?.Character.ExchangeInfo != null)
@@ -29,61 +31,500 @@ namespace Frostvein.Extension.Extension.Packet
                 session.SendPacket("exc_close 0");
                 session.Character.ExchangeInfo = null;
                 session.Character.TradeRequests.Clear();
+                session.Character.IsExchanging = false;
             }
         }
 
-        public static void Exchange(this ClientSession sourceSession, ClientSession targetSession)
+        /// <summary>
+        /// Plans the complete exchange without touching live inventories, persists every
+        /// affected item plus both gold balances in one SQL transaction, then applies the
+        /// already-committed plan to memory. Locks are always acquired by CharacterId.
+        /// </summary>
+        public static bool TryCommitExchange(
+            this ClientSession sourceSession,
+            ClientSession targetSession,
+            out TradeCommitResult commitResult)
         {
-            if (sourceSession?.Character.ExchangeInfo == null)
+            commitResult = TradeCommitResult.Error;
+            if (sourceSession?.Character?.Inventory == null || targetSession?.Character?.Inventory == null)
             {
-                return;
+                return false;
             }
 
-            var data = "";
+            var sourceCharacterId = sourceSession.Character.CharacterId;
+            var targetCharacterId = targetSession.Character.CharacterId;
+            var firstLock = sourceCharacterId < targetCharacterId
+                ? (object)sourceSession.Character.Inventory
+                : targetSession.Character.Inventory;
+            var secondLock = sourceCharacterId < targetCharacterId
+                ? (object)targetSession.Character.Inventory
+                : sourceSession.Character.Inventory;
 
-            // remove all items from source session
-            foreach (ItemInstance item in sourceSession.Character.ExchangeInfo.ExchangeList)
+            lock (firstLock)
             {
-                var invtemp = sourceSession.Character.Inventory.GetItemInstanceById(item.Id);
-                if (invtemp != null && invtemp?.Amount >= item.Amount)
+                lock (secondLock)
                 {
-                    sourceSession.Character.Inventory.RemoveItemFromInventory(invtemp.Id, item.Amount);
+                    return TryCommitExchangeLocked(sourceSession, targetSession, out commitResult);
+                }
+            }
+        }
+
+        private static bool TryCommitExchangeLocked(
+            ClientSession sourceSession,
+            ClientSession targetSession,
+            out TradeCommitResult commitResult)
+        {
+            commitResult = TradeCommitResult.Error;
+            var source = sourceSession.Character;
+            var target = targetSession.Character;
+            var sourceInfo = source.ExchangeInfo;
+            var targetInfo = target.ExchangeInfo;
+
+            if (sourceInfo == null || targetInfo == null)
+            {
+                commitResult = TradeCommitResult.AlreadyCommitted;
+                return false;
+            }
+
+            if (sourceInfo.CommitStarted || targetInfo.CommitStarted)
+            {
+                commitResult = TradeCommitResult.AlreadyCommitted;
+                return false;
+            }
+
+            if (!sourceInfo.Validated || !targetInfo.Validated ||
+                !sourceInfo.Confirmed || !targetInfo.Confirmed ||
+                sourceInfo.TargetCharacterId != target.CharacterId ||
+                targetInfo.TargetCharacterId != source.CharacterId ||
+                sourceInfo.OperationId == Guid.Empty ||
+                sourceInfo.OperationId != targetInfo.OperationId ||
+                sourceSession.IsDisposing || targetSession.IsDisposing ||
+                source.MapInstanceId != target.MapInstanceId)
+            {
+                commitResult = TradeCommitResult.Conflict;
+                return false;
+            }
+
+            sourceInfo.CommitStarted = true;
+            targetInfo.CommitStarted = true;
+            source.IsExchanging = true;
+            target.IsExchanging = true;
+
+            try
+            {
+                if (!TryBuildPlan(sourceSession, targetSession, sourceInfo, targetInfo, out var plan))
+                {
+                    commitResult = TradeCommitResult.Conflict;
+                    return false;
+                }
+
+                commitResult = TradeCommitService.Instance.Commit(plan.Commit);
+                if (commitResult != TradeCommitResult.Success &&
+                    commitResult != TradeCommitResult.AlreadyCommitted)
+                {
+                    return false;
+                }
+
+                ApplyPlan(sourceSession, targetSession, plan);
+                RecordTrace(sourceSession, targetSession, plan);
+                Logger.LogUserEvent("TRADE_COMMIT", sourceSession.GenerateIdentity(),
+                    $"OperationId={plan.Commit.OperationId} Target={targetSession.GenerateIdentity()} Items={plan.AffectedIds.Count}");
+                return true;
+            }
+            catch (Exception exception)
+            {
+                Logger.LogUserEventError("TRADE_COMMIT", sourceSession.GenerateIdentity(),
+                    $"Atomic trade operation {sourceInfo.OperationId} failed.", exception);
+                commitResult = TradeCommitResult.Error;
+                return false;
+            }
+            finally
+            {
+                if (source.ExchangeInfo != null)
+                {
+                    source.ExchangeInfo.CommitStarted = false;
+                }
+
+                if (target.ExchangeInfo != null)
+                {
+                    target.ExchangeInfo.CommitStarted = false;
+                }
+
+                source.IsExchanging = false;
+                target.IsExchanging = false;
+            }
+        }
+
+        private static bool TryBuildPlan(
+            ClientSession sourceSession,
+            ClientSession targetSession,
+            ExchangeInfo sourceInfo,
+            ExchangeInfo targetInfo,
+            out TradePlan plan)
+        {
+            plan = null;
+            var source = sourceSession.Character;
+            var target = targetSession.Character;
+
+            if (sourceInfo.Gold < 0 || targetInfo.Gold < 0 ||
+                sourceInfo.GoldBank < 0 || targetInfo.GoldBank < 0 ||
+                sourceInfo.Gold > source.Gold || targetInfo.Gold > target.Gold ||
+                sourceInfo.GoldBank > source.GoldBank || targetInfo.GoldBank > target.GoldBank)
+            {
+                return false;
+            }
+
+            var sourceGoldAfter = source.Gold - sourceInfo.Gold + targetInfo.Gold;
+            var targetGoldAfter = target.Gold - targetInfo.Gold + sourceInfo.Gold;
+            var sourceGoldBankAfter = source.GoldBank - sourceInfo.GoldBank + targetInfo.GoldBank;
+            var targetGoldBankAfter = target.GoldBank - targetInfo.GoldBank + sourceInfo.GoldBank;
+            if (sourceGoldAfter < 0 || targetGoldAfter < 0 ||
+                sourceGoldBankAfter < 0 || targetGoldBankAfter < 0 ||
+                sourceGoldAfter > GameConfiguration.MaxGold || targetGoldAfter > GameConfiguration.MaxGold ||
+                sourceGoldBankAfter > InventoryConfigrationExtension.MaxGoldBank ||
+                targetGoldBankAfter > InventoryConfigrationExtension.MaxGoldBank)
+            {
+                return false;
+            }
+
+            var sourceBefore = CloneInventory(source.Inventory);
+            var targetBefore = CloneInventory(target.Inventory);
+            var sourceAfter = CloneItems(sourceBefore);
+            var targetAfter = CloneItems(targetBefore);
+
+            if (!TryExtractOffers(sourceAfter, sourceInfo.ExchangeList, source.CharacterId, out var sourceChunks) ||
+                !TryExtractOffers(targetAfter, targetInfo.ExchangeList, target.CharacterId, out var targetChunks))
+            {
+                return false;
+            }
+
+            if (!TryDistribute(sourceChunks, targetAfter, target.Inventory, target.CharacterId) ||
+                !TryDistribute(targetChunks, sourceAfter, source.Inventory, source.CharacterId))
+            {
+                return false;
+            }
+
+            var beforeAll = sourceBefore.Concat(targetBefore).ToDictionary(item => item.Id, item => item);
+            var afterAll = sourceAfter.Concat(targetAfter).ToDictionary(item => item.Id, item => item);
+            var affectedIds = new HashSet<Guid>();
+            foreach (var id in beforeAll.Keys.Union(afterAll.Keys))
+            {
+                beforeAll.TryGetValue(id, out var before);
+                afterAll.TryGetValue(id, out var after);
+                if (!SameTradeState(before, after))
+                {
+                    affectedIds.Add(id);
+                }
+            }
+
+            var commit = new TradeCommitDTO
+            {
+                OperationId = sourceInfo.OperationId,
+                FirstCharacterId = source.CharacterId,
+                SecondCharacterId = target.CharacterId,
+                FirstGoldBefore = source.Gold,
+                FirstGoldAfter = sourceGoldAfter,
+                FirstGoldBankBefore = source.GoldBank,
+                FirstGoldBankAfter = sourceGoldBankAfter,
+                SecondGoldBefore = target.Gold,
+                SecondGoldAfter = targetGoldAfter,
+                SecondGoldBankBefore = target.GoldBank,
+                SecondGoldBankAfter = targetGoldBankAfter
+            };
+
+            foreach (var item in beforeAll.Values.Where(item => affectedIds.Contains(item.Id)))
+            {
+                commit.BeforeItems.Add(item);
+            }
+
+            foreach (var item in afterAll.Values.Where(item => affectedIds.Contains(item.Id)))
+            {
+                commit.AfterItems.Add(item);
+            }
+
+            plan = new TradePlan
+            {
+                Commit = commit,
+                SourceBefore = sourceBefore,
+                SourceAfter = sourceAfter,
+                TargetBefore = targetBefore,
+                TargetAfter = targetAfter,
+                AffectedIds = affectedIds
+            };
+            return true;
+        }
+
+        private static List<ItemInstance> CloneInventory(Inventory inventory) =>
+            inventory.GetAllItems().Where(item => item != null).Select(item => item.DeepCopy()).ToList();
+
+        private static List<ItemInstance> CloneItems(IEnumerable<ItemInstance> items) =>
+            items.Select(item => item.DeepCopy()).ToList();
+
+        private static bool TryExtractOffers(
+            List<ItemInstance> sourceItems,
+            IEnumerable<ItemInstance> offeredItems,
+            long sourceCharacterId,
+            out List<TransferChunk> chunks)
+        {
+            chunks = new List<TransferChunk>();
+            var seen = new HashSet<Guid>();
+            foreach (var offered in offeredItems ?? Enumerable.Empty<ItemInstance>())
+            {
+                if (offered == null || offered.Id == Guid.Empty || offered.Amount <= 0 || !seen.Add(offered.Id))
+                {
+                    return false;
+                }
+
+                var live = sourceItems.FirstOrDefault(item => item.Id == offered.Id);
+                if (live == null || live.CharacterId != sourceCharacterId ||
+                    live.ItemVNum != offered.ItemVNum || live.Type != offered.Type || live.Slot != offered.Slot ||
+                    live.Amount < offered.Amount || !CanTrade(live))
+                {
+                    return false;
+                }
+
+                var fullStack = live.Amount == offered.Amount;
+                var chunk = live.DeepCopy();
+                chunk.Amount = offered.Amount;
+                chunks.Add(new TransferChunk { Item = chunk, PreserveId = fullStack });
+
+                if (fullStack)
+                {
+                    sourceItems.Remove(live);
                 }
                 else
                 {
-                    return;
-                }                  
-            }
-
-            // add all items to target session
-            foreach (var item in sourceSession.Character.ExchangeInfo.ExchangeList)
-            {
-                var item2 = item.DeepCopy();
-                item2.Id = Guid.NewGuid();
-                data +=
-                    $"[OldIIId: {item.Id} NewIIId: {item2.Id} ItemVNum: {item.ItemVNum} Amount: {item.Amount} Rare: {item.Rare} Upgrade: {item.Upgrade}]";
-                var inv = targetSession.Character.Inventory.AddToInventory(item2);
-                if (inv.Count == 0)
-                {
-                    // do what?
+                    live.Amount -= offered.Amount;
                 }
             }
 
-            data += $"[Gold: {sourceSession.Character.ExchangeInfo.Gold}]";
-            data += $"[BankGold: {sourceSession.Character.ExchangeInfo.BankGold}]";
+            return true;
+        }
 
-            // handle gold
-            sourceSession.Character.Gold -= sourceSession.Character.ExchangeInfo.Gold;
-            sourceSession.Character.GoldBank -= sourceSession.Character.ExchangeInfo.BankGold;
+        private static bool TryDistribute(
+            IEnumerable<TransferChunk> chunks,
+            List<ItemInstance> targetItems,
+            Inventory targetInventory,
+            long targetCharacterId)
+        {
+            foreach (var chunk in chunks)
+            {
+                var remaining = chunk.Item.Amount;
+                var type = chunk.Item.Type;
+                var stackable = chunk.Item.Item != null &&
+                                (chunk.Item.Item.Type == InventoryType.Main ||
+                                 chunk.Item.Item.Type == InventoryType.Etc);
+                var merged = false;
+
+                if (stackable)
+                {
+                    foreach (var stack in targetItems
+                                 .Where(item => item.Type == type && item.ItemVNum == chunk.Item.ItemVNum &&
+                                                item.Amount > 0 && item.Amount < InventoryConfigrationExtension.MaxItemPerSlot)
+                                 .OrderBy(item => item.Slot).ToList())
+                    {
+                        var capacity = InventoryConfigrationExtension.MaxItemPerSlot - stack.Amount;
+                        var moved = Math.Min(capacity, remaining);
+                        stack.Amount += (short)moved;
+                        remaining -= (short)moved;
+                        merged = true;
+                        if (remaining <= 0)
+                        {
+                            break;
+                        }
+                    }
+                }
+
+                var firstCreated = true;
+                while (remaining > 0)
+                {
+                    var slot = FindFreeSlot(targetItems, targetInventory, type);
+                    if (!slot.HasValue)
+                    {
+                        return false;
+                    }
+
+                    var amount = stackable
+                        ? (short)Math.Min(InventoryConfigrationExtension.MaxItemPerSlot, remaining)
+                        : (short)1;
+                    var destination = chunk.Item.DeepCopy();
+                    destination.Id = chunk.PreserveId && !merged && firstCreated && amount == chunk.Item.Amount
+                        ? chunk.Item.Id
+                        : Guid.NewGuid();
+                    destination.CharacterId = targetCharacterId;
+                    destination.Type = type;
+                    destination.Slot = slot.Value;
+                    destination.Amount = amount;
+                    targetItems.Add(destination);
+                    remaining -= amount;
+                    firstCreated = false;
+                }
+            }
+
+            return true;
+        }
+
+        private static short? FindFreeSlot(List<ItemInstance> items, Inventory inventory, InventoryType type)
+        {
+            var capacity = type == InventoryType.Miniland ? 50 : inventory.BackpackSize();
+            for (short slot = 0; slot < capacity; slot++)
+            {
+                if (items.All(item => item.Type != type || item.Slot != slot))
+                {
+                    return slot;
+                }
+            }
+
+            return null;
+        }
+
+        private static bool CanTrade(ItemInstance item)
+        {
+            if (item?.Item == null || !item.Item.IsTradable ||
+                item.Type == InventoryType.Bazaar || item.Type == InventoryType.FamilyWareHouse)
+            {
+                return false;
+            }
+
+            return !item.IsBound ||
+                   (item.Item.Type == InventoryType.Equipment &&
+                    (item.Item.ItemType == ItemType.Armor || item.Item.ItemType == ItemType.Weapon));
+        }
+
+        private static bool SameTradeState(ItemInstance before, ItemInstance after)
+        {
+            if (ReferenceEquals(before, after)) return true;
+            if (before == null || after == null) return false;
+            return before.Id == after.Id && before.CharacterId == after.CharacterId &&
+                   before.ItemVNum == after.ItemVNum && before.Amount == after.Amount &&
+                   before.Type == after.Type && before.Slot == after.Slot &&
+                   before.EquipmentSerialId == after.EquipmentSerialId;
+        }
+
+        private static void ApplyPlan(ClientSession sourceSession, ClientSession targetSession, TradePlan plan)
+        {
+            foreach (var id in plan.AffectedIds)
+            {
+                sourceSession.Character.Inventory.Remove(id);
+                targetSession.Character.Inventory.Remove(id);
+            }
+
+            foreach (var item in plan.SourceAfter.Where(item => plan.AffectedIds.Contains(item.Id)))
+            {
+                sourceSession.Character.Inventory[item.Id] = item.DeepCopy();
+            }
+
+            foreach (var item in plan.TargetAfter.Where(item => plan.AffectedIds.Contains(item.Id)))
+            {
+                targetSession.Character.Inventory[item.Id] = item.DeepCopy();
+            }
+
+            sourceSession.Character.Gold = plan.Commit.FirstGoldAfter;
+            sourceSession.Character.GoldBank = plan.Commit.FirstGoldBankAfter;
+            targetSession.Character.Gold = plan.Commit.SecondGoldAfter;
+            targetSession.Character.GoldBank = plan.Commit.SecondGoldBankAfter;
+
+            SendInventoryChanges(sourceSession, plan.SourceBefore, plan.SourceAfter, plan.AffectedIds);
+            SendInventoryChanges(targetSession, plan.TargetBefore, plan.TargetAfter, plan.AffectedIds);
             sourceSession.SendPacket(sourceSession.Character.GenerateGold());
-            targetSession.Character.Gold += sourceSession.Character.ExchangeInfo.Gold;
-            targetSession.Character.GoldBank += sourceSession.Character.ExchangeInfo.BankGold;
             targetSession.SendPacket(targetSession.Character.GenerateGold());
-
-            // all items and gold from sourceSession have been transferred, clean exchange info
-            //LOGGER($"[TRADE] Source: {sourceSession.GenerateIdentity()} | Target: {targetSession.GenerateIdentity()} | Data: {data}");
-
+            sourceSession.SendPacket("exc_close 1");
+            targetSession.SendPacket("exc_close 1");
             sourceSession.Character.ExchangeInfo = null;
+            targetSession.Character.ExchangeInfo = null;
+            sourceSession.Character.TradeRequests.Clear();
+            targetSession.Character.TradeRequests.Clear();
+        }
+
+        private static void SendInventoryChanges(
+            ClientSession session,
+            IEnumerable<ItemInstance> before,
+            IEnumerable<ItemInstance> after,
+            HashSet<Guid> affectedIds)
+        {
+            var removedSlots = new HashSet<string>();
+            foreach (var item in before.Where(item => affectedIds.Contains(item.Id)))
+            {
+                var key = ((int)item.Type) + ":" + item.Slot;
+                if (removedSlots.Add(key))
+                {
+                    session.SendPacket(UserInterfaceHelper.Instance.GenerateInventoryRemove(item.Type, item.Slot));
+                }
+            }
+
+            foreach (var item in after.Where(item => affectedIds.Contains(item.Id)).OrderBy(item => item.Type).ThenBy(item => item.Slot))
+            {
+                var packet = item.GenerateInventoryAdd();
+                if (!string.IsNullOrWhiteSpace(packet))
+                {
+                    session.SendPacket(packet);
+                }
+            }
+        }
+
+        private static void RecordTrace(ClientSession sourceSession, ClientSession targetSession, TradePlan plan)
+        {
+            try
+            {
+                var before = plan.Commit.BeforeItems.ToDictionary(item => item.Id, item => item);
+                var after = plan.Commit.AfterItems.ToDictionary(item => item.Id, item => item);
+                var sequence = 0;
+                foreach (var id in plan.AffectedIds.OrderBy(value => value))
+                {
+                    before.TryGetValue(id, out var beforeItem);
+                    after.TryGetValue(id, out var afterItem);
+                    var action = beforeItem == null
+                        ? ItemTraceAction.Created
+                        : afterItem == null || beforeItem.CharacterId != afterItem.CharacterId
+                            ? ItemTraceAction.Transferred
+                            : beforeItem.Amount != afterItem.Amount
+                                ? ItemTraceAction.StackChanged
+                                : ItemTraceAction.Updated;
+
+                    ItemTraceService.Instance.Record(
+                        plan.Commit.OperationId,
+                        sequence++,
+                        action,
+                        ItemTraceSource.Trade,
+                        beforeItem,
+                        afterItem,
+                        sourceSession.Account?.AccountId,
+                        sourceSession.Character.CharacterId,
+                        sourceSession.Character.Name,
+                        "Atomic player trade",
+                        new
+                        {
+                            SourceCharacterId = sourceSession.Character.CharacterId,
+                            TargetCharacterId = targetSession.Character.CharacterId
+                        });
+                }
+            }
+            catch (Exception exception)
+            {
+                Logger.Error($"Trade {plan.Commit.OperationId} committed but item trace recording failed.", exception);
+            }
+        }
+
+        private sealed class TransferChunk
+        {
+            public ItemInstance Item { get; set; }
+
+            public bool PreserveId { get; set; }
+        }
+
+        private sealed class TradePlan
+        {
+            public TradeCommitDTO Commit { get; set; }
+
+            public List<ItemInstance> SourceBefore { get; set; }
+
+            public List<ItemInstance> SourceAfter { get; set; }
+
+            public List<ItemInstance> TargetBefore { get; set; }
+
+            public List<ItemInstance> TargetAfter { get; set; }
+
+            public HashSet<Guid> AffectedIds { get; set; }
         }
 
         public static void ChangeSp(this ClientSession Session)
@@ -168,7 +609,6 @@ namespace Frostvein.Extension.Extension.Packet
                 Session.SendPacket(Session.Character.GenerateSki());
                 Session.SendPackets(Session.Character.GenerateQuicklist());
                 Session.Character.LoadPartnerSkills(true);
-                //LOGGER($"[TRANSFORM] {Session.Character.Name} | Specialist: {sp.Item.Morph} | Name: {sp.Item.Name}");
             }
         }
     }

@@ -76,6 +76,7 @@
     <Compile Include="ItemDAO.cs" />
     <Compile Include="ItemInstanceDAO.cs" />
     <Compile Include="ItemTraceDAO.cs" />
+    <Compile Include="TradeCommitDAO.cs" />
     <Compile Include="MailDAO.cs" />
     <Compile Include="MapDAO.cs" />
     <Compile Include="MapMonsterDAO.cs" />

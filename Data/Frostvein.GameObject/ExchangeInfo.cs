@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+using System;
+using System.Collections.Generic;
 
 namespace Frostvein.GameObject
 {
@@ -14,13 +15,23 @@ namespace Frostvein.GameObject
             TargetCharacterId = -1;
             ExchangeList = new List<ItemInstance>();
             Validated = false;
+            OperationId = Guid.Empty;
         }
 
         #endregion
 
         #region Properties
 
-        public long BankGold { get; set; }
+        /// <summary>
+        /// Legacy alias kept for packet compatibility. New trade code uses GoldBank.
+        /// </summary>
+        public long BankGold
+        {
+            get => GoldBank;
+            set => GoldBank = value;
+        }
+
+        public bool CommitStarted { get; set; }
 
         public bool Confirmed { get; set; }
 
@@ -29,6 +40,12 @@ namespace Frostvein.GameObject
         public long Gold { get; set; }
 
         public long GoldBank { get; set; }
+
+        /// <summary>
+        /// Stable identifier shared by both participants for idempotent persistence,
+        /// auditing and item-trace events.
+        /// </summary>
+        public Guid OperationId { get; set; }
 
         public long TargetCharacterId { get; set; }
 
