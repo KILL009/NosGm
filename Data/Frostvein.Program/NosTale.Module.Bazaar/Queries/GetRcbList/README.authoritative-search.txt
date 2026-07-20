@@ -1,1 +1,0 @@
-The authoritative global bazaar query handler intentionally routes requests through the hardened renderer without executing the legacy handler first. This companion note can be removed after the legacy handler is fully refactored.
