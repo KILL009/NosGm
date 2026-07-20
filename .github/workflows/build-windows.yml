@@ -65,12 +65,7 @@ jobs:
             /flp:"logfile=$env:ARTIFACTS\resx.log;verbosity=normal" 2>&1
           $exitCode = $LASTEXITCODE
           $output | ForEach-Object { Write-Host $_ }
-          if ($exitCode -ne 0) {
-            Write-Host "::group::Concise RESX/MSBuild errors"
-            $output | Select-String -Pattern "error|MSB[0-9]{4}|ResX|resheader" | ForEach-Object { Write-Host $_.Line }
-            Write-Host "::endgroup::"
-            exit $exitCode
-          }
+          if ($exitCode -ne 0) { exit $exitCode }
 
       - name: Build complete solution
         shell: pwsh
@@ -88,18 +83,37 @@ jobs:
             /flp:"logfile=$env:ARTIFACTS\build.log;verbosity=normal" 2>&1
           $exitCode = $LASTEXITCODE
           $output | ForEach-Object { Write-Host $_ }
-          if ($exitCode -ne 0) {
-            Write-Host "::group::Concise solution build errors"
-            $output | Select-String -Pattern "error|MSB[0-9]{4}|CS[0-9]{4}" | ForEach-Object { Write-Host $_.Line }
-            Write-Host "::endgroup::"
-            exit $exitCode
-          }
+          if ($exitCode -ne 0) { exit $exitCode }
 
       - name: Upload build diagnostics
         if: always()
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: windows-msbuild-diagnostics
           path: artifacts/
           if-no-files-found: warn
           retention-days: 14
+
+  diagnostics:
+    name: Concise MSBuild failure report
+    needs: build
+    if: failure()
+    runs-on: windows-2022
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out diagnostic script
+        uses: actions/checkout@v6
+        with:
+          sparse-checkout: tools/print_msbuild_errors.ps1
+          sparse-checkout-cone-mode: false
+
+      - name: Download build diagnostics
+        uses: actions/download-artifact@v7
+        with:
+          name: windows-msbuild-diagnostics
+          path: diagnostics
+
+      - name: Print relevant errors
+        shell: pwsh
+        run: ./tools/print_msbuild_errors.ps1 -Path diagnostics
