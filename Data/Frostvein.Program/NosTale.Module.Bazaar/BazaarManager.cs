@@ -1,9 +1,8 @@
-﻿using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Hosting;
 using Frostvein.Core.Threading;
 using Frostvein.DAL;
 using Frostvein.Data;
 using Frostvein.GameObject;
-//using Frostvein.GameObject.Item.Instance;
 using Frostvein.GameObject.Networking;
 using System;
 using System.Collections.Concurrent;
@@ -16,6 +15,9 @@ namespace NosTale.Module.Bazaar
 {
     public class BazaarManager
     {
+        private readonly ConcurrentDictionary<long, object> _itemLocks =
+            new ConcurrentDictionary<long, object>();
+
         public BazaarManager()
         {
             BazaarItems = new ThreadSafeLockedDictionary<long, BazaarItemDTO>();
@@ -28,6 +30,9 @@ namespace NosTale.Module.Bazaar
         public ThreadSafeLockedDictionary<long, BazaarItemLink> BazaarItemLinks { get; set; }
 
         public ConcurrentBag<long> BazaarItemStates { get; set; }
+
+        public object GetItemLock(long bazaarItemId) =>
+            _itemLocks.GetOrAdd(bazaarItemId, _ => new object());
 
         public void Initialize()
         {
