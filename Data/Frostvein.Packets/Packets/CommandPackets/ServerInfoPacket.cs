@@ -22,4 +22,14 @@ namespace Frostvein.Packets.Packets.CommandPackets
 
         public static string ReturnHelp() => "$Perf <?runtime|packets|maps|security|reset|help>";
     }
+
+    [PacketHeader("$GmAudit", PassNonParseablePacket = true, Authority = AuthorityType.ADMIN)]
+    public class GmAuditPacket : PacketDefinition
+    {
+        [PacketIndex(0, SerializeToEnd = true)]
+        public string Contents { get; set; }
+
+        public static string ReturnHelp() =>
+            "$GmAudit <recent|failed|account|character|command|status> <value?> [take]";
+    }
 }
