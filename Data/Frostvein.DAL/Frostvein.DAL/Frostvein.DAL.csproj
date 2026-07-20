@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="14.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
   <PropertyGroup>
@@ -73,6 +73,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="DAOFactory.cs" />
+    <Compile Include="ItemTraceService.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
   <ItemGroup>
@@ -89,6 +90,10 @@
     <Content Include="favicon.ico" />
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="..\..\Frostvein.Domain\Frostvein.Domain.csproj">
+      <Project>{20addddd-dad9-44f3-9beb-026c73090660}</Project>
+      <Name>Frostvein.Domain</Name>
+    </ProjectReference>
     <ProjectReference Include="..\Frostvein.DAL.DAO\Frostvein.DAL.DAO.csproj">
       <Project>{b438a1df-0cfb-4854-82b5-2751793279bf}</Project>
       <Name>Frostvein.DAL.DAO</Name>
@@ -96,6 +101,10 @@
     <ProjectReference Include="..\Frostvein.DAL.Interface\Frostvein.DAL.Interface.csproj">
       <Project>{175c851b-8dc8-43a5-af93-af32d106cd77}</Project>
       <Name>Frostvein.DAL.Interface</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\Frostvein.Data\Frostvein.Data.csproj">
+      <Project>{f1071ded-3d92-4416-9b9c-8664441ade64}</Project>
+      <Name>Frostvein.Data</Name>
     </ProjectReference>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
