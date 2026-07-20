@@ -202,5 +202,7 @@ namespace Frostvein.Core.Networking.Communication.Scs.Server
         {
             Disconnected?.Invoke(this, EventArgs.Empty);
         }
+
+        #endregion
     }
 }
