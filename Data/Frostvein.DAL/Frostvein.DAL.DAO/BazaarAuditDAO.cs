@@ -10,7 +10,7 @@ using System.Threading;
 namespace Frostvein.DAL.DAO
 {
     /// <summary>
-    /// Read-only projections over the atomic bazaar ledgers and the current bazaar state.
+    /// Read-only projections over the atomic bazaar ledgers and current bazaar state.
     /// This component never changes listings, balances or item instances.
     /// </summary>
     public sealed class BazaarAuditDAO
@@ -24,11 +24,12 @@ namespace Frostvein.DAL.DAO
             {
                 using (var context = DataAccessHelper.CreateContext())
                 {
-                    return context.Database.SqlQuery<int>(@
+                    const string sql = @"
 SELECT CASE WHEN OBJECT_ID(N'dbo.BazaarItem', N'U') IS NOT NULL
                   AND OBJECT_ID(N'dbo.ItemInstance', N'U') IS NOT NULL
                   AND OBJECT_ID(N'dbo.Character', N'U') IS NOT NULL
-            THEN 1 ELSE 0 END;").Single() == 1;
+            THEN 1 ELSE 0 END;";
+                    return context.Database.SqlQuery<int>(sql).Single() == 1;
                 }
             }
             catch
@@ -47,18 +48,14 @@ SELECT CASE WHEN OBJECT_ID(N'dbo.BazaarItem', N'U') IS NOT NULL
                     status.ActiveListingCount = CountTable(context, "dbo.BazaarItem");
                     status.BazaarInventoryItemCount = context.Database.SqlQuery<long>(
                         "SELECT COUNT_BIG(*) FROM dbo.ItemInstance WHERE [Type] = 9;").Single();
-                    status.ListingOperationCount = status.ListingOperationAvailable == 1
-                        ? CountTable(context, "dbo.BazaarListingOperation")
-                        : 0;
-                    status.PurchaseOperationCount = status.PurchaseOperationAvailable == 1
-                        ? CountTable(context, "dbo.BazaarPurchaseOperation")
-                        : 0;
-                    status.PriceChangeOperationCount = status.PriceChangeOperationAvailable == 1
-                        ? CountTable(context, "dbo.BazaarPriceChangeOperation")
-                        : 0;
-                    status.RecollectOperationCount = status.RecollectOperationAvailable == 1
-                        ? CountTable(context, "dbo.BazaarRecollectOperation")
-                        : 0;
+                    status.ListingOperationCount = CountOptional(
+                        context, "dbo.BazaarListingOperation", status.ListingOperationAvailable);
+                    status.PurchaseOperationCount = CountOptional(
+                        context, "dbo.BazaarPurchaseOperation", status.PurchaseOperationAvailable);
+                    status.PriceChangeOperationCount = CountOptional(
+                        context, "dbo.BazaarPriceChangeOperation", status.PriceChangeOperationAvailable);
+                    status.RecollectOperationCount = CountOptional(
+                        context, "dbo.BazaarRecollectOperation", status.RecollectOperationAvailable);
                     return status;
                 }
             }
@@ -88,7 +85,7 @@ SELECT CASE WHEN OBJECT_ID(N'dbo.BazaarItem', N'U') IS NOT NULL
                         ? "CASE WHEN EXISTS (SELECT 1 FROM dbo.BazaarListingOperation l WHERE l.BazaarItemId = b.BazaarItemId) THEN 1 ELSE 0 END"
                         : "CAST(0 AS int)";
 
-                    string sql = $@"
+                    string sql = @"
 SELECT b.BazaarItemId,
        b.AccountId AS SellerAccountId,
        b.SellerId AS SellerCharacterId,
@@ -105,9 +102,9 @@ SELECT b.BazaarItemId,
        COALESCE(CAST(i.[Type] AS tinyint), CAST(255 AS tinyint)) AS InventoryType,
        COALESCE(i.CharacterId, CAST(0 AS bigint)) AS ItemOwnerCharacterId,
        i.EquipmentSerialId,
-       {purchaseCount} AS PurchaseCount,
-       {purchasedAmount} AS PurchasedAmount,
-       {hasListingOperation} AS HasListingOperation
+       " + purchaseCount + @" AS PurchaseCount,
+       " + purchasedAmount + @" AS PurchasedAmount,
+       " + hasListingOperation + @" AS HasListingOperation
 FROM dbo.BazaarItem b
 LEFT JOIN dbo.Character c ON c.CharacterId = b.SellerId
 LEFT JOIN dbo.ItemInstance i ON i.Id = b.ItemInstanceId
@@ -124,26 +121,32 @@ WHERE b.BazaarItemId = @BazaarItemId;";
             }
         }
 
-        public IEnumerable<BazaarAuditEventDTO> LoadRecent(int take = 20) =>
-            LoadEvents(null, null, take);
+        public IEnumerable<BazaarAuditEventDTO> LoadRecent(int take = 20)
+        {
+            return LoadEvents(null, null, take);
+        }
 
-        public IEnumerable<BazaarAuditEventDTO> LoadByListing(long bazaarItemId, int take = 30) =>
-            bazaarItemId <= 0
-                ? Enumerable.Empty<BazaarAuditEventDTO>()
-                : LoadEvents("e.BazaarItemId = @BazaarItemId",
-                    new object[] { new SqlParameter("@BazaarItemId", bazaarItemId) }, take);
+        public IEnumerable<BazaarAuditEventDTO> LoadByListing(long bazaarItemId, int take = 30)
+        {
+            if (bazaarItemId <= 0) return Enumerable.Empty<BazaarAuditEventDTO>();
+            return LoadEvents("e.BazaarItemId = @BazaarItemId",
+                new object[] { new SqlParameter("@BazaarItemId", bazaarItemId) }, take);
+        }
 
-        public IEnumerable<BazaarAuditEventDTO> LoadByCharacter(long characterId, int take = 30) =>
-            characterId <= 0
-                ? Enumerable.Empty<BazaarAuditEventDTO>()
-                : LoadEvents("(e.PrimaryCharacterId = @CharacterId OR e.CounterpartyCharacterId = @CharacterId)",
-                    new object[] { new SqlParameter("@CharacterId", characterId) }, take);
+        public IEnumerable<BazaarAuditEventDTO> LoadByCharacter(long characterId, int take = 30)
+        {
+            if (characterId <= 0) return Enumerable.Empty<BazaarAuditEventDTO>();
+            return LoadEvents(
+                "(e.PrimaryCharacterId = @CharacterId OR e.CounterpartyCharacterId = @CharacterId)",
+                new object[] { new SqlParameter("@CharacterId", characterId) }, take);
+        }
 
-        public IEnumerable<BazaarAuditEventDTO> LoadByItem(Guid itemInstanceId, int take = 30) =>
-            itemInstanceId == Guid.Empty
-                ? Enumerable.Empty<BazaarAuditEventDTO>()
-                : LoadEvents("e.ItemInstanceId = @ItemInstanceId",
-                    new object[] { new SqlParameter("@ItemInstanceId", itemInstanceId) }, take);
+        public IEnumerable<BazaarAuditEventDTO> LoadByItem(Guid itemInstanceId, int take = 30)
+        {
+            if (itemInstanceId == Guid.Empty) return Enumerable.Empty<BazaarAuditEventDTO>();
+            return LoadEvents("e.ItemInstanceId = @ItemInstanceId",
+                new object[] { new SqlParameter("@ItemInstanceId", itemInstanceId) }, take);
+        }
 
         public IEnumerable<BazaarAuditAnomalyDTO> LoadAnomalies(int take = 30)
         {
@@ -152,95 +155,7 @@ WHERE b.BazaarItemId = @BazaarItemId;";
                 using (var context = DataAccessHelper.CreateContext())
                 {
                     BazaarAuditStatusDTO status = ReadAvailability(context);
-                    var queries = new List<string>
-                    {
-                        @"
-SELECT CAST(3 AS tinyint) AS Severity,
-       CAST(N'LISTING_MISSING_ITEM' AS nvarchar(64)) AS Code,
-       CAST(b.BazaarItemId AS bigint) AS BazaarItemId,
-       CAST(b.ItemInstanceId AS uniqueidentifier) AS ItemInstanceId,
-       CAST(b.SellerId AS bigint) AS CharacterId,
-       CAST(NULL AS smallint) AS ItemVNum,
-       CAST(b.DateStart AS datetime2(3)) AS OccurredAtUtc,
-       CAST(N'Active listing references an ItemInstance row that does not exist.' AS nvarchar(500)) AS Detail
-FROM dbo.BazaarItem b
-LEFT JOIN dbo.ItemInstance i ON i.Id = b.ItemInstanceId
-WHERE i.Id IS NULL",
-                        @"
-SELECT CAST(3 AS tinyint) AS Severity,
-       CAST(N'LISTING_MISSING_SELLER' AS nvarchar(64)) AS Code,
-       CAST(b.BazaarItemId AS bigint) AS BazaarItemId,
-       CAST(b.ItemInstanceId AS uniqueidentifier) AS ItemInstanceId,
-       CAST(b.SellerId AS bigint) AS CharacterId,
-       CAST(i.ItemVNum AS smallint) AS ItemVNum,
-       CAST(b.DateStart AS datetime2(3)) AS OccurredAtUtc,
-       CAST(N'Active listing references a seller character that does not exist.' AS nvarchar(500)) AS Detail
-FROM dbo.BazaarItem b
-LEFT JOIN dbo.Character c ON c.CharacterId = b.SellerId
-LEFT JOIN dbo.ItemInstance i ON i.Id = b.ItemInstanceId
-WHERE c.CharacterId IS NULL",
-                        @"
-SELECT CAST(3 AS tinyint) AS Severity,
-       CAST(N'LISTING_WRONG_OWNER' AS nvarchar(64)) AS Code,
-       CAST(b.BazaarItemId AS bigint) AS BazaarItemId,
-       CAST(b.ItemInstanceId AS uniqueidentifier) AS ItemInstanceId,
-       CAST(i.CharacterId AS bigint) AS CharacterId,
-       CAST(i.ItemVNum AS smallint) AS ItemVNum,
-       CAST(b.DateStart AS datetime2(3)) AS OccurredAtUtc,
-       CAST(N'The bazaar ItemInstance owner does not match the listing seller.' AS nvarchar(500)) AS Detail
-FROM dbo.BazaarItem b
-JOIN dbo.ItemInstance i ON i.Id = b.ItemInstanceId
-WHERE i.CharacterId <> b.SellerId",
-                        @"
-SELECT CAST(3 AS tinyint) AS Severity,
-       CAST(N'LISTING_WRONG_INVENTORY' AS nvarchar(64)) AS Code,
-       CAST(b.BazaarItemId AS bigint) AS BazaarItemId,
-       CAST(b.ItemInstanceId AS uniqueidentifier) AS ItemInstanceId,
-       CAST(i.CharacterId AS bigint) AS CharacterId,
-       CAST(i.ItemVNum AS smallint) AS ItemVNum,
-       CAST(b.DateStart AS datetime2(3)) AS OccurredAtUtc,
-       CAST(N'The listing item is not stored in InventoryType.Bazaar.' AS nvarchar(500)) AS Detail
-FROM dbo.BazaarItem b
-JOIN dbo.ItemInstance i ON i.Id = b.ItemInstanceId
-WHERE i.[Type] <> 9",
-                        @"
-SELECT CAST(3 AS tinyint) AS Severity,
-       CAST(N'LISTING_INVALID_VALUES' AS nvarchar(64)) AS Code,
-       CAST(b.BazaarItemId AS bigint) AS BazaarItemId,
-       CAST(b.ItemInstanceId AS uniqueidentifier) AS ItemInstanceId,
-       CAST(b.SellerId AS bigint) AS CharacterId,
-       CAST(i.ItemVNum AS smallint) AS ItemVNum,
-       CAST(b.DateStart AS datetime2(3)) AS OccurredAtUtc,
-       CAST(N'Listing price, duration or item quantities are outside valid bounds.' AS nvarchar(500)) AS Detail
-FROM dbo.BazaarItem b
-JOIN dbo.ItemInstance i ON i.Id = b.ItemInstanceId
-WHERE b.Amount <= 0 OR b.Price <= 0 OR b.Duration <= 0 OR i.Amount < 0 OR i.Amount > b.Amount",
-                        @"
-SELECT CAST(3 AS tinyint) AS Severity,
-       CAST(N'DUPLICATE_LISTING_ITEM' AS nvarchar(64)) AS Code,
-       CAST(MIN(b.BazaarItemId) AS bigint) AS BazaarItemId,
-       CAST(b.ItemInstanceId AS uniqueidentifier) AS ItemInstanceId,
-       CAST(MIN(b.SellerId) AS bigint) AS CharacterId,
-       CAST(MIN(i.ItemVNum) AS smallint) AS ItemVNum,
-       CAST(MIN(b.DateStart) AS datetime2(3)) AS OccurredAtUtc,
-       CAST(N'Multiple active listings reference the same ItemInstance. count=' + CAST(COUNT_BIG(*) AS nvarchar(20)) AS nvarchar(500)) AS Detail
-FROM dbo.BazaarItem b
-LEFT JOIN dbo.ItemInstance i ON i.Id = b.ItemInstanceId
-GROUP BY b.ItemInstanceId
-HAVING COUNT_BIG(*) > 1",
-                        @"
-SELECT CAST(3 AS tinyint) AS Severity,
-       CAST(N'ORPHAN_BAZAAR_ITEM' AS nvarchar(64)) AS Code,
-       CAST(NULL AS bigint) AS BazaarItemId,
-       CAST(i.Id AS uniqueidentifier) AS ItemInstanceId,
-       CAST(i.CharacterId AS bigint) AS CharacterId,
-       CAST(i.ItemVNum AS smallint) AS ItemVNum,
-       CAST(NULL AS datetime2(3)) AS OccurredAtUtc,
-       CAST(N'ItemInstance is stored as Bazaar inventory but no active listing references it.' AS nvarchar(500)) AS Detail
-FROM dbo.ItemInstance i
-WHERE i.[Type] = 9
-  AND NOT EXISTS (SELECT 1 FROM dbo.BazaarItem b WHERE b.ItemInstanceId = i.Id)"
-                    };
+                    var queries = BuildCurrentStateAnomalyQueries();
 
                     if (status.ListingOperationAvailable == 1)
                     {
@@ -269,7 +184,7 @@ SELECT CAST(3 AS tinyint) AS Severity,
        CAST(p.BuyerCharacterId AS bigint) AS CharacterId,
        CAST(p.ItemVNum AS smallint) AS ItemVNum,
        CAST(p.CompletedAtUtc AS datetime2(3)) AS OccurredAtUtc,
-       CAST(N'Purchase operation quantities or participants do not balance.' AS nvarchar(500)) AS Detail
+       CAST(N'Purchase quantities or participants do not balance.' AS nvarchar(500)) AS Detail
 FROM dbo.BazaarPurchaseOperation p
 LEFT JOIN dbo.Character seller ON seller.CharacterId = p.SellerCharacterId
 WHERE p.Amount <= 0 OR p.UnitPrice <= 0 OR p.BazaarAmountAfter < 0
@@ -324,7 +239,8 @@ JOIN dbo.BazaarRecollectOperation r ON r.BazaarItemId = b.BazaarItemId
 LEFT JOIN dbo.ItemInstance i ON i.Id = b.ItemInstanceId");
                     }
 
-                    if (status.ListingOperationAvailable == 1 && status.PurchaseOperationAvailable == 1)
+                    if (status.ListingOperationAvailable == 1 &&
+                        status.PurchaseOperationAvailable == 1)
                     {
                         queries.Add(@"
 SELECT CAST(3 AS tinyint) AS Severity,
@@ -334,7 +250,7 @@ SELECT CAST(3 AS tinyint) AS Severity,
        CAST(b.SellerId AS bigint) AS CharacterId,
        CAST(i.ItemVNum AS smallint) AS ItemVNum,
        CAST(l.CompletedAtUtc AS datetime2(3)) AS OccurredAtUtc,
-       CAST(N'Atomic purchase totals do not match the active listing remaining amount.' AS nvarchar(500)) AS Detail
+       CAST(N'Purchase totals do not match the active listing remaining amount.' AS nvarchar(500)) AS Detail
 FROM dbo.BazaarItem b
 JOIN dbo.ItemInstance i ON i.Id = b.ItemInstanceId
 JOIN dbo.BazaarListingOperation l ON l.BazaarItemId = b.BazaarItemId
@@ -347,7 +263,8 @@ OUTER APPLY
 WHERE purchases.PurchasedAmount <> CAST(b.Amount AS int) - i.Amount");
                     }
 
-                    if (status.ListingOperationAvailable == 1 && status.PriceChangeOperationAvailable == 1)
+                    if (status.ListingOperationAvailable == 1 &&
+                        status.PriceChangeOperationAvailable == 1)
                     {
                         queries.Add(@"
 SELECT CAST(2 AS tinyint) AS Severity,
@@ -371,11 +288,11 @@ OUTER APPLY
 WHERE b.Price <> COALESCE(latest.NewUnitPrice, l.UnitPrice)");
                     }
 
-                    string sql = $@"
+                    string sql = @"
 SELECT TOP (@Take) *
 FROM
 (
-{string.Join("\nUNION ALL\n", queries)}
+" + string.Join("\nUNION ALL\n", queries) + @"
 ) anomalies
 ORDER BY Severity DESC, OccurredAtUtc DESC, BazaarItemId DESC;";
 
@@ -400,23 +317,25 @@ ORDER BY Severity DESC, OccurredAtUtc DESC, BazaarItemId DESC;";
             {
                 using (var context = DataAccessHelper.CreateContext())
                 {
-                    BazaarAuditStatusDTO status = ReadAvailability(context);
-                    List<string> eventQueries = BuildEventQueries(status);
+                    List<string> eventQueries = BuildEventQueries(ReadAvailability(context));
                     if (eventQueries.Count == 0) return Enumerable.Empty<BazaarAuditEventDTO>();
 
-                    string where = string.IsNullOrWhiteSpace(filter) ? string.Empty : "WHERE " + filter;
-                    string sql = $@"
+                    string where = string.IsNullOrWhiteSpace(filter)
+                        ? string.Empty
+                        : "WHERE " + filter;
+                    string sql = @"
 SELECT TOP (@Take) *
 FROM
 (
-{string.Join("\nUNION ALL\n", eventQueries)}
+" + string.Join("\nUNION ALL\n", eventQueries) + @"
 ) e
-{where}
+" + where + @"
 ORDER BY e.OccurredAtUtc DESC, e.BazaarItemId DESC;";
 
                     var queryParameters = parameters?.ToList() ?? new List<object>();
                     queryParameters.Add(new SqlParameter("@Take", ClampTake(take)));
-                    return context.Database.SqlQuery<BazaarAuditEventDTO>(sql, queryParameters.ToArray()).ToList();
+                    return context.Database.SqlQuery<BazaarAuditEventDTO>(
+                        sql, queryParameters.ToArray()).ToList();
                 }
             }
             catch (Exception exception)
@@ -433,19 +352,13 @@ ORDER BY e.OccurredAtUtc DESC, e.BazaarItemId DESC;";
             if (status.ListingOperationAvailable == 1)
             {
                 queries.Add(@"
-SELECT l.OperationId,
-       CAST(1 AS tinyint) AS EventType,
-       l.BazaarItemId,
-       l.CompletedAtUtc AS OccurredAtUtc,
-       CAST(l.SellerAccountId AS bigint) AS AccountId,
+SELECT l.OperationId, CAST(1 AS tinyint) AS EventType, l.BazaarItemId,
+       l.CompletedAtUtc AS OccurredAtUtc, CAST(l.SellerAccountId AS bigint) AS AccountId,
        l.SellerCharacterId AS PrimaryCharacterId,
        CAST(NULL AS bigint) AS CounterpartyCharacterId,
-       l.BazaarItemInstanceId AS ItemInstanceId,
-       l.ItemVNum,
-       CAST(l.ListedAmount AS int) AS Amount,
-       CAST(l.AmountAfter AS int) AS RemainingAmount,
-       l.UnitPrice,
-       l.UnitPrice AS PreviousUnitPrice,
+       l.BazaarItemInstanceId AS ItemInstanceId, l.ItemVNum,
+       CAST(l.ListedAmount AS int) AS Amount, CAST(l.AmountAfter AS int) AS RemainingAmount,
+       l.UnitPrice, l.UnitPrice AS PreviousUnitPrice,
        l.GoldAfter - l.GoldBefore AS GoldDelta
 FROM dbo.BazaarListingOperation l");
             }
@@ -453,19 +366,13 @@ FROM dbo.BazaarListingOperation l");
             if (status.PurchaseOperationAvailable == 1)
             {
                 queries.Add(@"
-SELECT p.OperationId,
-       CAST(2 AS tinyint) AS EventType,
-       p.BazaarItemId,
-       p.CompletedAtUtc AS OccurredAtUtc,
-       CAST(p.BuyerAccountId AS bigint) AS AccountId,
+SELECT p.OperationId, CAST(2 AS tinyint) AS EventType, p.BazaarItemId,
+       p.CompletedAtUtc AS OccurredAtUtc, CAST(p.BuyerAccountId AS bigint) AS AccountId,
        p.BuyerCharacterId AS PrimaryCharacterId,
        CAST(p.SellerCharacterId AS bigint) AS CounterpartyCharacterId,
-       p.BazaarItemInstanceId AS ItemInstanceId,
-       p.ItemVNum,
-       CAST(p.Amount AS int) AS Amount,
-       CAST(p.BazaarAmountAfter AS int) AS RemainingAmount,
-       p.UnitPrice,
-       p.UnitPrice AS PreviousUnitPrice,
+       p.BazaarItemInstanceId AS ItemInstanceId, p.ItemVNum,
+       CAST(p.Amount AS int) AS Amount, CAST(p.BazaarAmountAfter AS int) AS RemainingAmount,
+       p.UnitPrice, p.UnitPrice AS PreviousUnitPrice,
        (p.GoldAfter - p.GoldBefore) + (p.GoldBankAfter - p.GoldBankBefore) AS GoldDelta
 FROM dbo.BazaarPurchaseOperation p");
             }
@@ -473,19 +380,13 @@ FROM dbo.BazaarPurchaseOperation p");
             if (status.PriceChangeOperationAvailable == 1)
             {
                 queries.Add(@"
-SELECT p.OperationId,
-       CAST(3 AS tinyint) AS EventType,
-       p.BazaarItemId,
-       p.CompletedAtUtc AS OccurredAtUtc,
-       CAST(p.SellerAccountId AS bigint) AS AccountId,
+SELECT p.OperationId, CAST(3 AS tinyint) AS EventType, p.BazaarItemId,
+       p.CompletedAtUtc AS OccurredAtUtc, CAST(p.SellerAccountId AS bigint) AS AccountId,
        p.SellerCharacterId AS PrimaryCharacterId,
        CAST(NULL AS bigint) AS CounterpartyCharacterId,
-       p.BazaarItemInstanceId AS ItemInstanceId,
-       p.ItemVNum,
-       CAST(p.Amount AS int) AS Amount,
-       CAST(p.Amount AS int) AS RemainingAmount,
-       p.NewUnitPrice AS UnitPrice,
-       p.OldUnitPrice AS PreviousUnitPrice,
+       p.BazaarItemInstanceId AS ItemInstanceId, p.ItemVNum,
+       CAST(p.Amount AS int) AS Amount, CAST(p.Amount AS int) AS RemainingAmount,
+       p.NewUnitPrice AS UnitPrice, p.OldUnitPrice AS PreviousUnitPrice,
        CAST(0 AS bigint) AS GoldDelta
 FROM dbo.BazaarPriceChangeOperation p");
             }
@@ -493,19 +394,13 @@ FROM dbo.BazaarPriceChangeOperation p");
             if (status.RecollectOperationAvailable == 1)
             {
                 queries.Add(@"
-SELECT r.OperationId,
-       CAST(4 AS tinyint) AS EventType,
-       r.BazaarItemId,
-       r.CompletedAtUtc AS OccurredAtUtc,
-       CAST(NULL AS bigint) AS AccountId,
+SELECT r.OperationId, CAST(4 AS tinyint) AS EventType, r.BazaarItemId,
+       r.CompletedAtUtc AS OccurredAtUtc, CAST(NULL AS bigint) AS AccountId,
        r.SellerCharacterId AS PrimaryCharacterId,
        CAST(NULL AS bigint) AS CounterpartyCharacterId,
-       r.BazaarItemInstanceId AS ItemInstanceId,
-       r.ItemVNum,
-       CAST(r.SoldAmount AS int) AS Amount,
-       CAST(r.RemainingAmount AS int) AS RemainingAmount,
-       r.UnitPrice,
-       r.UnitPrice AS PreviousUnitPrice,
+       r.BazaarItemInstanceId AS ItemInstanceId, r.ItemVNum,
+       CAST(r.SoldAmount AS int) AS Amount, CAST(r.RemainingAmount AS int) AS RemainingAmount,
+       r.UnitPrice, r.UnitPrice AS PreviousUnitPrice,
        r.GoldAfter - r.GoldBefore AS GoldDelta
 FROM dbo.BazaarRecollectOperation r");
             }
@@ -513,8 +408,87 @@ FROM dbo.BazaarRecollectOperation r");
             return queries;
         }
 
-        private static BazaarAuditStatusDTO ReadAvailability(System.Data.Entity.DbContext context) =>
-            context.Database.SqlQuery<BazaarAuditStatusDTO>(@"
+        private static List<string> BuildCurrentStateAnomalyQueries()
+        {
+            return new List<string>
+            {
+                @"
+SELECT CAST(3 AS tinyint) AS Severity, CAST(N'LISTING_MISSING_ITEM' AS nvarchar(64)) AS Code,
+       CAST(b.BazaarItemId AS bigint) AS BazaarItemId,
+       CAST(b.ItemInstanceId AS uniqueidentifier) AS ItemInstanceId,
+       CAST(b.SellerId AS bigint) AS CharacterId, CAST(NULL AS smallint) AS ItemVNum,
+       CAST(b.DateStart AS datetime2(3)) AS OccurredAtUtc,
+       CAST(N'Active listing references an ItemInstance row that does not exist.' AS nvarchar(500)) AS Detail
+FROM dbo.BazaarItem b
+LEFT JOIN dbo.ItemInstance i ON i.Id = b.ItemInstanceId
+WHERE i.Id IS NULL",
+                @"
+SELECT CAST(3 AS tinyint) AS Severity, CAST(N'LISTING_MISSING_SELLER' AS nvarchar(64)) AS Code,
+       CAST(b.BazaarItemId AS bigint) AS BazaarItemId,
+       CAST(b.ItemInstanceId AS uniqueidentifier) AS ItemInstanceId,
+       CAST(b.SellerId AS bigint) AS CharacterId, CAST(i.ItemVNum AS smallint) AS ItemVNum,
+       CAST(b.DateStart AS datetime2(3)) AS OccurredAtUtc,
+       CAST(N'Active listing references a seller character that does not exist.' AS nvarchar(500)) AS Detail
+FROM dbo.BazaarItem b
+LEFT JOIN dbo.Character c ON c.CharacterId = b.SellerId
+LEFT JOIN dbo.ItemInstance i ON i.Id = b.ItemInstanceId
+WHERE c.CharacterId IS NULL",
+                @"
+SELECT CAST(3 AS tinyint) AS Severity, CAST(N'LISTING_WRONG_OWNER' AS nvarchar(64)) AS Code,
+       CAST(b.BazaarItemId AS bigint) AS BazaarItemId,
+       CAST(b.ItemInstanceId AS uniqueidentifier) AS ItemInstanceId,
+       CAST(i.CharacterId AS bigint) AS CharacterId, CAST(i.ItemVNum AS smallint) AS ItemVNum,
+       CAST(b.DateStart AS datetime2(3)) AS OccurredAtUtc,
+       CAST(N'The bazaar ItemInstance owner does not match the listing seller.' AS nvarchar(500)) AS Detail
+FROM dbo.BazaarItem b
+JOIN dbo.ItemInstance i ON i.Id = b.ItemInstanceId
+WHERE i.CharacterId <> b.SellerId",
+                @"
+SELECT CAST(3 AS tinyint) AS Severity, CAST(N'LISTING_WRONG_INVENTORY' AS nvarchar(64)) AS Code,
+       CAST(b.BazaarItemId AS bigint) AS BazaarItemId,
+       CAST(b.ItemInstanceId AS uniqueidentifier) AS ItemInstanceId,
+       CAST(i.CharacterId AS bigint) AS CharacterId, CAST(i.ItemVNum AS smallint) AS ItemVNum,
+       CAST(b.DateStart AS datetime2(3)) AS OccurredAtUtc,
+       CAST(N'The listing item is not stored in InventoryType.Bazaar.' AS nvarchar(500)) AS Detail
+FROM dbo.BazaarItem b
+JOIN dbo.ItemInstance i ON i.Id = b.ItemInstanceId
+WHERE i.[Type] <> 9",
+                @"
+SELECT CAST(3 AS tinyint) AS Severity, CAST(N'LISTING_INVALID_VALUES' AS nvarchar(64)) AS Code,
+       CAST(b.BazaarItemId AS bigint) AS BazaarItemId,
+       CAST(b.ItemInstanceId AS uniqueidentifier) AS ItemInstanceId,
+       CAST(b.SellerId AS bigint) AS CharacterId, CAST(i.ItemVNum AS smallint) AS ItemVNum,
+       CAST(b.DateStart AS datetime2(3)) AS OccurredAtUtc,
+       CAST(N'Listing price, duration or item quantities are outside valid bounds.' AS nvarchar(500)) AS Detail
+FROM dbo.BazaarItem b
+JOIN dbo.ItemInstance i ON i.Id = b.ItemInstanceId
+WHERE b.Amount <= 0 OR b.Price <= 0 OR b.Duration <= 0 OR i.Amount < 0 OR i.Amount > b.Amount",
+                @"
+SELECT CAST(3 AS tinyint) AS Severity, CAST(N'DUPLICATE_LISTING_ITEM' AS nvarchar(64)) AS Code,
+       CAST(MIN(b.BazaarItemId) AS bigint) AS BazaarItemId,
+       CAST(b.ItemInstanceId AS uniqueidentifier) AS ItemInstanceId,
+       CAST(MIN(b.SellerId) AS bigint) AS CharacterId, CAST(MIN(i.ItemVNum) AS smallint) AS ItemVNum,
+       CAST(MIN(b.DateStart) AS datetime2(3)) AS OccurredAtUtc,
+       CAST(N'Multiple active listings reference the same ItemInstance.' AS nvarchar(500)) AS Detail
+FROM dbo.BazaarItem b
+LEFT JOIN dbo.ItemInstance i ON i.Id = b.ItemInstanceId
+GROUP BY b.ItemInstanceId
+HAVING COUNT_BIG(*) > 1",
+                @"
+SELECT CAST(3 AS tinyint) AS Severity, CAST(N'ORPHAN_BAZAAR_ITEM' AS nvarchar(64)) AS Code,
+       CAST(NULL AS bigint) AS BazaarItemId, CAST(i.Id AS uniqueidentifier) AS ItemInstanceId,
+       CAST(i.CharacterId AS bigint) AS CharacterId, CAST(i.ItemVNum AS smallint) AS ItemVNum,
+       CAST(NULL AS datetime2(3)) AS OccurredAtUtc,
+       CAST(N'ItemInstance is stored as Bazaar inventory but no active listing references it.' AS nvarchar(500)) AS Detail
+FROM dbo.ItemInstance i
+WHERE i.[Type] = 9
+  AND NOT EXISTS (SELECT 1 FROM dbo.BazaarItem b WHERE b.ItemInstanceId = i.Id)"
+            };
+        }
+
+        private static BazaarAuditStatusDTO ReadAvailability(System.Data.Entity.DbContext context)
+        {
+            const string sql = @"
 SELECT CAST(CASE WHEN OBJECT_ID(N'dbo.BazaarListingOperation', N'U') IS NULL THEN 0 ELSE 1 END AS int)
            AS ListingOperationAvailable,
        CAST(CASE WHEN OBJECT_ID(N'dbo.BazaarPurchaseOperation', N'U') IS NULL THEN 0 ELSE 1 END AS int)
@@ -528,12 +502,28 @@ SELECT CAST(CASE WHEN OBJECT_ID(N'dbo.BazaarListingOperation', N'U') IS NULL THE
        CAST(0 AS bigint) AS ListingOperationCount,
        CAST(0 AS bigint) AS PurchaseOperationCount,
        CAST(0 AS bigint) AS PriceChangeOperationCount,
-       CAST(0 AS bigint) AS RecollectOperationCount;").Single();
+       CAST(0 AS bigint) AS RecollectOperationCount;";
+            return context.Database.SqlQuery<BazaarAuditStatusDTO>(sql).Single();
+        }
 
-        private static long CountTable(System.Data.Entity.DbContext context, string tableName) =>
-            context.Database.SqlQuery<long>($"SELECT COUNT_BIG(*) FROM {tableName};").Single();
+        private static long CountOptional(
+            System.Data.Entity.DbContext context,
+            string tableName,
+            int available)
+        {
+            return available == 1 ? CountTable(context, tableName) : 0;
+        }
 
-        private static int ClampTake(int take) => Math.Max(1, Math.Min(MaximumTake, take));
+        private static long CountTable(System.Data.Entity.DbContext context, string tableName)
+        {
+            return context.Database.SqlQuery<long>(
+                "SELECT COUNT_BIG(*) FROM " + tableName + ";").Single();
+        }
+
+        private static int ClampTake(int take)
+        {
+            return Math.Max(1, Math.Min(MaximumTake, take));
+        }
 
         private static void LogFailureOnce(string message, Exception exception)
         {
