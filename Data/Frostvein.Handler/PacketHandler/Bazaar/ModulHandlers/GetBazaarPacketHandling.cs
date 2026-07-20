@@ -51,7 +51,8 @@ namespace Frostvein.Handler.Bazaar
                 listing.SellerId != Session.Character.CharacterId ||
                 sourceDto.CharacterId != Session.Character.CharacterId ||
                 sourceDto.Type != InventoryType.Bazaar ||
-                sourceDto.ItemVNum != listing.ItemInstanceId.Equals(Guid.Empty) ? packet.VNum : sourceDto.ItemVNum)
+                sourceDto.ItemVNum != packet.VNum ||
+                listing.Price != packet.Price)
             {
                 SendStateChanged();
                 return;
