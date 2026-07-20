@@ -6,6 +6,7 @@ using Frostvein.GameObject.Modules.Bazaar.Commands;
 using Frostvein.GameObject.Modules.Bazaar.Queries;
 using System;
 using System.Net.Http;
+using System.Reflection;
 using System.Text;
 using System.Threading;
 
@@ -75,7 +76,14 @@ namespace Frostvein.GameObject.HttpClients
                 return Failure(BazaarListingResult.Error, "The World produced an empty bazaar listing plan.");
             }
 
-            string payload = JsonConvert.SerializeObject(command);
+            // Build a transport-only plan containing exact DTO instances. The live objects in
+            // World inherit from ItemInstanceDTO and expose calculated Session/Item properties;
+            // serializing those runtime types would create a large or circular HTTP payload.
+            var transportCommand = new CommitBazaarListingCommand
+            {
+                Plan = CreateTransportPlan(command.Plan)
+            };
+            string payload = JsonConvert.SerializeObject(transportCommand);
             Exception lastException = null;
 
             for (int attempt = 1; attempt <= 2; attempt++)
@@ -269,6 +277,44 @@ namespace Frostvein.GameObject.HttpClients
                 Logger.Log.Error(null, e);
                 return false;
             }
+        }
+
+        private static BazaarListingDTO CreateTransportPlan(BazaarListingDTO source)
+        {
+            return new BazaarListingDTO
+            {
+                OperationId = source.OperationId,
+                SellerAccountId = source.SellerAccountId,
+                SellerCharacterId = source.SellerCharacterId,
+                GoldBefore = source.GoldBefore,
+                GoldAfter = source.GoldAfter,
+                Tax = source.Tax,
+                MaximumGold = source.MaximumGold,
+                SourceBefore = CreateItemSnapshot(source.SourceBefore),
+                SourceAfter = CreateItemSnapshot(source.SourceAfter),
+                BazaarItemAfter = CreateItemSnapshot(source.BazaarItemAfter),
+                Listing = source.Listing
+            };
+        }
+
+        private static ItemInstanceDTO CreateItemSnapshot(ItemInstanceDTO source)
+        {
+            if (source == null)
+            {
+                return null;
+            }
+
+            var snapshot = new ItemInstanceDTO();
+            foreach (PropertyInfo property in typeof(ItemInstanceDTO).GetProperties(
+                         BindingFlags.Instance | BindingFlags.Public))
+            {
+                if (property.CanRead && property.CanWrite && property.GetIndexParameters().Length == 0)
+                {
+                    property.SetValue(snapshot, property.GetValue(source, null), null);
+                }
+            }
+
+            return snapshot;
         }
 
         private static BazaarListingCommitResponseDTO Failure(
