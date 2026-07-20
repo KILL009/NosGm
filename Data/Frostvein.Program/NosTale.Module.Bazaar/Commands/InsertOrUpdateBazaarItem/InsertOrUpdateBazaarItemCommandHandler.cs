@@ -1,14 +1,10 @@
-﻿using FluentValidation;
+using FluentValidation;
 using MediatR;
 using Frostvein.DAL;
 using Frostvein.Data;
 using Frostvein.GameObject;
-//using Frostvein.GameObject.Item.Instance;
 using Frostvein.GameObject.Modules.Bazaar.Commands;
 using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -34,36 +30,50 @@ namespace NosTale.Module.Bazaar.Commands.InsertOrUpdateBazaarItem
             }
 
             BazaarItemDTO item = command.BazaarItem;
-
-            DAOFactory.BazaarItemDAO.InsertOrUpdate(ref item);
-
-            var exists = _bazaarManager.BazaarItems.ContainsKey(item.BazaarItemId);
-
-            if (!exists)
+            if (!command.RefreshOnly)
             {
-                _bazaarManager.BazaarItems.TryAdd(item.BazaarItemId, item);
-                _bazaarManager.BazaarItemLinks.TryAdd(item.BazaarItemId, new BazaarItemLink
-                {
-                    BazaarItem = item,
-                    Item = new ItemInstance(DAOFactory.ItemInstanceDAO.LoadById(item.ItemInstanceId)),
-                    Owner = DAOFactory.CharacterDAO.LoadById(item.SellerId)?.Name
-                });
-                Console.WriteLine($"Inserting item: {item.BazaarItemId}. CharacterId: {item.SellerId}");
+                DAOFactory.BazaarItemDAO.InsertOrUpdate(ref item);
             }
-            else
+
+            long bazaarItemId = item.BazaarItemId;
+            lock (_bazaarManager.GetItemLock(bazaarItemId))
             {
-                _bazaarManager.BazaarItems[item.BazaarItemId] = item;
-                _bazaarManager.BazaarItemLinks[item.BazaarItemId] = new BazaarItemLink
+                if (command.RefreshOnly)
+                {
+                    item = DAOFactory.BazaarItemDAO.LoadById(bazaarItemId);
+                    if (item == null)
+                    {
+                        _bazaarManager.BazaarItems.TryRemove(bazaarItemId, out _);
+                        _bazaarManager.BazaarItemLinks.TryRemove(bazaarItemId, out _);
+                        return -1;
+                    }
+                }
+
+                var itemDto = DAOFactory.ItemInstanceDAO.LoadById(item.ItemInstanceId);
+                if (itemDto == null)
+                {
+                    _bazaarManager.BazaarItems.TryRemove(bazaarItemId, out _);
+                    _bazaarManager.BazaarItemLinks.TryRemove(bazaarItemId, out _);
+                    return -1;
+                }
+
+                var link = new BazaarItemLink
                 {
                     BazaarItem = item,
-                    Item = new ItemInstance(DAOFactory.ItemInstanceDAO.LoadById(item.ItemInstanceId)),
+                    Item = new ItemInstance(itemDto),
                     Owner = DAOFactory.CharacterDAO.LoadById(item.SellerId)?.Name
                 };
 
-                Console.WriteLine($"Updating item: {item.BazaarItemId}. CharacterId: {item.SellerId}");
-            }
+                bool exists = _bazaarManager.BazaarItems.ContainsKey(bazaarItemId);
+                _bazaarManager.BazaarItems[bazaarItemId] = item;
+                _bazaarManager.BazaarItemLinks[bazaarItemId] = link;
 
-            return item.BazaarItemId;
+                Console.WriteLine(exists
+                    ? $"Updating item: {bazaarItemId}. CharacterId: {item.SellerId}"
+                    : $"Inserting item: {bazaarItemId}. CharacterId: {item.SellerId}");
+
+                return bazaarItemId;
+            }
         }
     }
 }
