@@ -17,6 +17,7 @@ using Frostvein.Domain;
 using System;
 using System.Diagnostics;
 using System.Linq;
+using System.Threading;
 
 namespace Frostvein.Core.Handling
 {
@@ -39,6 +40,7 @@ namespace Frostvein.Core.Handling
                 handlerMethod,
                 ParentHandler,
                 header,
+                Authority,
                 new HandlerPacketRateGuard(header));
         }
 
@@ -63,6 +65,7 @@ namespace Frostvein.Core.Handling
                 handlerMethod,
                 ParentHandler,
                 header,
+                Authority,
                 new HandlerPacketRateGuard(header));
         }
 
@@ -99,6 +102,7 @@ namespace Frostvein.Core.Handling
             Action<object, object> handlerMethod,
             IPacketHandler parentHandler,
             string header,
+            AuthorityType requiredAuthority,
             HandlerPacketRateGuard rateGuard)
         {
             if (handlerMethod == null)
@@ -131,10 +135,16 @@ namespace Frostvein.Core.Handling
 
                 long started = Stopwatch.GetTimestamp();
                 bool succeeded = false;
+                Exception failure = null;
                 try
                 {
                     handlerMethod(handler, packet);
                     succeeded = true;
+                }
+                catch (Exception exception)
+                {
+                    failure = exception;
+                    throw;
                 }
                 finally
                 {
@@ -142,9 +152,28 @@ namespace Frostvein.Core.Handling
                         header,
                         Stopwatch.GetTimestamp() - started,
                         succeeded);
+
+                    if (IsStaffCommand(header, requiredAuthority))
+                    {
+                        GmCommandAuditBridge.Publish(new GmCommandExecutionEvent
+                        {
+                            ParentHandler = parentHandler,
+                            Packet = packet,
+                            Header = header,
+                            RequiredAuthority = requiredAuthority,
+                            Outcome = succeeded
+                                ? GmCommandAuditOutcome.Executed
+                                : GmCommandAuditOutcome.Failed,
+                            Exception = failure
+                        });
+                    }
                 }
             };
         }
+
+        private static bool IsStaffCommand(string header, AuthorityType requiredAuthority) =>
+            requiredAuthority > AuthorityType.User ||
+            (!string.IsNullOrWhiteSpace(header) && header.StartsWith("$", StringComparison.Ordinal));
 
         private static void TryDisconnect(IPacketHandler parentHandler)
         {
@@ -171,5 +200,48 @@ namespace Frostvein.Core.Handling
                        .FirstOrDefault(header => !string.IsNullOrWhiteSpace(header))
                    ?? "<unidentified>";
         }
+    }
+
+    /// <summary>
+    /// Dependency-neutral bridge from Core to the world-layer persistence service.
+    /// A failing audit sink can never break command execution.
+    /// </summary>
+    public static class GmCommandAuditBridge
+    {
+        private static Action<GmCommandExecutionEvent> _sink;
+
+        public static void Configure(Action<GmCommandExecutionEvent> sink)
+        {
+            if (sink == null) throw new ArgumentNullException(nameof(sink));
+            Interlocked.CompareExchange(ref _sink, sink, null);
+        }
+
+        public static void Publish(GmCommandExecutionEvent auditEvent)
+        {
+            if (auditEvent == null) return;
+            try
+            {
+                Volatile.Read(ref _sink)?.Invoke(auditEvent);
+            }
+            catch (Exception exception)
+            {
+                Logger.Error("The GM command audit sink failed.", exception);
+            }
+        }
+    }
+
+    public sealed class GmCommandExecutionEvent
+    {
+        public object ParentHandler { get; set; }
+
+        public object Packet { get; set; }
+
+        public string Header { get; set; }
+
+        public AuthorityType RequiredAuthority { get; set; }
+
+        public GmCommandAuditOutcome Outcome { get; set; }
+
+        public Exception Exception { get; set; }
     }
 }
