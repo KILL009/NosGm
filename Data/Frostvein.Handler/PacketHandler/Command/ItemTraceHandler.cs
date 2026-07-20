@@ -92,7 +92,7 @@ namespace Frostvein.Handler.PacketHandler.Command
             }
         }
 
-        public void StaffPermission(StaffPermissionPacket packet)
+        public void ManageStaffPermission(StaffPermissionPacket packet)
         {
             string[] parts = (packet?.Contents ?? string.Empty)
                 .Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
