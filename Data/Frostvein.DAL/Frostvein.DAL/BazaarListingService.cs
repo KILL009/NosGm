@@ -1,5 +1,6 @@
 using Frostvein.DAL.DAO;
 using Frostvein.Data;
+using Frostvein.Domain;
 using System;
 
 namespace Frostvein.DAL
@@ -18,6 +19,36 @@ namespace Frostvein.DAL
 
         public static BazaarListingService Instance => LazyInstance.Value;
 
-        public BazaarListingResult Commit(BazaarListingDTO request) => _dao.Commit(request);
+        public BazaarListingResult Commit(BazaarListingDTO request)
+        {
+            NormalizeNonEquipmentSerials(request);
+            return _dao.Commit(request);
+        }
+
+        private static void NormalizeNonEquipmentSerials(BazaarListingDTO request)
+        {
+            if (request?.SourceBefore == null || request.SourceBefore.Type == InventoryType.Equipment)
+            {
+                return;
+            }
+
+            // EquipmentSerialId protects equipment-specific options. Normal inventory stacks
+            // can legitimately inherit or duplicate that legacy value after stack operations,
+            // so it must not be used as an identity conflict for Main/Etc listings.
+            request.SourceBefore.EquipmentSerialId = Guid.Empty;
+
+            if (request.SourceAfter != null)
+            {
+                request.SourceAfter.EquipmentSerialId = Guid.Empty;
+                return;
+            }
+
+            // A full transfer preserves the source ItemInstance identity, therefore both sides
+            // of the plan must carry the same normalized serial for validation to remain atomic.
+            if (request.BazaarItemAfter != null)
+            {
+                request.BazaarItemAfter.EquipmentSerialId = Guid.Empty;
+            }
+        }
     }
 }
