@@ -13,4 +13,10 @@ namespace Frostvein.Packets.Packets.CommandPackets
 
         public static string ReturnHelp() => "$ServerInfo <?ChannelId>";
     }
+
+    [PacketHeader("$Perf", PassNonParseablePacket = true, Authority = AuthorityType.ADMIN)]
+    public class PerformancePacket : PacketDefinition
+    {
+        public static string ReturnHelp() => "$Perf";
+    }
 }
