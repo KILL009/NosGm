@@ -1,4 +1,4 @@
-﻿using Frostvein.Domain;
+using Frostvein.Domain;
 using System;
 
 namespace Frostvein.Data
@@ -21,6 +21,17 @@ namespace Frostvein.Data
         public short? AttachmentVNum { get; set; }
 
         public DateTime Date { get; set; }
+
+        /// <summary>
+        /// Stable business-operation identifier used to make mail and reward delivery idempotent.
+        /// It is persisted in MailDeliveryOperation instead of the legacy Mail table.
+        /// </summary>
+        public Guid? DeliveryOperationId { get; set; }
+
+        /// <summary>
+        /// Subsystem that created the delivery. Used by item trace events when the parcel is claimed.
+        /// </summary>
+        public ItemTraceSource DeliverySource { get; set; }
 
         public string EqPacket { get; set; }
 

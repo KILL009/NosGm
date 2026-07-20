@@ -1,5 +1,6 @@
-﻿using Frostvein.Data;
+using Frostvein.Data;
 using Frostvein.Data.Enums;
+using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 
@@ -21,8 +22,8 @@ namespace Frostvein.DAL.Interface
 
         Task<IEnumerable<MailDTO>> LoadSentToCharacterAsync(long characterId);
 
-        #endregion
+        void MarkDeliveryClaimed(long mailId, Guid itemInstanceId);
 
-        //
+        #endregion
     }
 }

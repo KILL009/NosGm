@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 
 namespace Frostvein.Master.Library.Data
 {
@@ -14,6 +14,12 @@ namespace Frostvein.Master.Library.Data
         public short ItemVNum { get; set; }
 
         public byte Level { get; set; }
+
+        /// <summary>
+        /// Stable purchase transaction identifier. API callers should reuse the same value
+        /// when retrying a delivery so the server cannot create a duplicate parcel.
+        /// </summary>
+        public Guid OperationId { get; set; }
 
         public byte Rare { get; set; }
 

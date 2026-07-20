@@ -1,11 +1,16 @@
-﻿using Frostvein.Packets.Packets.ClientPackets;
+using Frostvein.Packets.Packets.ClientPackets;
 using Frostvein.Core;
 using Frostvein.DAL;
+using Frostvein.Data.Enums;
 using Frostvein.Domain;
 using Frostvein.GameObject;
 using Frostvein.GameObject.Helpers;
+using Frostvein.GameObject.Networking;
+using System;
+using System.Globalization;
 using System.Linq;
-using System.Threading.Tasks;
+using System.Security.Cryptography;
+using System.Text;
 
 namespace Frostvein.Handler.PacketHandler.Basic
 {
@@ -30,56 +35,196 @@ namespace Frostvein.Handler.PacketHandler.Basic
 
         public void GetGift(GetGiftPacket getGiftPacket)
         {
-            var giftId = getGiftPacket.GiftId;
-            if (Session.Character.MailList.ContainsKey(giftId))
+            if (getGiftPacket == null || Session?.Character?.MailList == null)
             {
-                var mail = Session.Character.MailList[giftId];
-                if (getGiftPacket.Type == 4 && mail.AttachmentVNum != null)
+                return;
+            }
+
+            // Serializes parcel mutations for this character. This closes the double-click window
+            // while the deterministic ItemInstanceId closes the crash/restart window.
+            lock (Session.Character.MailList)
+            {
+                var giftId = getGiftPacket.GiftId;
+                if (!Session.Character.MailList.TryGetValue(giftId, out var mail))
                 {
-                    if (Session.Character.Inventory.CanAddItem((short)mail.AttachmentVNum))
-                    {
-                        var newInv = Session.Character.Inventory.AddNewToInventory((short)mail.AttachmentVNum, mail.AttachmentAmount, Upgrade: mail.AttachmentUpgrade, Rare: (sbyte)mail.AttachmentRarity, Design: mail.AttachmentDesign)
-                            .FirstOrDefault();
-                        if (newInv != null)
-                        {
-                            if (newInv.Rare != 0) newInv.SetRarityPoint();
+                    return;
+                }
 
-                            if (newInv.Item.EquipmentSlot == EquipmentType.Gloves || newInv.Item.EquipmentSlot == EquipmentType.Boots)
-                            {
-                                newInv.DarkResistance = (short)(newInv.Item.DarkResistance * newInv.Upgrade);
-                                newInv.LightResistance = (short)(newInv.Item.LightResistance * newInv.Upgrade);
-                                newInv.WaterResistance = (short)(newInv.Item.WaterResistance * newInv.Upgrade);
-                                newInv.FireResistance = (short)(newInv.Item.FireResistance * newInv.Upgrade);
-                            }
-
-                            Logger.LogUserEvent("PARCEL_GET", Session.GenerateIdentity(), $"IIId: {newInv.Id} ItemVNum: {newInv.ItemVNum} Amount: {mail.AttachmentAmount} Sender: {mail.SenderId}");
-
-                            Session.SendPacket(Session.Character.GenerateSay(string.Format(Language.Instance.GetMessageFromKey("ITEM_GIFTED"), newInv.Item.Name, mail.AttachmentAmount), 12));
-                            DAOFactory.MailDAO.DeleteById(mail.MailId);
-                            Session.SendPacket($"parcel 2 1 {giftId}");
-                            Session.Character.MailList.Remove(giftId);
-                        }
-                    }
-                    else
-                    {
-                        Session.SendPacket("parcel 5 1 0");
-                        Session.SendPacket(UserInterfaceHelper.GenerateMsg(Language.Instance.GetMessageFromKey("NOT_ENOUGH_PLACE"), 0));
-                    }
+                if (getGiftPacket.Type == 4 && mail.AttachmentVNum.HasValue)
+                {
+                    ClaimAttachment(giftId, mail);
                 }
                 else if (getGiftPacket.Type == 5)
                 {
-                    Session.SendPacket($"parcel 7 1 {giftId}");
+                    DeleteParcel(giftId, mail.MailId);
+                }
+            }
+        }
 
-                    if (DAOFactory.MailDAO.LoadById(mail.MailId) != null)
+        private void ClaimAttachment(int giftId, Frostvein.Data.MailDTO mail)
+        {
+            var itemVNum = (short)mail.AttachmentVNum.Value;
+            var itemDefinition = ServerManager.GetItem(itemVNum);
+            if (itemDefinition == null)
+            {
+                Session.SendPacket(UserInterfaceHelper.GenerateMsg("Invalid parcel item. Please contact a GM.", 0));
+                return;
+            }
+
+            var itemInstanceId = CreateDeterministicGuid("NosGM.MailClaim.Item", mail.MailId);
+            var traceOperationId = CreateDeterministicGuid("NosGM.MailClaim.Trace", mail.MailId);
+            var inventory = Session.Character.Inventory;
+            var itemInstance = inventory.GetItemInstanceById(itemInstanceId);
+            var newlyCreated = false;
+
+            if (itemInstance == null)
+            {
+                var persisted = DAOFactory.ItemInstanceDAO.LoadById(itemInstanceId);
+                if (persisted != null)
+                {
+                    itemInstance = new ItemInstance(persisted);
+                    var occupied = inventory.LoadBySlotAndType(itemInstance.Slot, itemInstance.Type);
+                    if (occupied == null)
                     {
-                        DAOFactory.MailDAO.DeleteById(mail.MailId);
+                        if (inventory.AddToInventoryWithSlotAndType(itemInstance, itemInstance.Type, itemInstance.Slot) == null)
+                        {
+                            Session.SendPacket(UserInterfaceHelper.GenerateMsg(
+                                "The saved parcel item could not be restored. Relog and try again.", 0));
+                            return;
+                        }
                     }
-
-                    if (Session.Character.MailList.ContainsKey(giftId))
+                    else if (occupied.Id != itemInstance.Id)
                     {
-                        Session.Character.MailList.Remove(giftId);
+                        Session.SendPacket(UserInterfaceHelper.GenerateMsg(
+                            "The parcel was already saved, but its slot is busy. Relog to refresh the inventory.", 0));
+                        return;
                     }
                 }
+                else
+                {
+                    itemInstance = Frostvein.GameObject.Inventory.InstantiateItemInstance(
+                        itemVNum,
+                        Session.Character.CharacterId,
+                        mail.AttachmentAmount > 0 ? mail.AttachmentAmount : (short)1);
+                    itemInstance.Id = itemInstanceId;
+                    itemInstance.Rare = unchecked((sbyte)mail.AttachmentRarity);
+                    itemInstance.Upgrade = mail.AttachmentUpgrade;
+                    itemInstance.Design = mail.AttachmentDesign;
+
+                    ApplyEquipmentValues(itemInstance);
+
+                    var freeSlot = inventory.getFreeSlot(itemInstance.Type);
+                    if (!freeSlot.HasValue)
+                    {
+                        Session.SendPacket("parcel 5 1 0");
+                        Session.SendPacket(UserInterfaceHelper.GenerateMsg(
+                            Language.Instance.GetMessageFromKey("NOT_ENOUGH_PLACE"), 0));
+                        return;
+                    }
+
+                    if (inventory.AddToInventoryWithSlotAndType(itemInstance, itemInstance.Type, freeSlot.Value) == null)
+                    {
+                        Session.SendPacket(UserInterfaceHelper.GenerateMsg(
+                            Language.Instance.GetMessageFromKey("NOT_ENOUGH_PLACE"), 0));
+                        return;
+                    }
+
+                    if (DAOFactory.ItemInstanceDAO.InsertOrUpdate(itemInstance) == null)
+                    {
+                        inventory.DeleteById(itemInstance.Id);
+                        Session.SendPacket(UserInterfaceHelper.Instance.GenerateInventoryRemove(
+                            itemInstance.Type, itemInstance.Slot));
+                        Session.SendPacket(UserInterfaceHelper.GenerateMsg(
+                            "The parcel could not be saved. Nothing was consumed; please try again.", 0));
+                        return;
+                    }
+
+                    newlyCreated = true;
+                }
+            }
+
+            var traceSource = mail.DeliverySource == ItemTraceSource.Unknown
+                ? ItemTraceSource.Mail
+                : mail.DeliverySource;
+            ItemTraceService.Instance.Record(
+                traceOperationId,
+                0,
+                ItemTraceAction.Created,
+                traceSource,
+                null,
+                itemInstance,
+                actorCharacterId: Session.Character.CharacterId,
+                actorName: Session.Character.Name,
+                reason: "Parcel attachment claimed",
+                metadata: new
+                {
+                    mail.MailId,
+                    mail.DeliveryOperationId,
+                    mail.Title,
+                    RecoveredExistingItem = !newlyCreated
+                });
+
+            DAOFactory.MailDAO.MarkDeliveryClaimed(mail.MailId, itemInstance.Id);
+
+            var persistedMail = DAOFactory.MailDAO.LoadById(mail.MailId);
+            if (persistedMail != null && DAOFactory.MailDAO.DeleteById(mail.MailId) == DeleteResult.Error)
+            {
+                Session.SendPacket(UserInterfaceHelper.GenerateMsg(
+                    "The item was saved, but the parcel cleanup failed. Claim it again to finish safely.", 0));
+                return;
+            }
+
+            Session.SendPacket($"parcel 2 1 {giftId}");
+            Session.Character.MailList.Remove(giftId);
+
+            Logger.LogUserEvent("PARCEL_GET", Session.GenerateIdentity(),
+                $"IIId: {itemInstance.Id} ItemVNum: {itemInstance.ItemVNum} Amount: {itemInstance.Amount} Sender: {mail.SenderId} Operation: {traceOperationId}");
+            Session.SendPacket(Session.Character.GenerateSay(
+                string.Format(Language.Instance.GetMessageFromKey("ITEM_GIFTED"),
+                    itemInstance.Item.Name, mail.AttachmentAmount), 12));
+        }
+
+        private static void ApplyEquipmentValues(ItemInstance itemInstance)
+        {
+            if (itemInstance.Rare != 0)
+            {
+                itemInstance.SetRarityPoint();
+            }
+
+            if (itemInstance.Item.EquipmentSlot == EquipmentType.Gloves ||
+                itemInstance.Item.EquipmentSlot == EquipmentType.Boots)
+            {
+                itemInstance.DarkResistance = (short)(itemInstance.Item.DarkResistance * itemInstance.Upgrade);
+                itemInstance.LightResistance = (short)(itemInstance.Item.LightResistance * itemInstance.Upgrade);
+                itemInstance.WaterResistance = (short)(itemInstance.Item.WaterResistance * itemInstance.Upgrade);
+                itemInstance.FireResistance = (short)(itemInstance.Item.FireResistance * itemInstance.Upgrade);
+            }
+        }
+
+        private void DeleteParcel(int giftId, long mailId)
+        {
+            Session.SendPacket($"parcel 7 1 {giftId}");
+
+            var persisted = DAOFactory.MailDAO.LoadById(mailId);
+            if (persisted != null && DAOFactory.MailDAO.DeleteById(mailId) == DeleteResult.Error)
+            {
+                Session.SendPacket(UserInterfaceHelper.GenerateMsg(
+                    "The parcel could not be deleted. Please try again.", 0));
+                return;
+            }
+
+            Session.Character.MailList.Remove(giftId);
+        }
+
+        private static Guid CreateDeterministicGuid(string scope, long value)
+        {
+            using (var sha256 = SHA256.Create())
+            {
+                var payload = Encoding.UTF8.GetBytes(
+                    scope + "|" + value.ToString(CultureInfo.InvariantCulture));
+                var hash = sha256.ComputeHash(payload);
+                var guidBytes = hash.Take(16).ToArray();
+                return new Guid(guidBytes);
             }
         }
 
