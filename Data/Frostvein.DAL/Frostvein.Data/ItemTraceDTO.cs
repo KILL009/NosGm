@@ -1,5 +1,6 @@
 using Frostvein.Domain;
 using System;
+using System.Collections.Generic;
 
 namespace Frostvein.Data
 {
@@ -53,5 +54,54 @@ namespace Frostvein.Data
         public string Metadata { get; set; }
 
         public bool IsSuspicious { get; set; }
+    }
+
+    public enum TradeCommitResult
+    {
+        Success = 0,
+        AlreadyCommitted = 1,
+        Conflict = 2,
+        MissingSchema = 3,
+        Error = 4
+    }
+
+    /// <summary>
+    /// Complete before/after state used to commit both sides of one trade in a single
+    /// SQL transaction. Only items affected by the trade are included.
+    /// </summary>
+    [Serializable]
+    public sealed class TradeCommitDTO
+    {
+        public TradeCommitDTO()
+        {
+            BeforeItems = new List<ItemInstanceDTO>();
+            AfterItems = new List<ItemInstanceDTO>();
+        }
+
+        public Guid OperationId { get; set; }
+
+        public long FirstCharacterId { get; set; }
+
+        public long SecondCharacterId { get; set; }
+
+        public long FirstGoldBefore { get; set; }
+
+        public long FirstGoldAfter { get; set; }
+
+        public long FirstGoldBankBefore { get; set; }
+
+        public long FirstGoldBankAfter { get; set; }
+
+        public long SecondGoldBefore { get; set; }
+
+        public long SecondGoldAfter { get; set; }
+
+        public long SecondGoldBankBefore { get; set; }
+
+        public long SecondGoldBankAfter { get; set; }
+
+        public List<ItemInstanceDTO> BeforeItems { get; set; }
+
+        public List<ItemInstanceDTO> AfterItems { get; set; }
     }
 }
