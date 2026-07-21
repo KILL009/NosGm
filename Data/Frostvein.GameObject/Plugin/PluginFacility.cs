@@ -3,6 +3,7 @@ using Frostvein.Packets.Packets.ClientPackets;
 using Frostvein.Core;
 using Frostvein.Domain;
 using Frostvein.GameObject;
+using Frostvein.GameObject.Battle;
 using Frostvein.GameObject._plugins;
 using System;
 using System.Collections.Generic;
@@ -11,7 +12,6 @@ using static Frostvein.Domain.BCardType;
 using BCardEvent = Game.Configuration.BCards.BCardEvent;
 using IGuriHandler = Frostvein.GameObject._plugins.IGuriHandler;
 using Frostvein.GameObject.Plugin.Event;
-using System.Threading.Tasks;
 
 namespace Game.Configuration
 {
@@ -20,7 +20,8 @@ namespace Game.Configuration
         private static IDictionary<NRunType[], Action<ClientSession, NRunPacket>> _nrunHandler;
         private static IDictionary<GuriType[], Action<ClientSession, GuriPacket>> _guriHandler;
         private static IDictionary<CardType, Action<BCardEvent>> _bcardHandler;
-        private static readonly HashSet<CardType> MissingBCardWarnings = new HashSet<CardType>();
+        private static IDictionary<CardType, string> _bcardHandlerNames;
+        private static readonly HashSet<string> MissingBCardWarnings = new HashSet<string>();
         private static readonly object MissingBCardWarningsLock = new object();
 
         public static bool IsInitialized { get; set; }
@@ -29,7 +30,12 @@ namespace Game.Configuration
             _bcardHandler != null && _bcardHandler.ContainsKey(type);
 
         public static IReadOnlyCollection<CardType> RegisteredBCardTypes =>
-            _bcardHandler?.Keys.ToList() ?? new List<CardType>();
+            _bcardHandler?.Keys.OrderBy(type => (byte)type).ToList() ?? new List<CardType>();
+
+        public static IReadOnlyDictionary<CardType, string> RegisteredBCardHandlers =>
+            _bcardHandlerNames == null
+                ? new Dictionary<CardType, string>()
+                : new Dictionary<CardType, string>(_bcardHandlerNames);
 
         public static void InitializeAll()
         {
@@ -38,7 +44,13 @@ namespace Game.Configuration
                 _nrunHandler = new Dictionary<NRunType[], Action<ClientSession, NRunPacket>>();
                 _guriHandler = new Dictionary<GuriType[], Action<ClientSession, GuriPacket>>();
                 _bcardHandler = new Dictionary<CardType, Action<BCardEvent>>();
+                _bcardHandlerNames = new Dictionary<CardType, string>();
                 IsInitialized = true;
+            }
+
+            lock (MissingBCardWarningsLock)
+            {
+                MissingBCardWarnings.Clear();
             }
 
             //NrunPlugin.Enable();
@@ -46,11 +58,42 @@ namespace Game.Configuration
             BCardPlugin.Enable();
         }
 
-        public static void AddBCardHandler(IBCardHandler type, Action<BCardEvent> action)
+        public static void AddBCardHandler(IBCardHandler handler, Action<BCardEvent> action)
         {
-            if (_bcardHandler.ContainsKey(type.ActionType)) return;
+            TryAddBCardHandler(handler, action, out _);
+        }
 
-            _bcardHandler.Add(type.ActionType, action);
+        public static bool TryAddBCardHandler(
+            IBCardHandler handler,
+            Action<BCardEvent> action,
+            out string existingHandler)
+        {
+            if (handler == null)
+            {
+                throw new ArgumentNullException(nameof(handler));
+            }
+
+            if (action == null)
+            {
+                throw new ArgumentNullException(nameof(action));
+            }
+
+            if (_bcardHandler == null || _bcardHandlerNames == null)
+            {
+                throw new InvalidOperationException("PluginFacility must be initialized before registering BCard handlers.");
+            }
+
+            CardType actionType = handler.ActionType;
+            if (_bcardHandler.ContainsKey(actionType))
+            {
+                _bcardHandlerNames.TryGetValue(actionType, out existingHandler);
+                return false;
+            }
+
+            _bcardHandler.Add(actionType, action);
+            _bcardHandlerNames[actionType] = handler.GetType().FullName ?? handler.GetType().Name;
+            existingHandler = null;
+            return true;
         }
 
         public static void AddNrunHandler(INrunHandler type, Action<ClientSession, NRunPacket> action)
@@ -67,7 +110,6 @@ namespace Game.Configuration
             _guriHandler.Add(type.ActionType, action);
         }
 
-      
         public static void HandleBCard(BCardEvent evnt)
         {
             if (evnt?.Caster == null || evnt.Target == null || evnt.BCard == null)
@@ -78,11 +120,26 @@ namespace Game.Configuration
             var cardType = (CardType)evnt.BCard.Type;
             if (_bcardHandler == null || !_bcardHandler.TryGetValue(cardType, out Action<BCardEvent> action))
             {
+                string warningKey = string.Join(":",
+                    (byte)cardType,
+                    evnt.BCard.SubType,
+                    evnt.BCard.SkillVNum?.ToString() ?? "-",
+                    evnt.BCard.CardId?.ToString() ?? "-",
+                    evnt.BCard.BCardId);
+
                 lock (MissingBCardWarningsLock)
                 {
-                    if (MissingBCardWarnings.Add(cardType))
+                    if (MissingBCardWarnings.Add(warningKey))
                     {
-                        Logger.Warn($"[BCARD_HANDLER_MISSING] Type={(byte)cardType} Name={cardType}");
+                        Logger.Warn(
+                            $"[BCARD_HANDLER_MISSING] Type={(byte)cardType} Name={cardType} " +
+                            $"SubType={evnt.BCard.SubType} SkillVNum={FormatNullable(evnt.BCard.SkillVNum)} " +
+                            $"CardId={FormatNullable(evnt.BCard.CardId)} BCardId={evnt.BCard.BCardId} " +
+                            $"FirstData={evnt.FirstData} RawFirstData={evnt.BCard.FirstData} " +
+                            $"SecondData={evnt.BCard.SecondData} ThirdData={evnt.BCard.ThirdData} " +
+                            $"CastType={evnt.BCard.CastType} IsLevelDivided={evnt.BCard.IsLevelDivided} " +
+                            $"LevelUpgraded={evnt.LevelUpgraded} CasterLevel={evnt.CasterLevel} " +
+                            $"Caster={DescribeEntity(evnt.Caster)} Target={DescribeEntity(evnt.Target)}");
                     }
                 }
 
@@ -95,7 +152,14 @@ namespace Game.Configuration
             }
             catch (Exception exception)
             {
-                Logger.Error($"[BCARD_HANDLER_FAILED] Type={(byte)cardType} Name={cardType}", exception);
+                Logger.Error(
+                    $"[BCARD_HANDLER_FAILED] Type={(byte)cardType} Name={cardType} " +
+                    $"SubType={evnt.BCard.SubType} SkillVNum={FormatNullable(evnt.BCard.SkillVNum)} " +
+                    $"CardId={FormatNullable(evnt.BCard.CardId)} BCardId={evnt.BCard.BCardId} " +
+                    $"FirstData={evnt.FirstData} SecondData={evnt.BCard.SecondData} " +
+                    $"ThirdData={evnt.BCard.ThirdData} Caster={DescribeEntity(evnt.Caster)} " +
+                    $"Target={DescribeEntity(evnt.Target)}",
+                    exception);
             }
         }
 
@@ -103,7 +167,6 @@ namespace Game.Configuration
         {
             if (!_nrunHandler.Any(h => h.Key.Contains((NRunType)packet.Runner)))
             {
-                // Logger.Log.Debug($"[HANDLER_NOT_FOUND] NRUN_EFFECT : {packet.Runner} ");
                 return;
             }
 
@@ -115,15 +178,39 @@ namespace Game.Configuration
         {
             if (!_guriHandler.Any(h => h.Key.Contains((GuriType)packet.Type)))
             {
-                //Logger.Log.Debug($"[HANDLER_NOT_FOUND] GURI_EFFECT : {packet.Type} ");
                 return;
             }
 
             var action = _guriHandler.FirstOrDefault(h => h.Key.Contains((GuriType)packet.Type));
-
             action.Value(player, packet);
         }
 
-      
+        private static string DescribeEntity(BattleEntity entity)
+        {
+            if (entity?.Character != null)
+            {
+                return "Character";
+            }
+
+            if (entity?.Mate != null)
+            {
+                return "Mate";
+            }
+
+            if (entity?.MapMonster != null)
+            {
+                return "MapMonster";
+            }
+
+            if (entity?.MapNpc != null)
+            {
+                return "MapNpc";
+            }
+
+            return entity == null ? "null" : "BattleEntity";
+        }
+
+        private static string FormatNullable<T>(T? value) where T : struct =>
+            value.HasValue ? value.Value.ToString() : "-";
     }
 }

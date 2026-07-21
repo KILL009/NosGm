@@ -1,7 +1,9 @@
 ﻿using Frostvein.Core;
-using Frostvein.Core.Extensions;
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
+using System.Linq;
+using System.Reflection;
 
 namespace Game.Configuration.BCards
 {
@@ -9,32 +11,80 @@ namespace Game.Configuration.BCards
     {
         public static void Enable()
         {
-            var stopWatch = new Stopwatch();
-            stopWatch.Start();
-            long i = 0;
+            var stopWatch = Stopwatch.StartNew();
+            Assembly assembly = typeof(IBCardHandler).Assembly;
+            Type[] assemblyTypes = GetLoadableTypes(assembly);
+            List<Type> handlerTypes = assemblyTypes
+                .Where(type => type != null &&
+                               type.IsClass &&
+                               !type.IsAbstract &&
+                               typeof(IBCardHandler).IsAssignableFrom(type))
+                .OrderBy(type => type.FullName, StringComparer.Ordinal)
+                .ToList();
 
-            foreach (var handler in typeof(AddBuffHandler).Assembly.GetTypesImplementingInterface<IBCardHandler>())
+            int registered = 0;
+            int duplicates = 0;
+            int failed = 0;
+
+            foreach (Type handlerType in handlerTypes)
             {
                 try
                 {
-                    if (!typeof(IBCardHandler).IsAssignableFrom(handler) || !handler.IsClass)
+                    if (!(Activator.CreateInstance(handlerType) is IBCardHandler instance))
                     {
+                        failed++;
+                        Logger.Error($"[BCARD_REGISTRY_FAILED] Handler={handlerType.FullName} Reason=ActivatorReturnedNull");
                         continue;
                     }
 
-                    var instance = Activator.CreateInstance(handler) as IBCardHandler;
-                    PluginFacility.AddBCardHandler(instance, instance.Execute);
-                    i++;
+                    if (PluginFacility.TryAddBCardHandler(instance, instance.Execute, out string existingHandler))
+                    {
+                        registered++;
+                        continue;
+                    }
+
+                    duplicates++;
+                    Logger.Warn(
+                        $"[BCARD_REGISTRY_DUPLICATE] Type={(byte)instance.ActionType} Name={instance.ActionType} " +
+                        $"Ignored={handlerType.FullName} Registered={existingHandler ?? "unknown"}");
                 }
-                catch (Exception e)
+                catch (Exception exception)
                 {
-                    Logger.Log.Error($"{handler.FullName} not resolved", e);
+                    failed++;
+                    Logger.Error($"[BCARD_REGISTRY_FAILED] Handler={handlerType.FullName}", exception);
                 }
             }
+
             stopWatch.Stop();
-            TimeSpan ts = stopWatch.Elapsed;
-            string elapsedTime = $"{ts.Minutes:00}:{ts.Seconds:00}.{ts.Milliseconds:000}";
-            Logger.Log.Info($"[ServiceManager]: {elapsedTime} to Load {i} Handler");
+            string registeredTypes = string.Join(", ",
+                PluginFacility.RegisteredBCardHandlers
+                    .OrderBy(pair => (byte)pair.Key)
+                    .Select(pair => $"{(byte)pair.Key}:{pair.Key}={pair.Value}"));
+
+            Logger.Info(
+                $"[BCARD_REGISTRY] Assembly={assembly.GetName().Name} Location={assembly.Location} " +
+                $"Discovered={handlerTypes.Count} Registered={registered} Duplicates={duplicates} " +
+                $"Failed={failed} ElapsedMs={stopWatch.ElapsedMilliseconds}");
+            Logger.Info($"[BCARD_REGISTRY_TYPES] {registeredTypes}");
+        }
+
+        private static Type[] GetLoadableTypes(Assembly assembly)
+        {
+            try
+            {
+                return assembly.GetTypes();
+            }
+            catch (ReflectionTypeLoadException exception)
+            {
+                foreach (Exception loaderException in exception.LoaderExceptions.Where(item => item != null))
+                {
+                    Logger.Error(
+                        $"[BCARD_REGISTRY_TYPELOAD_FAILED] Assembly={assembly.GetName().Name} " +
+                        $"Reason={loaderException.GetType().Name}: {loaderException.Message}");
+                }
+
+                return exception.Types.Where(type => type != null).ToArray();
+            }
         }
     }
 }
