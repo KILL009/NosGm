@@ -102,6 +102,7 @@ namespace Game.Configuration.BCards
     {
         private const int MaximumGauge = 100;
         private const int MaximumSynchronizationLevel = 3;
+        private const int DuplicateFallbackMilliseconds = 750;
         private static readonly ConditionalWeakTable<Character, ModernSpecialistState> States =
             new ConditionalWeakTable<Character, ModernSpecialistState>();
 
@@ -118,6 +119,11 @@ namespace Game.Configuration.BCards
             {
                 ResetWhenSpecialistChanged(state, character);
                 ResetExpiredSynchronization(state, character);
+
+                if (ShouldSuppressRepeatedSkillApplication(state, character, evnt, source))
+                {
+                    return;
+                }
 
                 int beforeGauge = state.Gauge;
                 int beforeLevel = state.SynchronizationLevel;
@@ -183,6 +189,50 @@ namespace Game.Configuration.BCards
             }
         }
 
+        private static bool ShouldSuppressRepeatedSkillApplication(
+            ModernSpecialistState state,
+            Character character,
+            BCardEvent evnt,
+            string source)
+        {
+            short? skillVNum = evnt?.Skill?.SkillVNum ?? evnt?.BCard?.SkillVNum;
+            if (!skillVNum.HasValue)
+            {
+                return false;
+            }
+
+            CharacterSkill characterSkill = character.GetSkills()?
+                .FirstOrDefault(skill => skill.SkillVNum == skillVNum.Value);
+
+            long castStamp = evnt?.BCard?.CastType == 0
+                ? characterSkill?.LastUse.Ticks ?? 0
+                : 0;
+
+            string key = $"{source}:{skillVNum.Value}:{evnt?.BCard?.BCardId ?? 0}";
+            DateTime now = DateTime.UtcNow;
+
+            if (state.ProcessedSkillCasts.TryGetValue(key, out ProcessedSkillCast previous))
+            {
+                if (castStamp != 0 && previous.CastStamp == castStamp)
+                {
+                    return true;
+                }
+
+                if (castStamp == 0 &&
+                    (now - previous.ProcessedAtUtc).TotalMilliseconds < DuplicateFallbackMilliseconds)
+                {
+                    return true;
+                }
+            }
+
+            state.ProcessedSkillCasts[key] = new ProcessedSkillCast
+            {
+                CastStamp = castStamp,
+                ProcessedAtUtc = now
+            };
+            return false;
+        }
+
         private static void ResetWhenSpecialistChanged(ModernSpecialistState state, Character character)
         {
             if (state.Morph == character.Morph)
@@ -195,6 +245,7 @@ namespace Game.Configuration.BCards
             state.SynchronizationLevel = 0;
             state.ExpiresAtUtc = DateTime.MinValue;
             state.LastActivityUtc = DateTime.UtcNow;
+            state.ProcessedSkillCasts.Clear();
         }
 
         private static void ResetExpiredSynchronization(ModernSpecialistState state, Character character)
@@ -214,10 +265,18 @@ namespace Game.Configuration.BCards
             state.Gauge = 0;
             state.SynchronizationLevel = 0;
             state.ExpiresAtUtc = DateTime.MinValue;
+            state.ProcessedSkillCasts.Clear();
         }
 
         private static string FormatSkill(BCardEvent evnt) =>
             evnt?.BCard?.SkillVNum?.ToString() ?? evnt?.Skill?.SkillVNum.ToString() ?? "-";
+
+        private sealed class ProcessedSkillCast
+        {
+            public long CastStamp { get; set; }
+
+            public DateTime ProcessedAtUtc { get; set; }
+        }
 
         private sealed class ModernSpecialistState
         {
@@ -232,6 +291,9 @@ namespace Game.Configuration.BCards
             public DateTime LastActivityUtc { get; set; }
 
             public DateTime ExpiresAtUtc { get; set; }
+
+            public Dictionary<string, ProcessedSkillCast> ProcessedSkillCasts { get; } =
+                new Dictionary<string, ProcessedSkillCast>();
         }
     }
 
