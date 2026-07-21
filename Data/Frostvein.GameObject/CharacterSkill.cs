@@ -98,6 +98,8 @@ namespace Frostvein.GameObject
                     PassiveSkillHelper.Instance.PassiveSkillToBCards(
                         Session.Character.Skills?.Where(s => s.Skill.SkillType == 0)));
 
+                NormalizeModernGaugeContributors(SkillBCards);
+
                 if (Skill.SkillVNum == 1123)
                     foreach (var ambushBCard in Session.Character.Buff.GetAllItems().SelectMany(s =>
                         s.Card.BCards.Where(b =>
@@ -118,6 +120,33 @@ namespace Frostvein.GameObject
             }
 
             return SkillBCards.ToList();
+        }
+
+        private void NormalizeModernGaugeContributors(List<BCard> skillBCards)
+        {
+            if (skillBCards == null || skillBCards.Count < 2)
+            {
+                return;
+            }
+
+            var groupedContributors = skillBCards
+                .Where(bCard => bCard != null && bCard.SkillVNum.HasValue &&
+                                (bCard.Type == (byte)CardType.TokenGauge ||
+                                 bCard.Type == (byte)CardType.DimensionalSynchronization))
+                .GroupBy(bCard => new { bCard.Type, bCard.SubType })
+                .Where(group => group.Select(bCard => bCard.SkillVNum.Value).Distinct().Count() > 1)
+                .ToList();
+
+            foreach (var group in groupedContributors)
+            {
+                short preferredSkillVNum = group.Any(bCard => bCard.SkillVNum == SkillVNum)
+                    ? SkillVNum
+                    : group.Max(bCard => bCard.SkillVNum.Value);
+
+                group.Where(bCard => bCard.SkillVNum != preferredSkillVNum)
+                    .ToList()
+                    .ForEach(bCard => skillBCards.Remove(bCard));
+            }
         }
 
         public int GetSkillRange()
