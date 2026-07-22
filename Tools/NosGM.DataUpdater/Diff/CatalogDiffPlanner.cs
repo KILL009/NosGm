@@ -1,0 +1,199 @@
+/*
+ * Derived from the design of noszanou/BCardGistUpdater at commit
+ * 53153c990ae5b65a603d223eeda504df2a67d5fb.
+ * Copyright (C) noszanou and BCardGistUpdater contributors.
+ * Modifications Copyright (C) 2026 NosGM contributors.
+ * SPDX-License-Identifier: GPL-3.0-only
+ */
+
+using System.Text;
+using System.Text.Json;
+using NosGM.DataUpdater.Models;
+
+namespace NosGM.DataUpdater.Diff;
+
+public sealed class CatalogDiffPlanner
+{
+    private static readonly JsonSerializerOptions JsonOptions = new()
+    {
+        WriteIndented = true,
+        PropertyNameCaseInsensitive = true
+    };
+
+    private readonly UpdaterOptions _options;
+
+    public CatalogDiffPlanner(UpdaterOptions options)
+    {
+        _options = options;
+    }
+
+    public async Task<RepositoryUpdatePlan> BuildAsync(
+        CatalogGenerationResult generation,
+        CancellationToken cancellationToken = default)
+    {
+        var desiredFiles = generation.Files.ToDictionary(
+            static file => file.RepositoryPath,
+            static file => file.Content,
+            StringComparer.Ordinal);
+
+        var report = new StringBuilder();
+        report.AppendLine("# BCard catalog change report");
+        report.AppendLine();
+        report.AppendLine($"Source SHA-256: `{generation.SourceSha256}`");
+        report.AppendLine();
+
+        var totalAddedTypes = 0;
+        var totalRemovedTypes = 0;
+        var totalAddedSubtypes = 0;
+        var totalRemovedSubtypes = 0;
+        var totalChangedLabels = 0;
+
+        foreach (var generatedFile in generation.Files.OrderBy(static file => file.Catalog.Language, StringComparer.Ordinal))
+        {
+            var existing = await ReadExistingCatalogAsync(generatedFile.RepositoryPath, cancellationToken);
+            var changes = Compare(existing, generatedFile.Catalog);
+
+            totalAddedTypes += changes.AddedTypes.Count;
+            totalRemovedTypes += changes.RemovedTypes.Count;
+            totalAddedSubtypes += changes.AddedSubtypes.Count;
+            totalRemovedSubtypes += changes.RemovedSubtypes.Count;
+            totalChangedLabels += changes.ChangedLabels.Count;
+
+            report.AppendLine($"## {generatedFile.Catalog.Language}");
+            report.AppendLine();
+            report.AppendLine($"- Types: {generatedFile.Catalog.Types.Count}");
+            report.AppendLine($"- Added types: {FormatNumbers(changes.AddedTypes)}");
+            report.AppendLine($"- Removed types: {FormatNumbers(changes.RemovedTypes)}");
+            report.AppendLine($"- Added subtypes: {FormatPairs(changes.AddedSubtypes)}");
+            report.AppendLine($"- Removed subtypes: {FormatPairs(changes.RemovedSubtypes)}");
+            report.AppendLine($"- Changed names or descriptions: {FormatPairs(changes.ChangedLabels)}");
+            report.AppendLine();
+        }
+
+        var manifest = new
+        {
+            schemaVersion = 1,
+            sourceSha256 = generation.SourceSha256,
+            languages = generation.Files.Select(static file => new
+            {
+                code = file.Catalog.Language,
+                typeCount = file.Catalog.Types.Count,
+                subtypeCount = file.Catalog.Types.Sum(static type => type.Subtypes.Count)
+            }).OrderBy(static language => language.code, StringComparer.Ordinal),
+            unsupportedConfiguredLanguages = generation.UnsupportedLanguages.OrderBy(static value => value, StringComparer.Ordinal)
+        };
+
+        desiredFiles[$"{_options.OutputRoot}/manifest.json"] =
+            JsonSerializer.Serialize(manifest, JsonOptions) + Environment.NewLine;
+        desiredFiles[$"{_options.OutputRoot}/CHANGE_REPORT.md"] = report.ToString();
+
+        var changedFiles = new Dictionary<string, string>(StringComparer.Ordinal);
+        var unchangedFiles = 0;
+
+        foreach (var desiredFile in desiredFiles)
+        {
+            var localPath = ToLocalPath(desiredFile.Key);
+            var existingContent = File.Exists(localPath)
+                ? await File.ReadAllTextAsync(localPath, cancellationToken)
+                : null;
+
+            if (string.Equals(Normalize(existingContent), Normalize(desiredFile.Value), StringComparison.Ordinal))
+            {
+                unchangedFiles++;
+                continue;
+            }
+
+            changedFiles[desiredFile.Key] = desiredFile.Value;
+        }
+
+        var pullRequestSummary = $"""
+            Automated BCard catalog refresh.
+
+            - Source SHA-256: `{generation.SourceSha256}`
+            - Languages generated: {generation.Files.Count}
+            - Added types: {totalAddedTypes}
+            - Removed types: {totalRemovedTypes}
+            - Added subtypes: {totalAddedSubtypes}
+            - Removed subtypes: {totalRemovedSubtypes}
+            - Changed names or descriptions: {totalChangedLabels}
+            - Files changed: {changedFiles.Count}
+            - Files unchanged: {unchangedFiles}
+
+            Generated by `Tools/NosGM.DataUpdater`, adapted from `noszanou/BCardGistUpdater` commit `53153c990ae5b65a603d223eeda504df2a67d5fb` under GPL-3.0-only.
+            """;
+
+        return new RepositoryUpdatePlan(changedFiles, unchangedFiles, pullRequestSummary);
+    }
+
+    private async Task<BCardCatalogDocument?> ReadExistingCatalogAsync(
+        string repositoryPath,
+        CancellationToken cancellationToken)
+    {
+        var localPath = ToLocalPath(repositoryPath);
+        if (!File.Exists(localPath))
+        {
+            return null;
+        }
+
+        await using var stream = File.OpenRead(localPath);
+        return await JsonSerializer.DeserializeAsync<BCardCatalogDocument>(stream, JsonOptions, cancellationToken);
+    }
+
+    private string ToLocalPath(string repositoryPath) =>
+        Path.Combine(_options.RepositoryRoot, repositoryPath.Replace('/', Path.DirectorySeparatorChar));
+
+    private static CatalogChanges Compare(BCardCatalogDocument? oldCatalog, BCardCatalogDocument newCatalog)
+    {
+        var oldTypes = (oldCatalog?.Types ?? []).ToDictionary(static type => type.Type);
+        var newTypes = newCatalog.Types.ToDictionary(static type => type.Type);
+
+        var addedTypes = newTypes.Keys.Except(oldTypes.Keys).Order().ToArray();
+        var removedTypes = oldTypes.Keys.Except(newTypes.Keys).Order().ToArray();
+        var addedSubtypes = new List<(long Type, long Subtype)>();
+        var removedSubtypes = new List<(long Type, long Subtype)>();
+        var changedLabels = new List<(long Type, long Subtype)>();
+
+        foreach (var type in oldTypes.Keys.Intersect(newTypes.Keys).Order())
+        {
+            var oldType = oldTypes[type];
+            var newType = newTypes[type];
+            var oldSubtypes = oldType.Subtypes.ToDictionary(static subtype => subtype.Subtype);
+            var newSubtypes = newType.Subtypes.ToDictionary(static subtype => subtype.Subtype);
+
+            addedSubtypes.AddRange(newSubtypes.Keys.Except(oldSubtypes.Keys).Select(subtype => (type, subtype)));
+            removedSubtypes.AddRange(oldSubtypes.Keys.Except(newSubtypes.Keys).Select(subtype => (type, subtype)));
+
+            foreach (var subtype in oldSubtypes.Keys.Intersect(newSubtypes.Keys))
+            {
+                var oldEntry = oldSubtypes[subtype];
+                var newEntry = newSubtypes[subtype];
+                if (!string.Equals(oldEntry.Name, newEntry.Name, StringComparison.Ordinal)
+                    || !string.Equals(oldEntry.Description, newEntry.Description, StringComparison.Ordinal))
+                {
+                    changedLabels.Add((type, subtype));
+                }
+            }
+        }
+
+        return new CatalogChanges(addedTypes, removedTypes, addedSubtypes, removedSubtypes, changedLabels);
+    }
+
+    private static string FormatNumbers(IReadOnlyCollection<long> values) =>
+        values.Count == 0 ? "none" : string.Join(", ", values.Select(static value => $"`{value}`"));
+
+    private static string FormatPairs(IReadOnlyCollection<(long Type, long Subtype)> values) =>
+        values.Count == 0
+            ? "none"
+            : string.Join(", ", values.OrderBy(static value => value.Type).ThenBy(static value => value.Subtype)
+                .Select(static value => $"`{value.Type}:{value.Subtype}`"));
+
+    private static string? Normalize(string? value) =>
+        value?.Replace("\r\n", "\n", StringComparison.Ordinal);
+
+    private sealed record CatalogChanges(
+        IReadOnlyList<long> AddedTypes,
+        IReadOnlyList<long> RemovedTypes,
+        IReadOnlyList<(long Type, long Subtype)> AddedSubtypes,
+        IReadOnlyList<(long Type, long Subtype)> RemovedSubtypes,
+        IReadOnlyList<(long Type, long Subtype)> ChangedLabels);
+}
