@@ -55,6 +55,8 @@ Every adapted tool must include:
 
 `Tools/NosGM.DataUpdater` follows this policy for its adaptation of `noszanou/BCardGistUpdater@53153c990ae5b65a603d223eeda504df2a67d5fb`.
 
+`Tools/NosGM.TimeSpaceParser` follows this policy for its adaptation of `noszanou/OpennosTimeSpaceParser@36bd96a51c4b4a1e55e8827ca7eb375cc189ad9e`, while preserving the upstream credits to Elendan, SEOVA and OpenNos XML-model contributors.
+
 ## New files written entirely for NosGM
 
 For a new file containing only original NosGM work, use:
