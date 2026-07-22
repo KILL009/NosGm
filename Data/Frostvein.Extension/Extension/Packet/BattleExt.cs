@@ -1,4 +1,4 @@
-﻿using Frostvein.Configuration;
+using Frostvein.Configuration;
 using Frostvein.Core;
 using Frostvein.Data;
 using Frostvein.Domain;
@@ -59,8 +59,9 @@ namespace Frostvein.Extension.Extension.Packet
                 var dragonBuff = false;
                 var battleEntity = new BattleEntity(hitRequest.Session.Character, hitRequest.Skill);
                 var battleEntityDefense = new BattleEntity(target.Character, null);
-                var damage = DamageHelper.Instance.CalculateDamage(battleEntity, battleEntityDefense, hitRequest.Skill,
+                DamageCalculationResult damageResult = hitRequest.CalculateDamage(battleEntity, battleEntityDefense,
                     ref hitmode, ref onyxWings, ref zephyrWings, ref dragonBuff);
+                var damage = damageResult.FinalDamage;
 
                 if (target.Character.HasGodMode)
                 {
