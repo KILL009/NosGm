@@ -101,13 +101,14 @@ namespace Game.Configuration
 
             var interval = thirdData > 0 ? thirdData * 2 : castType * 2;
 
-            if (cardId != null && interval > 0)
+            if (cardId.HasValue && interval > 0)
             {
+                int disposableKey = cardId.Value;
                 IDisposable bcardDisposable = null;
                 bcardDisposable = Observable.Interval(TimeSpan.FromSeconds(interval))
                     .Subscribe(s =>
                     {
-                        if (target.BCardDisposables[cardId] != bcardDisposable)
+                        if (target.BCardDisposables[disposableKey] != bcardDisposable)
                         {
                             bcardDisposable.Dispose();
                             return;
@@ -118,7 +119,7 @@ namespace Game.Configuration
                             HealingBurningAndCastingAction();
                         }
                     });
-                target.BCardDisposables[cardId] = bcardDisposable;
+                target.BCardDisposables[disposableKey] = bcardDisposable;
             }
         }
     }
