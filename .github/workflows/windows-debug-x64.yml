@@ -1,0 +1,61 @@
+name: Windows Debug x64 validation
+
+on:
+  push:
+    branches:
+      - fix/nosgm-debug-x64-build
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-debug-x64:
+    name: MSBuild Debug / x64
+    runs-on: windows-2022
+    timeout-minutes: 60
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Visual Studio MSBuild
+        uses: microsoft/setup-msbuild@v3
+        with:
+          vs-version: '[17.0,18.0)'
+          msbuild-architecture: x64
+
+      - name: Restore NuGet packages
+        shell: pwsh
+        run: nuget restore NosGm.sln -NonInteractive -Verbosity normal
+
+      - name: Build complete solution in Debug x64
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path artifacts | Out-Null
+          $output = & msbuild NosGm.sln `
+            /t:Rebuild `
+            /m `
+            /nologo `
+            /nr:false `
+            /v:minimal `
+            /p:Configuration=Debug `
+            /p:Platform=x64 `
+            /bl:artifacts/debug-x64.binlog `
+            /fl `
+            /flp:"logfile=artifacts/debug-x64.log;verbosity=diagnostic" 2>&1
+          $exitCode = $LASTEXITCODE
+          $output | ForEach-Object { Write-Host $_ }
+          exit $exitCode
+
+      - name: Upload diagnostics
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: nosgm-debug-x64-diagnostics
+          path: artifacts/
+          if-no-files-found: warn
+          retention-days: 14
