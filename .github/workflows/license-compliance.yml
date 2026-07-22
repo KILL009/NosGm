@@ -26,6 +26,10 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v6
 
-      - name: Run compliance checks
+      - name: Run repository compliance checks
         shell: pwsh
         run: ./scripts/verify-license-compliance.ps1
+
+      - name: Verify NosGM.DataUpdater
+        shell: pwsh
+        run: ./scripts/verify-data-updater.ps1
