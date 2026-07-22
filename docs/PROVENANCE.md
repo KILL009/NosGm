@@ -4,16 +4,23 @@ This register tracks where the code in NosGM came from and which license terms a
 
 A component marked **unresolved** must be investigated before a public binary release.
 
+## Repository import history
+
+- `e4fa098aaf3b9df7ddde72ba880823a6633dfde1` created the NosGM repository with only the initial `.gitignore`.
+- `22238e8225e82b22f4bd73effb5ba308a352533c` is the first large NosGM commit in which the inherited source tree appears.
+
+The second commit identifies the snapshot imported into NosGM, but it does not identify the immutable upstream Frostvein or ChickenAPI revisions from which that snapshot was produced. Those upstream revisions remain unresolved.
+
 ## Component register
 
 | Component | Upstream location | Revision imported | License evidence | Status |
 |---|---|---|---|---|
-| OpenNos | `https://github.com/OpenNos/OpenNos` | Exact base revision to be identified from Git history | Upstream `LICENSE` contains GPL v2; reviewed file headers state GPL v2 or later | Partially verified |
-| Frostvein lineage | Exact upstream repository must be identified | Pending | Historical source identity and Git history; original license file and notices must be recovered | **Unresolved** |
-| ChickenAPI.DAL | Exact upstream repository must be identified | Pending | Included as source project; upstream license and revision must be confirmed | **Unresolved** |
-| ChickenAPI.Events | Exact upstream repository must be identified | Pending | Included as source project; upstream license and revision must be confirmed | **Unresolved** |
-| ChickenAPI.Plugins | Exact upstream repository must be identified | Pending | Included as source project; upstream license and revision must be confirmed | **Unresolved** |
-| NosGM modifications | `https://github.com/KILL009/NosGm` | Git history | Copyright held by the respective NosGM contributors | Verified by repository history |
+| OpenNos | `https://github.com/OpenNos/OpenNos` | Present in NosGM import commit `22238e8225e82b22f4bd73effb5ba308a352533c`; exact upstream base pending | Upstream `LICENSE` contains GPL v2; reviewed file headers state GPL v2 or later | Partially verified |
+| Frostvein lineage | Exact upstream repository must be identified | Present in NosGM import commit `22238e8225e82b22f4bd73effb5ba308a352533c`; exact upstream revision pending | Historical source identity and Git history; original license file and notices must be recovered | **Unresolved** |
+| ChickenAPI.DAL | Exact upstream repository must be identified | Present in NosGM import commit `22238e8225e82b22f4bd73effb5ba308a352533c`; exact upstream revision pending | Included as source project; upstream license and revision must be confirmed | **Unresolved** |
+| ChickenAPI.Events | Exact upstream repository must be identified | Present in NosGM import commit `22238e8225e82b22f4bd73effb5ba308a352533c`; exact upstream revision pending | Included as source project; upstream license and revision must be confirmed | **Unresolved** |
+| ChickenAPI.Plugins | Exact upstream repository must be identified | Present in NosGM import commit `22238e8225e82b22f4bd73effb5ba308a352533c`; exact upstream revision pending | Included as source project; upstream license and revision must be confirmed | **Unresolved** |
+| NosGM modifications | `https://github.com/KILL009/NosGm` | Git history after the source import | Copyright held by the respective NosGM contributors | Verified by repository history |
 
 ## Evidence already preserved
 
@@ -21,6 +28,7 @@ A component marked **unresolved** must be investigated before a public binary re
 - Original OpenNos source files reviewed during the audit contain notices referring to the OpenNos `AUTHORS` file and GPL version 2 or later.
 - The original OpenNos `AUTHORS.md` contributor list is preserved in the NosGM `AUTHORS.md` file.
 - The current solution includes OpenNos-derived project GUIDs, database entities and architecture, as well as ChickenAPI-named source projects.
+- File-specific `.license` sidecars restore attribution for indexed inherited files whose project header was renamed during the NosGM identity migration.
 
 ## Required investigation
 
