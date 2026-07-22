@@ -61,17 +61,29 @@ function Get-TextEncodingInfo {
 function Replace-IdentityText {
     param([string]$Text)
 
-    return $Text.Replace($legacyPascal, $newPascal)
-        .Replace($legacyLower, $newLower)
-        .Replace($legacyUpper, $newUpper)
+    $result = $Text.Replace($legacyPascal, $newPascal)
+    $result = $result.Replace($legacyLower, $newLower)
+    $result = $result.Replace($legacyUpper, $newUpper)
+    $result = [regex]::Replace(
+        $result,
+        [regex]::Escape($legacyPascal),
+        $newPascal,
+        [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+    return $result
 }
 
 function Replace-IdentityPath {
     param([string]$Path)
 
-    return $Path.Replace($legacyPascal, $newPascal)
-        .Replace($legacyLower, $newLower)
-        .Replace($legacyUpper, $newUpper)
+    $result = $Path.Replace($legacyPascal, $newPascal)
+    $result = $result.Replace($legacyLower, $newLower)
+    $result = $result.Replace($legacyUpper, $newUpper)
+    $result = [regex]::Replace(
+        $result,
+        [regex]::Escape($legacyPascal),
+        $newPascal,
+        [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+    return $result
 }
 
 $contentFilesChanged = 0
@@ -111,7 +123,10 @@ foreach ($relativePath in $trackedFiles) {
         continue
     }
 
-    $occurrences = ([regex]::Matches($text, [regex]::Escape($legacyPascal), [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)).Count
+    $occurrences = ([regex]::Matches(
+        $text,
+        [regex]::Escape($legacyPascal),
+        [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)).Count
     if ($occurrences -eq 0) {
         continue
     }
@@ -127,7 +142,7 @@ foreach ($relativePath in $trackedFiles) {
         [System.IO.File]::WriteAllBytes($absolutePath, $body)
     }
     else {
-        [byte[]]$output = New-Object byte[] ($preamble.Length + $body.Length)
+        [byte[]]$output = [byte[]]::new($preamble.Length + $body.Length)
         [System.Array]::Copy($preamble, 0, $output, 0, $preamble.Length)
         [System.Array]::Copy($body, 0, $output, $preamble.Length, $body.Length)
         [System.IO.File]::WriteAllBytes($absolutePath, $output)
@@ -166,8 +181,10 @@ foreach ($oldPath in $paths) {
     $pathsRenamed++
 }
 
-$remainingContent = @(& git grep -n -I -i -- $legacyPascal -- . 2>$null)
-$remainingPaths = @(git ls-files | Where-Object { $_ -match [regex]::Escape($legacyPascal) })
+$remainingContent = @(& git grep -n -I -i -e $legacyPascal -- . 2>$null)
+$remainingPaths = @(git ls-files | Where-Object {
+    $_ -match [regex]::Escape($legacyPascal)
+})
 
 if ($remainingContent.Count -gt 0 -or $remainingPaths.Count -gt 0) {
     Write-Host 'Remaining legacy identity references:'
@@ -192,6 +209,9 @@ The migration includes namespaces, assemblies, project names, project paths, sol
 configuration type names, executable names, build workflows, scripts, resources and documentation.
 Binary assets are not rewritten internally because changing arbitrary binary bytes would corrupt them.
 "@
-[System.IO.File]::WriteAllText((Join-Path (Get-Location) 'docs/NOSGM_IDENTITY_MIGRATION.md'), $report, [System.Text.UTF8Encoding]::new($false))
+[System.IO.File]::WriteAllText(
+    (Join-Path (Get-Location) 'docs/NOSGM_IDENTITY_MIGRATION.md'),
+    $report,
+    [System.Text.UTF8Encoding]::new($false))
 
 Write-Host "[NOSGM_IDENTITY] TextFilesChanged=$contentFilesChanged OccurrencesChanged=$contentOccurrencesChanged PathsRenamed=$pathsRenamed SkippedBinary=$skippedBinaryFiles Remaining=0"
