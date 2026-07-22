@@ -26,37 +26,33 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v6
 
-      - name: Reject legacy technical identifiers and paths
+      - name: Verify NosGM and OpenNos identity
         shell: pwsh
         run: |
-          $legacy = [string]::Concat('F', 'rostvein')
+          if (-not (Test-Path -LiteralPath 'NosGm.sln' -PathType Leaf)) {
+            Write-Error 'NosGm.sln is missing.'
+            exit 1
+          }
 
-          # Historical project names are allowed in legal notices, provenance records
-          # and source attribution. They are not allowed to return as namespaces,
-          # assembly prefixes, configuration identifiers or tracked paths.
-          $pathspecs = @(
-            '*.cs', '*.csproj', '*.sln', '*.config', '*.json', '*.xml', '*.resx',
-            '*.yml', '*.yaml', '*.ps1', '*.bat'
-          )
-
-          $identifierHits = @(
-            & git grep -n -I -i -e "$legacy\." -- @pathspecs 2>$null
+          $invalidMetadata = @(
+            & git grep -n -I -i -E 'AssemblyCompany\("NosGm Team"\)|NosGm Team Copyright' -- '*.cs' 2>$null
           )
 
           if ($LASTEXITCODE -gt 1) {
-            Write-Error 'git grep failed while checking technical identity.'
+            Write-Error 'git grep failed while checking assembly identity.'
             exit 1
           }
 
-          $pathHits = @(git ls-files | Where-Object {
-            $_.IndexOf($legacy, [System.StringComparison]::OrdinalIgnoreCase) -ge 0
-          })
-
-          if ($identifierHits.Count -gt 0 -or $pathHits.Count -gt 0) {
-            Write-Error 'Legacy technical identity detected. Technical names and paths must remain NosGm.'
-            $identifierHits | Select-Object -First 100 | ForEach-Object { Write-Host "identifier: $_" }
-            $pathHits | Select-Object -First 100 | ForEach-Object { Write-Host "path: $_" }
+          if ($invalidMetadata.Count -gt 0) {
+            Write-Error 'Outdated NosGM authorship metadata detected.'
+            $invalidMetadata | Select-Object -First 100 | ForEach-Object { Write-Host $_ }
             exit 1
           }
 
-          Write-Host 'NosGm technical identity verified. Historical legal attribution remains permitted.'
+          $readme = Get-Content -LiteralPath 'README.md' -Raw
+          if ($readme -notmatch 'NosGM is an open-source NosTale server emulator derived from OpenNos') {
+            Write-Error 'README.md must identify NosGM directly as an OpenNos-derived emulator.'
+            exit 1
+          }
+
+          Write-Host 'NosGM technical identity and OpenNos provenance verified.'
