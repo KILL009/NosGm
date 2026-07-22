@@ -11,7 +11,7 @@
         public static string DatabaseConnection = "Data Source=localhost;Initial Catalog=NosGm;Integrated Security=true";
 
         public static bool GameVersionRequired = false;
-        public static string GameVersion = "0.9.3.3254";
+        public static string GameVersion = "0.9.3.3255";
 
         public static string Language = "uk";
         public static string ServerName = "Sumeria";

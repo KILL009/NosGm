@@ -221,9 +221,6 @@
     <PackageReference Include="log4net">
       <Version>3.3.2</Version>
     </PackageReference>
-	  <PackageReference Include="MongoDB.Driver">
-    <Version>3.10.0</Version>
-  </PackageReference>
   </ItemGroup>
   <ItemGroup>
     <Content Include="favicon.ico" />
