@@ -41,14 +41,22 @@ if ($falseHistoricalClaims.Count -gt 0) {
 }
 
 $contextPath = 'Data/NosGm.DAL/NosGm.DAL.EF/Context/OpenNosContext.cs'
+$contextLicensePath = "$contextPath.license"
 if (Test-Path -LiteralPath $contextPath) {
-    $contextText = Get-Content -LiteralPath $contextPath -Raw
-    if ($contextText -notmatch 'derived from the OpenNos Emulator Project') {
-        Fail "$contextPath must preserve its OpenNos-derived attribution notice."
+    if (-not (Test-Path -LiteralPath $contextLicensePath -PathType Leaf)) {
+        Fail "$contextLicensePath must preserve file-specific attribution for the inherited context."
     }
 
-    if ($contextText -notmatch 'Modified by the NosGM project') {
-        Fail "$contextPath must state that NosGM modified the inherited file."
+    $contextLicenseText = Get-Content -LiteralPath $contextLicensePath -Raw
+    foreach ($requiredText in @(
+        'OpenNos Emulator Project',
+        'SPDX-License-Identifier: GPL-2.0-or-later',
+        '2026 NosGM contributors',
+        '2026-07-22'
+    )) {
+        if ($contextLicenseText -notmatch [regex]::Escape($requiredText)) {
+            Fail "$contextLicensePath is missing required attribution text: $requiredText"
+        }
     }
 }
 
