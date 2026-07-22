@@ -5,6 +5,7 @@ using Frostvein.Domain;
 using Frostvein.GameObject.Helpers;
 using System;
 using System.Collections.Generic;
+using System.Linq;
 
 namespace Frostvein.GameObject.Battle
 {
@@ -185,6 +186,10 @@ namespace Frostvein.GameObject.Battle
     /// </summary>
     public static class DamageHelperStructuredExtensions
     {
+        private const short AchillesUltimateSkillVNum = 1961;
+        private const byte DistanceDamagePerCellSubtype = 21;
+        private const int AchillesUltimatePercentPerSynchronizationLevel = 10;
+
         public static DamageCalculationResult CalculateDamageDetailed(this DamageHelper helper,
             BattleEntity attacker, BattleEntity defender, Skill skill, HitContext hitContext,
             ref int hitMode, ref bool onyxWings, ref bool zephyrWings, ref bool dragonBuff,
@@ -216,8 +221,23 @@ namespace Frostvein.GameObject.Battle
             }
 
             int heroAttackBonus = CalculatePercentage(legacyDamage, heroAttackPercent);
-            int totalAttackBonus = ClampDamage((long)synchronizationAttackBonus + heroAttackBonus);
-            int damageAfterAttackBonuses = ClampDamage((long)legacyDamage + totalAttackBonus);
+
+            int distancePercentPerCell = GetDistanceDamagePercentPerCell(attacker);
+            int distanceCells = GetDistanceCells(attacker, defender);
+            int distanceDamagePercent = ClampDamage((long)distancePercentPerCell * distanceCells);
+            int distanceDamageBonus = CalculatePercentage(legacyDamage, distanceDamagePercent);
+
+            int generalAttackBonus = ClampDamage(
+                (long)synchronizationAttackBonus + heroAttackBonus + distanceDamageBonus);
+            int damageAfterGeneralBonuses = ClampDamage((long)legacyDamage + generalAttackBonus);
+
+            int ultimateSynchronizationPercent = skill?.SkillVNum == AchillesUltimateSkillVNum
+                ? attackerSynchronizationLevel * AchillesUltimatePercentPerSynchronizationLevel
+                : 0;
+            int ultimateSynchronizationBonus =
+                CalculatePercentage(damageAfterGeneralBonuses, ultimateSynchronizationPercent);
+            int damageBeforeDefence =
+                ClampDamage((long)damageAfterGeneralBonuses + ultimateSynchronizationBonus);
 
             ModernSpecialistSnapshot defenderSnapshot =
                 AuthoritativeModernSpecialistStateStore.GetSnapshot(defender?.Character);
@@ -225,10 +245,11 @@ namespace Frostvein.GameObject.Battle
             int synchronizationDefencePercent = defenderSnapshot.DefencePercentPerSynchronizationLevel *
                                                 defenderSynchronizationLevel;
             int synchronizationDefenceReduction =
-                CalculatePercentage(damageAfterAttackBonuses, synchronizationDefencePercent);
-            int finalDamage = ClampDamage((long)damageAfterAttackBonuses - synchronizationDefenceReduction);
+                CalculatePercentage(damageBeforeDefence, synchronizationDefencePercent);
+            int finalDamage = ClampDamage((long)damageBeforeDefence - synchronizationDefenceReduction);
             DateTime completedAtUtc = DateTime.UtcNow;
 
+            int totalAttackBonus = ClampDamage((long)generalAttackBonus + ultimateSynchronizationBonus);
             if (totalAttackBonus != 0 || synchronizationDefenceReduction != 0)
             {
                 Logger.Info(
@@ -239,6 +260,10 @@ namespace Frostvein.GameObject.Battle
                     $"SyncAttackPercent={synchronizationAttackPercent} " +
                     $"SyncAttackBonus={synchronizationAttackBonus} " +
                     $"HeroAttackPercent={heroAttackPercent} HeroAttackBonus={heroAttackBonus} " +
+                    $"DistanceCells={distanceCells} DistancePercentPerCell={distancePercentPerCell} " +
+                    $"DistanceDamagePercent={distanceDamagePercent} DistanceDamageBonus={distanceDamageBonus} " +
+                    $"UltimateSyncPercent={ultimateSynchronizationPercent} " +
+                    $"UltimateSyncBonus={ultimateSynchronizationBonus} " +
                     $"DefenderSyncLevel={defenderSynchronizationLevel} " +
                     $"SyncDefencePercent={synchronizationDefencePercent} " +
                     $"SyncDefenceReduction={synchronizationDefenceReduction} Final={finalDamage}");
@@ -266,6 +291,15 @@ namespace Frostvein.GameObject.Battle
                         (attacker?.Character != null && defender?.Character != null),
                 Breakdown = new DamageBreakdown
                 {
+                    LegacyDamage = legacyDamage,
+                    SynchronizationAttackBonus = synchronizationAttackBonus == 0
+                        ? (int?)null
+                        : synchronizationAttackBonus,
+                    HeroAttackBonus = heroAttackBonus == 0 ? (int?)null : heroAttackBonus,
+                    DistanceDamageBonus = distanceDamageBonus == 0 ? (int?)null : distanceDamageBonus,
+                    SynchronizationUltimateBonus = ultimateSynchronizationBonus == 0
+                        ? (int?)null
+                        : ultimateSynchronizationBonus,
                     BonusDamage = totalAttackBonus == 0 ? (int?)null : totalAttackBonus,
                     DamageReduction = synchronizationDefenceReduction == 0
                         ? (int?)null
@@ -278,7 +312,7 @@ namespace Frostvein.GameObject.Battle
             if (hitContext != null)
             {
                 // RawDamage is the proven legacy result. FinalDamage includes the modern
-                // specialist synchronization modifiers applied by this adapter.
+                // specialist synchronization and Achilles-specific modifiers applied here.
                 hitContext.RawDamage = legacyDamage;
                 hitContext.FinalDamage = finalDamage;
                 hitContext.HitMode = hitMode;
@@ -287,6 +321,34 @@ namespace Frostvein.GameObject.Battle
 
             CombatDamageDiagnostics.Publish(result);
             return result;
+        }
+
+        private static int GetDistanceDamagePercentPerCell(BattleEntity attacker)
+        {
+            if (attacker?.BCards == null)
+            {
+                return 0;
+            }
+
+            return attacker.BCards
+                .Where(bcard => bcard != null &&
+                                bcard.Type == (byte)BCardType.CardType.HideBarrelSkill &&
+                                bcard.SubType == DistanceDamagePerCellSubtype)
+                .Select(bcard => Math.Abs(bcard.FirstData))
+                .DefaultIfEmpty(0)
+                .Max();
+        }
+
+        private static int GetDistanceCells(BattleEntity attacker, BattleEntity defender)
+        {
+            if (attacker == null || defender == null)
+            {
+                return 0;
+            }
+
+            return Map.GetDistance(
+                new MapCell { X = attacker.PositionX, Y = attacker.PositionY },
+                new MapCell { X = defender.PositionX, Y = defender.PositionY });
         }
 
         private static int CalculatePercentage(int value, int percent)
@@ -359,7 +421,7 @@ namespace Frostvein.GameObject.Battle
 
         public double ElapsedMilliseconds => (CompletedAtUtc - StartedAtUtc).TotalMilliseconds;
 
-        public string PipelineVersion => "legacy-adapter-v2-sync";
+        public string PipelineVersion => "legacy-adapter-v3-achilles";
     }
 
     /// <summary>
@@ -368,6 +430,16 @@ namespace Frostvein.GameObject.Battle
     /// </summary>
     public sealed class DamageBreakdown
     {
+        public int? LegacyDamage { get; set; }
+
+        public int? SynchronizationAttackBonus { get; set; }
+
+        public int? HeroAttackBonus { get; set; }
+
+        public int? DistanceDamageBonus { get; set; }
+
+        public int? SynchronizationUltimateBonus { get; set; }
+
         public int? BaseDamage { get; set; }
 
         public int? SkillDamage { get; set; }
