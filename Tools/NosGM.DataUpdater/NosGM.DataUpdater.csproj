@@ -11,9 +11,14 @@
     <Authors>noszanou, BCardGistUpdater contributors, NosGM contributors</Authors>
     <Copyright>Portions copyright noszanou and BCardGistUpdater contributors; modifications copyright 2026 NosGM contributors</Copyright>
     <PackageLicenseExpression>GPL-3.0-only</PackageLicenseExpression>
+    <EnableNosGamePackages Condition="'$(EnableNosGamePackages)' == ''">false</EnableNosGamePackages>
   </PropertyGroup>
 
-  <ItemGroup>
+  <PropertyGroup Condition="'$(EnableNosGamePackages)' == 'true'">
+    <DefineConstants>$(DefineConstants);NOSGAME_PACKAGES</DefineConstants>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(EnableNosGamePackages)' == 'true'">
     <PackageReference Include="Za.NosGame.Fetcher" Version="1.0.21" />
     <PackageReference Include="Za.NosGame.RessourceLoader" Version="1.0.21" />
   </ItemGroup>
