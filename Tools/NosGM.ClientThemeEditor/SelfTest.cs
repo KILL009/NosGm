@@ -11,7 +11,8 @@ internal static class SelfTest
         {
             Directory.CreateDirectory(root);
             var client = Path.Combine(root, "NostaleClientX.exe");
-            File.WriteAllBytes(client, BuildSyntheticPe());
+            var originalBytes = BuildSyntheticPe();
+            File.WriteAllBytes(client, originalBytes);
 
             var identity = PeInspector.Inspect(client);
             Require(identity.Architecture == "x86", "Synthetic PE architecture was not recognized.");
@@ -31,7 +32,7 @@ internal static class SelfTest
                         Id = "gm-tag",
                         Description = "Synthetic GM tag color",
                         Enabled = true,
-                        PatternHex = "DE AD BE EF 10 20 30 40",
+                        PatternHex = "DE AD ?? EF 10 20 30 40",
                         ExpectedMatches = 1,
                         ValueOffset = 4,
                         ExpectedOriginalHex = "10 20 30 40",
@@ -57,6 +58,28 @@ internal static class SelfTest
             Require(patched.AsSpan(0xC4, 4).SequenceEqual(new byte[] { 0x11, 0x22, 0x33, 0x44 }),
                 "Replacement bytes were not written at the expected offset.");
             Require(manifest.Operations.Count == 1, "Expected one patch operation.");
+            Require(File.Exists(output + ".nosgm-theme-manifest.json"), "Copy-mode manifest was not written.");
+
+            var changedContent = originalBytes.ToArray();
+            changedContent[0x100] = 0x7F;
+            ExpectInvalidData(() => ThemeEngine.BuildPlan(changedContent, identity, profile, theme),
+                "Content hash mismatch was accepted.");
+
+            var unknownTheme = theme with
+            {
+                Colors = new Dictionary<string, string>
+                {
+                    ["unknown-color"] = "#11223344"
+                }
+            };
+            ExpectInvalidData(() => ThemeEngine.BuildPlan(originalBytes, identity, profile, unknownTheme),
+                "Unknown theme color was accepted.");
+
+            ExpectInvalidData(() => ThemeEngine.BuildPlan(
+                originalBytes,
+                identity,
+                profile with { ResearchOnly = true },
+                theme), "Research-only profile was accepted.");
 
             var duplicate = BuildSyntheticPe();
             Array.Copy(duplicate, 0xC0, duplicate, 0xD0, 8);
@@ -69,7 +92,7 @@ internal static class SelfTest
                 ExpectedLength = duplicateIdentity.Length,
                 ExpectedSha256 = duplicateIdentity.Sha256
             };
-            ExpectFailure(() => ThemeEngine.BuildPlan(
+            ExpectInvalidData(() => ThemeEngine.BuildPlan(
                 duplicate,
                 duplicateIdentity,
                 duplicateProfile,
@@ -89,6 +112,15 @@ internal static class SelfTest
                 SearchOption.AllDirectories).Single();
             Require(PeInspector.Inspect(inplace).Sha256 == inplaceManifest.PatchedSha256,
                 "In-place patched hash differs from the manifest.");
+
+            var expectedPatchedBytes = File.ReadAllBytes(inplace);
+            var externallyChanged = expectedPatchedBytes.ToArray();
+            externallyChanged[0x100] ^= 0xFF;
+            File.WriteAllBytes(inplace, externallyChanged);
+            ExpectInvalidData(() => ThemeEngine.Restore(manifestPath),
+                "Restore accepted a client changed after patching.");
+
+            File.WriteAllBytes(inplace, expectedPatchedBytes);
             ThemeEngine.Restore(manifestPath);
             Require(PeInspector.Inspect(inplace).Sha256 == inplaceIdentity.Sha256,
                 "Restore did not recover the original hash.");
@@ -121,7 +153,7 @@ internal static class SelfTest
         return bytes;
     }
 
-    private static void ExpectFailure(Action action, string message)
+    private static void ExpectInvalidData(Action action, string message)
     {
         try
         {
