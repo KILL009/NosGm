@@ -196,9 +196,53 @@ namespace Frostvein.GameObject.Battle
             }
 
             DateTime startedAtUtc = DateTime.UtcNow;
-            int finalDamage = helper.CalculateDamage(attacker, defender, skill, ref hitMode,
+            int legacyDamage = helper.CalculateDamage(attacker, defender, skill, ref hitMode,
                 ref onyxWings, ref zephyrWings, ref dragonBuff, attackGreaterDistance);
+
+            ModernSpecialistSnapshot attackerSnapshot =
+                AuthoritativeModernSpecialistStateStore.GetSnapshot(attacker?.Character);
+            int attackerSynchronizationLevel = attackerSnapshot.SynchronizationLevel;
+            int synchronizationAttackPercent = attackerSnapshot.AttackPercentPerSynchronizationLevel *
+                                               attackerSynchronizationLevel;
+            int synchronizationAttackBonus = CalculatePercentage(legacyDamage, synchronizationAttackPercent);
+
+            int heroAttackPercent = 0;
+            Character heroOwner = attacker?.MapMonster?.Owner?.Character;
+            if (heroOwner != null)
+            {
+                ModernSpecialistSnapshot heroOwnerSnapshot =
+                    AuthoritativeModernSpecialistStateStore.GetSnapshot(heroOwner);
+                heroAttackPercent = heroOwnerSnapshot.HeroAttackPercent;
+            }
+
+            int heroAttackBonus = CalculatePercentage(legacyDamage, heroAttackPercent);
+            int totalAttackBonus = ClampDamage((long)synchronizationAttackBonus + heroAttackBonus);
+            int damageAfterAttackBonuses = ClampDamage((long)legacyDamage + totalAttackBonus);
+
+            ModernSpecialistSnapshot defenderSnapshot =
+                AuthoritativeModernSpecialistStateStore.GetSnapshot(defender?.Character);
+            int defenderSynchronizationLevel = defenderSnapshot.SynchronizationLevel;
+            int synchronizationDefencePercent = defenderSnapshot.DefencePercentPerSynchronizationLevel *
+                                                defenderSynchronizationLevel;
+            int synchronizationDefenceReduction =
+                CalculatePercentage(damageAfterAttackBonuses, synchronizationDefencePercent);
+            int finalDamage = ClampDamage((long)damageAfterAttackBonuses - synchronizationDefenceReduction);
             DateTime completedAtUtc = DateTime.UtcNow;
+
+            if (totalAttackBonus != 0 || synchronizationDefenceReduction != 0)
+            {
+                Logger.Info(
+                    $"[SP_SYNC_DAMAGE] CastId={FormatCastId(hitContext)} " +
+                    $"SkillVNum={(skill == null ? "-" : skill.SkillVNum.ToString())} " +
+                    $"Attacker={attacker?.MapEntityId ?? 0} Defender={defender?.MapEntityId ?? 0} " +
+                    $"Legacy={legacyDamage} SyncAttackLevel={attackerSynchronizationLevel} " +
+                    $"SyncAttackPercent={synchronizationAttackPercent} " +
+                    $"SyncAttackBonus={synchronizationAttackBonus} " +
+                    $"HeroAttackPercent={heroAttackPercent} HeroAttackBonus={heroAttackBonus} " +
+                    $"DefenderSyncLevel={defenderSynchronizationLevel} " +
+                    $"SyncDefencePercent={synchronizationDefencePercent} " +
+                    $"SyncDefenceReduction={synchronizationDefenceReduction} Final={finalDamage}");
+            }
 
             var result = new DamageCalculationResult
             {
@@ -222,6 +266,10 @@ namespace Frostvein.GameObject.Battle
                         (attacker?.Character != null && defender?.Character != null),
                 Breakdown = new DamageBreakdown
                 {
+                    BonusDamage = totalAttackBonus == 0 ? (int?)null : totalAttackBonus,
+                    DamageReduction = synchronizationDefenceReduction == 0
+                        ? (int?)null
+                        : synchronizationDefenceReduction,
                     FinalDamage = finalDamage,
                     IsComplete = false
                 }
@@ -229,9 +277,9 @@ namespace Frostvein.GameObject.Battle
 
             if (hitContext != null)
             {
-                // Until the legacy formula exposes each stage, raw and final are intentionally equal.
-                // The IsComplete flag prevents consumers from treating this as a full breakdown.
-                hitContext.RawDamage = finalDamage;
+                // RawDamage is the proven legacy result. FinalDamage includes the modern
+                // specialist synchronization modifiers applied by this adapter.
+                hitContext.RawDamage = legacyDamage;
                 hitContext.FinalDamage = finalDamage;
                 hitContext.HitMode = hitMode;
                 hitContext.DamageResult = result;
@@ -240,6 +288,29 @@ namespace Frostvein.GameObject.Battle
             CombatDamageDiagnostics.Publish(result);
             return result;
         }
+
+        private static int CalculatePercentage(int value, int percent)
+        {
+            if (value <= 0 || percent <= 0)
+            {
+                return 0;
+            }
+
+            return ClampDamage((long)value * percent / 100);
+        }
+
+        private static int ClampDamage(long value)
+        {
+            if (value <= 0)
+            {
+                return 0;
+            }
+
+            return value >= int.MaxValue ? int.MaxValue : (int)value;
+        }
+
+        private static string FormatCastId(HitContext hitContext) =>
+            hitContext?.CastContext == null ? "-" : hitContext.CastContext.CastId.ToString("N");
     }
 
     /// <summary>
@@ -288,7 +359,7 @@ namespace Frostvein.GameObject.Battle
 
         public double ElapsedMilliseconds => (CompletedAtUtc - StartedAtUtc).TotalMilliseconds;
 
-        public string PipelineVersion => "legacy-adapter-v1";
+        public string PipelineVersion => "legacy-adapter-v2-sync";
     }
 
     /// <summary>
