@@ -136,7 +136,19 @@ internal sealed class CliOptions
             : throw new ArgumentException($"Missing required option '--{name}'.");
 
     public string? Optional(string name)
-        => _values.TryGetValue(name, out var value) ? value : null;
+    {
+        if (!_values.TryGetValue(name, out var value))
+        {
+            return null;
+        }
+
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            throw new ArgumentException($"Option '--{name}' requires a value.");
+        }
+
+        return value;
+    }
 
     public bool Flag(string name)
     {
