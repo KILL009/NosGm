@@ -131,6 +131,33 @@ namespace Frostvein.GameObject.Battle
                 ref hitMode, ref onyxWings, ref zephyrWings, ref dragonBuff, attackGreaterDistance);
         }
 
+        /// <summary>
+        /// Executes one BCard with the cast and hit metadata belonging to this request.
+        /// This is the only supported entry point for BCards fired by a resolved combat impact.
+        /// </summary>
+        public void ApplyBCard(BCard bcard, BattleEntity target, BattleEntity caster,
+            BCardExecutionPhase executionPhase, short x = 0, short y = 0,
+            short partnerBuffLevel = 0, short levelUpgraded = 0)
+        {
+            if (bcard == null || target == null || caster == null)
+            {
+                return;
+            }
+
+            HitContext hitContext = LastHitContext;
+            if (hitContext == null &&
+                (executionPhase == BCardExecutionPhase.Hit ||
+                 executionPhase == BCardExecutionPhase.ReceiveHit ||
+                 executionPhase == BCardExecutionPhase.Kill))
+            {
+                hitContext = CreateHitContext(target);
+                LastHitContext = hitContext;
+            }
+
+            bcard.ApplyBCards(target, caster, x, y, partnerBuffLevel, levelUpgraded,
+                executionPhase, CastContext, hitContext);
+        }
+
         public HitContext CreateHitContext(BattleEntity target, int hitIndex = 0)
         {
             return new HitContext

@@ -1000,14 +1000,14 @@ namespace Frostvein.GameObject
                 {
                     if (s.Type != (byte)CardType.Buff)
                     {
-                        s.ApplyBCards(BattleEntity, attackerBattleEntity);
+                        hitRequest.ApplyBCard(s, BattleEntity, attackerBattleEntity, Game.Configuration.BCards.BCardExecutionPhase.Hit);
                     }
                 });
 
                 hitRequest.SkillBCards.Where(s =>
                                   !s.Type.Equals((byte)CardType.Buff) && !s.Type.Equals((byte)CardType.Capture) &&
                                   s.CardId == null).ToList()
-                          .ForEach(s => s.ApplyBCards(BattleEntity, attackerBattleEntity));
+                          .ForEach(s => hitRequest.ApplyBCard(s, BattleEntity, attackerBattleEntity, Game.Configuration.BCards.BCardExecutionPhase.Hit));
 
                 if (hitmode != 4 && hitmode != 2)
                 {
@@ -1043,14 +1043,14 @@ namespace Frostvein.GameObject
                                 switch (b.Card?.BuffType)
                                 {
                                     case BuffType.Bad:
-                                        s.ApplyBCards(attackerBattleEntity, BattleEntity);
+                                        hitRequest.ApplyBCard(s, attackerBattleEntity, BattleEntity, Game.Configuration.BCards.BCardExecutionPhase.ReceiveHit);
                                         break;
 
                                     case BuffType.Good:
                                     case BuffType.Neutral:
                                         if (s.NpcMonsterVNum == null || firstHit)
                                         {
-                                            s.ApplyBCards(BattleEntity, BattleEntity);
+                                            hitRequest.ApplyBCard(s, BattleEntity, BattleEntity, Game.Configuration.BCards.BCardExecutionPhase.ReceiveHit);
                                         }
 
                                         break;
@@ -1069,12 +1069,12 @@ namespace Frostvein.GameObject
                                 switch (b.Card?.BuffType)
                                 {
                                     case BuffType.Bad:
-                                        s.ApplyBCards(BattleEntity, attackerBattleEntity);
+                                        hitRequest.ApplyBCard(s, BattleEntity, attackerBattleEntity, Game.Configuration.BCards.BCardExecutionPhase.Hit);
                                         break;
 
                                     case BuffType.Good:
                                     case BuffType.Neutral:
-                                        s.ApplyBCards(attackerBattleEntity, attackerBattleEntity);
+                                        hitRequest.ApplyBCard(s, attackerBattleEntity, attackerBattleEntity, Game.Configuration.BCards.BCardExecutionPhase.Hit);
                                         break;
                                 }
                             }
@@ -1097,21 +1097,21 @@ namespace Frostvein.GameObject
                         switch (b.Card?.BuffType)
                         {
                             case BuffType.Bad:
-                                cardd.ApplyBCards(attackerBattleEntity, BattleEntity);
+                                hitRequest.ApplyBCard(cardd, attackerBattleEntity, BattleEntity, Game.Configuration.BCards.BCardExecutionPhase.ReceiveHit);
                                 break;
 
                             case BuffType.Good:
                             case BuffType.Neutral:
-                                cardd.ApplyBCards(BattleEntity, BattleEntity);
+                                hitRequest.ApplyBCard(cardd, BattleEntity, BattleEntity, Game.Configuration.BCards.BCardExecutionPhase.ReceiveHit);
                                 break;
                         }
                     }
 
                     hitRequest.SkillBCards.Where(s => s.Type.Equals((byte)CardType.Capture)).ToList()
-                        .ForEach(s => s.ApplyBCards(BattleEntity, attackerBattleEntity));
+                        .ForEach(s => hitRequest.ApplyBCard(s, BattleEntity, attackerBattleEntity, Game.Configuration.BCards.BCardExecutionPhase.Hit));
 
                     hitRequest.SkillBCards.Where(s => s.Type.Equals((byte)CardType.SniperAttack)).ToList()
-                        .ForEach(s => s.ApplyBCards(BattleEntity, attackerBattleEntity));
+                        .ForEach(s => hitRequest.ApplyBCard(s, BattleEntity, attackerBattleEntity, Game.Configuration.BCards.BCardExecutionPhase.Hit));
 
                     if (attackerBattleEntity?.ShellWeaponEffects != null)
                     {
