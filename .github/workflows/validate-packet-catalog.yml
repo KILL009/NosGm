@@ -1,0 +1,69 @@
+name: Validate NosGM.PacketCatalog
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: validate-packet-catalog-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Build, self-test and analyze repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up .NET 9
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 9.0.x
+
+      - name: Restore packet catalog
+        run: dotnet restore Tools/NosGM.PacketCatalog/NosGM.PacketCatalog.csproj
+
+      - name: Build packet catalog
+        run: dotnet build Tools/NosGM.PacketCatalog/NosGM.PacketCatalog.csproj --configuration Release --no-restore
+
+      - name: Run synthetic regression test
+        run: dotnet run --project Tools/NosGM.PacketCatalog/NosGM.PacketCatalog.csproj --configuration Release --no-build -- self-test
+
+      - name: Analyze the repository source tree
+        shell: bash
+        run: |
+          set +e
+          dotnet run --project Tools/NosGM.PacketCatalog/NosGM.PacketCatalog.csproj --configuration Release --no-build -- \
+            generate --root . --output-directory artifacts/packet-catalog
+          exit_code=$?
+          set -e
+          if [ "$exit_code" -gt 1 ]; then
+            exit "$exit_code"
+          fi
+          test -s artifacts/packet-catalog/packet-catalog.json
+          test -s artifacts/packet-catalog/diagnostics.json
+          test -s artifacts/packet-catalog/PACKETS.md
+
+      - name: Run attribution and safety checks
+        shell: pwsh
+        run: ./scripts/verify-packet-catalog.ps1
+
+      - name: Upload packet catalog diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nosgm-packet-catalog
+          path: artifacts/packet-catalog
+          if-no-files-found: ignore
+          retention-days: 7

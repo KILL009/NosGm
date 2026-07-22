@@ -14,6 +14,7 @@ This document records direct dependencies found during the compliance review. It
 | ChickenAPI.Plugins | Source project derived from `Price-H16/NQ-Verde@2594ec13f4fba5d893b424197878c05f801f68a2` | Treat as GPL-3.0-only; exact project GUID and inspected AssemblyInfo blob match |
 | BCardGistUpdater | `Tools/NosGM.DataUpdater` adapts parsing, resource setup and GitHub update concepts from `noszanou/BCardGistUpdater@53153c990ae5b65a603d223eeda504df2a67d5fb` | GPL-3.0-only; attribution preserved in `Tools/NosGM.DataUpdater/NOTICE.md` |
 | OpennosTimeSpaceParser | `Tools/NosGM.TimeSpaceParser` adapts packet analysis and OpenNos-compatible XML generation from `noszanou/OpennosTimeSpaceParser@36bd96a51c4b4a1e55e8827ca7eb375cc189ad9e`, with recorded lineage to Elendan and SEOVA | GPL-3.0-only; attribution preserved in `Tools/NosGM.TimeSpaceParser/NOTICE.md` |
+| SaltyEmu | `Tools/NosGM.PacketCatalog` adapts packet-documentation concepts from `BlowaXD/SaltyEmu@2588cfdc64789a7952c781faaafdf1026ac73e9d`, including packet-documentator commit `7f849171da82feee1b9fae851a45b3eef9a9cd68` | GPL-3.0-only; attribution preserved in `Tools/NosGM.PacketCatalog/NOTICE.md` |
 | NostaleWidget | `Tools/NosGM.ClientEnhancements` adapts client compatibility, pattern scanning and reversible modification concepts from `ImNotAVirus/NostaleWidget@fc1b6dda5d797efc24a053180d30702f8dad162a` | MIT; Copyright (c) 2022 ApourtArtt; license and attribution preserved in the component directory |
 | OnexExplorer | `Tools/NosGM.ResourceExplorer` adapts archive layouts and DAT/LST text decoding from `Pumba98/OnexExplorer@eaee2aa9f0e71b9960da586f425f79e628013021` | BSL-1.0; attribution and complete license text preserved in the component directory |
 | NosGM | Current modifications and new work | Copyright remains with NosGM contributors; upstream rights are preserved |
@@ -30,6 +31,7 @@ The following entries were observed in inspected project files. License expressi
 | Google.Cloud.Translation.V2 | 3.5.0 | Apache-2.0 |
 | log4net | 3.3.2 | Apache-2.0 |
 | MediatR | 12.2.0 | Apache-2.0 |
+| Microsoft.CodeAnalysis.CSharp | 5.6.0 | MIT; used only by `Tools/NosGM.PacketCatalog`; notice preserved in `Tools/NosGM.PacketCatalog/THIRD_PARTY_LICENSES.md` |
 | MongoDB.Driver | 3.10.0 | Apache-2.0 |
 | Newtonsoft.Json | 13.0.4 | MIT |
 | System.Reactive | 6.1.0 | Verify and preserve package license text in release output |
@@ -41,13 +43,15 @@ The following entries were observed in inspected project files. License expressi
 
 `Tools/NosGM.TimeSpaceParser` and `Tools/NosGM.ResourceExplorer` have no third-party NuGet dependency; they use only the .NET 9 base class library.
 
+`Tools/NosGM.PacketCatalog` uses `Microsoft.CodeAnalysis.CSharp` 5.6.0 for syntax-only source parsing. It does not compile or execute NosGM server assemblies.
+
 `Tools/NosGM.ClientEnhancements` has no package-manager dependency. Its Windows build links only platform libraries supplied by the Windows SDK. Future optional SDK integrations require a separate license review before activation.
 
 Package references do not transfer ownership to NosGM. A release must include all notices and license texts required by the resolved packages.
 
 ## Compatibility note
 
-OpenNos files reviewed during this audit permit GPL version 2 or later, while the verified ChickenAPI snapshot, the BCardGistUpdater-derived tool and the Time-Space parser adaptation are treated as GPL-3.0-only. GPLv3 obligations apply to the corresponding covered components and any combined distribution governed by those terms. MIT and Boost-1.0 are permissive when their required notices are preserved.
+OpenNos files reviewed during this audit permit GPL version 2 or later, while the verified ChickenAPI snapshot, the BCardGistUpdater-derived tool, the Time-Space parser adaptation and the SaltyEmu-inspired packet catalog are treated as GPL-3.0-only. GPLv3 obligations apply to the corresponding covered components and any combined distribution governed by those terms. MIT and Boost-1.0 are permissive when their required notices are preserved.
 
 ## Release requirements
 

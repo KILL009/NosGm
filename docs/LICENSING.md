@@ -57,9 +57,22 @@ Every adapted tool must include:
 
 `Tools/NosGM.TimeSpaceParser` follows this policy for its adaptation of `noszanou/OpennosTimeSpaceParser@36bd96a51c4b4a1e55e8827ca7eb375cc189ad9e`, while preserving the upstream credits to Elendan, SEOVA and OpenNos XML-model contributors.
 
+`Tools/NosGM.PacketCatalog` follows this policy for its GPL-3.0-only adaptation of packet-documentation concepts from `BlowaXD/SaltyEmu@2588cfdc64789a7952c781faaafdf1026ac73e9d`, including the packet-documentator introduced at `7f849171da82feee1b9fae851a45b3eef9a9cd68`, while preserving credit to Blowa and the recorded SaltyEmu contributors.
+
 `Tools/NosGM.ClientEnhancements` follows this policy for its MIT-licensed adaptation of `ImNotAVirus/NostaleWidget@fc1b6dda5d797efc24a053180d30702f8dad162a`, preserving Copyright (c) 2022 ApourtArtt and the reviewed references to DitzProject/ClientModdingAPI and ApourtArtt/DelphiClassInfo.
 
 `Tools/NosGM.ResourceExplorer` follows this policy for its BSL-1.0 adaptation of `Pumba98/OnexExplorer@eaee2aa9f0e71b9960da586f425f79e628013021`, preserving credit to Pumba98, OnexExplorer contributors and their respective upstream contributors.
+
+Packet source-analysis tooling has additional safeguards:
+
+- parse source syntax without loading or executing server assemblies;
+- never compile packet source as part of catalog generation;
+- do not connect to clients, databases, brokers or game servers;
+- do not modify packet source files;
+- produce deterministic reports without timestamps;
+- record diagnostics with stable codes and source locations;
+- keep generated catalogs and artifacts outside the server runtime;
+- use only synthetic, non-proprietary source fixtures in tests.
 
 Client resource tooling has additional safeguards:
 

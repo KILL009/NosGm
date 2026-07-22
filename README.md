@@ -36,6 +36,12 @@ It is adapted from `noszanou/OpennosTimeSpaceParser@36bd96a51c4b4a1e55e8827ca7eb
 
 The first release supports reviewed compressed archive and DAT/LST text-container layouts, but deliberately excludes repacking, patching and source-archive overwrite. It is adapted from `Pumba98/OnexExplorer@eaee2aa9f0e71b9960da586f425f79e628013021` under the Boost Software License 1.0. See its [README](Tools/NosGM.ResourceExplorer/README.md) and [notice](Tools/NosGM.ResourceExplorer/NOTICE.md).
 
+## Packet catalog tooling
+
+`Tools/NosGM.PacketCatalog` is an external .NET 9 source-analysis tool that generates deterministic JSON and Markdown documentation for packet definitions, indexed fields, typed handlers and legacy raw-header handlers without loading or executing server assemblies.
+
+It validates duplicate headers, duplicate indexes, unreachable `SerializeToEnd` fields and handler registration conflicts. The design adapts packet-documentation concepts from `BlowaXD/SaltyEmu@2588cfdc64789a7952c781faaafdf1026ac73e9d`, including the earlier packet-documentator work at `7f849171da82feee1b9fae851a45b3eef9a9cd68`, and remains GPL-3.0-only. See its [README](Tools/NosGM.PacketCatalog/README.md) and [notice](Tools/NosGM.PacketCatalog/NOTICE.md).
+
 ## Client enhancement research
 
 `Tools/NosGM.ClientEnhancements` is an optional x86 client-compatibility foundation kept outside the server solution. Its first release provides an exact client identity probe, strict profile validation, safe pattern parsing, memory-range checks and reversible patch infrastructure. It contains no injector, packet injection or active gameplay modification.
@@ -65,6 +71,7 @@ NosGM contains code from multiple verified license lineages:
 - the included ChickenAPI source is derived from the verified `Price-H16/NQ-Verde` snapshot `2594ec13f4fba5d893b424197878c05f801f68a2` and is conservatively treated as GPL-3.0-only;
 - `Tools/NosGM.DataUpdater` is adapted from `noszanou/BCardGistUpdater@53153c990ae5b65a603d223eeda504df2a67d5fb` and is GPL-3.0-only;
 - `Tools/NosGM.TimeSpaceParser` is adapted from `noszanou/OpennosTimeSpaceParser@36bd96a51c4b4a1e55e8827ca7eb375cc189ad9e` and is GPL-3.0-only;
+- `Tools/NosGM.PacketCatalog` adapts packet-documentation concepts from `BlowaXD/SaltyEmu@2588cfdc64789a7952c781faaafdf1026ac73e9d` and is GPL-3.0-only;
 - `Tools/NosGM.ClientEnhancements` preserves the MIT License from `ImNotAVirus/NostaleWidget@fc1b6dda5d797efc24a053180d30702f8dad162a`;
 - `Tools/NosGM.ResourceExplorer` preserves the Boost Software License 1.0 from `Pumba98/OnexExplorer@eaee2aa9f0e71b9960da586f425f79e628013021`;
 - the complete GNU GPL version 3 text is bundled under [LICENSES/GPL-3.0-only](LICENSES/GPL-3.0-only/README.md).
@@ -75,7 +82,7 @@ The exact OpenNos base commit is still being narrowed through source comparison,
 
 If GPL-3.0-only components remain linked into or are distributed with a combined application, the applicable distribution must satisfy GPL version 3. MIT and Boost-covered portions must retain their required notices.
 
-When binaries are distributed, recipients must also receive the complete corresponding source code or equivalent GPL-compliant access to the exact source used for that build. Do not impose additional restrictions that prevent recipients from copying, modifying or redistributing GPL-covered code.
+When binaries are distributed, recipients must also receive the complete corresponding source code or equivalent GPL-compliant access to the exact source used to produce it. Do not impose additional restrictions that prevent recipients from copying, modifying or redistributing GPL-covered code.
 
 ## Third-party dependencies
 
