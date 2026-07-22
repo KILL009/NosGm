@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <AssemblyName>NosGM.ResourceExplorer</AssemblyName>
+    <RootNamespace>NosGM.ResourceExplorer</RootNamespace>
+    <Version>0.1.0</Version>
+    <Authors>Pumba98; OnexExplorer contributors; NosGM contributors</Authors>
+    <Description>Read-only NosTale .NOS archive inspector and safe extractor for NosGM.</Description>
+    <PackageLicenseExpression>BSL-1.0</PackageLicenseExpression>
+    <RepositoryUrl>https://github.com/KILL009/NosGm</RepositoryUrl>
+  </PropertyGroup>
+</Project>

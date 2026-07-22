@@ -11,6 +11,7 @@ This register tracks where the code in NosGM came from and which license terms a
 - `53153c990ae5b65a603d223eeda504df2a67d5fb` identifies the immutable `noszanou/BCardGistUpdater` snapshot adapted into `Tools/NosGM.DataUpdater`.
 - `36bd96a51c4b4a1e55e8827ca7eb375cc189ad9e` identifies the immutable `noszanou/OpennosTimeSpaceParser` snapshot adapted into `Tools/NosGM.TimeSpaceParser`.
 - `fc1b6dda5d797efc24a053180d30702f8dad162a` identifies the immutable `ImNotAVirus/NostaleWidget` snapshot used for `Tools/NosGM.ClientEnhancements` provenance and adaptation.
+- `eaee2aa9f0e71b9960da586f425f79e628013021` identifies the immutable `Pumba98/OnexExplorer` snapshot adapted into `Tools/NosGM.ResourceExplorer`.
 
 NosGM is an OpenNos-derived emulator. The exact OpenNos base revision can continue to be narrowed through file and commit comparison, but no separate emulator lineage is claimed.
 
@@ -25,6 +26,7 @@ NosGM is an OpenNos-derived emulator. The exact OpenNos base revision can contin
 | BCardGistUpdater adaptation | `https://github.com/noszanou/BCardGistUpdater` | Snapshot `53153c990ae5b65a603d223eeda504df2a67d5fb`, adapted under `Tools/NosGM.DataUpdater` | Upstream repository includes GNU GPL version 3; adapted files carry GPL-3.0-only SPDX headers and `Tools/NosGM.DataUpdater/NOTICE.md` | Verified |
 | OpennosTimeSpaceParser adaptation | `https://github.com/noszanou/OpennosTimeSpaceParser` | Snapshot `36bd96a51c4b4a1e55e8827ca7eb375cc189ad9e`, adapted under `Tools/NosGM.TimeSpaceParser`; the upstream README records earlier work by Elendan and SEOVA and OpenNos XML-model lineage | Upstream repository includes GNU GPL version 3; adapted files carry GPL-3.0-only SPDX headers and `Tools/NosGM.TimeSpaceParser/NOTICE.md` | Verified; exact intermediate Elendan and SEOVA revisions were not documented and are not guessed |
 | NostaleWidget adaptation | `https://github.com/ImNotAVirus/NostaleWidget` | Snapshot `fc1b6dda5d797efc24a053180d30702f8dad162a`, adapted under `Tools/NosGM.ClientEnhancements`; reviewed source references DitzProject/ClientModdingAPI and ApourtArtt/DelphiClassInfo without immutable revisions | Upstream `LICENSE` is MIT, Copyright (c) 2022 ApourtArtt; adapted source carries MIT SPDX headers and a local notice | Verified; earlier referenced revisions are not guessed |
+| OnexExplorer adaptation | `https://github.com/Pumba98/OnexExplorer` | Snapshot `eaee2aa9f0e71b9960da586f425f79e628013021`, adapted under `Tools/NosGM.ResourceExplorer`; reviewed UI identifies the repository as a fork maintained by Pumba98 without naming an immutable earlier revision | Upstream `LICENSE` contains Boost Software License 1.0; adapted source carries BSL-1.0 SPDX headers and a local notice | Verified; earlier fork revision is not guessed |
 | NosGM modifications | `https://github.com/KILL009/NosGm` | Git history after the source import | Copyright held by the respective NosGM contributors | Verified by repository history |
 
 ## License structure
@@ -37,9 +39,10 @@ NosGM contains these verified license lineages:
 - `Tools/NosGM.DataUpdater` is adapted from GPLv3-licensed BCardGistUpdater and is marked GPL-3.0-only;
 - `Tools/NosGM.TimeSpaceParser` is adapted from GPLv3-licensed Time-Space parser components and is marked GPL-3.0-only;
 - `Tools/NosGM.ClientEnhancements` preserves the MIT License from the reviewed NostaleWidget source;
+- `Tools/NosGM.ResourceExplorer` preserves the Boost Software License 1.0 from the reviewed OnexExplorer source;
 - a complete GPL version 3 license copy is bundled under `LICENSES/GPL-3.0-only/`.
 
-GPLv3 obligations apply to the GPL-3.0-only components and to combined distributions when those license terms govern the combination. The MIT copyright and permission notice must accompany copies or substantial portions of the client-enhancement component.
+GPLv3 obligations apply to the GPL-3.0-only components and to combined distributions when those license terms govern the combination. MIT and Boost notices must accompany their respective covered components as required.
 
 ## Evidence already preserved
 
@@ -52,6 +55,7 @@ GPLv3 obligations apply to the GPL-3.0-only components and to combined distribut
 - `Tools/NosGM.DataUpdater/NOTICE.md` records the BCardGistUpdater source, immutable commit, original author and NosGM modifications.
 - `Tools/NosGM.TimeSpaceParser/NOTICE.md` records the Time-Space parser source, immutable commit, earlier credited contributors, XML-model lineage and NosGM modifications.
 - `Tools/NosGM.ClientEnhancements/NOTICE.md` records the NostaleWidget source, immutable commit, ApourtArtt copyright, MIT license, referenced earlier projects and NosGM safety modifications.
+- `Tools/NosGM.ResourceExplorer/NOTICE.md` records the OnexExplorer source, immutable commit, Boost license, fork uncertainty and NosGM safety modifications.
 - File-specific `.license` sidecars restore attribution for inherited OpenNos files whose project header was renamed during the NosGM identity migration.
 
 ## Continuing provenance work
