@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <Deterministic>true</Deterministic>
+    <ContinuousIntegrationBuild Condition="'$(CI)' == 'true'">true</ContinuousIntegrationBuild>
+    <AssemblyName>NosGM.TimeSpaceParser</AssemblyName>
+    <RootNamespace>NosGM.TimeSpaceParser</RootNamespace>
+    <PackageId>NosGM.TimeSpaceParser</PackageId>
+    <Description>Packet capture to NosGM/OpenNos Time-Space XML converter and validator.</Description>
+    <Authors>Elendan; SEOVA; noszanou; OpenNos contributors; NosGM contributors</Authors>
+    <Company>NosGM contributors</Company>
+    <Copyright>Copyright remains with the respective upstream and NosGM contributors.</Copyright>
+    <PackageLicenseExpression>GPL-3.0-only</PackageLicenseExpression>
+    <RepositoryUrl>https://github.com/KILL009/NosGm</RepositoryUrl>
+  </PropertyGroup>
+</Project>

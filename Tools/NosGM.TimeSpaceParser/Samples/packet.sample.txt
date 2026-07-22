@@ -1,0 +1,14 @@
+# Synthetic non-proprietary capture used for documentation and regression testing.
+rbr 1 0 0 1.99 0 -1.0 -1.0 -1.0 -1.0 -1.0 -1.0 -1.0 -1.0 -1.0 -1.0 0. 0 0 Training Time-Space
+Synthetic validation capture
+at 100 1 10 10 0 0 0 0
+rsfn 0 0
+in 3 TestMonster 100 5000 12 12 0 100 0 0
+msg 0 Welcome_to_the_first_room
+gp 15 1 101 1 0 0
+mapclean
+at 101 2 15 28 0 0 0 0
+rsfn 1 0
+in 2 TestNpc 200 6000 14 20 2 100 0 0
+gp 15 28 100 1 0 0
+gp 20 20 -1 5 1 0

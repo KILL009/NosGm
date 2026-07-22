@@ -33,3 +33,7 @@ jobs:
       - name: Verify NosGM.DataUpdater
         shell: pwsh
         run: ./scripts/verify-data-updater.ps1
+
+      - name: Verify NosGM.TimeSpaceParser
+        shell: pwsh
+        run: ./scripts/verify-timespace-parser.ps1

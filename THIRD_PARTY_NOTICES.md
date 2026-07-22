@@ -13,9 +13,10 @@ This document records direct dependencies found during the compliance review. It
 | ChickenAPI.Events | Source project derived from `Price-H16/NQ-Verde@2594ec13f4fba5d893b424197878c05f801f68a2` | Treat as GPL-3.0-only; project GUID and metadata match |
 | ChickenAPI.Plugins | Source project derived from `Price-H16/NQ-Verde@2594ec13f4fba5d893b424197878c05f801f68a2` | Treat as GPL-3.0-only; exact project GUID and inspected AssemblyInfo blob match |
 | BCardGistUpdater | `Tools/NosGM.DataUpdater` adapts parsing, resource setup and GitHub update concepts from `noszanou/BCardGistUpdater@53153c990ae5b65a603d223eeda504df2a67d5fb` | GPL-3.0-only; attribution preserved in `Tools/NosGM.DataUpdater/NOTICE.md` |
+| OpennosTimeSpaceParser | `Tools/NosGM.TimeSpaceParser` adapts packet analysis and OpenNos-compatible XML generation from `noszanou/OpennosTimeSpaceParser@36bd96a51c4b4a1e55e8827ca7eb375cc189ad9e`, with recorded lineage to Elendan and SEOVA | GPL-3.0-only; attribution preserved in `Tools/NosGM.TimeSpaceParser/NOTICE.md` |
 | NosGM | Current modifications and new work | Copyright remains with NosGM contributors; upstream rights are preserved |
 
-The ChickenAPI evidence and matching `KILL009/NosGuana` snapshot are described in `Data/NosGm.ChickenAPI/NOTICE.md` and `docs/PROVENANCE.md`. The BCardGistUpdater adaptation is described in `Tools/NosGM.DataUpdater/NOTICE.md`. A complete GNU GPL version 3 license copy is bundled under `LICENSES/GPL-3.0-only/`.
+The ChickenAPI evidence and matching `KILL009/NosGuana` snapshot are described in `Data/NosGm.ChickenAPI/NOTICE.md` and `docs/PROVENANCE.md`. The BCardGistUpdater adaptation is described in `Tools/NosGM.DataUpdater/NOTICE.md`. The Time-Space parser adaptation is described in `Tools/NosGM.TimeSpaceParser/NOTICE.md`. A complete GNU GPL version 3 license copy is bundled under `LICENSES/GPL-3.0-only/`.
 
 ## Direct NuGet dependencies observed
 
@@ -36,11 +37,13 @@ The following entries were observed in inspected project files. License expressi
 | Za.NosGame.Fetcher | 1.0.21 | Used only by `Tools/NosGM.DataUpdater`; verify package metadata and preserve required notices before redistributing the tool |
 | Za.NosGame.RessourceLoader | 1.0.21 | Used only by `Tools/NosGM.DataUpdater`; verify package metadata and preserve required notices before redistributing the tool |
 
+`Tools/NosGM.TimeSpaceParser` has no third-party NuGet dependency; it uses only the .NET 9 base class library.
+
 Package references do not transfer ownership to NosGM. A release must include all notices and license texts required by the resolved packages.
 
 ## Compatibility note
 
-OpenNos files reviewed during this audit permit GPL version 2 or later, while the verified ChickenAPI snapshot and the BCardGistUpdater-derived tool are treated as GPL-3.0-only. GPLv3 obligations apply to the corresponding covered components and any combined distribution governed by those terms.
+OpenNos files reviewed during this audit permit GPL version 2 or later, while the verified ChickenAPI snapshot, the BCardGistUpdater-derived tool and the Time-Space parser adaptation are treated as GPL-3.0-only. GPLv3 obligations apply to the corresponding covered components and any combined distribution governed by those terms.
 
 ## Release requirements
 

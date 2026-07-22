@@ -9,6 +9,7 @@ NosGM is a modified work derived from the OpenNos project. The current repositor
 - code originally published by the OpenNos project and its contributors;
 - ChickenAPI components traced to the NQ-Source snapshot `Price-H16/NQ-Verde@2594ec13f4fba5d893b424197878c05f801f68a2`;
 - the external `Tools/NosGM.DataUpdater` utility adapted from `noszanou/BCardGistUpdater@53153c990ae5b65a603d223eeda504df2a67d5fb`;
+- the external `Tools/NosGM.TimeSpaceParser` utility adapted from `noszanou/OpennosTimeSpaceParser@36bd96a51c4b4a1e55e8827ca7eb375cc189ad9e`, with earlier credit to Elendan, SEOVA and OpenNos XML-model contributors;
 - new modifications made by NosGM contributors.
 
 The NosGM name identifies the current project and its modifications. It does not replace or erase the authorship of OpenNos or other verified upstream contributors.
@@ -22,6 +23,7 @@ Examples of appropriate attribution include:
 - `Copyright (C) 2016-2017 OpenNos contributors`
 - `Additional portions copyright their respective NQ-Source and ChickenAPI contributors`
 - `NosGM.DataUpdater portions copyright noszanou and BCardGistUpdater contributors`
+- `NosGM.TimeSpaceParser portions copyright Elendan, SEOVA, noszanou, OpenNos contributors and their respective contributors`
 - `Modifications Copyright (C) 2026 NosGM contributors`
 
 Dates must describe when the relevant work was authored. NosGM must not claim authorship of upstream work merely because identifiers were renamed or modified later.
@@ -34,6 +36,7 @@ The repository preserves more than one relevant GPL text and license lineage:
 - reviewed original OpenNos file notices permit GPL version 2 or, at the recipient's option, any later version;
 - `Data/NosGm.ChickenAPI` is traced to an upstream snapshot carrying GNU GPL version 3 and is conservatively treated as GPL-3.0-only;
 - `Tools/NosGM.DataUpdater` is adapted from GPLv3-licensed BCardGistUpdater and is GPL-3.0-only;
+- `Tools/NosGM.TimeSpaceParser` is adapted from GPLv3-licensed Time-Space parser components and is GPL-3.0-only;
 - `LICENSES/GPL-3.0-only/` contains a complete, checksum-protected copy of GNU GPL version 3.
 
 GPLv3 obligations apply to the GPL-3.0-only components and to combined distributions when those terms govern the combination.

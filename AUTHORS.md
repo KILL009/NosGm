@@ -34,6 +34,8 @@ NosGM includes ChickenAPI-related source components traced to the NQ-Source snap
 
 `Tools/NosGM.DataUpdater` is adapted from `noszanou/BCardGistUpdater` commit `53153c990ae5b65a603d223eeda504df2a67d5fb`. Credit belongs to `noszanou` and every contributor recorded in that upstream repository's Git history. The detailed attribution and modification list are preserved in `Tools/NosGM.DataUpdater/NOTICE.md`.
 
+`Tools/NosGM.TimeSpaceParser` is adapted from `noszanou/OpennosTimeSpaceParser` commit `36bd96a51c4b4a1e55e8827ca7eb375cc189ad9e`. Its recorded lineage also credits Elendan, the contributor known as SEOVA and OpenNos XML-model contributors. Detailed provenance and NosGM modifications are preserved in `Tools/NosGM.TimeSpaceParser/NOTICE.md`.
+
 The Git history and verified upstream repository history remain the authoritative attribution records. See `NOTICE.md` and `docs/PROVENANCE.md`.
 
 ## NosGM contributors
