@@ -34,10 +34,13 @@ jobs:
           # Historical project names are allowed in legal notices, provenance records
           # and source attribution. They are not allowed to return as namespaces,
           # assembly prefixes, configuration identifiers or tracked paths.
+          $pathspecs = @(
+            '*.cs', '*.csproj', '*.sln', '*.config', '*.json', '*.xml', '*.resx',
+            '*.yml', '*.yaml', '*.ps1', '*.bat'
+          )
+
           $identifierHits = @(
-            & git grep -n -I -i -e "$legacy\." -- \
-              '*.cs' '*.csproj' '*.sln' '*.config' '*.json' '*.xml' '*.resx' \
-              '*.yml' '*.yaml' '*.ps1' '*.bat' 2>$null
+            & git grep -n -I -i -e "$legacy\." -- @pathspecs 2>$null
           )
 
           if ($LASTEXITCODE -gt 1) {
