@@ -7,11 +7,16 @@
  */
 
 using System.Text;
-using Microsoft.Extensions.DependencyInjection;
 using NosGM.DataUpdater.Diff;
 using NosGM.DataUpdater.Extraction;
 using NosGM.DataUpdater.Publishing;
+using NosGM.DataUpdater.Translation;
+
+#if NOSGAME_PACKAGES
+using Microsoft.Extensions.DependencyInjection;
 using Za.NosGame.Fetcher;
+using Za.NosGame.Shared;
+#endif
 
 namespace NosGM.DataUpdater;
 
@@ -25,49 +30,74 @@ public static class Program
         {
             var options = UpdaterOptions.FromEnvironment(args);
             options.Validate();
-
-            await using var services = new ServiceCollection()
-                .AddNosGMDataUpdater(options)
-                .BuildServiceProvider();
-
-            if (options.DownloadClientResources)
-            {
-                Console.WriteLine("Downloading and extracting current NosTale resources...");
-                await services.GetRequiredService<FileFetcher>().ExecuteAsync();
-            }
-            else
-            {
-                Console.WriteLine("Using local resources from the configured working directory.");
-            }
-
-            var generation = await services.GetRequiredService<BCardCatalogExtractor>().ExtractAsync();
-            var plan = await services.GetRequiredService<CatalogDiffPlanner>().BuildAsync(generation);
-
-            Console.WriteLine($"Generated {generation.Files.Count} language catalogs from {generation.SourceFile}.");
-            Console.WriteLine($"Source SHA-256: {generation.SourceSha256}");
-            Console.WriteLine($"Changed files: {plan.ChangedFiles.Count}; unchanged files: {plan.UnchangedFiles}.");
-
-            if (generation.UnsupportedLanguages.Count > 0)
-            {
-                Console.WriteLine(
-                    $"Unsupported configured language codes were skipped: {string.Join(", ", generation.UnsupportedLanguages)}");
-            }
-
-            if (!options.Publish)
-            {
-                await WritePreviewAsync(options, plan);
-            }
-
-            await services.GetRequiredService<GitHubPullRequestPublisher>()
-                .PublishAsync(plan, generation.SourceSha256);
-
-            return 0;
+            return await RunAsync(options);
         }
         catch (Exception exception)
         {
             Console.Error.WriteLine(exception);
             return 1;
         }
+    }
+
+    private static async Task<int> RunAsync(UpdaterOptions options)
+    {
+        if (options.DownloadClientResources)
+        {
+#if NOSGAME_PACKAGES
+            Console.WriteLine("Downloading and extracting current NosTale resources with the optional NosGame package adapter...");
+            await using var services = new ServiceCollection()
+                .AddNosGamePackageAdapter(options)
+                .BuildServiceProvider();
+
+            await services.GetRequiredService<FileFetcher>().ExecuteAsync();
+            var folders = services.GetRequiredService<DatFileFolder>();
+            var downloadedOptions = options with
+            {
+                BCardFile = Path.Combine(folders.DatFolder, "BCard.dat")
+            };
+
+            return await ExecutePipelineAsync(
+                downloadedOptions,
+                services.GetRequiredService<IBCardTranslationProvider>());
+#else
+            throw new InvalidOperationException(
+                "Resource downloading is optional and was not compiled into this build. "
+                + "Build with -p:EnableNosGamePackages=true and provide a package-read token, "
+                + "or run local mode with BCard.dat and translation maps.");
+#endif
+        }
+
+        Console.WriteLine($"Using local BCard data: {options.BCardFile}");
+        Console.WriteLine($"Using local translation maps: {options.TranslationDirectory}");
+        return await ExecutePipelineAsync(
+            options,
+            new JsonBCardTranslationProvider(options.TranslationDirectory));
+    }
+
+    private static async Task<int> ExecutePipelineAsync(
+        UpdaterOptions options,
+        IBCardTranslationProvider translationProvider)
+    {
+        var generation = await new BCardCatalogExtractor(options, translationProvider).ExtractAsync();
+        var plan = await new CatalogDiffPlanner(options).BuildAsync(generation);
+
+        Console.WriteLine($"Generated {generation.Files.Count} language catalogs from {generation.SourceFile}.");
+        Console.WriteLine($"Source SHA-256: {generation.SourceSha256}");
+        Console.WriteLine($"Changed files: {plan.ChangedFiles.Count}; unchanged files: {plan.UnchangedFiles}.");
+
+        if (generation.UnsupportedLanguages.Count > 0)
+        {
+            Console.WriteLine(
+                $"Languages without an available translation source were skipped: {string.Join(", ", generation.UnsupportedLanguages)}");
+        }
+
+        if (!options.Publish)
+        {
+            await WritePreviewAsync(options, plan);
+        }
+
+        await new GitHubPullRequestPublisher(options).PublishAsync(plan, generation.SourceSha256);
+        return 0;
     }
 
     private static async Task WritePreviewAsync(
