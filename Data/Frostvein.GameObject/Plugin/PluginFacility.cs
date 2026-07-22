@@ -122,7 +122,7 @@ namespace Game.Configuration
             {
                 // Calculation-only BCards are data consumed by DamageHelper/stat loaders. They are not
                 // missing executable handlers and must not flood the logs as false positives.
-                if (BCardExecutionClassifier.IsPassiveCalculationOnly(cardType))
+                if (BCardExecutionClassifier.IsPassiveCalculationOnly(cardType, evnt.BCard.SubType))
                 {
                     return;
                 }
