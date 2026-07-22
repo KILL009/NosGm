@@ -100,6 +100,27 @@ namespace Game.Configuration.BCards
     /// </summary>
     public static class BCardExecutionClassifier
     {
+        public static BCardExecutionKind GetKind(BCardType.CardType type, byte subtype)
+        {
+            if (type == BCardType.CardType.StealBuff)
+            {
+                switch (subtype)
+                {
+                    case (byte)AdditionalTypes.StealBuff.IgnoreDefenceChance:
+                    case (byte)AdditionalTypes.StealBuff.IgnoreDefenceChanceNegated:
+                    case (byte)AdditionalTypes.StealBuff.ReduceCriticalReceivedChance:
+                    case (byte)AdditionalTypes.StealBuff.ReduceCriticalReceivedChanceNegated:
+                    case (byte)AdditionalTypes.StealBuff.ChanceSummonOnyxDragon:
+                    case (byte)AdditionalTypes.StealBuff.ChanceSummonOnyxDragonNegated:
+                        return BCardExecutionKind.PassiveCalculation;
+                    default:
+                        return BCardExecutionKind.Executable;
+                }
+            }
+
+            return GetKind(type);
+        }
+
         public static BCardExecutionKind GetKind(BCardType.CardType type)
         {
             switch (type)
@@ -108,6 +129,7 @@ namespace Game.Configuration.BCards
                 case BCardType.CardType.RecoveryAndDamagePercent:
                     return BCardExecutionKind.Hybrid;
 
+                case BCardType.CardType.SpecialAttack:
                 case BCardType.CardType.SpecialDefence:
                 case BCardType.CardType.Target:
                 case BCardType.CardType.Critical:
@@ -145,6 +167,9 @@ namespace Game.Configuration.BCards
                     return BCardExecutionKind.Executable;
             }
         }
+
+        public static bool IsPassiveCalculationOnly(BCardType.CardType type, byte subtype) =>
+            GetKind(type, subtype) == BCardExecutionKind.PassiveCalculation;
 
         public static bool IsPassiveCalculationOnly(BCardType.CardType type) =>
             GetKind(type) == BCardExecutionKind.PassiveCalculation;
