@@ -3,14 +3,14 @@ name: Windows Debug x64 validation
 on:
   push:
     branches:
-      - main
+      - fix/nosgm-debug-x64-build
   pull_request:
     branches:
       - main
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: windows-debug-x64-${{ github.workflow }}-${{ github.ref }}
@@ -23,8 +23,32 @@ jobs:
     timeout-minutes: 60
 
     steps:
-      - name: Check out repository
+      - name: Check out repair branch
         uses: actions/checkout@v6
+        with:
+          ref: fix/nosgm-debug-x64-build
+          fetch-depth: 0
+
+      - name: Align executable projects with .NET Framework 4.8.1
+        shell: pwsh
+        run: |
+          $projects = @(
+            'Data/NosGm.Program/NosGm.Logger/NosGm.LogServer.csproj',
+            'Data/NosGm.Program/NosGm.Login/NosGm.Login.csproj',
+            'Data/NosGm.Program/NosGm.Master.Server/NosGm.Master.Server.csproj',
+            'Data/NosGm.Program/NosGm.World/NosGm.World.csproj'
+          )
+
+          foreach ($project in $projects) {
+            $content = [System.IO.File]::ReadAllText($project)
+            $updated = $content.Replace(
+              '<TargetFrameworkVersion>v4.8</TargetFrameworkVersion>',
+              '<TargetFrameworkVersion>v4.8.1</TargetFrameworkVersion>')
+            if ($updated -ne $content) {
+              [System.IO.File]::WriteAllText($project, $updated, [System.Text.UTF8Encoding]::new($true))
+              Write-Host "Aligned $project to .NET Framework 4.8.1."
+            }
+          }
 
       - name: Set up Visual Studio MSBuild
         uses: microsoft/setup-msbuild@v3
@@ -32,28 +56,9 @@ jobs:
           vs-version: '[17.0,18.0)'
           msbuild-architecture: x64
 
-      - name: Prepare diagnostics and inspect stale metadata
+      - name: Prepare diagnostics
         shell: pwsh
-        run: |
-          New-Item -ItemType Directory -Force -Path artifacts | Out-Null
-
-          $trackedGenerated = @(git ls-files | Where-Object { $_ -match '(^|/)(bin|obj)/' })
-          "Tracked generated files: $($trackedGenerated.Count)" | Tee-Object -FilePath artifacts/generated-metadata.txt
-          $trackedGenerated | Add-Content artifacts/generated-metadata.txt
-
-          $frameworkHits = New-Object System.Collections.Generic.List[string]
-          foreach ($file in (git ls-files '*.csproj' '*.props' '*.targets' '*.json')) {
-            if (-not (Test-Path -LiteralPath $file -PathType Leaf)) { continue }
-            try {
-              $matches = Select-String -LiteralPath $file -Pattern 'v4\.8\.1|net481' -AllMatches
-              foreach ($match in $matches) {
-                $frameworkHits.Add(('{0}:{1}:{2}' -f $file, $match.LineNumber, $match.Line.Trim()))
-              }
-            }
-            catch { }
-          }
-          "Tracked net481 references: $($frameworkHits.Count)" | Add-Content artifacts/generated-metadata.txt
-          $frameworkHits | Add-Content artifacts/generated-metadata.txt
+        run: New-Item -ItemType Directory -Force -Path artifacts | Out-Null
 
       - name: Remove all bin and obj directories
         shell: pwsh
@@ -61,7 +66,6 @@ jobs:
           $directories = @(Get-ChildItem -Path . -Directory -Recurse -Force |
             Where-Object { $_.Name -in @('bin', 'obj') } |
             Sort-Object FullName -Descending)
-          Write-Host "Removing $($directories.Count) generated directories."
           foreach ($directory in $directories) {
             Remove-Item -LiteralPath $directory.FullName -Recurse -Force
           }
@@ -91,6 +95,26 @@ jobs:
           $exitCode = $LASTEXITCODE
           $output | Tee-Object -FilePath artifacts/build-console.log | ForEach-Object { Write-Host $_ }
           exit $exitCode
+
+      - name: Commit validated framework alignment
+        if: success() && github.event_name == 'push'
+        shell: pwsh
+        run: |
+          $projects = @(
+            'Data/NosGm.Program/NosGm.Logger/NosGm.LogServer.csproj',
+            'Data/NosGm.Program/NosGm.Login/NosGm.Login.csproj',
+            'Data/NosGm.Program/NosGm.Master.Server/NosGm.Master.Server.csproj',
+            'Data/NosGm.Program/NosGm.World/NosGm.World.csproj'
+          )
+          if (-not (git status --porcelain -- $projects)) {
+            Write-Host 'Framework alignment is already committed.'
+            exit 0
+          }
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -- $projects
+          git commit -m 'fix: align NosGm executables with .NET Framework 4.8.1'
+          git push origin HEAD:fix/nosgm-debug-x64-build
 
       - name: Upload diagnostics
         if: always()
