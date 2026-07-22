@@ -1,0 +1,46 @@
+name: net481 graph diagnostic
+
+on:
+  push:
+    branches:
+      - fix/unify-net481-project-graph
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  restore:
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: microsoft/setup-msbuild@v3
+        with:
+          vs-version: '[17.0,18.0)'
+          msbuild-architecture: x64
+
+      - name: Restore quietly and capture output
+        id: restore
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          $output = & nuget restore NosGm.sln -NonInteractive -Verbosity quiet 2>&1
+          $exitCode = $LASTEXITCODE
+          $output | Out-File restore.log -Encoding utf8
+          "exit_code=$exitCode" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          exit 0
+
+      - name: Print concise restore errors
+        shell: pwsh
+        run: |
+          Write-Host '===== NET481 RESTORE ERRORS ====='
+          $matches = Select-String -Path restore.log -Pattern 'NU\d{4}|error |not compatible|is not compatible|does not support|no es compatible' -CaseSensitive:$false
+          if ($matches) {
+            $matches | ForEach-Object { Write-Host $_.Line }
+          }
+          else {
+            Write-Host 'No matching restore errors were found.'
+          }
+          Write-Host "RESTORE_EXIT_CODE=${{ steps.restore.outputs.exit_code }}"
+          if ('${{ steps.restore.outputs.exit_code }}' -ne '0') { exit 1 }
