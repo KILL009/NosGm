@@ -1,4 +1,4 @@
-﻿using Frostvein.Extension.Extension.Packet;
+using Frostvein.Extension.Extension.Packet;
 using Frostvein.Packets.Packets.ClientPackets;
 using Frostvein.Core;
 using Frostvein.Domain;
@@ -31,7 +31,6 @@ namespace Frostvein.Handler.PacketHandler.Battle
         #endregion
 
         #region Methods
-
 
         public void UseSkill(UseSkillPacket useSkillPacket)
         {
@@ -134,7 +133,6 @@ namespace Frostvein.Handler.PacketHandler.Battle
                 return;
             }
 
-
             if (Session.Character.CanFight && useSkillPacket != null && !Session.Character.IsSeal)
             {
                 if (useSkillPacket.UserType == UserType.Monster)
@@ -204,11 +202,8 @@ namespace Frostvein.Handler.PacketHandler.Battle
                     return;
                 }
 
-                if (useSkillPacket.MapX.HasValue && useSkillPacket.MapY.HasValue)
-                {
-                    Session.Character.PositionX = useSkillPacket.MapX.Value;
-                    Session.Character.PositionY = useSkillPacket.MapY.Value;
-                }
+                // Client-provided coordinates are targeting metadata. They must never relocate the
+                // authoritative server-side character position.
 
                 if (Session.Character.IsSitting)
                 {
