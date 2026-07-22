@@ -40,6 +40,8 @@ NosGM includes ChickenAPI-related source components traced to the NQ-Source snap
 
 `Tools/NosGM.ResourceExplorer` adapts archive-layout and text-decoding behavior from `Pumba98/OnexExplorer` commit `eaee2aa9f0e71b9960da586f425f79e628013021`. Credit remains with Pumba98, OnexExplorer contributors and their respective upstream contributors. Detailed attribution is preserved in `Tools/NosGM.ResourceExplorer/NOTICE.md`.
 
+`Tools/NosGM.PacketCatalog` adapts packet-documentation concepts from `BlowaXD/SaltyEmu` commit `2588cfdc64789a7952c781faaafdf1026ac73e9d`, including the earlier packet-documentator work introduced at `7f849171da82feee1b9fae851a45b3eef9a9cd68`. Credit remains with Blowa, SaltyEmu contributors and contributors recorded in the upstream Git history. Detailed attribution is preserved in `Tools/NosGM.PacketCatalog/NOTICE.md`.
+
 The Git history and verified upstream repository history remain the authoritative attribution records. See `NOTICE.md` and `docs/PROVENANCE.md`.
 
 ## NosGM contributors
