@@ -12,6 +12,8 @@ This register tracks where the code in NosGM came from and which license terms a
 - `36bd96a51c4b4a1e55e8827ca7eb375cc189ad9e` identifies the immutable `noszanou/OpennosTimeSpaceParser` snapshot adapted into `Tools/NosGM.TimeSpaceParser`.
 - `fc1b6dda5d797efc24a053180d30702f8dad162a` identifies the immutable `ImNotAVirus/NostaleWidget` snapshot used for `Tools/NosGM.ClientEnhancements` provenance and adaptation.
 - `eaee2aa9f0e71b9960da586f425f79e628013021` identifies the immutable `Pumba98/OnexExplorer` snapshot adapted into `Tools/NosGM.ResourceExplorer`.
+- `9eb44d2a0041b49375fabb730121a01acd7bae87` identifies the immutable `Elendan/Notale-Text-Picker` snapshot adapted into `Tools/NosGM.ClientThemeEditor`.
+- `9d1e61c717b6a49ca221a5f2d855dfa5fa11591c` identifies the reviewed `Pumba98/Nostale-ClientColorizer` snapshot recorded only as prior art; no source, signature or offset is imported.
 
 NosGM is an OpenNos-derived emulator. The exact OpenNos base revision can continue to be narrowed through file and commit comparison, but no separate emulator lineage is claimed.
 
@@ -27,6 +29,8 @@ NosGM is an OpenNos-derived emulator. The exact OpenNos base revision can contin
 | OpennosTimeSpaceParser adaptation | `https://github.com/noszanou/OpennosTimeSpaceParser` | Snapshot `36bd96a51c4b4a1e55e8827ca7eb375cc189ad9e`, adapted under `Tools/NosGM.TimeSpaceParser`; the upstream README records earlier work by Elendan and SEOVA and OpenNos XML-model lineage | Upstream repository includes GNU GPL version 3; adapted files carry GPL-3.0-only SPDX headers and `Tools/NosGM.TimeSpaceParser/NOTICE.md` | Verified; exact intermediate Elendan and SEOVA revisions were not documented and are not guessed |
 | NostaleWidget adaptation | `https://github.com/ImNotAVirus/NostaleWidget` | Snapshot `fc1b6dda5d797efc24a053180d30702f8dad162a`, adapted under `Tools/NosGM.ClientEnhancements`; reviewed source references DitzProject/ClientModdingAPI and ApourtArtt/DelphiClassInfo without immutable revisions | Upstream `LICENSE` is MIT, Copyright (c) 2022 ApourtArtt; adapted source carries MIT SPDX headers and a local notice | Verified; earlier referenced revisions are not guessed |
 | OnexExplorer adaptation | `https://github.com/Pumba98/OnexExplorer` | Snapshot `eaee2aa9f0e71b9960da586f425f79e628013021`, adapted under `Tools/NosGM.ResourceExplorer`; reviewed UI identifies the repository as a fork maintained by Pumba98 without naming an immutable earlier revision | Upstream `LICENSE` contains Boost Software License 1.0; adapted source carries BSL-1.0 SPDX headers and a local notice | Verified; earlier fork revision is not guessed |
+| Notale-Text-Picker adaptation | `https://github.com/Elendan/Notale-Text-Picker` | Snapshot `9eb44d2a0041b49375fabb730121a01acd7bae87`, adapted under `Tools/NosGM.ClientThemeEditor`; upstream README credits Cryless and Fizo55 | Upstream `LICENSE` is MIT, Copyright (c) 2019 Elendan; adapted source carries MIT SPDX headers and a local notice | Verified |
+| Nostale-ClientColorizer prior-art review | `https://github.com/Pumba98/Nostale-ClientColorizer` | Snapshot `9d1e61c717b6a49ca221a5f2d855dfa5fa11591c`, reviewed only to identify object-label and weapon-glow feature categories | No reuse license found in the reviewed repository tree | No code, signatures or offsets imported; future implementation must be independent |
 | NosGM modifications | `https://github.com/KILL009/NosGm` | Git history after the source import | Copyright held by the respective NosGM contributors | Verified by repository history |
 
 ## License structure
@@ -40,6 +44,7 @@ NosGM contains these verified license lineages:
 - `Tools/NosGM.TimeSpaceParser` is adapted from GPLv3-licensed Time-Space parser components and is marked GPL-3.0-only;
 - `Tools/NosGM.ClientEnhancements` preserves the MIT License from the reviewed NostaleWidget source;
 - `Tools/NosGM.ResourceExplorer` preserves the Boost Software License 1.0 from the reviewed OnexExplorer source;
+- `Tools/NosGM.ClientThemeEditor` preserves the MIT License from the reviewed Notale-Text-Picker source;
 - a complete GPL version 3 license copy is bundled under `LICENSES/GPL-3.0-only/`.
 
 GPLv3 obligations apply to the GPL-3.0-only components and to combined distributions when those license terms govern the combination. MIT and Boost notices must accompany their respective covered components as required.
@@ -56,6 +61,7 @@ GPLv3 obligations apply to the GPL-3.0-only components and to combined distribut
 - `Tools/NosGM.TimeSpaceParser/NOTICE.md` records the Time-Space parser source, immutable commit, earlier credited contributors, XML-model lineage and NosGM modifications.
 - `Tools/NosGM.ClientEnhancements/NOTICE.md` records the NostaleWidget source, immutable commit, ApourtArtt copyright, MIT license, referenced earlier projects and NosGM safety modifications.
 - `Tools/NosGM.ResourceExplorer/NOTICE.md` records the OnexExplorer source, immutable commit, Boost license, fork uncertainty and NosGM safety modifications.
+- `Tools/NosGM.ClientThemeEditor/NOTICE.md` records the Notale-Text-Picker source, immutable commit, Elendan copyright, Cryless and Fizo55 credits, MIT license, independent ClientColorizer boundary and NosGM safety modifications.
 - File-specific `.license` sidecars restore attribution for inherited OpenNos files whose project header was renamed during the NosGM identity migration.
 
 ## Continuing provenance work
