@@ -34,8 +34,10 @@ internal static class Program
     private static int Inspect(CliOptions options)
     {
         options.EnsureOnly("input", "profile-output", "force");
-        var input = options.Required("input");
+        var input = Path.GetFullPath(options.Required("input"));
         var output = Path.GetFullPath(options.Required("profile-output"));
+        EnsureDifferent(output, input);
+
         var force = options.Flag("force");
         if (File.Exists(output) && !force)
         {
@@ -69,16 +71,20 @@ internal static class Program
     private static int Plan(CliOptions options)
     {
         options.EnsureOnly("input", "profile", "theme", "report-output", "force");
-        var input = options.Required("input");
+        var input = Path.GetFullPath(options.Required("input"));
+        var profilePath = Path.GetFullPath(options.Required("profile"));
+        var themePath = Path.GetFullPath(options.Required("theme"));
         var reportOutput = Path.GetFullPath(options.Required("report-output"));
+        EnsureDifferent(reportOutput, input, profilePath, themePath);
+
         var force = options.Flag("force");
         if (File.Exists(reportOutput) && !force)
         {
             throw new IOException($"Plan '{reportOutput}' already exists. Use --force to replace it.");
         }
 
-        var profile = JsonFiles.Read<ThemeProfile>(options.Required("profile"));
-        var theme = JsonFiles.Read<ThemeDocument>(options.Required("theme"));
+        var profile = JsonFiles.Read<ThemeProfile>(profilePath);
+        var theme = JsonFiles.Read<ThemeDocument>(themePath);
         var content = File.ReadAllBytes(input);
         var plan = ThemeEngine.BuildPlan(content, PeInspector.Inspect(input), profile, theme);
         JsonFiles.Write(reportOutput, plan);
@@ -88,12 +94,13 @@ internal static class Program
 
     private static int Apply(CliOptions options)
     {
-        options.EnsureOnly("input", "profile", "theme", "output", "in-place", "force");
-        var input = options.Required("input");
-        var profile = JsonFiles.Read<ThemeProfile>(options.Required("profile"));
-        var theme = JsonFiles.Read<ThemeDocument>(options.Required("theme"));
+        options.EnsureOnly("input", "profile", "theme", "output", "in-place");
+        var input = Path.GetFullPath(options.Required("input"));
+        var profilePath = Path.GetFullPath(options.Required("profile"));
+        var themePath = Path.GetFullPath(options.Required("theme"));
+        var profile = JsonFiles.Read<ThemeProfile>(profilePath);
+        var theme = JsonFiles.Read<ThemeDocument>(themePath);
         var inPlace = options.Flag("in-place");
-        var force = options.Flag("force");
 
         PatchManifest manifest;
         if (inPlace)
@@ -103,17 +110,13 @@ internal static class Program
                 throw new ArgumentException("--output cannot be combined with --in-place.");
             }
 
-            if (force)
-            {
-                throw new ArgumentException("--force is not supported with guarded --in-place mode.");
-            }
-
             manifest = ThemeEngine.ApplyInPlace(input, profile, theme);
         }
         else
         {
-            var output = options.Required("output");
-            manifest = ThemeEngine.ApplyToOutput(input, output, profile, theme, force);
+            var output = Path.GetFullPath(options.Required("output"));
+            EnsureDifferent(output, input, profilePath, themePath);
+            manifest = ThemeEngine.ApplyToOutput(input, output, profile, theme);
         }
 
         Console.WriteLine($"Patched SHA-256: {manifest.PatchedSha256}");
@@ -146,6 +149,17 @@ internal static class Program
         return Help();
     }
 
+    private static void EnsureDifferent(string output, params string[] inputs)
+    {
+        var comparison = OperatingSystem.IsWindows()
+            ? StringComparison.OrdinalIgnoreCase
+            : StringComparison.Ordinal;
+        if (inputs.Any(input => string.Equals(output, input, comparison)))
+        {
+            throw new ArgumentException("An output path must not replace any input, profile or theme file.");
+        }
+    }
+
     private static int Help()
     {
         Console.WriteLine("""
@@ -153,7 +167,7 @@ NosGM.ClientThemeEditor
 
 inspect --input <client.exe> --profile-output <profile.json> [--force]
 plan --input <client.exe> --profile <profile.json> --theme <theme.json> --report-output <plan.json> [--force]
-apply --input <client.exe> --profile <profile.json> --theme <theme.json> --output <copy.exe> [--force]
+apply --input <client.exe> --profile <profile.json> --theme <theme.json> --output <new-copy.exe>
 apply --input <client.exe> --profile <profile.json> --theme <theme.json> --in-place
 restore --manifest <manifest.json>
 self-test
