@@ -1,4 +1,4 @@
-﻿using Frostvein.Configuration;
+using Frostvein.Configuration;
 using Frostvein.Core;
 using Frostvein.Data;
 using Frostvein.Domain;
@@ -1236,8 +1236,10 @@ namespace Frostvein.GameObject
                 if (hitRequest.Skill != null && hitRequest.Skill.TargetType == 1 && hitRequest.Skill.HitType == 1 &&
                     hitRequest.Skill.TargetRange == 0 && hitRequest.Skill.Range > 0) attackGreaterDistance = true;
 
-                var damage = DamageHelper.Instance.CalculateDamage(attackerBattleEntity, new BattleEntity(this),
-                    hitRequest.Skill, ref hitmode, ref onyxWings, ref zephyrWings, ref dragonBuff, attackGreaterDistance);
+                DamageCalculationResult damageResult = hitRequest.CalculateDamage(attackerBattleEntity,
+                    new BattleEntity(this), ref hitmode, ref onyxWings, ref zephyrWings, ref dragonBuff,
+                    attackGreaterDistance: attackGreaterDistance);
+                var damage = damageResult.FinalDamage;
                 if (Monster.BCards.Find(s =>
                     s.Type == (byte)CardType.LightAndShadow &&
                     s.SubType == (byte)AdditionalTypes.LightAndShadow.InflictDamageToMP) is BCard card)
