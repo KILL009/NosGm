@@ -3,6 +3,7 @@
   <PropertyGroup>
     <TargetFramework>net7.0</TargetFramework>
     <BaseOutputPath>..\..\..\bin\</BaseOutputPath>
+    <ApplicationIcon>nosgm-emulator-icon.ico</ApplicationIcon>
   </PropertyGroup>
 
 	<PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
@@ -14,6 +15,10 @@
 		<Optimize>True</Optimize>
 		<OutputPath>..\..\..\bin\Release\Modules</OutputPath>
 	</PropertyGroup>
+
+	<ItemGroup>
+	  <Content Include="nosgm-emulator-icon.ico" />
+	</ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="EntityFramework" Version="6.5.2" />
