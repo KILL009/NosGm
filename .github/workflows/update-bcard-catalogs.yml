@@ -20,7 +20,7 @@ jobs:
     timeout-minutes: 45
 
     env:
-      NUGET_AUTH_TOKEN: ${{ secrets.NOSGAME_PACKAGE_TOKEN || secrets.TOKEN }}
+      NUGET_AUTH_TOKEN: ${{ secrets.NOSGAME_PACKAGE_TOKEN }}
       GITHUB_TOKEN: ${{ github.token }}
       NOSGM_UPDATER_OWNER: ${{ github.repository_owner }}
       NOSGM_UPDATER_REPO: ${{ github.event.repository.name }}
@@ -35,11 +35,11 @@ jobs:
         with:
           ref: main
 
-      - name: Require package-read token
+      - name: Require dedicated package-read token
         shell: bash
         run: |
           if [ -z "$NUGET_AUTH_TOKEN" ]; then
-            echo "::error::Create the NOSGAME_PACKAGE_TOKEN repository secret with read access to the noszanou GitHub Packages feed."
+            echo "::error::Create the NOSGAME_PACKAGE_TOKEN repository secret with read:packages access to the noszanou GitHub Packages feed."
             exit 1
           fi
 
@@ -49,11 +49,11 @@ jobs:
           dotnet-version: 9.0.x
           source-url: https://nuget.pkg.github.com/noszanou/index.json
 
-      - name: Restore updater
-        run: dotnet restore Tools/NosGM.DataUpdater/NosGM.DataUpdater.csproj
+      - name: Restore updater with download adapter
+        run: dotnet restore Tools/NosGM.DataUpdater/NosGM.DataUpdater.csproj -p:EnableNosGamePackages=true
 
-      - name: Build updater
-        run: dotnet build Tools/NosGM.DataUpdater/NosGM.DataUpdater.csproj --configuration Release --no-restore
+      - name: Build updater with download adapter
+        run: dotnet build Tools/NosGM.DataUpdater/NosGM.DataUpdater.csproj --configuration Release --no-restore -p:EnableNosGamePackages=true
 
       - name: Extract data and open pull request when changed
-        run: dotnet run --project Tools/NosGM.DataUpdater/NosGM.DataUpdater.csproj --configuration Release --no-build -- --publish
+        run: dotnet run --project Tools/NosGM.DataUpdater/NosGM.DataUpdater.csproj --configuration Release --no-build -p:EnableNosGamePackages=true -- --download-resources --publish
