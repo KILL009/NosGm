@@ -2,16 +2,20 @@
 
 NosGM includes or references third-party software. Each component remains subject to its own copyright and license terms.
 
-This document records direct dependencies found during the initial compliance review. It must be updated whenever a dependency is added, removed or upgraded. Transitive dependencies must also be reviewed before distributing binaries.
+This document records direct dependencies found during the compliance review. It must be updated whenever a dependency is added, removed or upgraded. Transitive dependencies must also be reviewed before distributing binaries.
 
 ## Source components
 
 | Component | Relationship | License status |
 |---|---|---|
 | OpenNos | Upstream source and project lineage | Original reviewed headers state GPL-2.0-or-later |
-| Frostvein | Intermediate OpenNos ecosystem source | Exact upstream repository, revision and license notice must be recorded in `docs/PROVENANCE.md` |
-| ChickenAPI components | Source projects included in the solution | Exact upstream repository, revision and license for each component must be confirmed in `docs/PROVENANCE.md` |
+| Frostvein | Intermediate OpenNos ecosystem source | Exact upstream repository, revision and license notice remain unresolved in `docs/PROVENANCE.md` |
+| ChickenAPI.DAL | Source project derived from `Price-H16/NQ-Verde@2594ec13f4fba5d893b424197878c05f801f68a2` | Treat as GPL-3.0-only; exact project GUID and inspected AssemblyInfo blob match |
+| ChickenAPI.Events | Source project derived from `Price-H16/NQ-Verde@2594ec13f4fba5d893b424197878c05f801f68a2` | Treat as GPL-3.0-only; project GUID and metadata match |
+| ChickenAPI.Plugins | Source project derived from `Price-H16/NQ-Verde@2594ec13f4fba5d893b424197878c05f801f68a2` | Treat as GPL-3.0-only; exact project GUID and inspected AssemblyInfo blob match |
 | NosGM | Current modifications and new work | Copyright remains with NosGM contributors; upstream rights are preserved |
+
+The ChickenAPI evidence and intermediate `KILL009/NosGuana` snapshot are described in `Data/NosGm.ChickenAPI/NOTICE.md` and `docs/PROVENANCE.md`. A complete GNU GPL version 3 license copy is bundled under `LICENSES/GPL-3.0-only/`.
 
 ## Direct NuGet dependencies observed
 
@@ -32,17 +36,22 @@ The following entries were observed in inspected project files. License expressi
 
 Package references do not transfer ownership to NosGM. A release must include all notices and license texts required by the resolved packages.
 
+## Compatibility note
+
+OpenNos files reviewed during this audit permit GPL version 2 or later, while the verified ChickenAPI snapshot is treated as GPL-3.0-only. If those components are distributed together as one combined program, the distribution must satisfy GPL version 3. The unresolved Frostvein lineage must still be checked for any GPL-2.0-only or otherwise incompatible material.
+
 ## Release requirements
 
 Before publishing any executable, DLL, ZIP, installer, container or prebuilt package:
 
-1. Restore the exact dependency graph used for the build.
-2. Export all direct and transitive package names and versions.
-3. Confirm each package license from its package metadata and upstream source.
-4. Review compatibility with the license governing the combined NosGM build.
-5. Include required license and notice files in the distributed archive.
-6. Record the exact NosGM source commit used to produce the binaries.
-7. Provide the complete corresponding source under the applicable GPL terms.
+1. Resolve the Frostvein provenance and license record.
+2. Restore the exact dependency graph used for the build.
+3. Export all direct and transitive package names and versions.
+4. Confirm each package license from its package metadata and upstream source.
+5. Review compatibility with the license governing the combined NosGM build.
+6. Include required license and notice files in the distributed archive.
+7. Record the exact NosGM source commit used to produce the binaries.
+8. Provide the complete corresponding source under the applicable GPL terms.
 
 ## Proprietary assets
 
