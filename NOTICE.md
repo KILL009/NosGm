@@ -11,6 +11,7 @@ NosGM is a modified work derived from the OpenNos project. The current repositor
 - the external `Tools/NosGM.DataUpdater` utility adapted from `noszanou/BCardGistUpdater@53153c990ae5b65a603d223eeda504df2a67d5fb`;
 - the external `Tools/NosGM.TimeSpaceParser` utility adapted from `noszanou/OpennosTimeSpaceParser@36bd96a51c4b4a1e55e8827ca7eb375cc189ad9e`, with earlier credit to Elendan, SEOVA and OpenNos XML-model contributors;
 - the optional `Tools/NosGM.ClientEnhancements` compatibility foundation adapted from concepts in `ImNotAVirus/NostaleWidget@fc1b6dda5d797efc24a053180d30702f8dad162a`;
+- the external read-only `Tools/NosGM.ResourceExplorer` utility adapted from archive and text-decoding behavior in `Pumba98/OnexExplorer@eaee2aa9f0e71b9960da586f425f79e628013021`;
 - new modifications made by NosGM contributors.
 
 The NosGM name identifies the current project and its modifications. It does not replace or erase the authorship of OpenNos or other verified upstream contributors.
@@ -26,6 +27,7 @@ Examples of appropriate attribution include:
 - `NosGM.DataUpdater portions copyright noszanou and BCardGistUpdater contributors`
 - `NosGM.TimeSpaceParser portions copyright Elendan, SEOVA, noszanou, OpenNos contributors and their respective contributors`
 - `NosGM.ClientEnhancements upstream portions Copyright (c) 2022 ApourtArtt`
+- `NosGM.ResourceExplorer upstream portions copyright Pumba98, OnexExplorer contributors and their respective upstream contributors`
 - `Modifications Copyright (C) 2026 NosGM contributors`
 
 Dates must describe when the relevant work was authored. NosGM must not claim authorship of upstream work merely because identifiers were renamed or modified later.
@@ -40,9 +42,10 @@ The repository preserves multiple license lineages:
 - `Tools/NosGM.DataUpdater` is adapted from GPLv3-licensed BCardGistUpdater and is GPL-3.0-only;
 - `Tools/NosGM.TimeSpaceParser` is adapted from GPLv3-licensed Time-Space parser components and is GPL-3.0-only;
 - `Tools/NosGM.ClientEnhancements` preserves the MIT License from the reviewed NostaleWidget source and includes its own `LICENSE` and `NOTICE.md`;
+- `Tools/NosGM.ResourceExplorer` preserves the Boost Software License 1.0 from the reviewed OnexExplorer source and includes its own `LICENSE` and `NOTICE.md`;
 - `LICENSES/GPL-3.0-only/` contains a complete, checksum-protected copy of GNU GPL version 3.
 
-GPLv3 obligations apply to the GPL-3.0-only components and to combined distributions when those terms govern the combination. MIT notices must remain with copies or substantial portions of the client-enhancement component.
+GPLv3 obligations apply to the GPL-3.0-only components and to combined distributions when those terms govern the combination. MIT and Boost notices must remain with copies or covered source portions of their respective components.
 
 This repository must not be represented as newly relicensed exclusively by the NosGM project. Existing upstream license notices remain controlling for the portions to which they apply.
 
@@ -60,4 +63,4 @@ NosTale and related names, artwork, data and trademarks belong to their respecti
 
 ## No warranty
 
-The software is provided without warranty, to the extent permitted by applicable law. See the applicable GPL and MIT texts and `NOTICE.md` files for the complete terms.
+The software is provided without warranty, to the extent permitted by applicable law. See the applicable GPL, MIT and Boost texts and component `NOTICE.md` files for the complete terms.

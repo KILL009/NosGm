@@ -30,6 +30,12 @@ Generated catalogs belong under `Data/Generated/BCards`. Proprietary client arch
 
 It is adapted from `noszanou/OpennosTimeSpaceParser@36bd96a51c4b4a1e55e8827ca7eb375cc189ad9e`, remains under GPL-3.0-only and preserves the recorded credits to Elendan, SEOVA and OpenNos XML-model contributors. See its [README](Tools/NosGM.TimeSpaceParser/README.md) and [notice](Tools/NosGM.TimeSpaceParser/NOTICE.md).
 
+## Resource exploration tooling
+
+`Tools/NosGM.ResourceExplorer` is an external, package-free .NET 9 command-line tool for read-only inspection, hashing, comparison and sandboxed extraction of supported `.NOS` resource archives.
+
+The first release supports reviewed compressed archive and DAT/LST text-container layouts, but deliberately excludes repacking, patching and source-archive overwrite. It is adapted from `Pumba98/OnexExplorer@eaee2aa9f0e71b9960da586f425f79e628013021` under the Boost Software License 1.0. See its [README](Tools/NosGM.ResourceExplorer/README.md) and [notice](Tools/NosGM.ResourceExplorer/NOTICE.md).
+
 ## Client enhancement research
 
 `Tools/NosGM.ClientEnhancements` is an optional x86 client-compatibility foundation kept outside the server solution. Its first release provides an exact client identity probe, strict profile validation, safe pattern parsing, memory-range checks and reversible patch infrastructure. It contains no injector, packet injection or active gameplay modification.
@@ -60,13 +66,14 @@ NosGM contains code from multiple verified license lineages:
 - `Tools/NosGM.DataUpdater` is adapted from `noszanou/BCardGistUpdater@53153c990ae5b65a603d223eeda504df2a67d5fb` and is GPL-3.0-only;
 - `Tools/NosGM.TimeSpaceParser` is adapted from `noszanou/OpennosTimeSpaceParser@36bd96a51c4b4a1e55e8827ca7eb375cc189ad9e` and is GPL-3.0-only;
 - `Tools/NosGM.ClientEnhancements` preserves the MIT License from `ImNotAVirus/NostaleWidget@fc1b6dda5d797efc24a053180d30702f8dad162a`;
+- `Tools/NosGM.ResourceExplorer` preserves the Boost Software License 1.0 from `Pumba98/OnexExplorer@eaee2aa9f0e71b9960da586f425f79e628013021`;
 - the complete GNU GPL version 3 text is bundled under [LICENSES/GPL-3.0-only](LICENSES/GPL-3.0-only/README.md).
 
 NosGM is an OpenNos-derived community project. Copyright remains with the respective authors of OpenNos, NQ-Source, ChickenAPI and the adapted external tools, and with NosGM contributors for their own modifications. Renaming namespaces or assemblies does not transfer authorship.
 
 The exact OpenNos base commit is still being narrowed through source comparison, but the project lineage is OpenNos directly. See [docs/PROVENANCE.md](docs/PROVENANCE.md).
 
-If GPL-3.0-only components remain linked into or are distributed with a combined application, the applicable distribution must satisfy GPL version 3. MIT-covered portions must retain their copyright and permission notice.
+If GPL-3.0-only components remain linked into or are distributed with a combined application, the applicable distribution must satisfy GPL version 3. MIT and Boost-covered portions must retain their required notices.
 
 When binaries are distributed, recipients must also receive the complete corresponding source code or equivalent GPL-compliant access to the exact source used for that build. Do not impose additional restrictions that prevent recipients from copying, modifying or redistributing GPL-covered code.
 

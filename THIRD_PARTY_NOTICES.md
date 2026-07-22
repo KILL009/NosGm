@@ -15,9 +15,10 @@ This document records direct dependencies found during the compliance review. It
 | BCardGistUpdater | `Tools/NosGM.DataUpdater` adapts parsing, resource setup and GitHub update concepts from `noszanou/BCardGistUpdater@53153c990ae5b65a603d223eeda504df2a67d5fb` | GPL-3.0-only; attribution preserved in `Tools/NosGM.DataUpdater/NOTICE.md` |
 | OpennosTimeSpaceParser | `Tools/NosGM.TimeSpaceParser` adapts packet analysis and OpenNos-compatible XML generation from `noszanou/OpennosTimeSpaceParser@36bd96a51c4b4a1e55e8827ca7eb375cc189ad9e`, with recorded lineage to Elendan and SEOVA | GPL-3.0-only; attribution preserved in `Tools/NosGM.TimeSpaceParser/NOTICE.md` |
 | NostaleWidget | `Tools/NosGM.ClientEnhancements` adapts client compatibility, pattern scanning and reversible modification concepts from `ImNotAVirus/NostaleWidget@fc1b6dda5d797efc24a053180d30702f8dad162a` | MIT; Copyright (c) 2022 ApourtArtt; license and attribution preserved in the component directory |
+| OnexExplorer | `Tools/NosGM.ResourceExplorer` adapts archive layouts and DAT/LST text decoding from `Pumba98/OnexExplorer@eaee2aa9f0e71b9960da586f425f79e628013021` | BSL-1.0; attribution and complete license text preserved in the component directory |
 | NosGM | Current modifications and new work | Copyright remains with NosGM contributors; upstream rights are preserved |
 
-The ChickenAPI evidence and matching `KILL009/NosGuana` snapshot are described in `Data/NosGm.ChickenAPI/NOTICE.md` and `docs/PROVENANCE.md`. The BCardGistUpdater adaptation is described in `Tools/NosGM.DataUpdater/NOTICE.md`. The Time-Space parser adaptation is described in `Tools/NosGM.TimeSpaceParser/NOTICE.md`. The NostaleWidget adaptation is described in `Tools/NosGM.ClientEnhancements/NOTICE.md`. A complete GNU GPL version 3 license copy is bundled under `LICENSES/GPL-3.0-only/`, while the client-enhancement MIT text is bundled in its own directory.
+The component-specific evidence is described in each tool's `NOTICE.md` and in `docs/PROVENANCE.md`. Complete GPLv3 text is bundled under `LICENSES/GPL-3.0-only/`; MIT and Boost texts are bundled in their respective tool directories.
 
 ## Direct NuGet dependencies observed
 
@@ -38,7 +39,7 @@ The following entries were observed in inspected project files. License expressi
 | Za.NosGame.Fetcher | 1.0.21 | Used only by `Tools/NosGM.DataUpdater`; verify package metadata and preserve required notices before redistributing the tool |
 | Za.NosGame.RessourceLoader | 1.0.21 | Used only by `Tools/NosGM.DataUpdater`; verify package metadata and preserve required notices before redistributing the tool |
 
-`Tools/NosGM.TimeSpaceParser` has no third-party NuGet dependency; it uses only the .NET 9 base class library.
+`Tools/NosGM.TimeSpaceParser` and `Tools/NosGM.ResourceExplorer` have no third-party NuGet dependency; they use only the .NET 9 base class library.
 
 `Tools/NosGM.ClientEnhancements` has no package-manager dependency. Its Windows build links only platform libraries supplied by the Windows SDK. Future optional SDK integrations require a separate license review before activation.
 
@@ -46,7 +47,7 @@ Package references do not transfer ownership to NosGM. A release must include al
 
 ## Compatibility note
 
-OpenNos files reviewed during this audit permit GPL version 2 or later, while the verified ChickenAPI snapshot, the BCardGistUpdater-derived tool and the Time-Space parser adaptation are treated as GPL-3.0-only. GPLv3 obligations apply to the corresponding covered components and any combined distribution governed by those terms. MIT is compatible for source combination when its copyright and permission notice are preserved.
+OpenNos files reviewed during this audit permit GPL version 2 or later, while the verified ChickenAPI snapshot, the BCardGistUpdater-derived tool and the Time-Space parser adaptation are treated as GPL-3.0-only. GPLv3 obligations apply to the corresponding covered components and any combined distribution governed by those terms. MIT and Boost-1.0 are permissive when their required notices are preserved.
 
 ## Release requirements
 

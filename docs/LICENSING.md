@@ -59,6 +59,17 @@ Every adapted tool must include:
 
 `Tools/NosGM.ClientEnhancements` follows this policy for its MIT-licensed adaptation of `ImNotAVirus/NostaleWidget@fc1b6dda5d797efc24a053180d30702f8dad162a`, preserving Copyright (c) 2022 ApourtArtt and the reviewed references to DitzProject/ClientModdingAPI and ApourtArtt/DelphiClassInfo.
 
+`Tools/NosGM.ResourceExplorer` follows this policy for its BSL-1.0 adaptation of `Pumba98/OnexExplorer@eaee2aa9f0e71b9960da586f425f79e628013021`, preserving credit to Pumba98, OnexExplorer contributors and their respective upstream contributors.
+
+Client resource tooling has additional safeguards:
+
+- source archives are opened read-only;
+- parsing enforces count, offset, size, name and decompression limits;
+- extraction is confined to an explicitly selected output directory;
+- no source archive overwrite, repacking or patch application in the initial release;
+- no proprietary archive, extracted resource or client asset in the repository;
+- write support requires byte-identical round-trip tests against authorized samples before activation.
+
 Client-side memory research has additional safeguards:
 
 - no injector, automatic loader or server-side DLL deployment;

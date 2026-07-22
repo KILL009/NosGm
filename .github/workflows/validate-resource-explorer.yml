@@ -1,0 +1,45 @@
+name: Validate NosGM.ResourceExplorer
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: validate-resource-explorer-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Build and run synthetic self-test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up .NET 9
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 9.0.x
+
+      - name: Restore explorer
+        run: dotnet restore Tools/NosGM.ResourceExplorer/NosGM.ResourceExplorer.csproj
+
+      - name: Build explorer
+        run: dotnet build Tools/NosGM.ResourceExplorer/NosGM.ResourceExplorer.csproj --configuration Release --no-restore
+
+      - name: Run synthetic regression test
+        run: dotnet run --project Tools/NosGM.ResourceExplorer/NosGM.ResourceExplorer.csproj --configuration Release --no-build -- self-test
+
+      - name: Run attribution and safety checks
+        shell: pwsh
+        run: ./scripts/verify-resource-explorer.ps1
