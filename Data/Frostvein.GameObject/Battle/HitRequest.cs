@@ -153,6 +153,69 @@ namespace Frostvein.GameObject.Battle
     }
 
     /// <summary>
+    /// Non-invasive adapter around the legacy DamageHelper. It gives new combat routes a structured
+    /// result without changing the proven legacy formula while that formula is split into stages.
+    /// </summary>
+    public static class DamageHelperStructuredExtensions
+    {
+        public static DamageCalculationResult CalculateDamageDetailed(this DamageHelper helper,
+            BattleEntity attacker, BattleEntity defender, Skill skill, HitContext hitContext,
+            ref int hitMode, ref bool onyxWings, ref bool zephyrWings, ref bool dragonBuff,
+            bool attackGreaterDistance = false)
+        {
+            if (helper == null)
+            {
+                throw new ArgumentNullException(nameof(helper));
+            }
+
+            DateTime startedAtUtc = DateTime.UtcNow;
+            int finalDamage = helper.CalculateDamage(attacker, defender, skill, ref hitMode,
+                ref onyxWings, ref zephyrWings, ref dragonBuff, attackGreaterDistance);
+            DateTime completedAtUtc = DateTime.UtcNow;
+
+            var result = new DamageCalculationResult
+            {
+                StartedAtUtc = startedAtUtc,
+                CompletedAtUtc = completedAtUtc,
+                CastId = hitContext?.CastContext?.CastId,
+                HitId = hitContext?.HitId,
+                AttackerId = attacker?.MapEntityId ?? 0,
+                AttackerUserType = attacker != null ? attacker.UserType : default(UserType),
+                DefenderId = defender?.MapEntityId ?? 0,
+                DefenderUserType = defender != null ? defender.UserType : default(UserType),
+                SkillVNum = skill?.SkillVNum,
+                TargetHitType = hitContext?.TargetHitType ?? default(TargetHitType),
+                FinalDamage = finalDamage,
+                HitMode = hitMode,
+                OnyxWings = onyxWings,
+                ZephyrWings = zephyrWings,
+                DragonBuff = dragonBuff,
+                AttackGreaterDistance = attackGreaterDistance,
+                IsPvp = hitContext?.CastContext?.IsPvp ??
+                        (attacker?.Character != null && defender?.Character != null),
+                Breakdown = new DamageBreakdown
+                {
+                    FinalDamage = finalDamage,
+                    IsComplete = false
+                }
+            };
+
+            if (hitContext != null)
+            {
+                // Until the legacy formula exposes each stage, raw and final are intentionally equal.
+                // The IsComplete flag prevents consumers from treating this as a full breakdown.
+                hitContext.RawDamage = finalDamage;
+                hitContext.FinalDamage = finalDamage;
+                hitContext.HitMode = hitMode;
+                hitContext.DamageResult = result;
+            }
+
+            CombatDamageDiagnostics.Publish(result);
+            return result;
+        }
+    }
+
+    /// <summary>
     /// Structured output of one damage calculation. During the migration the legacy formula fills
     /// the final values, while later phases will populate each individual component of Breakdown.
     /// </summary>
