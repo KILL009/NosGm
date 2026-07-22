@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build-debug-x64:
@@ -21,6 +21,24 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Apply candidate framework alignment
+        shell: pwsh
+        run: |
+          $project = 'Data/NosGm.Program/NosGm.Logger/NosGm.LogServer.csproj'
+          $content = [System.IO.File]::ReadAllText($project)
+          $updated = $content.Replace(
+            '<TargetFrameworkVersion>v4.8.1</TargetFrameworkVersion>',
+            '<TargetFrameworkVersion>v4.8</TargetFrameworkVersion>')
+          if ($updated -eq $content) {
+            Write-Host 'LogServer already targets .NET Framework 4.8.'
+          }
+          else {
+            [System.IO.File]::WriteAllText($project, $updated, [System.Text.UTF8Encoding]::new($true))
+            Write-Host 'Aligned NosGm.LogServer from .NET Framework 4.8.1 to 4.8.'
+          }
 
       - name: Set up Visual Studio MSBuild
         uses: microsoft/setup-msbuild@v3
@@ -39,8 +57,7 @@ jobs:
           $exitCode = $LASTEXITCODE
           $output | Tee-Object -FilePath artifacts/restore.log | ForEach-Object { Write-Host $_ }
           "NuGetExitCode=$exitCode" | Out-File artifacts/restore-exit-code.txt
-          # Continue so the build log reveals the actual project/configuration failure too.
-          exit 0
+          if ($exitCode -ne 0) { exit $exitCode }
 
       - name: Build complete solution in Debug x64
         shell: pwsh
@@ -59,6 +76,20 @@ jobs:
           $exitCode = $LASTEXITCODE
           $output | Tee-Object -FilePath artifacts/build-console.log | ForEach-Object { Write-Host $_ }
           exit $exitCode
+
+      - name: Commit validated framework fix
+        if: success() && github.event_name == 'push'
+        shell: pwsh
+        run: |
+          if (-not (git status --porcelain -- 'Data/NosGm.Program/NosGm.Logger/NosGm.LogServer.csproj')) {
+            Write-Host 'No framework change needs to be committed.'
+            exit 0
+          }
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -- 'Data/NosGm.Program/NosGm.Logger/NosGm.LogServer.csproj'
+          git commit -m 'fix: align LogServer with .NET Framework 4.8'
+          git push origin HEAD:fix/nosgm-debug-x64-build
 
       - name: Upload diagnostics
         if: always()
