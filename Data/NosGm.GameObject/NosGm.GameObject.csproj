@@ -1,0 +1,608 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="14.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
+  <PropertyGroup>
+    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
+    <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
+    <ProjectGuid>{EADD17BE-20A4-4589-830E-E41BE9314928}</ProjectGuid>
+    <OutputType>Library</OutputType>
+    <AppDesignerFolder>Properties</AppDesignerFolder>
+    <RootNamespace>NosGm.GameObject</RootNamespace>
+    <AssemblyName>NosGm.GameObject</AssemblyName>
+    <TargetFrameworkVersion>v4.8</TargetFrameworkVersion>
+    <FileAlignment>512</FileAlignment>
+    <NuGetPackageImportStamp />
+    <TargetFrameworkProfile />
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
+    <DebugSymbols>true</DebugSymbols>
+    <DebugType>full</DebugType>
+    <Optimize>false</Optimize>
+    <OutputPath>bin\Debug\</OutputPath>
+    <DefineConstants>DEBUG;TRACE</DefineConstants>
+    <ErrorReport>prompt</ErrorReport>
+    <WarningLevel>4</WarningLevel>
+    <CodeAnalysisRuleSet>..\..\..\ProjectRuleset.ruleset</CodeAnalysisRuleSet>
+    <LangVersion>latest</LangVersion>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
+    <DebugType>pdbonly</DebugType>
+    <Optimize>true</Optimize>
+    <OutputPath>bin\Release\</OutputPath>
+    <DefineConstants>TRACE</DefineConstants>
+    <ErrorReport>prompt</ErrorReport>
+    <WarningLevel>4</WarningLevel>
+    <CodeAnalysisRuleSet>..\..\..\ProjectRuleset.ruleset</CodeAnalysisRuleSet>
+    <LangVersion>latest</LangVersion>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Debug|x64'">
+    <PlatformTarget>x64</PlatformTarget>
+    <OutputPath>bin\x64\Debug\</OutputPath>
+    <DefineConstants>DEBUG;TRACE</DefineConstants>
+    <CodeAnalysisRuleSet>..\..\..\ProjectRuleset.ruleset</CodeAnalysisRuleSet>
+    <LangVersion>latest</LangVersion>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Release|x64'">
+    <PlatformTarget>x64</PlatformTarget>
+    <OutputPath>bin\x64\Release\</OutputPath>
+    <DefineConstants>TRACE</DefineConstants>
+    <Optimize>true</Optimize>
+    <CodeAnalysisRuleSet>..\..\..\ProjectRuleset.ruleset</CodeAnalysisRuleSet>
+    <LangVersion>latest</LangVersion>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Debug|x86'">
+    <PlatformTarget>x86</PlatformTarget>
+    <OutputPath>bin\x86\Debug\</OutputPath>
+    <DefineConstants>DEBUG;TRACE</DefineConstants>
+    <CodeAnalysisRuleSet>..\..\..\ProjectRuleset.ruleset</CodeAnalysisRuleSet>
+    <LangVersion>latest</LangVersion>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Release|x86'">
+    <PlatformTarget>x86</PlatformTarget>
+    <OutputPath>bin\x86\Release\</OutputPath>
+    <DefineConstants>TRACE</DefineConstants>
+    <Optimize>true</Optimize>
+    <CodeAnalysisRuleSet>..\..\..\ProjectRuleset.ruleset</CodeAnalysisRuleSet>
+    <LangVersion>latest</LangVersion>
+  </PropertyGroup>
+  <PropertyGroup>
+    <ApplicationIcon>favicon.ico</ApplicationIcon>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="PresentationCore" />
+    <Reference Include="System" />
+    <Reference Include="System.Configuration" />
+    <Reference Include="System.Data" />
+    <Reference Include="System.Drawing" />
+    <Reference Include="System.Net.Http" />
+    <Reference Include="System.Runtime.Caching" />
+    <Reference Include="System.Windows.Forms" />
+    <Reference Include="System.Xml" />
+    <Reference Include="System.Xml.Linq" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="Act4Stat.cs" />
+    <Compile Include="ArenaMember.cs" />
+    <Compile Include="ArenaTeamMember.cs" />
+    <Compile Include="Battle\BattleEntityExtension.cs" />
+    <Compile Include="BazaarActionTimer.cs" />
+    <Compile Include="Buff\BCard.cs" />
+    <Compile Include="Buff\Buff.cs" />
+    <Compile Include="Buff\Card.cs" />
+    <Compile Include="CharacterQuest.cs" />
+    <Compile Include="Characters\Events\AddPartnerBobEvent.cs" />
+    <Compile Include="Characters\Events\AddPartnerKliffEvent.cs" />
+    <Compile Include="Characters\Events\AddPartnerSakuraEvent.cs" />
+    <Compile Include="Characters\Events\AddPartnerTomEvent.cs" />
+    <Compile Include="Characters\Events\AddPetFlareEvent.cs" />
+    <Compile Include="Characters\Events\AddPetIceWolfEvent.cs" />
+    <Compile Include="Characters\Events\AddPetShadowHamsterEvent.cs" />
+    <Compile Include="Characters\Events\AddPetYellowLambEvent.cs" />
+    <Compile Include="Characters\Events\Bank\OpenBankEvent.cs" />
+    <Compile Include="Characters\Events\ChangeSexEvent.cs" />
+    <Compile Include="Characters\Events\CharacterSaveEvent.cs" />
+    <Compile Include="Characters\Events\Mates\AddPetWithSkillEvent.cs" />
+    <Compile Include="Characters\Events\PlayerChangeChannelEvent.cs" />
+    <Compile Include="Characters\EventArguments\AddTattooEvent.cs" />
+    <Compile Include="Characters\EventArguments\CaptureEventArgs.cs" />
+    <Compile Include="Characters\EventArguments\CraftRecipeEventArgs.cs" />
+    <Compile Include="Characters\EventArguments\DieEventArgs.cs" />
+    <Compile Include="Characters\EventArguments\FinishScriptedInstanceEventArgs.cs" />
+    <Compile Include="Characters\EventArguments\HitEventArgs.cs" />
+    <Compile Include="Characters\EventArguments\KillEventArgs.cs" />
+    <Compile Include="Characters\EventArguments\MineItemEventArgs.cs" />
+    <Compile Include="Characters\EventArguments\MoveEventArgs.cs" />
+    <Compile Include="Characters\EventArguments\PickupItemEventArgs.cs" />
+    <Compile Include="Characters\EventArguments\TalkEventArgs.cs" />
+    <Compile Include="Characters\EventArguments\UpgradeEquipmentEvent.cs" />
+    <Compile Include="Characters\EventArguments\UpgradeRuneEvent.cs" />
+    <Compile Include="Helpers\RaidInventoryHelper.cs" />
+    <Compile Include="Item\Items\SpecialItems\13201.cs" />
+    <Compile Include="Plugin\Event\Handler\GameEvent\ArenaOfTalent\ArenaEvent.cs" />
+    <Compile Include="Plugin\Event\Handler\GameEvent\Duel\DuelEvent.cs" />
+    <Compile Include="Plugin\Event\Handler\GameEvent\Duel\DuelEventPrivate.cs" />
+    <Compile Include="Event\EventSubscriber.cs" />
+    <Compile Include="Event\EventWave.cs" />
+    <Compile Include="Plugin\Event\Handler\GameEvent\Worldboss\Worldboss.cs" />
+    <Compile Include="Plugin\Event\Handler\GameEvent\TimeSpaces\PartyTimespace.cs" />
+    <Compile Include="Plugin\Event\Handler\GameEvent\Moritius\CelestialSpire.cs" />
+    <Compile Include="Plugin\Event\Handler\GameEvent\RainbowBattle\RainbowBattle.cs" />
+    <Compile Include="Plugin\Event\Handler\GameEvent\RainbowBattle\RainbowBattleManager.cs" />
+    <Compile Include="Plugin\Event\Handler\GameEvent\RainbowBattle\RainbowBattleTeam.cs" />
+    <Compile Include="Plugin\Event\Handler\GameEvent\ArenaOfTalent\TalentArena.cs" />
+    <Compile Include="Plugin\Event\Handler\GameEvent\ArenaOfTalent\TalentArenaBattle.cs" />
+    <Compile Include="Extension\Character\CharacterConfigurationExtension.cs" />
+    <Compile Include="Extension\Character\MiniPetExtension.cs" />
+    <Compile Include="Extension\Character\ReputationExtension.cs" />
+    <Compile Include="Extension\Character\StatusExtension.cs" />
+    <Compile Include="Extension\Data\BetweenExtensions.cs" />
+    <Compile Include="Extension\Character\CharacterExtension.cs" />
+    <Compile Include="Extension\Data\GarbageCollectionExtension.cs" />
+    <Compile Include="Extension\Data\RandomNumberExtension.cs" />
+    <Compile Include="Extension\Dialog\DialogExtension.cs" />
+    <Compile Include="Extension\Event\SealedVesselEventExtension.cs" />
+    <Compile Include="Extension\Family\FamilyExtensions.cs" />
+    <Compile Include="Extension\Family\FamilySystemExtensions.cs" />
+    <Compile Include="Extension\Inventory\BuffBookExtension.cs" />
+    <Compile Include="Extension\Inventory\ConvertToPartnerEquipmentExtension.cs" />
+    <Compile Include="Extension\Inventory\ApplyTattooExtension.cs" />
+    <Compile Include="Extension\Inventory\InventoryItemExtension.cs" />
+    <Compile Include="Extension\Inventory\MagicianExtension.cs" />
+    <Compile Include="Extension\Inventory\RemoveRuneExtension.cs" />
+    <Compile Include="Extension\Inventory\RemoveTattooInked.cs" />
+    <Compile Include="Extension\Inventory\UpgradeableExtension.cs" />
+    <Compile Include="Extension\Inventory\UpgradeFairy.cs" />
+    <Compile Include="Extension\Inventory\UpgradeRuneExtension.cs" />
+    <Compile Include="Extension\Inventory\UpgradeTattooExtension.cs" />
+    <Compile Include="Extension\Inventory\ItemExtension.cs" />
+    <Compile Include="Extension\Data\NumberExtension.cs" />
+    <Compile Include="Extension\Data\RepeatMeExtension.cs" />
+    <Compile Include="Extension\Message\MessageExtension.cs" />
+    <Compile Include="Extension\Npc\SpecialistExchangeExtension.cs" />
+    <Compile Include="Extension\Instance\InstanceExtension.cs" />
+    <Compile Include="Extension\Reward\DailyReward.cs" />
+    <Compile Include="Extension\Reward\LevelReward.cs" />
+    <Compile Include="Helpers\BuffHelper.cs" />
+    <Compile Include="Item\Items\SpecialItems\13200.cs" />
+    <Compile Include="Item\Items\SpecialItems\14005.cs" />
+    <Compile Include="Item\Items\SpecialItems\5989bookbox.cs" />
+    <Compile Include="Item\Items\SpecialItems\9871.cs" />
+    <Compile Include="Item\Items\SpecialItems\9872.cs" />
+    <Compile Include="Item\Items\SpecialItems\Belial9850.cs" />
+    <Compile Include="Item\Items\SpecialItems\Carno9849.cs" />
+    <Compile Include="Item\Items\SpecialItems\Castra9835.cs" />
+    <Compile Include="Item\Items\SpecialItems\Cuby9833.cs" />
+    <Compile Include="Item\Items\SpecialItems\Erenia9845.cs" />
+    <Compile Include="Item\Items\SpecialItems\Fernon9846.cs" />
+    <Compile Include="Item\Items\SpecialItems\Ginseng9834.cs" />
+    <Compile Include="Item\Items\SpecialItems\Grenigas9842.cs" />
+    <Compile Include="Item\Items\SpecialItems\Kertos.cs" />
+    <Compile Include="Item\Items\SpecialItems\Kirolla9848.cs" />
+    <Compile Include="Item\Items\SpecialItems\Paimon9851.cs" />
+    <Compile Include="Item\Items\SpecialItems\Slade9837.cs" />
+    <Compile Include="Item\Items\SpecialItems\Spider9836.cs" />
+    <Compile Include="Item\Items\SpecialItems\StarterMallKit.cs" />
+    <Compile Include="Item\Items\SpecialItems\Valakus9840.cs" />
+    <Compile Include="Item\Items\SpecialItems\Zenas9844.cs" />
+    <Compile Include="Plugin\BCard\BCardEvent.cs" />
+    <Compile Include="Plugin\BCard\BCardPlugin.cs" />
+    <Compile Include="Plugin\BCard\Handler\AbsorbedSpiritHandler.cs" />
+    <Compile Include="Plugin\BCard\Handler\AddBuff.cs" />
+    <Compile Include="Plugin\BCard\Handler\AttackPowerHandler.cs" />
+    <Compile Include="Plugin\BCard\Handler\BearSpiritHandler.cs" />
+    <Compile Include="Plugin\BCard\Handler\BossMonstersSkillHandler.cs" />
+    <Compile Include="Plugin\BCard\Handler\CaptureHandler.cs" />
+    <Compile Include="Plugin\BCard\Handler\DamageConvertingSkillHandler.cs" />
+    <Compile Include="Plugin\BCard\Handler\DarkCloneSummonHandler.cs" />
+    <Compile Include="Plugin\BCard\Handler\DragonSkillsHandler.cs" />
+    <Compile Include="Plugin\BCard\Handler\DrainAndStealHandler.cs" />
+    <Compile Include="Plugin\BCard\Handler\DrainHandler.cs" />
+    <Compile Include="Plugin\BCard\Handler\FalconSkillHandler.cs" />
+    <Compile Include="Plugin\BCard\Handler\FearSkillHandler.cs" />
+    <Compile Include="Plugin\BCard\Handler\FrozenDebuffHandler.cs" />
+    <Compile Include="Plugin\BCard\Handler\HealingBurningAndCastingHandler.cs" />
+    <Compile Include="Plugin\BCard\Handler\HPMPHandler.cs" />
+    <Compile Include="Plugin\BCard\Handler\HugeSnowmanHandler.cs" />
+    <Compile Include="Plugin\BCard\Handler\InflictSkillHandler.cs" />
+    <Compile Include="Plugin\BCard\Handler\JumpBackPushHandler.cs" />
+    <Compile Include="Plugin\BCard\Handler\LightAndShadowHandler.cs" />
+    <Compile Include="Plugin\BCard\Handler\LordHatusHandler.cs" />
+    <Compile Include="Plugin\BCard\Handler\LotusSkillsHandler.cs" />
+    <Compile Include="Plugin\BCard\Handler\MeditationSkillHandler.cs" />
+    <Compile Include="Plugin\BCard\Handler\MeteoriteTeleportHandler.cs" />
+    <Compile Include="Plugin\BCard\Handler\MoveHandler.cs" />
+    <Compile Include="Plugin\BCard\Handler\RecoveryAndDamagePercentHandler.cs" />
+    <Compile Include="Plugin\BCard\Handler\RecoveryHandler.cs" />
+    <Compile Include="Plugin\BCard\Handler\ReflectionHandler.cs" />
+    <Compile Include="Plugin\BCard\Handler\SecondSPCardHandler.cs" />
+    <Compile Include="Plugin\BCard\Handler\SESpecialistHandler.cs" />
+    <Compile Include="Plugin\BCard\Handler\SniperAttackHandler.cs" />
+    <Compile Include="Plugin\BCard\Handler\SpecialActionsHandler.cs" />
+    <Compile Include="Plugin\BCard\Handler\SpecialBehaviourHandler.cs" />
+    <Compile Include="Plugin\BCard\Handler\SpecialEffects2Handler.cs" />
+    <Compile Include="Plugin\BCard\Handler\SpecialEffectsHandler.cs" />
+    <Compile Include="Plugin\BCard\Handler\SpecialisationBuffResistanceHandler.cs" />
+    <Compile Include="Plugin\BCard\Handler\SummonAndRecoverHPHandler.cs" />
+    <Compile Include="Plugin\BCard\Handler\SummonedMonsterAttackHandler.cs" />
+    <Compile Include="Plugin\BCard\Handler\SummonsHandler.cs" />
+    <Compile Include="Plugin\BCard\Handler\SummonSkillHandler.cs" />
+    <Compile Include="Plugin\BCard\Handler\TauntSkillHandler.cs" />
+    <Compile Include="Plugin\BCard\Handler\TransfoHandler.cs" />
+    <Compile Include="Plugin\BCard\Handler\WolfMasterHandler.cs" />
+    <Compile Include="Plugin\BCard\IBCardHandler.cs" />
+    <Compile Include="Plugin\Event\EventService.cs" />
+    <Compile Include="Plugin\Event\Extension\EventServiceExtension.cs" />
+    <Compile Include="Plugin\Event\EventServiceHandler.cs" />
+    <Compile Include="Plugin\Event\GameEventHandler.cs" />
+    <Compile Include="Plugin\Event\Handler\Handler\AutomaticMessageEvent.cs" />
+    <Compile Include="Plugin\Event\Handler\Handler\BaseArenaEvent.cs" />
+    <Compile Include="Plugin\Event\Handler\Handler\CheckEvent.cs" />
+    <Compile Include="Plugin\Event\Handler\Handler\FamilyArenaEvent.cs" />
+    <Compile Include="Plugin\Event\Handler\GameEvent\Glacernon\Caligor.cs" />
+    <Compile Include="Plugin\Event\Handler\GameEvent\Glacernon\GlacernonRaid.cs" />
+    <Compile Include="Plugin\Event\Handler\GameEvent\Glacernon\GlacernonShip.cs" />
+    <Compile Include="Plugin\Event\Handler\GameEvent\IceBreaker\IceBreaker.cs" />
+    <Compile Include="Plugin\Event\Handler\GameEvent\InstantBattle\AsgobasInstantBattle.cs" />
+    <Compile Include="Plugin\Event\Handler\GameEvent\LandOfDeath\LandOfDeath.cs" />
+    <Compile Include="Plugin\Event\Handler\GameEvent\Moritius\MoritiusShip.cs" />
+    <Compile Include="Plugin\Event\Handler\Handler\GemStoneEvent.cs" />
+    <Compile Include="Plugin\Event\Handler\Handler\GlacernonEvent.cs" />
+    <Compile Include="Plugin\Event\Handler\Handler\GroupEvent.cs" />
+    <Compile Include="Plugin\Event\Handler\Handler\IceFlowerEvent.cs" />
+    <Compile Include="Plugin\Event\Handler\GameEvent\MinilandRefresh\MinilandRefresh.cs" />
+    <Compile Include="Plugin\Event\Handler\Handler\MoritiusShipEvent.cs" />
+    <Compile Include="Plugin\Event\Handler\Handler\OnLoadEvent.cs" />
+    <Compile Include="Plugin\Event\Handler\Handler\RankingEvent.cs" />
+    <Compile Include="Plugin\Event\Handler\Handler\RemoveItemEvent.cs" />
+    <Compile Include="Plugin\Event\Handler\Handler\SaveEvent.cs" />
+    <Compile Include="Plugin\Event\Handler\GameEvent\InstantBattle\InstantBattle.cs" />
+    <Compile Include="Plugin\Event\IEventServiceHandler.cs" />
+    <Compile Include="Plugin\Guri\GuriEvent.cs" />
+    <Compile Include="Plugin\Guri\Handler\G10.cs" />
+    <Compile Include="Plugin\Guri\Handler\G1502.cs" />
+    <Compile Include="Plugin\Guri\Handler\G199.cs" />
+    <Compile Include="Plugin\Guri\Handler\G2.cs" />
+    <Compile Include="Plugin\Guri\Handler\G2000.cs" />
+    <Compile Include="Plugin\Guri\Handler\G2001.cs" />
+    <Compile Include="Plugin\Guri\Handler\G201.cs" />
+    <Compile Include="Plugin\Guri\Handler\G202.cs" />
+    <Compile Include="Plugin\Guri\Handler\G203.cs" />
+    <Compile Include="Plugin\Guri\Handler\G204.cs" />
+    <Compile Include="Plugin\Guri\Handler\G205.cs" />
+    <Compile Include="Plugin\Guri\Handler\G208.cs" />
+    <Compile Include="Plugin\Guri\Handler\G209.cs" />
+    <Compile Include="Plugin\Guri\Handler\G300.cs" />
+    <Compile Include="Plugin\Guri\Handler\G306.cs" />
+    <Compile Include="Plugin\Guri\Handler\G4.cs" />
+    <Compile Include="Plugin\Guri\Handler\G40.cs" />
+    <Compile Include="Plugin\Guri\Handler\G400.cs" />
+    <Compile Include="Plugin\Guri\Handler\G41.cs" />
+    <Compile Include="Plugin\Guri\Handler\G42.cs" />
+    <Compile Include="Plugin\Guri\Handler\G43.cs" />
+    <Compile Include="Plugin\Guri\Handler\G44.cs" />
+    <Compile Include="Plugin\Guri\Handler\G5.cs" />
+    <Compile Include="Plugin\Guri\Handler\G501.cs" />
+    <Compile Include="Plugin\Guri\Handler\G502.cs" />
+    <Compile Include="Plugin\Guri\Handler\G505.cs" />
+    <Compile Include="Plugin\Guri\Handler\G506.cs" />
+    <Compile Include="Plugin\Guri\Handler\G507.cs" />
+    <Compile Include="Plugin\Guri\Handler\G513.cs" />
+    <Compile Include="Plugin\Guri\Handler\G596.cs" />
+    <Compile Include="Plugin\Guri\Handler\G6.cs" />
+    <Compile Include="Plugin\Guri\Handler\G710.cs" />
+    <Compile Include="Plugin\Guri\Handler\G711.cs" />
+    <Compile Include="Plugin\Guri\Handler\G750.cs" />
+    <Compile Include="Plugin\Guri\IGuriHandler.cs" />
+    <Compile Include="Plugin\IGenericGameHandler.cs" />
+    <Compile Include="Plugin\Load\Handler\LoadBannedCharacters.cs" />
+    <Compile Include="Plugin\Load\Handler\LoadBattlePass.cs" />
+    <Compile Include="Plugin\Load\Handler\LoadBazaarItems.cs" />
+    <Compile Include="Plugin\Load\Handler\LoadBosses.cs" />
+    <Compile Include="Plugin\Load\Handler\LoadCards.cs" />
+    <Compile Include="Plugin\Load\Handler\LoadCharacterRelations.cs" />
+    <Compile Include="Plugin\Load\Handler\LoadEvents.cs" />
+    <Compile Include="Plugin\Load\Handler\LoadFairyEnchantment.cs" />
+    <Compile Include="Plugin\Load\Handler\LoadFamilies.cs" />
+    <Compile Include="Plugin\Load\Handler\LoadFishes.cs" />
+    <Compile Include="Plugin\Load\Handler\LoadItems.cs" />
+    <Compile Include="Plugin\Load\Handler\LoadMail.cs" />
+    <Compile Include="Plugin\Load\Handler\LoadMapNpc.cs" />
+    <Compile Include="Plugin\Load\Handler\LoadMapsAndContent.cs" />
+    <Compile Include="Plugin\Load\Handler\LoadMonsterDrop.cs" />
+    <Compile Include="Plugin\Load\Handler\LoadMonsterSkills.cs" />
+    <Compile Include="Plugin\Load\Handler\LoadNpcMonster.cs" />
+    <Compile Include="Plugin\Load\Handler\LoadProperty.cs" />
+    <Compile Include="Plugin\Load\Handler\LoadQuest.cs" />
+    <Compile Include="Plugin\Load\Handler\LoadRecipe.cs" />
+    <Compile Include="Plugin\Load\Handler\LoadRecipeList.cs" />
+    <Compile Include="Plugin\Load\Handler\LoadScriptedInstances.cs" />
+    <Compile Include="Plugin\Load\Handler\LoadShopItem.cs" />
+    <Compile Include="Plugin\Load\Handler\LoadShops.cs" />
+    <Compile Include="Plugin\Load\Handler\LoadShopSkills.cs" />
+    <Compile Include="Plugin\Load\Handler\LoadSkills.cs" />
+    <Compile Include="Plugin\Load\Handler\LoadTeleporter.cs" />
+    <Compile Include="Plugin\Load\Handler\LoadTimespaceLogs.cs" />
+    <Compile Include="Plugin\Load\ILoadService.cs" />
+    <Compile Include="Plugin\Load\LoadService.cs" />
+    <Compile Include="Plugin\PluginFacility.cs" />
+    <Compile Include="Threads\WorkerThreads\Battle\BattleThread.cs" />
+    <Compile Include="Threads\WorkerThreads\Battle\Buff\BuffThread.cs" />
+    <Compile Include="Threads\WorkerThreads\Discord\DiscordHelperThread.cs" />
+    <Compile Include="Threads\WorkerThreads\Enum\SpecialistType.cs" />
+    <Compile Include="Threads\WorkerThreads\Battle\Skill\HandleSkillThread.cs" />
+    <Compile Include="Threads\WorkerThreads\Battle\Skill\SkillThread.cs" />
+    <Compile Include="Threads\WorkerThreads\Discord\DiscordThread.cs" />
+    <Compile Include="Threads\WorkerThreads\Discord\EmbedThread.cs" />
+    <Compile Include="Threads\WorkerThreads\Discord\EmbedBuilderThread.cs" />
+    <Compile Include="Threads\WorkerThreads\Discord\WebhookThread.cs" />
+    <Compile Include="Threads\WorkerThreads\Item\Items\RaidSealThread.cs" />
+    <Compile Include="Threads\WorkerThreads\Enum\PlayerCountType.cs" />
+    <Compile Include="Threads\WorkerThreads\MessageThread.cs" />
+    <Compile Include="Threads\WorkerThreads\System\GameStartThread.cs" />
+    <Compile Include="Threads\WorkerThreads\Item\Items\WingsThread.cs" />
+    <Compile Include="Extension\Teleportation\TeleportationExtension.cs" />
+    <Compile Include="Extension\Translator\TranslatorExtension.cs" />
+    <Compile Include="FamilySkillMission.cs" />
+    <Compile Include="Helpers\ChangeClassHelper.cs" />
+    <Compile Include="Helpers\FamilySystemHelper.cs" />
+    <Compile Include="Helpers\LogHelper.cs" />
+    <Compile Include="Helpers\MallAPIHelper.cs" />
+    <Compile Include="Helpers\MateHelper.cs" />
+    <Compile Include="Helpers\ItemHelper.cs" />
+    <Compile Include="Helpers\MonsterHelper.cs" />
+    <Compile Include="Helpers\PartnerHelper.cs" />
+    <Compile Include="Helpers\PartnerSkillHelper.cs" />
+    <Compile Include="Helpers\RuneHelper.cs" />
+    <Compile Include="Helpers\SkillHelper.cs" />
+    <Compile Include="Helpers\PassiveSkillHelper.cs" />
+    <Compile Include="Helpers\QuestHelper.cs" />
+    <Compile Include="Helpers\RewardsHelper.cs" />
+    <Compile Include="Helpers\ShellGeneratorHelper.cs" />
+    <Compile Include="Helpers\StaticPacketHelper.cs" />
+    <Compile Include="Battle\BattleEntity.cs" />
+    <Compile Include="Helpers\DamageHelper.cs" />
+    <Compile Include="Event\EventContainer.cs" />
+    <Compile Include="Event\Schedule.cs" />
+    <Compile Include="Helpers\EventHelper.cs" />
+    <Compile Include="Event\EventSchedule.cs" />
+    <Compile Include="Helpers\TitleHelper.cs" />
+    <Compile Include="Helpers\UserInterfaceHelper.cs" />
+    <Compile Include="HttpClient\BazaarHttpClient.cs" />
+    <Compile Include="HttpClient\KeepAliveClient.cs" />
+    <Compile Include="HttpClient\UserHttpClient.cs" />
+    <Compile Include="Instances\FarmingInstance.cs" />
+    <Compile Include="Item\Instance\FusionItemExt.cs" />
+    <Compile Include="Item\Items\ItemHandler.cs" />
+    <Compile Include="Item\Items\SpecialItems\11011.cs" />
+    <Compile Include="Item\Items\SpecialItems\13006.cs" />
+    <Compile Include="Item\Items\SpecialItems\13007.cs" />
+    <Compile Include="Item\Items\SpecialItems\1458.cs" />
+    <Compile Include="Item\Items\SpecialItems\5119.cs" />
+    <Compile Include="Item\Items\SpecialItems\9071.cs" />
+    <Compile Include="Item\Items\SpecialItems\9283.cs" />
+    <Compile Include="Item\Items\TitleItem.cs" />
+    <Compile Include="Modules\Bazaar\Commands\DeleteBazaarItemCommand.cs" />
+    <Compile Include="Modules\Bazaar\Commands\DeleteStateCommand.cs" />
+    <Compile Include="Modules\Bazaar\Commands\InsertOrUpdateBazaarItemCommand.cs" />
+    <Compile Include="Modules\Bazaar\Commands\SetStateCommand.cs" />
+    <Compile Include="Modules\Bazaar\Queries\GetBazaarItemQuery.cs" />
+    <Compile Include="Modules\Bazaar\Queries\GetRcbListQuery.cs" />
+    <Compile Include="Modules\Bazaar\Queries\GetRcsListQuery.cs" />
+    <Compile Include="Modules\Bazaar\Queries\GetStateQuery.cs" />
+    <Compile Include="Networking\AntiSpamModule.cs" />
+    <Compile Include="Npc\NRunHandler.cs" />
+    <Compile Include="PartnerSp.cs" />
+    <Compile Include="PartnerSkill.cs" />
+    <Compile Include="PossibleTypeAndSubtype.cs" />
+    <Compile Include="Quest.cs" />
+    <Compile Include="ScriptedObjects\Clock.cs" />
+    <Compile Include="ScriptedObjects\Locker.cs" />
+    <Compile Include="Map\MapButton.cs" />
+    <Compile Include="InstanceBag.cs" />
+    <Compile Include="Map\MapInstancePortalHandler.cs" />
+    <Compile Include="Battle\MTListHitTarget.cs" />
+    <Compile Include="Map\ZoneEvent.cs" />
+    <Compile Include="NpcToSummon.cs" />
+    <Compile Include="MonsterToSummon.cs" />
+    <Compile Include="ScriptedInstance.cs" />
+    <Compile Include="Portal.cs" />
+    <Compile Include="BazaarItemLink.cs" />
+    <Compile Include="Account.cs" />
+    <Compile Include="Character.cs" />
+    <Compile Include="ExchangeInfo.cs" />
+    <Compile Include="FamilyCharacter.cs" />
+    <Compile Include="Helpers\MappingHelper.cs" />
+    <Compile Include="Item\Items\FoodItem.cs" />
+    <Compile Include="Item\Items\MagicalItem.cs" />
+    <Compile Include="Item\Items\ProduceItem.cs" />
+    <Compile Include="Item\Items\SnackItem.cs" />
+    <Compile Include="Item\Items\PotionItem.cs" />
+    <Compile Include="Item\Items\SpecialItem.cs" />
+    <Compile Include="Item\Items\BoxItem.cs" />
+    <Compile Include="Item\Items\TeacherItem.cs" />
+    <Compile Include="Item\Items\UpgradeItem.cs" />
+    <Compile Include="Item\Items\NoFunctionItem.cs" />
+    <Compile Include="Item\Items\WearableItem.cs" />
+    <Compile Include="Map\CharacterMapItem.cs" />
+    <Compile Include="Map\Map.cs" />
+    <Compile Include="Group.cs" />
+    <Compile Include="Map\MapCell.cs" />
+    <Compile Include="Map\MapInstance.cs" />
+    <Compile Include="Map\MapMonster.cs" />
+    <Compile Include="MonsterMapItem.cs" />
+    <Compile Include="Networking\BroadcastableBase.cs" />
+    <Compile Include="Battle\HitRequest.cs" />
+    <Compile Include="Networking\SessionManager.cs" />
+    <Compile Include="Networking\TransportFactory.cs" />
+    <Compile Include="NpcMonsterSkill.cs" />
+    <Compile Include="Map\MapNpc.cs" />
+    <Compile Include="Gift.cs" />
+    <Compile Include="Mate.cs" />
+    <Compile Include="Recipe.cs" />
+    <Compile Include="MinilandObject.cs" />
+    <Compile Include="Extension\Data\IPBlockExtension.cs" />
+    <Compile Include="Extension\Configuration\GlacernonConfigurationExtension.cs" />
+    <Compile Include="Extension\Configuration\InventoryConfigurationExtension.cs" />
+    <Compile Include="Extension\Configuration\UpgradeRuneConfigurationService.cs" />
+    <Compile Include="Extension\Configuration\ConfigurationExtension.cs" />
+    <Compile Include="Extension\Configuration\MysteryBoxConfigurationService.cs" />
+    <Compile Include="Extension\Lottery\LotteryService.cs" />
+    <Compile Include="Extension\MysteryBox\MysteryBox.cs" />
+    <Compile Include="Extension\PrimalQuest\PrimalQuestRewardExtension.cs" />
+    <Compile Include="Extension\PrimalQuest\PrimalQuestExtension.cs" />
+    <Compile Include="Extension\Ranking\RankingExtension.cs" />
+    <Compile Include="Extension\Inventory\TitleExtension.cs" />
+    <Compile Include="Extension\Inventory\TrophyExtension.cs" />
+    <Compile Include="Extension\Inventory\WingChangerExtension.cs" />
+    <Compile Include="Extension\Refresh\RefreshExtension.cs" />
+    <Compile Include="Extension\Reward\Reward.cs" />
+    <Compile Include="Extension\Inventory\CraftFairyService.cs" />
+    <Compile Include="Extension\Inventory\UpgradeDragonCardExtension.cs" />
+    <Compile Include="Shop.cs" />
+    <Compile Include="Item\Items\Item.cs" />
+    <Compile Include="Inventory.cs" />
+    <Compile Include="PersonalShopItem.cs" />
+    <Compile Include="Map\MapShop.cs" />
+    <Compile Include="Map\MapItem.cs" />
+    <Compile Include="Item\Instance\ItemInstance.cs" />
+    <Compile Include="Networking\ClientSession.cs" />
+    <Compile Include="Networking\ServerManager.cs" />
+    <Compile Include="Networking\BroadcastPacket.cs" />
+    <Compile Include="Networking\NetworkManager.cs" />
+    <Compile Include="Npc\NpcMonster.cs" />
+    <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="Helpers\CharacterHelper.cs" />
+    <Compile Include="Family.cs" />
+    <Compile Include="Skill.cs" />
+    <Compile Include="CharacterSkill.cs" />
+    <Compile Include="SoccerMember.cs" />
+    <Compile Include="SoccerTeamMember.cs" />
+    <Compile Include="Threads\WorkerThreads\Item\Items\RaidboxThread.cs" />
+    <Compile Include="Threads\WorkerThreads\Item\ItemThread.cs" />
+    <Compile Include="Threads\WorkerThreads\Raid\RaidEndThread.cs" />
+    <Compile Include="Threads\WorkerThreads\Raid\RaidStartThread.cs" />
+    <Compile Include="Threads\WorkerThreads\System\PlayerCountThread.cs" />
+    <Compile Include="Threads\WorkerThreads\Titan Shield\Thread\AutomaticResponseThread.cs" />
+    <Compile Include="Threads\WorkerThreads\Titan Shield\Thread\DoNothingThread.cs" />
+    <Compile Include="Threads\WorkerThreads\Titan Shield\Thread\FilePathThread.cs" />
+    <Compile Include="Threads\WorkerThreads\Titan Shield\Thread\FilterThread.cs" />
+    <Compile Include="Threads\WorkerThreads\Titan Shield\Thread\GarbageCollectionThread.cs" />
+    <Compile Include="Threads\WorkerThreads\Titan Shield\Thread\MemoryCacheThread.cs" />
+    <Compile Include="Threads\WorkerThreads\Titan Shield\Thread\PunishThread.cs" />
+    <Compile Include="Threads\WorkerThreads\Titan Shield\Thread\ResponseWithIdThread.cs" />
+    <Compile Include="Threads\WorkerThreads\Enum\TitanShieldType.cs" />
+    <Compile Include="Threads\WorkerThreads\Titan Shield\TitanShield.cs" />
+    <Compile Include="UseSkillOnDamage.cs" />
+    <Compile Include="_Storage\_Algorithm\IAlgorithmService.cs" />
+    <Compile Include="_Storage\_Algorithm\IDamageAlgorithm.cs" />
+    <Compile Include="_Storage\_Algorithm\INpcMonsterAlgorithmService.cs" />
+    <Compile Include="_Storage\_BCards\Event\BcardEvent.cs" />
+    <Compile Include="_Storage\_BCards\IBCardEffectAsyncHandler.cs" />
+    <Compile Include="_Storage\_BCards\IBCardEffectHandlerContainer.cs" />
+    <Compile Include="_Storage\_Event\EventEntity.cs" />
+    <Compile Include="_Storage\_Event\PlayerEvent.cs" />
+    <Compile Include="_Storage\_gameEvent\EventNotificationContext.cs" />
+    <Compile Include="_Storage\_gameEvent\IPlayerNotifier.cs" />
+    <Compile Include="_Storage\_gameEvent\NotifiableEventType.cs" />
+    <Compile Include="_Storage\_Guri\Event\GuriEvent.cs" />
+    <Compile Include="_Storage\_Guri\IGuriHandler.cs" />
+    <Compile Include="_Storage\_Guri\IGuriHandlerContainer.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\NosGm.Algorithm\NosGm.Algorithm.csproj">
+      <Project>{6681eb59-1773-45be-9f10-099524882836}</Project>
+      <Name>NosGm.Algorithm</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\NosGm.ChickenAPI\ChickenAPI.Events\ChickenAPI.Events.csproj">
+      <Project>{decb5668-600c-49f1-a5c8-cde5a12c9f5a}</Project>
+      <Name>ChickenAPI.Events</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\NosGm.Configuration\NosGm.Configuration.csproj">
+      <Project>{011ee023-e1b8-4645-bbe9-94ac35b55390}</Project>
+      <Name>NosGm.Configuration</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\NosGm.Core\NosGm.Core.csproj">
+      <Project>{c93a0a40-0551-4732-b594-171b87679ac1}</Project>
+      <Name>NosGm.Core</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\NosGm.DAL\NosGm.DAL.Interface\NosGm.DAL.Interface.csproj">
+      <Project>{175c851b-8dc8-43a5-af93-af32d106cd77}</Project>
+      <Name>NosGm.DAL.Interface</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\NosGm.DAL\NosGm.DAL\NosGm.DAL.csproj">
+      <Project>{d8c8a266-3d46-42c5-a492-28c75db85ba8}</Project>
+      <Name>NosGm.DAL</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\NosGm.DAL\NosGm.Data\NosGm.Data.csproj">
+      <Project>{f1071ded-3d92-4416-9b9c-8664441ade64}</Project>
+      <Name>NosGm.Data</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\NosGm.Domain\NosGm.Domain.csproj">
+      <Project>{20addddd-dad9-44f3-9beb-026c73090660}</Project>
+      <Name>NosGm.Domain</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\NosGm.Master.Library\NosGm.Master.Library.csproj">
+      <Project>{8fabda5b-c873-4e32-a78f-08a9a4768595}</Project>
+      <Name>NosGm.Master.Library</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\NosGm.Packets\NosGm.Packets.csproj">
+      <Project>{865a727d-5369-40ca-9085-dc6e751522d7}</Project>
+      <Name>NosGm.Packets</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\NosGm.PathFinder\NosGm.PathFinder.csproj">
+      <Project>{4bc2b4b0-2a38-4274-98a2-37cef5f03b42}</Project>
+      <Name>NosGm.PathFinder</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\NosGm.Program\NosGm.Logger\NosGm.LogServer.csproj">
+      <Project>{A09A8666-2598-4F86-8F5E-9A2708354F37}</Project>
+      <Name>NosGm.LogServer</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\NosGm.XMLModel\NosGm.XMLModel.csproj">
+      <Project>{ce1bcbe7-edb7-4564-a11e-8d90868df9d0}</Project>
+      <Name>NosGm.XMLModel</Name>
+    </ProjectReference>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="app.config" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="FluentValidation">
+      <Version>11.8.1</Version>
+    </PackageReference>
+    <PackageReference Include="Google.Cloud.Translation.V2">
+      <Version>3.5.0</Version>
+    </PackageReference>
+    <PackageReference Include="log4net">
+      <Version>3.3.2</Version>
+    </PackageReference>
+    <PackageReference Include="MediatR">
+      <Version>12.2.0</Version>
+    </PackageReference>
+    <PackageReference Include="MongoDB.Driver">
+      <Version>3.9.0</Version>
+    </PackageReference>
+    <PackageReference Include="Newtonsoft.Json">
+      <Version>13.0.4</Version>
+    </PackageReference>
+    <PackageReference Include="System.Reactive">
+      <Version>6.1.0</Version>
+    </PackageReference>
+    <PackageReference Include="WindowsFirewallHelper">
+      <Version>2.2.0.86</Version>
+    </PackageReference>
+  </ItemGroup>
+  <ItemGroup>
+    <Folder Include="Extension\Thread\" />
+    <Folder Include="Plugin\Battle\" />
+    <Folder Include="Plugin\Discord\" />
+    <Folder Include="Plugin\Event\Handler\GameEvent\ArenaOfMaster\" />
+    <Folder Include="Plugin\Event\Handler\GameEvent\Cylloan\" />
+    <Folder Include="Plugin\Item\" />
+    <Folder Include="Plugin\NRun\" />
+    <Folder Include="Plugin\Titan Shield\" />
+  </ItemGroup>
+  <ItemGroup>
+    <Content Include="favicon.ico" />
+  </ItemGroup>
+  <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
+</Project>

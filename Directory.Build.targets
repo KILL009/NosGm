@@ -1,15 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="14.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
-  <ItemGroup Condition="'$(MSBuildProjectName)' == 'Frostvein.Packets'">
-    <Compile Include="$(MSBuildThisFileDirectory)Data\Frostvein.Packets\Packets\CommandPackets\ItemTracePacket.cs" />
-    <Compile Include="$(MSBuildThisFileDirectory)Data\Frostvein.Packets\Packets\CommandPackets\GmCasePacket.cs" />
-    <Compile Include="$(MSBuildThisFileDirectory)Data\Frostvein.Packets\Packets\CommandPackets\SanctionPacket.cs" />
-    <Compile Include="$(MSBuildThisFileDirectory)Data\Frostvein.Packets\Packets\CommandPackets\BazaarAuditPacket.cs" />
+  <ItemGroup Condition="'$(MSBuildProjectName)' == 'NosGm.Packets'">
+    <Compile Include="$(MSBuildThisFileDirectory)Data\NosGm.Packets\Packets\CommandPackets\ItemTracePacket.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Data\NosGm.Packets\Packets\CommandPackets\GmCasePacket.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Data\NosGm.Packets\Packets\CommandPackets\SanctionPacket.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Data\NosGm.Packets\Packets\CommandPackets\BazaarAuditPacket.cs" />
   </ItemGroup>
-  <ItemGroup Condition="'$(MSBuildProjectName)' == 'Frostvein.Handler'">
-    <Compile Include="$(MSBuildThisFileDirectory)Data\Frostvein.Handler\PacketHandler\Command\ItemTraceHandler.cs" />
-    <Compile Include="$(MSBuildThisFileDirectory)Data\Frostvein.Handler\PacketHandler\Command\GmCaseHandler.cs" />
-    <Compile Include="$(MSBuildThisFileDirectory)Data\Frostvein.Handler\PacketHandler\Command\SanctionHandler.cs" />
-    <Compile Include="$(MSBuildThisFileDirectory)Data\Frostvein.Handler\PacketHandler\Command\BazaarAuditHandler.cs" />
+  <ItemGroup Condition="'$(MSBuildProjectName)' == 'NosGm.Handler'">
+    <Compile Include="$(MSBuildThisFileDirectory)Data\NosGm.Handler\PacketHandler\Command\ItemTraceHandler.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Data\NosGm.Handler\PacketHandler\Command\GmCaseHandler.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Data\NosGm.Handler\PacketHandler\Command\SanctionHandler.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Data\NosGm.Handler\PacketHandler\Command\BazaarAuditHandler.cs" />
   </ItemGroup>
 </Project>

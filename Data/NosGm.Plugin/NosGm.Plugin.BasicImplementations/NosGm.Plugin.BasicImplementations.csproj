@@ -1,0 +1,204 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
+  <PropertyGroup>
+    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
+    <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
+    <ProjectGuid>{B5FE46A3-9C85-44D9-8EFB-4A33E7E77C4A}</ProjectGuid>
+    <OutputType>Library</OutputType>
+    <AppDesignerFolder>Properties</AppDesignerFolder>
+    <RootNamespace>NosGm.Plugin.BasicImplementations</RootNamespace>
+    <AssemblyName>NosGm.Plugin.BasicImplementations</AssemblyName>
+    <TargetFrameworkVersion>v4.8</TargetFrameworkVersion>
+    <FileAlignment>512</FileAlignment>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
+    <PlatformTarget>AnyCPU</PlatformTarget>
+    <DebugSymbols>true</DebugSymbols>
+    <DebugType>full</DebugType>
+    <Optimize>false</Optimize>
+    <OutputPath>bin\Debug\</OutputPath>
+    <DefineConstants>DEBUG;TRACE</DefineConstants>
+    <ErrorReport>prompt</ErrorReport>
+    <WarningLevel>4</WarningLevel>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
+    <PlatformTarget>AnyCPU</PlatformTarget>
+    <DebugType>pdbonly</DebugType>
+    <Optimize>true</Optimize>
+    <OutputPath>bin\Release\</OutputPath>
+    <DefineConstants>TRACE</DefineConstants>
+    <ErrorReport>prompt</ErrorReport>
+    <WarningLevel>4</WarningLevel>
+  </PropertyGroup>
+  <PropertyGroup>
+    <ApplicationIcon>favicon.ico</ApplicationIcon>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="System" />
+    <Reference Include="System.ComponentModel.Composition" />
+    <Reference Include="System.Core" />
+    <Reference Include="System.Data" />
+    <Reference Include="System.Net.Http" />
+    <Reference Include="System.Xml" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="Algorithm\AlgorithmPluginCore.cs" />
+    <Compile Include="Algorithm\AlgorithmService.cs" />
+    <Compile Include="Algorithm\CharacterAlgorithms\Close\CloseDefenceAlgorithm.cs" />
+    <Compile Include="Algorithm\CharacterAlgorithms\Close\CloseDodgeAlgorithm.cs" />
+    <Compile Include="Algorithm\CharacterAlgorithms\Damage\CriticalDistAlgorithm.cs" />
+    <Compile Include="Algorithm\CharacterAlgorithms\Damage\CriticalDistRateAlgorithm.cs" />
+    <Compile Include="Algorithm\CharacterAlgorithms\Damage\CriticalHitAlgortihmcs.cs" />
+    <Compile Include="Algorithm\CharacterAlgorithms\Damage\CriticalHitRateAlgorithm.cs" />
+    <Compile Include="Algorithm\CharacterAlgorithms\Damage\DistanceHitRateAlgorithm.cs" />
+    <Compile Include="Algorithm\CharacterAlgorithms\Damage\HitRateAlgorithm.cs" />
+    <Compile Include="Algorithm\CharacterAlgorithms\Damage\SecondaryDamageAlgorithm.cs" />
+    <Compile Include="Algorithm\CharacterAlgorithms\Damage\DamageAlgorithm.cs" />
+    <Compile Include="Algorithm\CharacterAlgorithms\Distance\RangedDefenceAlgorithm.cs" />
+    <Compile Include="Algorithm\CharacterAlgorithms\Distance\RangedDodgeAlgorithm.cs" />
+    <Compile Include="Algorithm\CharacterAlgorithms\HpMp\HpMax.cs" />
+    <Compile Include="Algorithm\CharacterAlgorithms\HpMp\HpRegen.cs" />
+    <Compile Include="Algorithm\CharacterAlgorithms\HpMp\HpRegenSitting.cs" />
+    <Compile Include="Algorithm\CharacterAlgorithms\HpMp\MpMax.cs" />
+    <Compile Include="Algorithm\CharacterAlgorithms\HpMp\MpRegen.cs" />
+    <Compile Include="Algorithm\CharacterAlgorithms\HpMp\MpRegenSitting.cs" />
+    <Compile Include="Algorithm\CharacterAlgorithms\ICharacterStatAlgorithm.cs" />
+    <Compile Include="Algorithm\CharacterAlgorithms\Magical\MagicDefenceAlgorithm.cs" />
+    <Compile Include="Algorithm\CharacterAlgorithms\Magical\MagicDodgeAlgorithm.cs" />
+    <Compile Include="Algorithm\CharacterAlgorithms\SpeedAlgorithm.cs" />
+    <Compile Include="Algorithm\CharacterAlgorithms\Xp\FairyLevelBasedAlgorithm.cs" />
+    <Compile Include="Algorithm\CharacterAlgorithms\Xp\HeroLevelBasedAlgorithm.cs" />
+    <Compile Include="Algorithm\CharacterAlgorithms\Xp\JobLevelBasedAlgorithm.cs" />
+    <Compile Include="Algorithm\CharacterAlgorithms\Xp\LevelBasedAlgorithm.cs" />
+    <Compile Include="Algorithm\CharacterAlgorithms\Xp\SpLevelBasedAlgorithm.cs" />
+    <Compile Include="Algorithm\DamageAlgorithm.cs" />
+    <Compile Include="Algorithm\FamilyAlgorithms\FamilyLevelBasedAlgorithm.cs" />
+    <Compile Include="Algorithm\ILevelBasedDataAlgorithm.cs" />
+    <Compile Include="Algorithm\NpcMonsterAlgorithmService.cs" />
+    <Compile Include="Algorithm\NpcMonsterAlgorithms\HeroXp.cs" />
+    <Compile Include="Algorithm\NpcMonsterAlgorithms\HpMax.cs" />
+    <Compile Include="Algorithm\NpcMonsterAlgorithms\IMonsterRaceStatAlgorithm.cs" />
+    <Compile Include="Algorithm\NpcMonsterAlgorithms\JobXp.cs" />
+    <Compile Include="Algorithm\NpcMonsterAlgorithms\MpMax.cs" />
+    <Compile Include="Algorithm\NpcMonsterAlgorithms\Xp.cs" />
+    <Compile Include="Event\BCard\BCardEventHandler.cs" />
+    <Compile Include="Event\Characters\Bank\OpenBankEventHandler.cs" />
+    <Compile Include="Event\Characters\ChangeSexEventHandler.cs" />
+    <Compile Include="Event\Characters\CharacterSaveEventHandler.cs" />
+    <Compile Include="Event\Characters\Mates\AddPetWithSkillEventHandler.cs" />
+    <Compile Include="Event\Characters\PlayerChangeChannelEventHandler.cs" />
+    <Compile Include="Event\GenericEventPlugin.cs" />
+    <Compile Include="Event\GenericEventPluginCore.cs" />
+    <Compile Include="Event\Guri\GuriEventHandler.cs" />
+    <Compile Include="Guri\GuriHandlerContainer.cs" />
+    <Compile Include="Guri\GuriPlugin.cs" />
+    <Compile Include="Guri\GuriPluginCore.cs" />
+    <Compile Include="Guri\Handler\G2000.cs" />
+    <Compile Include="Guri\Handler\G2001.cs" />
+    <Compile Include="Guri\Handler\G40.cs" />
+    <Compile Include="Guri\Handler\G10.cs" />
+    <Compile Include="Guri\Handler\G1502.cs" />
+    <Compile Include="Guri\Handler\G199.cs" />
+    <Compile Include="Guri\Handler\G2.cs" />
+    <Compile Include="Guri\Handler\G201.cs" />
+    <Compile Include="Guri\Handler\G202.cs" />
+    <Compile Include="Guri\Handler\G203.cs" />
+    <Compile Include="Guri\Handler\G204.cs" />
+    <Compile Include="Guri\Handler\G205.cs" />
+    <Compile Include="Guri\Handler\G208.cs" />
+    <Compile Include="Guri\Handler\G209.cs" />
+    <Compile Include="Guri\Handler\G300.cs" />
+    <Compile Include="Guri\Handler\G306.cs" />
+    <Compile Include="Guri\Handler\G4.cs" />
+    <Compile Include="Guri\Handler\G400.cs" />
+    <Compile Include="Guri\Handler\G41.cs" />
+    <Compile Include="Guri\Handler\G42.cs" />
+    <Compile Include="Guri\Handler\G43.cs" />
+    <Compile Include="Guri\Handler\G44.cs" />
+    <Compile Include="Guri\Handler\G5.cs" />
+    <Compile Include="Guri\Handler\G501.cs" />
+    <Compile Include="Guri\Handler\G502.cs" />
+    <Compile Include="Guri\Handler\G505.cs" />
+    <Compile Include="Guri\Handler\G506.cs" />
+    <Compile Include="Guri\Handler\G507.cs" />
+    <Compile Include="Guri\Handler\G513.cs" />
+    <Compile Include="Guri\Handler\G596.cs" />
+    <Compile Include="Guri\Handler\G6.cs" />
+    <Compile Include="Guri\Handler\G710.cs" />
+    <Compile Include="Guri\Handler\G711.cs" />
+    <Compile Include="Guri\Handler\G750.cs" />
+    <Compile Include="Properties\AssemblyInfo.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\NosGm.ChickenAPI\ChickenAPI.Events\ChickenAPI.Events.csproj">
+      <Project>{decb5668-600c-49f1-a5c8-cde5a12c9f5a}</Project>
+      <Name>ChickenAPI.Events</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\..\NosGm.ChickenAPI\ChickenAPI.Plugins\ChickenAPI.Plugins.csproj">
+      <Project>{a8289e58-4507-4614-8a28-9ff936bee009}</Project>
+      <Name>ChickenAPI.Plugins</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\..\NosGm.DAL\NosGm.DAL.Interface\NosGm.DAL.Interface.csproj">
+      <Project>{175c851b-8dc8-43a5-af93-af32d106cd77}</Project>
+      <Name>NosGm.DAL.Interface</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\..\NosGm.DAL\NosGm.DAL\NosGm.DAL.csproj">
+      <Project>{d8c8a266-3d46-42c5-a492-28c75db85ba8}</Project>
+      <Name>NosGm.DAL</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\..\NosGm.DAL\NosGm.Data\NosGm.Data.csproj">
+      <Project>{f1071ded-3d92-4416-9b9c-8664441ade64}</Project>
+      <Name>NosGm.Data</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\..\NosGm.Configuration\NosGm.Configuration.csproj">
+      <Project>{011EE023-E1B8-4645-BBE9-94AC35B55390}</Project>
+      <Name>NosGm.Configuration</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\..\NosGm.Packets\NosGm.Packets.csproj">
+      <Project>{865a727d-5369-40ca-9085-dc6e751522d7}</Project>
+      <Name>NosGm.Packets</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\..\NosGm.Core\NosGm.Core.csproj">
+      <Project>{c93a0a40-0551-4732-b594-171b87679ac1}</Project>
+      <Name>NosGm.Core</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\..\NosGm.Domain\NosGm.Domain.csproj">
+      <Project>{20addddd-dad9-44f3-9beb-026c73090660}</Project>
+      <Name>NosGm.Domain</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\..\NosGm.GameObject\NosGm.GameObject.csproj">
+      <Project>{eadd17be-20a4-4589-830e-e41be9314928}</Project>
+      <Name>NosGm.GameObject</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\..\NosGm.Master.Library\NosGm.Master.Library.csproj">
+      <Project>{8fabda5b-c873-4e32-a78f-08a9a4768595}</Project>
+      <Name>NosGm.Master.Library</Name>
+    </ProjectReference>
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Autofac">
+      <Version>9.3.0</Version>
+    </PackageReference>
+    <PackageReference Include="log4net">
+      <Version>3.3.2</Version>
+    </PackageReference>
+    <PackageReference Include="System.Net.Http">
+      <Version>4.3.4</Version>
+    </PackageReference>
+    <PackageReference Include="System.ValueTuple">
+      <Version>4.6.2</Version>
+    </PackageReference>
+  </ItemGroup>
+  <ItemGroup>
+    <Content Include="favicon.ico" />
+  </ItemGroup>
+  <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
+  <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
+         Other similar extension points exist, see Microsoft.Common.targets.
+    <Target Name="BeforeBuild">
+    </Target>
+    <Target Name="AfterBuild">
+    </Target>
+    -->
+</Project>

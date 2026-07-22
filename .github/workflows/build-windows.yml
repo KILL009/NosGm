@@ -52,7 +52,7 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path "$env:ARTIFACTS" | Out-Null
-          $output = & msbuild "Data\Frostvein.Program\Frostvein.World\Frostvein.World.csproj" `
+          $output = & msbuild "Data\NosGm.Program\NosGm.World\NosGm.World.csproj" `
             /t:PrepareResources `
             /m `
             /nologo `

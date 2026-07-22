@@ -1,0 +1,223 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="14.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
+  <PropertyGroup>
+    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
+    <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
+    <ProjectGuid>{4AECC47D-098A-4493-8E1E-D10EDBB7A189}</ProjectGuid>
+    <OutputType>Library</OutputType>
+    <AppDesignerFolder>Properties</AppDesignerFolder>
+    <RootNamespace>NosGm.DAL.EF</RootNamespace>
+    <AssemblyName>NosGm.DAL.EF</AssemblyName>
+    <TargetFrameworkVersion>v4.8</TargetFrameworkVersion>
+    <FileAlignment>512</FileAlignment>
+    <NuGetPackageImportStamp>
+    </NuGetPackageImportStamp>
+    <TargetFrameworkProfile />
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
+    <DebugSymbols>true</DebugSymbols>
+    <DebugType>full</DebugType>
+    <Optimize>false</Optimize>
+    <OutputPath>bin\Debug\</OutputPath>
+    <DefineConstants>TRACE;DEBUG</DefineConstants>
+    <ErrorReport>prompt</ErrorReport>
+    <WarningLevel>4</WarningLevel>
+    <CodeAnalysisRuleSet>..\..\..\ProjectRuleset.ruleset</CodeAnalysisRuleSet>
+    <LangVersion>latest</LangVersion>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
+    <DebugType>pdbonly</DebugType>
+    <Optimize>true</Optimize>
+    <OutputPath>bin\Release\</OutputPath>
+    <DefineConstants>TRACE</DefineConstants>
+    <ErrorReport>prompt</ErrorReport>
+    <WarningLevel>4</WarningLevel>
+    <CodeAnalysisRuleSet>..\..\..\ProjectRuleset.ruleset</CodeAnalysisRuleSet>
+    <LangVersion>latest</LangVersion>
+  </PropertyGroup>
+  <PropertyGroup Label="SlowCheetah">
+    <SlowCheetahToolsPath>$([System.IO.Path]::GetFullPath( $(MSBuildProjectDirectory)\..\..\..\packages\SlowCheetah.2.5.15\tools\))</SlowCheetahToolsPath>
+    <SlowCheetah_EnableImportFromNuGet Condition=" '$(SlowCheetah_EnableImportFromNuGet)'=='' ">true</SlowCheetah_EnableImportFromNuGet>
+    <SlowCheetah_NuGetImportPath Condition=" '$(SlowCheetah_NuGetImportPath)'=='' ">$([System.IO.Path]::GetFullPath( $(MSBuildProjectDirectory)\Properties\SlowCheetah\SlowCheetah.Transforms.targets ))</SlowCheetah_NuGetImportPath>
+    <SlowCheetahTargets Condition=" '$(SlowCheetah_EnableImportFromNuGet)'=='true' and Exists('$(SlowCheetah_NuGetImportPath)') ">$(SlowCheetah_NuGetImportPath)</SlowCheetahTargets>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Debug|x64'">
+    <PlatformTarget>x64</PlatformTarget>
+    <OutputPath>bin\x64\Debug\</OutputPath>
+    <DefineConstants>TRACE;DEBUG</DefineConstants>
+    <CodeAnalysisRuleSet>..\..\..\ProjectRuleset.ruleset</CodeAnalysisRuleSet>
+    <LangVersion>latest</LangVersion>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Release|x64'">
+    <PlatformTarget>x64</PlatformTarget>
+    <OutputPath>bin\x64\Release\</OutputPath>
+    <DefineConstants>TRACE</DefineConstants>
+    <Optimize>true</Optimize>
+    <CodeAnalysisRuleSet>..\..\..\ProjectRuleset.ruleset</CodeAnalysisRuleSet>
+    <LangVersion>latest</LangVersion>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Debug|x86'">
+    <PlatformTarget>x86</PlatformTarget>
+    <OutputPath>bin\x86\Debug\</OutputPath>
+    <DefineConstants>TRACE;DEBUG</DefineConstants>
+    <CodeAnalysisRuleSet>..\..\..\ProjectRuleset.ruleset</CodeAnalysisRuleSet>
+    <LangVersion>latest</LangVersion>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Release|x86'">
+    <PlatformTarget>x86</PlatformTarget>
+    <OutputPath>bin\x86\Release\</OutputPath>
+    <DefineConstants>TRACE</DefineConstants>
+    <Optimize>true</Optimize>
+    <CodeAnalysisRuleSet>..\..\..\ProjectRuleset.ruleset</CodeAnalysisRuleSet>
+    <LangVersion>latest</LangVersion>
+  </PropertyGroup>
+  <PropertyGroup>
+    <ApplicationIcon>favicon.ico</ApplicationIcon>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="System" />
+    <Reference Include="System.ComponentModel.DataAnnotations" />
+    <Reference Include="System.Data">
+      <Private>True</Private>
+    </Reference>
+    <Reference Include="System.Net.Http" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="BattlePassAccountLog.cs" />
+    <Compile Include="BattlePassPrize.cs" />
+    <Compile Include="BattlePassQuest.cs" />
+    <Compile Include="BattlePassQuestProgress.cs" />
+    <Compile Include="CellonOption.cs" />
+    <Compile Include="CharacterFish.cs" />
+    <Compile Include="CharacterQuest.cs" />
+    <Compile Include="CharacterTimespaceLog.cs" />
+    <Compile Include="CharacterTitle.cs" />
+    <Compile Include="FairyEnchantment.cs" />
+    <Compile Include="FamilySkillMission.cs" />
+    <Compile Include="Fishinginformations.cs" />
+    <Compile Include="FishingPosition.cs" />
+    <Compile Include="Migrations\202607021732163_inicio.cs" />
+    <Compile Include="Migrations\202607021732163_inicio.Designer.cs">
+      <DependentUpon>202607021732163_inicio.cs</DependentUpon>
+    </Compile>
+    <Compile Include="Migrations\202607021756319_01.cs" />
+    <Compile Include="Migrations\202607021756319_01.Designer.cs">
+      <DependentUpon>202607021756319_01.cs</DependentUpon>
+    </Compile>
+    <Compile Include="Migrations\202607160555516_02.cs" />
+    <Compile Include="Migrations\202607160555516_02.Designer.cs">
+      <DependentUpon>202607160555516_02.cs</DependentUpon>
+    </Compile>
+    <Compile Include="Migrations\202607200130236_03.cs" />
+    <Compile Include="Migrations\202607200130236_03.Designer.cs">
+      <DependentUpon>202607200130236_03.cs</DependentUpon>
+    </Compile>
+    <Compile Include="PartnerSkill.cs" />
+    <Compile Include="Quest.cs" />
+    <Compile Include="QuestLog.cs" />
+    <Compile Include="QuestObjective.cs" />
+    <Compile Include="QuestReward.cs" />
+    <Compile Include="Raidbox.cs" />
+    <Compile Include="RecipeList.cs" />
+    <Compile Include="Mate.cs" />
+    <Compile Include="RuneEffect.cs" />
+    <Compile Include="ScriptedInstance.cs" />
+    <Compile Include="BCard.cs" />
+    <Compile Include="ShellEffect.cs" />
+    <Compile Include="Account.cs" />
+    <Compile Include="Base\SynchronizableBaseEntity.cs" />
+    <Compile Include="BazaarItem.cs" />
+    <Compile Include="Card.cs" />
+    <Compile Include="Character.cs" />
+    <Compile Include="CharacterRelation.cs" />
+    <Compile Include="CharacterSkill.cs" />
+    <Compile Include="Combo.cs" />
+    <Compile Include="Drop.cs" />
+    <Compile Include="Family.cs" />
+    <Compile Include="FamilyCharacter.cs" />
+    <Compile Include="FamilyLog.cs" />
+    <Compile Include="GeneralLog.cs" />
+    <Compile Include="Item.cs" />
+    <Compile Include="ItemInstance.cs" />
+    <Compile Include="Mail.cs" />
+    <Compile Include="Map.cs" />
+    <Compile Include="MapMonster.cs" />
+    <Compile Include="MapType.cs" />
+    <Compile Include="MapTypeMap.cs" />
+    <Compile Include="MinilandObject.cs" />
+    <Compile Include="PenaltyLog.cs" />
+    <Compile Include="RespawnMapType.cs" />
+    <Compile Include="StaticBonus.cs" />
+    <Compile Include="StaticBuff.cs" />
+    <Compile Include="MapNpc.cs" />
+    <Compile Include="NpcMonster.cs" />
+    <Compile Include="NpcMonsterSkill.cs" />
+    <Compile Include="Migrations\Configuration.cs" />
+    <Compile Include="Context\OpenNosContext.cs" />
+    <Compile Include="Portal.cs" />
+    <Compile Include="QuicklistEntry.cs" />
+    <Compile Include="Recipe.cs" />
+    <Compile Include="RecipeItem.cs" />
+    <Compile Include="Respawn.cs" />
+    <Compile Include="Shop.cs" />
+    <Compile Include="ShopItem.cs" />
+    <Compile Include="Helpers\DataAccessHelper.cs" />
+    <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="Shopskill.cs" />
+    <Compile Include="Skill.cs" />
+    <Compile Include="Teleporter.cs" />
+    <Compile Include="MinigameLog.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <Service Include="{508349B6-6B84-4DF5-91F0-309BEEBAD82D}" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="app.config">
+      <SubType>Designer</SubType>
+      <TransformOnBuild>true</TransformOnBuild>
+    </None>
+    <None Include="Properties\SlowCheetah\SlowCheetah.Transforms.targets">
+      <SubType>Designer</SubType>
+    </None>
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="EntityFramework">
+      <Version>6.5.2</Version>
+    </PackageReference>
+    <PackageReference Include="Newtonsoft.Json">
+      <Version>13.0.4</Version>
+    </PackageReference>
+  </ItemGroup>
+  <ItemGroup>
+    <Content Include="favicon.ico" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\NosGm.Domain\NosGm.Domain.csproj">
+      <Project>{20addddd-dad9-44f3-9beb-026c73090660}</Project>
+      <Name>NosGm.Domain</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\..\NosGm.Program\NosGm.Logger\NosGm.LogServer.csproj">
+      <Project>{a09a8666-2598-4f86-8f5e-9a2708354f37}</Project>
+      <Name>NosGm.LogServer</Name>
+    </ProjectReference>
+  </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="Migrations\202607021732163_inicio.resx">
+      <DependentUpon>202607021732163_inicio.cs</DependentUpon>
+      <SubType>Designer</SubType>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Migrations\202607021756319_01.resx">
+      <DependentUpon>202607021756319_01.cs</DependentUpon>
+      <SubType>Designer</SubType>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Migrations\202607160555516_02.resx">
+      <DependentUpon>202607160555516_02.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Migrations\202607200130236_03.resx">
+      <DependentUpon>202607200130236_03.cs</DependentUpon>
+    </EmbeddedResource>
+  </ItemGroup>
+  <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
+  <Import Project="$(SlowCheetahTargets)" Condition="Exists('$(SlowCheetahTargets)')" Label="SlowCheetah" />
+</Project>

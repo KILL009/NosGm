@@ -39,7 +39,7 @@ $env:NOSGM_DISABLE_NORMAL_EXP = "true"
 $env:NOSGM_DISABLE_HERO_EXP = "true"
 $env:NOSGM_PVE_ALLOW_INSTANCED_PVP = "true"
 
-.\Frostvein.World.exe --port 1337
+.\NosGm.World.exe --port 1337
 ```
 
 The process grants no normal or hero EXP, even when a map has its own positive EXP rate. Job EXP and SP EXP still work.
@@ -54,7 +54,7 @@ $env:NOSGM_WORLD_MODE = "PVP"
 $env:NOSGM_WORLD_PORT = "1338"
 $env:NOSGM_PVP_SAFE_MAP_IDS = "1,145"
 
-.\Frostvein.World.exe --port 1338
+.\NosGm.World.exe --port 1338
 ```
 
 Add every town or protected map to `NOSGM_PVP_SAFE_MAP_IDS` before opening this world to players.

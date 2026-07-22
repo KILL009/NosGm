@@ -1,4 +1,4 @@
-START bin/Release/Login/Frostvein.Login.exe
-START bin/Release/Master/Frostvein.Master.Server.exe
-START bin/Release/World/Frostvein.World.exe
-START bin/Release/LogServer/Frostvein.LogServer.exe
+START bin/Release/Login/NosGm.Login.exe
+START bin/Release/Master/NosGm.Master.Server.exe
+START bin/Release/World/NosGm.World.exe
+START bin/Release/LogServer/NosGm.LogServer.exe
