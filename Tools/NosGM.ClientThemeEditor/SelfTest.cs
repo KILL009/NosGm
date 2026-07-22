@@ -52,13 +52,19 @@ internal static class SelfTest
 
             var originalHash = identity.Sha256;
             var output = Path.Combine(root, "patched.exe");
-            var manifest = ThemeEngine.ApplyToOutput(client, output, profile, theme, overwrite: false);
+            var manifest = SafeThemeApplication.ApplyCopy(client, output, profile, theme);
             Require(PeInspector.Inspect(client).Sha256 == originalHash, "Copy mode modified the original file.");
             var patched = File.ReadAllBytes(output);
             Require(patched.AsSpan(0xC4, 4).SequenceEqual(new byte[] { 0x11, 0x22, 0x33, 0x44 }),
                 "Replacement bytes were not written at the expected offset.");
             Require(manifest.Operations.Count == 1, "Expected one patch operation.");
             Require(File.Exists(output + ".nosgm-theme-manifest.json"), "Copy-mode manifest was not written.");
+
+            var outputHash = PeInspector.Inspect(output).Sha256;
+            ExpectIOException(() => SafeThemeApplication.ApplyCopy(client, output, profile, theme),
+                "Copy mode overwrote an existing executable.");
+            Require(PeInspector.Inspect(output).Sha256 == outputHash,
+                "Existing copy changed after overwrite refusal.");
 
             var changedContent = originalBytes.ToArray();
             changedContent[0x100] = 0x7F;
@@ -160,6 +166,20 @@ internal static class SelfTest
             action();
         }
         catch (InvalidDataException)
+        {
+            return;
+        }
+
+        throw new InvalidOperationException(message);
+    }
+
+    private static void ExpectIOException(Action action, string message)
+    {
+        try
+        {
+            action();
+        }
+        catch (IOException)
         {
             return;
         }
