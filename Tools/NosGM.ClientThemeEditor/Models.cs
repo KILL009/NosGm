@@ -98,6 +98,11 @@ internal sealed class CliOptions
             }
 
             var key = token[2..];
+            if (string.IsNullOrWhiteSpace(key))
+            {
+                throw new ArgumentException("Option name cannot be empty.");
+            }
+
             string? value = null;
             if (index + 1 < args.Length && !args[index + 1].StartsWith("--", StringComparison.Ordinal))
             {
@@ -113,6 +118,18 @@ internal sealed class CliOptions
         return new CliOptions(args[0].ToLowerInvariant(), values);
     }
 
+    public void EnsureOnly(params string[] allowed)
+    {
+        var unknown = _values.Keys
+            .Where(key => !allowed.Contains(key, StringComparer.OrdinalIgnoreCase))
+            .OrderBy(key => key, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        if (unknown.Length > 0)
+        {
+            throw new ArgumentException($"Unknown option(s): {string.Join(", ", unknown.Select(key => $"--{key}"))}.");
+        }
+    }
+
     public string Required(string name)
         => _values.TryGetValue(name, out var value) && !string.IsNullOrWhiteSpace(value)
             ? value
@@ -122,5 +139,17 @@ internal sealed class CliOptions
         => _values.TryGetValue(name, out var value) ? value : null;
 
     public bool Flag(string name)
-        => _values.ContainsKey(name);
+    {
+        if (!_values.TryGetValue(name, out var value))
+        {
+            return false;
+        }
+
+        if (value is not null)
+        {
+            throw new ArgumentException($"Flag '--{name}' does not accept a value.");
+        }
+
+        return true;
+    }
 }
