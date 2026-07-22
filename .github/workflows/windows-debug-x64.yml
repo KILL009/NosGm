@@ -3,14 +3,18 @@ name: Windows Debug x64 validation
 on:
   push:
     branches:
-      - fix/nosgm-debug-x64-build
+      - main
   pull_request:
     branches:
       - main
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
+
+concurrency:
+  group: windows-debug-x64-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build-debug-x64:
@@ -21,33 +25,6 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v6
-        with:
-          fetch-depth: 0
-
-      - name: Normalize .NET Framework projects to 4.8
-        shell: pwsh
-        run: |
-          $changed = New-Object System.Collections.Generic.List[string]
-          foreach ($project in (Get-ChildItem -Path . -Filter *.csproj -Recurse -File)) {
-            $content = [System.IO.File]::ReadAllText($project.FullName)
-            if (-not $content.Contains('<TargetFrameworkVersion>v4.8.1</TargetFrameworkVersion>')) {
-              continue
-            }
-
-            $updated = $content.Replace(
-              '<TargetFrameworkVersion>v4.8.1</TargetFrameworkVersion>',
-              '<TargetFrameworkVersion>v4.8</TargetFrameworkVersion>')
-            [System.IO.File]::WriteAllText($project.FullName, $updated, [System.Text.UTF8Encoding]::new($true))
-            $changed.Add((Resolve-Path -Relative $project.FullName))
-          }
-
-          if ($changed.Count -eq 0) {
-            Write-Host 'All legacy projects already target .NET Framework 4.8.'
-          }
-          else {
-            Write-Host "Aligned $($changed.Count) project(s) to .NET Framework 4.8:"
-            $changed | ForEach-Object { Write-Host " - $_" }
-          }
 
       - name: Set up Visual Studio MSBuild
         uses: microsoft/setup-msbuild@v3
@@ -62,13 +39,12 @@ jobs:
       - name: Restore NuGet packages
         shell: pwsh
         run: |
-          $output = & nuget restore NosGm.sln -NonInteractive -Verbosity detailed 2>&1
+          $output = & nuget restore NosGm.sln -NonInteractive -Verbosity normal 2>&1
           $exitCode = $LASTEXITCODE
           $output | Tee-Object -FilePath artifacts/restore.log | ForEach-Object { Write-Host $_ }
-          "NuGetExitCode=$exitCode" | Out-File artifacts/restore-exit-code.txt
           if ($exitCode -ne 0) { exit $exitCode }
 
-      - name: Build complete solution in Debug x64
+      - name: Rebuild complete solution in Debug x64
         shell: pwsh
         run: |
           $output = & msbuild NosGm.sln `
@@ -81,26 +57,10 @@ jobs:
             /p:Platform=x64 `
             /bl:artifacts/debug-x64.binlog `
             /fl `
-            /flp:"logfile=artifacts/debug-x64.log;verbosity=diagnostic" 2>&1
+            /flp:"logfile=artifacts/debug-x64.log;verbosity=normal" 2>&1
           $exitCode = $LASTEXITCODE
           $output | Tee-Object -FilePath artifacts/build-console.log | ForEach-Object { Write-Host $_ }
           exit $exitCode
-
-      - name: Commit validated framework normalization
-        if: success() && github.event_name == 'push'
-        shell: pwsh
-        run: |
-          $changes = @(git status --porcelain -- '*.csproj')
-          if ($changes.Count -eq 0) {
-            Write-Host 'No framework changes need to be committed.'
-            exit 0
-          }
-
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add -- '*.csproj'
-          git commit -m 'fix: align legacy projects with .NET Framework 4.8'
-          git push origin HEAD:fix/nosgm-debug-x64-build
 
       - name: Upload diagnostics
         if: always()
