@@ -8,6 +8,7 @@
 
 #if NOSGAME_PACKAGES
 using Za.NosGame.RessourceLoader.Traduction;
+using Za.NosGame.Shared;
 using Za.NosGame.Shared.DatEntitys.Enums;
 
 namespace NosGM.DataUpdater.Translation;
