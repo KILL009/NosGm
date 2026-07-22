@@ -3,84 +3,84 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.3.32922.545
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Frostvein.Algorithm", "Data\Frostvein.Algorithm\Frostvein.Algorithm.csproj", "{6681EB59-1773-45BE-9F10-099524882836}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NosGm.Algorithm", "Data\NosGm.Algorithm\NosGm.Algorithm.csproj", "{6681EB59-1773-45BE-9F10-099524882836}"
 EndProject
-Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Frostvein.Domain", "Frostvein.Domain", "{2494F96A-FC6B-4C7F-B5DE-17AD1D957ABD}"
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "NosGm.Domain", "NosGm.Domain", "{2494F96A-FC6B-4C7F-B5DE-17AD1D957ABD}"
 EndProject
-Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Frostvein.ChickenAPI", "Frostvein.ChickenAPI", "{5FA42254-7721-4499-9DF2-7C3CEB18EC74}"
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "NosGm.ChickenAPI", "NosGm.ChickenAPI", "{5FA42254-7721-4499-9DF2-7C3CEB18EC74}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ChickenAPI.DAL", "Data\Frostvein.ChickenAPI\ChickenAPI.DAL\ChickenAPI.DAL.csproj", "{8D199C92-D754-461F-89B0-83C2B4E6DF9F}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ChickenAPI.DAL", "Data\NosGm.ChickenAPI\ChickenAPI.DAL\ChickenAPI.DAL.csproj", "{8D199C92-D754-461F-89B0-83C2B4E6DF9F}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ChickenAPI.Events", "Data\Frostvein.ChickenAPI\ChickenAPI.Events\ChickenAPI.Events.csproj", "{DECB5668-600C-49F1-A5C8-CDE5A12C9F5A}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ChickenAPI.Events", "Data\NosGm.ChickenAPI\ChickenAPI.Events\ChickenAPI.Events.csproj", "{DECB5668-600C-49F1-A5C8-CDE5A12C9F5A}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ChickenAPI.Plugins", "Data\Frostvein.ChickenAPI\ChickenAPI.Plugins\ChickenAPI.Plugins.csproj", "{A8289E58-4507-4614-8A28-9FF936BEE009}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ChickenAPI.Plugins", "Data\NosGm.ChickenAPI\ChickenAPI.Plugins\ChickenAPI.Plugins.csproj", "{A8289E58-4507-4614-8A28-9FF936BEE009}"
 EndProject
-Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Frostvein.DAL", "Frostvein.DAL", "{0BA58F1C-DD60-44D2-BEFC-934FBF3B2FE6}"
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "NosGm.DAL", "NosGm.DAL", "{0BA58F1C-DD60-44D2-BEFC-934FBF3B2FE6}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Frostvein.DAL", "Data\Frostvein.DAL\Frostvein.DAL\Frostvein.DAL.csproj", "{D8C8A266-3D46-42C5-A492-28C75DB85BA8}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NosGm.DAL", "Data\NosGm.DAL\NosGm.DAL\NosGm.DAL.csproj", "{D8C8A266-3D46-42C5-A492-28C75DB85BA8}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Frostvein.DAL.DAO", "Data\Frostvein.DAL\Frostvein.DAL.DAO\Frostvein.DAL.DAO.csproj", "{B438A1DF-0CFB-4854-82B5-2751793279BF}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NosGm.DAL.DAO", "Data\NosGm.DAL\NosGm.DAL.DAO\NosGm.DAL.DAO.csproj", "{B438A1DF-0CFB-4854-82B5-2751793279BF}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Frostvein.DAL.EF", "Data\Frostvein.DAL\Frostvein.DAL.EF\Frostvein.DAL.EF.csproj", "{4AECC47D-098A-4493-8E1E-D10EDBB7A189}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NosGm.DAL.EF", "Data\NosGm.DAL\NosGm.DAL.EF\NosGm.DAL.EF.csproj", "{4AECC47D-098A-4493-8E1E-D10EDBB7A189}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Frostvein.DAL.Interface", "Data\Frostvein.DAL\Frostvein.DAL.Interface\Frostvein.DAL.Interface.csproj", "{175C851B-8DC8-43A5-AF93-AF32D106CD77}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NosGm.DAL.Interface", "Data\NosGm.DAL\NosGm.DAL.Interface\NosGm.DAL.Interface.csproj", "{175C851B-8DC8-43A5-AF93-AF32D106CD77}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Frostvein.Data", "Data\Frostvein.DAL\Frostvein.Data\Frostvein.Data.csproj", "{F1071DED-3D92-4416-9B9C-8664441ADE64}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NosGm.Data", "Data\NosGm.DAL\NosGm.Data\NosGm.Data.csproj", "{F1071DED-3D92-4416-9B9C-8664441ADE64}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Frostvein.Mapper", "Data\Frostvein.DAL\Frostvein.Mapper\Frostvein.Mapper.csproj", "{057B5A6F-378A-4BD9-B17B-074C7F5C9FEC}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NosGm.Mapper", "Data\NosGm.DAL\NosGm.Mapper\NosGm.Mapper.csproj", "{057B5A6F-378A-4BD9-B17B-074C7F5C9FEC}"
 EndProject
-Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Frostvein.Program", "Frostvein.Program", "{C68114B9-0B52-4F03-88A7-C45195B2C18A}"
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "NosGm.Program", "NosGm.Program", "{C68114B9-0B52-4F03-88A7-C45195B2C18A}"
 	ProjectSection(SolutionItems) = preProject
 		bin\Release\Start.bat = bin\Release\Start.bat
 	EndProjectSection
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Frostvein.LogServer", "Data\Frostvein.Program\Frostvein.Logger\Frostvein.LogServer.csproj", "{A09A8666-2598-4F86-8F5E-9A2708354F37}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NosGm.LogServer", "Data\NosGm.Program\NosGm.Logger\NosGm.LogServer.csproj", "{A09A8666-2598-4F86-8F5E-9A2708354F37}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Frostvein.Domain", "Data\Frostvein.Domain\Frostvein.Domain.csproj", "{20ADDDDD-DAD9-44F3-9BEB-026C73090660}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NosGm.Domain", "Data\NosGm.Domain\NosGm.Domain.csproj", "{20ADDDDD-DAD9-44F3-9BEB-026C73090660}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Frostvein.Core", "Data\Frostvein.Core\Frostvein.Core.csproj", "{C93A0A40-0551-4732-B594-171B87679AC1}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NosGm.Core", "Data\NosGm.Core\NosGm.Core.csproj", "{C93A0A40-0551-4732-B594-171B87679AC1}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Frostvein.Configuration", "Data\Frostvein.Configuration\Frostvein.Configuration.csproj", "{011EE023-E1B8-4645-BBE9-94AC35B55390}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NosGm.Configuration", "Data\NosGm.Configuration\NosGm.Configuration.csproj", "{011EE023-E1B8-4645-BBE9-94AC35B55390}"
 EndProject
-Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Frostvein.World", "Frostvein.World", "{DCD8D9D8-0546-4C31-8808-D4A37FAC2814}"
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "NosGm.World", "NosGm.World", "{DCD8D9D8-0546-4C31-8808-D4A37FAC2814}"
 EndProject
-Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Frostvein.SCS", "Frostvein.SCS", "{E7311CE9-D4FD-41E5-86DB-0C03A15CA1A3}"
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "NosGm.SCS", "NosGm.SCS", "{E7311CE9-D4FD-41E5-86DB-0C03A15CA1A3}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Frostvein.SCS", "Frostvein.SCS\Frostvein.SCS.csproj", "{F030D498-8F64-479F-B68B-7B2A6288552A}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NosGm.SCS", "NosGm.SCS\NosGm.SCS.csproj", "{F030D498-8F64-479F-B68B-7B2A6288552A}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Frostvein.Extension", "Data\Frostvein.Extension\Frostvein.Extension.csproj", "{464CFEBD-B7D4-4D5F-97B5-0D38786B65A1}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NosGm.Extension", "Data\NosGm.Extension\NosGm.Extension.csproj", "{464CFEBD-B7D4-4D5F-97B5-0D38786B65A1}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Frostvein.Packets", "Data\Frostvein.Packets\Frostvein.Packets.csproj", "{865A727D-5369-40CA-9085-DC6E751522D7}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NosGm.Packets", "Data\NosGm.Packets\NosGm.Packets.csproj", "{865A727D-5369-40CA-9085-DC6E751522D7}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Frostvein.GameObject", "Data\Frostvein.GameObject\Frostvein.GameObject.csproj", "{EADD17BE-20A4-4589-830E-E41BE9314928}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NosGm.GameObject", "Data\NosGm.GameObject\NosGm.GameObject.csproj", "{EADD17BE-20A4-4589-830E-E41BE9314928}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Frostvein.Handler", "Data\Frostvein.Handler\Frostvein.Handler.csproj", "{A6748A8D-0D96-41B9-A110-DBF692AFC56D}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NosGm.Handler", "Data\NosGm.Handler\NosGm.Handler.csproj", "{A6748A8D-0D96-41B9-A110-DBF692AFC56D}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Frostvein.Master.Library", "Data\Frostvein.Master.Library\Frostvein.Master.Library.csproj", "{8FABDA5B-C873-4E32-A78F-08A9A4768595}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NosGm.Master.Library", "Data\NosGm.Master.Library\NosGm.Master.Library.csproj", "{8FABDA5B-C873-4E32-A78F-08A9A4768595}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Frostvein.PathFinder", "Data\Frostvein.PathFinder\Frostvein.PathFinder.csproj", "{4BC2B4B0-2A38-4274-98A2-37CEF5F03B42}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NosGm.PathFinder", "Data\NosGm.PathFinder\NosGm.PathFinder.csproj", "{4BC2B4B0-2A38-4274-98A2-37CEF5F03B42}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Frostvein.Plugin.BasicImplementations", "Data\Frostvein.Plugin\Frostvein.Plugin.BasicImplementations\Frostvein.Plugin.BasicImplementations.csproj", "{B5FE46A3-9C85-44D9-8EFB-4A33E7E77C4A}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NosGm.Plugin.BasicImplementations", "Data\NosGm.Plugin\NosGm.Plugin.BasicImplementations\NosGm.Plugin.BasicImplementations.csproj", "{B5FE46A3-9C85-44D9-8EFB-4A33E7E77C4A}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Frostvein.Login", "Data\Frostvein.Program\Frostvein.Login\Frostvein.Login.csproj", "{AB3A47F3-3B2A-484A-B768-7C6CF5C83386}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NosGm.Login", "Data\NosGm.Program\NosGm.Login\NosGm.Login.csproj", "{AB3A47F3-3B2A-484A-B768-7C6CF5C83386}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Frostvein.Master.Server", "Data\Frostvein.Program\Frostvein.Master.Server\Frostvein.Master.Server.csproj", "{9AA91BF5-88E7-4130-9F42-73AE206E2916}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NosGm.Master.Server", "Data\NosGm.Program\NosGm.Master.Server\NosGm.Master.Server.csproj", "{9AA91BF5-88E7-4130-9F42-73AE206E2916}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Frostvein.Parser", "Data\Frostvein.Program\Frostvein.Parser\Frostvein.Parser.csproj", "{9DC21067-A102-419A-993C-4AA10C0B4708}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NosGm.Parser", "Data\NosGm.Program\NosGm.Parser\NosGm.Parser.csproj", "{9DC21067-A102-419A-993C-4AA10C0B4708}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Frostvein.World", "Data\Frostvein.Program\Frostvein.World\Frostvein.World.csproj", "{EC300279-181E-4E6E-A94C-E8BAF0EAB2AD}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NosGm.World", "Data\NosGm.Program\NosGm.World\NosGm.World.csproj", "{EC300279-181E-4E6E-A94C-E8BAF0EAB2AD}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Frostvein.XMLModel", "Data\Frostvein.XMLModel\Frostvein.XMLModel.csproj", "{CE1BCBE7-EDB7-4564-A11E-8D90868DF9D0}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NosGm.XMLModel", "Data\NosGm.XMLModel\NosGm.XMLModel.csproj", "{CE1BCBE7-EDB7-4564-A11E-8D90868DF9D0}"
 EndProject
-Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Frostvein.Data", "Frostvein.Data", "{5FB06A57-00C9-4AD5-AE00-25328FDF8EE0}"
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "NosGm.Data", "NosGm.Data", "{5FB06A57-00C9-4AD5-AE00-25328FDF8EE0}"
 	ProjectSection(SolutionItems) = preProject
-		Data\Frostvein.Changelog.txt = Data\Frostvein.Changelog.txt
-		Data\Frostvein.Features.txt = Data\Frostvein.Features.txt
-		Frostvein.Helper.txt = Frostvein.Helper.txt
-		Data\Frostvein.TODO.txt = Data\Frostvein.TODO.txt
+		Data\NosGm.Changelog.txt = Data\NosGm.Changelog.txt
+		Data\NosGm.Features.txt = Data\NosGm.Features.txt
+		NosGm.Helper.txt = NosGm.Helper.txt
+		Data\NosGm.TODO.txt = Data\NosGm.TODO.txt
 	EndProjectSection
 EndProject
-Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Frostvein.Script", "Frostvein.Script", "{9C14B463-4E7B-4692-A7D6-F52D632C85C0}"
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "NosGm.Script", "NosGm.Script", "{9C14B463-4E7B-4692-A7D6-F52D632C85C0}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Raid", "Raid", "{FB854081-C64C-43DB-92C3-42500A720638}"
 EndProject
@@ -93,9 +93,9 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "SQL", "SQL", "{FF5C053F-616
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Raidboxes", "Raidboxes", "{827D7FC4-E1BB-4075-8C94-F2E5EB043794}"
 EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "NosTale.Module.Bazaar", "Data\Frostvein.Program\NosTale.Module.Bazaar\NosTale.Module.Bazaar.csproj", "{B6E096AC-3141-46DA-8CE6-545D7776D9D8}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "NosTale.Module.Bazaar", "Data\NosGm.Program\NosTale.Module.Bazaar\NosTale.Module.Bazaar.csproj", "{B6E096AC-3141-46DA-8CE6-545D7776D9D8}"
 EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "NosTale.Modules", "Data\Frostvein.Program\NosTale.Modules\NosTale.Modules.csproj", "{D1EC765C-EA41-4DC6-944D-0DB37157DEE3}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "NosTale.Modules", "Data\NosGm.Program\NosTale.Modules\NosTale.Modules.csproj", "{D1EC765C-EA41-4DC6-944D-0DB37157DEE3}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

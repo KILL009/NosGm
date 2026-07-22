@@ -1,0 +1,38 @@
+﻿using NosGm.DAL;
+using NosGm.Domain;
+using NosGm.GameObject.Networking;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Text;
+using System.Threading.Tasks;
+
+namespace NosGm.GameObject.Plugin.Event.Handler
+{
+    public static class BaseArenaEvent
+    {
+        public static void Load()
+        {
+            if (DAOFactory.MapDAO.LoadById(2106) == null)
+            {
+                return;
+            }
+
+            ServerManager.Instance.ArenaInstance = ServerManager.GenerateMapInstance(2106, MapInstanceType.ArenaInstance, new InstanceBag());
+            ServerManager.Instance.ArenaInstance.IsPVP = true;
+
+            var portal = new Portal
+            {
+                SourceMapId = 2106,
+                SourceX = 37,
+                SourceY = 69,
+                DestinationMapId = 1,
+                DestinationX = 0,
+                DestinationY = 0,
+                Type = -1
+            };
+
+            ServerManager.Instance.ArenaInstance.CreatePortal(portal);
+        }
+    }
+}

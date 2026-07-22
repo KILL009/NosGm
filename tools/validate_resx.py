@@ -10,7 +10,7 @@ import xml.etree.ElementTree as ET
 from collections import Counter
 from pathlib import Path
 
-RESOURCE_DIR = Path("Data/Frostvein.Program/Frostvein.World/Resource")
+RESOURCE_DIR = Path("Data/NosGm.Program/NosGm.World/Resource")
 NEUTRAL_FILE = RESOURCE_DIR / "LocalizedResources.resx"
 SATELLITE_PATTERN = "LocalizedResources.*.resx"
 PLACEHOLDER_RE = re.compile(r"\{\d+(?:[^{}]*)\}")

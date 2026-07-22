@@ -4,7 +4,7 @@ This slice adds the append-only audit ledger that will support anti-duplication 
 
 ## Database installation
 
-Run `Database/Migrations/20260720_ItemTrace.sql` once against the Frostvein database before enabling callers that write audit events. The script is idempotent and may be executed again safely.
+Run `Database/Migrations/20260720_ItemTrace.sql` once against the NosGm database before enabling callers that write audit events. The script is idempotent and may be executed again safely.
 
 The table deliberately has no foreign key to `ItemInstance`. Audit history must remain available after an item is consumed or deleted.
 

@@ -1,8 +1,0 @@
-﻿namespace Frostvein.Domain
-{
-    public enum GenderType : byte
-    {
-        Male = 0,
-        Female = 1
-    }
-}

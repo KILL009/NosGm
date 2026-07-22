@@ -1,0 +1,202 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="14.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
+  <PropertyGroup>
+    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
+    <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
+    <ProjectGuid>{C93A0A40-0551-4732-B594-171B87679AC1}</ProjectGuid>
+    <OutputType>Library</OutputType>
+    <AppDesignerFolder>Properties</AppDesignerFolder>
+    <RootNamespace>NosGm.Core</RootNamespace>
+    <AssemblyName>NosGm.Core</AssemblyName>
+    <TargetFrameworkVersion>v4.8</TargetFrameworkVersion>
+    <FileAlignment>512</FileAlignment>
+    <NuGetPackageImportStamp />
+    <TargetFrameworkProfile />
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
+    <DebugSymbols>true</DebugSymbols>
+    <DebugType>full</DebugType>
+    <Optimize>false</Optimize>
+    <OutputPath>bin\Debug\</OutputPath>
+    <DefineConstants>DEBUG;TRACE</DefineConstants>
+    <ErrorReport>prompt</ErrorReport>
+    <WarningLevel>4</WarningLevel>
+    <CodeAnalysisRuleSet>..\..\..\ProjectRuleset.ruleset</CodeAnalysisRuleSet>
+    <LangVersion>latest</LangVersion>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
+    <DebugType>pdbonly</DebugType>
+    <Optimize>true</Optimize>
+    <OutputPath>bin\Release\</OutputPath>
+    <DefineConstants>TRACE</DefineConstants>
+    <ErrorReport>prompt</ErrorReport>
+    <WarningLevel>4</WarningLevel>
+    <CodeAnalysisRuleSet>..\..\..\ProjectRuleset.ruleset</CodeAnalysisRuleSet>
+    <LangVersion>latest</LangVersion>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Debug|x64'">
+    <PlatformTarget>x64</PlatformTarget>
+    <OutputPath>bin\x64\Debug\</OutputPath>
+    <DefineConstants>TRACE;DEBUG</DefineConstants>
+    <CodeAnalysisRuleSet>..\..\..\ProjectRuleset.ruleset</CodeAnalysisRuleSet>
+    <LangVersion>latest</LangVersion>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Release|x64'">
+    <PlatformTarget>x64</PlatformTarget>
+    <OutputPath>bin\x64\Release\</OutputPath>
+    <Optimize>true</Optimize>
+    <DefineConstants>TRACE</DefineConstants>
+    <CodeAnalysisRuleSet>..\..\..\ProjectRuleset.ruleset</CodeAnalysisRuleSet>
+    <LangVersion>latest</LangVersion>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Debug|x86'">
+    <PlatformTarget>x86</PlatformTarget>
+    <OutputPath>bin\x86\Debug\</OutputPath>
+    <DefineConstants>DEBUG;TRACE</DefineConstants>
+    <Optimize>false</Optimize>
+    <CodeAnalysisRuleSet>..\..\..\ProjectRuleset.ruleset</CodeAnalysisRuleSet>
+    <LangVersion>latest</LangVersion>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Release|x86'">
+    <PlatformTarget>x86</PlatformTarget>
+    <OutputPath>bin\x86\Release\</OutputPath>
+    <CodeAnalysisRuleSet>..\..\..\ProjectRuleset.ruleset</CodeAnalysisRuleSet>
+    <LangVersion>latest</LangVersion>
+  </PropertyGroup>
+  <PropertyGroup>
+    <ApplicationIcon>favicon.ico</ApplicationIcon>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="System" />
+    <Reference Include="System.Net.Http" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="AnonymousHttpClientFactory.cs" />
+    <Compile Include="CryptoRandom.cs" />
+    <Compile Include="Diagnostics\PacketSecurityMonitor.cs" />
+    <Compile Include="Diagnostics\ServerPerformanceMonitor.cs" />
+    <Compile Include="Extension.cs" />
+    <Compile Include="Extensions\AssemblyExtension.cs" />
+    <Compile Include="Extensions\BlockingCollectionExtensions.cs" />
+    <Compile Include="Extensions\ConcurrentBagExtension.cs" />
+    <Compile Include="Extensions\ConcurrentQueueExtensions.cs" />
+    <Compile Include="Extensions\StringExtension.cs" />
+    <Compile Include="Handling\HandlerMethodReference.cs" />
+    <Compile Include="Interfaces\Packets\ClientPackets\ICharacterCreatePacket.cs" />
+    <Compile Include="Networking\Communication\ScsServices\Communication\Messages\ScsRemoteInvocationException.cs" />
+    <Compile Include="Networking\Communication\Scs\Communication\Messages\ScsPingMessage.cs" />
+    <Compile Include="Networking\INetworkClient.cs" />
+    <Compile Include="Handling\IPacketHandler.cs" />
+    <Compile Include="Networking\NetworkClient.cs" />
+    <Compile Include="Singleton.cs" />
+    <Compile Include="Threading\ThreadSafeGenericList.cs" />
+    <Compile Include="Threading\ThreadSafeGenericLockedList.cs" />
+    <Compile Include="Threading\ThreadSafeLockedDictionary.cs" />
+    <Compile Include="Threading\ThreadSafeSortedList.cs" />
+    <Compile Include="DelegateBuilder.cs" />
+    <Compile Include="Cryptography\LoginCryptography.cs" />
+    <Compile Include="Networking\Communication\ScsServices\Client\IScsServiceClient.cs" />
+    <Compile Include="Networking\Communication\ScsServices\Client\ScsServiceClient.cs" />
+    <Compile Include="Networking\Communication\ScsServices\Client\ScsServiceClientBuilder.cs" />
+    <Compile Include="Networking\Communication\ScsServices\Communication\AutoConnectRemoteInvokeProxy.cs">
+      <ExcludeFromStyleCop>False</ExcludeFromStyleCop>
+    </Compile>
+    <Compile Include="Networking\Communication\ScsServices\Communication\Messages\ScsRemoteException.cs" />
+    <Compile Include="Networking\Communication\ScsServices\Communication\Messages\ScsRemoteInvokeMessage.cs" />
+    <Compile Include="Networking\Communication\ScsServices\Communication\Messages\ScsRemoteInvokeReturnMessage.cs" />
+    <Compile Include="Networking\Communication\ScsServices\Communication\RemoteInvokeProxy.cs" />
+    <Compile Include="Networking\Communication\ScsServices\Service\IScsServiceApplication.cs" />
+    <Compile Include="Networking\Communication\ScsServices\Service\IScsServiceClient.cs" />
+    <Compile Include="Networking\Communication\ScsServices\Service\ScsService.cs" />
+    <Compile Include="Networking\Communication\ScsServices\Service\ScsServiceApplication.cs" />
+    <Compile Include="Networking\Communication\ScsServices\Service\ScsServiceAttribute.cs" />
+    <Compile Include="Networking\Communication\ScsServices\Service\ScsServiceBuilder.cs" />
+    <Compile Include="Networking\Communication\ScsServices\Service\ScsServiceClient.cs" />
+    <Compile Include="Networking\Communication\ScsServices\Service\ScsServiceClientFactory.cs" />
+    <Compile Include="Networking\Communication\ScsServices\Service\ServiceClientEventArgs.cs" />
+    <Compile Include="Networking\Communication\Scs\Client\ClientReConnecter.cs" />
+    <Compile Include="Networking\Communication\Scs\Client\IConnectableClient.cs" />
+    <Compile Include="Networking\Communication\Scs\Client\IScsClient.cs" />
+    <Compile Include="Networking\Communication\Scs\Client\ScsClientBase.cs" />
+    <Compile Include="Networking\Communication\Scs\Client\ScsClientFactory.cs" />
+    <Compile Include="Networking\Communication\Scs\Client\Tcp\ScsTcpClient.cs" />
+    <Compile Include="Networking\Communication\Scs\Client\Tcp\TcpHelper.cs" />
+    <Compile Include="Networking\Communication\Scs\Communication\Channels\CommunicationChannelBase.cs" />
+    <Compile Include="Networking\Communication\Scs\Communication\Channels\CommunicationChannelEventArgs.cs" />
+    <Compile Include="Networking\Communication\Scs\Communication\Channels\ConnectionListenerBase.cs" />
+    <Compile Include="Networking\Communication\Scs\Communication\Channels\ICommunicationChannel.cs" />
+    <Compile Include="Networking\Communication\Scs\Communication\Channels\IConnectionListener.cs" />
+    <Compile Include="Networking\Communication\Scs\Communication\Channels\Tcp\TcpCommunicationChannel.cs" />
+    <Compile Include="Networking\Communication\Scs\Communication\Channels\Tcp\TcpConnectionListener.cs" />
+    <Compile Include="Networking\Communication\Scs\Communication\CommunicationException.cs" />
+    <Compile Include="Networking\Communication\Scs\Communication\CommunicationStateException.cs" />
+    <Compile Include="Networking\Communication\Scs\Communication\CommunicationStates.cs" />
+    <Compile Include="Networking\Communication\Scs\Communication\EndPoints\ScsEndPoint.cs" />
+    <Compile Include="Networking\Communication\Scs\Communication\EndPoints\Tcp\ScsTcpEndPoint.cs" />
+    <Compile Include="Networking\Communication\Scs\Communication\Messages\IScsMessage.cs" />
+    <Compile Include="Networking\Communication\Scs\Communication\Messages\MessageEventArgs.cs" />
+    <Compile Include="Networking\Communication\Scs\Communication\Messages\ScsMessage.cs" />
+    <Compile Include="Networking\Communication\Scs\Communication\Messages\ScsRawDataMessage.cs" />
+    <Compile Include="Networking\Communication\Scs\Communication\Messages\ScsTextMessage.cs" />
+    <Compile Include="Networking\Communication\Scs\Communication\Messengers\IMessenger.cs" />
+    <Compile Include="Networking\Communication\Scs\Communication\Messengers\RequestReplyMessenger.cs" />
+    <Compile Include="Networking\Communication\Scs\Communication\Messengers\SynchronizedMessenger.cs" />
+    <Compile Include="Networking\Communication\Scs\Communication\Protocols\BinarySerialization\BinarySerializationProtocol.cs" />
+    <Compile Include="Networking\Communication\Scs\Communication\Protocols\BinarySerialization\BinarySerializationProtocolFactory.cs" />
+    <Compile Include="Networking\Communication\Scs\Communication\Protocols\IScsWireProtocol.cs" />
+    <Compile Include="Networking\Communication\Scs\Communication\Protocols\IScsWireProtocolFactory.cs" />
+    <Compile Include="Networking\Communication\Scs\Communication\Protocols\WireProtocolManager.cs" />
+    <Compile Include="Networking\Communication\Scs\Server\IScsServer.cs" />
+    <Compile Include="Networking\Communication\Scs\Server\IScsServerClient.cs" />
+    <Compile Include="Networking\Communication\Scs\Server\ScsServerBase.cs" />
+    <Compile Include="Networking\Communication\Scs\Server\ScsServerClient.cs" />
+    <Compile Include="Networking\Communication\Scs\Server\ScsServerFactory.cs" />
+    <Compile Include="Networking\Communication\Scs\Server\ScsServerManager.cs" />
+    <Compile Include="Networking\Communication\Scs\Server\ServerClientEventArgs.cs" />
+    <Compile Include="Networking\Communication\Scs\Server\Tcp\ScsTcpServer.cs" />
+    <Compile Include="Language.cs" />
+    <Compile Include="Cryptography\CryptographyBase.cs" />
+    <Compile Include="Logger.cs" />
+    <Compile Include="Handling\PacketAttribute.cs" />
+    <Compile Include="Networking\WireProtocol.cs" />
+    <Compile Include="Networking\WireProtocolFactory.cs" />
+    <Compile Include="Serializing\PacketHeaderAttribute.cs" />
+    <Compile Include="Serializing\PacketDefinition.cs" />
+    <Compile Include="Serializing\PacketFactory.cs" />
+    <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="Serializing\PacketIndexAttribute.cs" />
+    <Compile Include="SessionFactory.cs" />
+    <Compile Include="Threading\SequentialItemProcessor.cs" />
+    <Compile Include="Threading\Timer.cs" />
+    <Compile Include="Cryptography\WorldCryptography.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="app.config">
+      <SubType>Designer</SubType>
+    </None>
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="log4net">
+      <Version>3.3.2</Version>
+    </PackageReference>
+  </ItemGroup>
+  <ItemGroup>
+    <Content Include="favicon.ico" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\NosGm.Configuration\NosGm.Configuration.csproj">
+      <Project>{011ee023-e1b8-4645-bbe9-94ac35b55390}</Project>
+      <Name>NosGm.Configuration</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\NosGm.Domain\NosGm.Domain.csproj">
+      <Project>{20addddd-dad9-44f3-9beb-026c73090660}</Project>
+      <Name>NosGm.Domain</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\NosGm.Program\NosGm.Logger\NosGm.LogServer.csproj">
+      <Project>{a09a8666-2598-4f86-8f5e-9a2708354f37}</Project>
+      <Name>NosGm.LogServer</Name>
+    </ProjectReference>
+  </ItemGroup>
+  <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
+</Project>

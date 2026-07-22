@@ -1,0 +1,19 @@
+﻿using NosGm.DAL;
+using NosGm.GameObject.Networking;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Text;
+using System.Threading.Tasks;
+
+namespace NosGm.GameObject.Plugin.Load
+{
+    public static class PluginLoadCharacterRelations
+    {
+        public static void Load()
+        {
+            ServerManager.Instance.CharacterRelations = DAOFactory.CharacterRelationDAO.LoadAll().ToList();
+            ServerManager.Instance.PenaltyLogs = DAOFactory.PenaltyLogDAO.LoadAll().ToList();
+        }
+    }
+}
