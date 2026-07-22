@@ -20,7 +20,7 @@ internal static class Program
                 _ => throw new ArgumentException($"Unknown command: {cli.Command}")
             };
         }
-        catch (Exception exception) when (exception is ArgumentException or IOException or InvalidDataException or UnauthorizedAccessException)
+        catch (Exception exception) when (exception is ArgumentException or IOException or UnauthorizedAccessException)
         {
             Console.Error.WriteLine($"ERROR: {exception.Message}");
             return 2;
