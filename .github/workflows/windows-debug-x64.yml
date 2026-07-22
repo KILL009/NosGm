@@ -47,7 +47,7 @@ jobs:
             try {
               $matches = Select-String -LiteralPath $file -Pattern 'v4\.8\.1|net481' -AllMatches
               foreach ($match in $matches) {
-                $frameworkHits.Add("$file:$($match.LineNumber):$($match.Line.Trim())")
+                $frameworkHits.Add(('{0}:{1}:{2}' -f $file, $match.LineNumber, $match.Line.Trim()))
               }
             }
             catch { }
