@@ -40,6 +40,21 @@ Use the following form when an inherited file lacks an adequate notice or when r
 
 Do not insert a specific SPDX identifier until the original license version for that component has been verified.
 
+## Adapted external tools
+
+Tools adapted from another repository must remain outside the server runtime unless there is a documented architectural reason to combine them.
+
+Every adapted tool must include:
+
+- upstream repository and immutable commit;
+- original author and contributor credit;
+- applicable SPDX license identifier in adapted source files;
+- a local `NOTICE.md` describing copied concepts and NosGM modifications;
+- configuration instead of credentials or third-party destinations embedded in code;
+- automated checks preventing attribution removal.
+
+`Tools/NosGM.DataUpdater` follows this policy for its adaptation of `noszanou/BCardGistUpdater@53153c990ae5b65a603d223eeda504df2a67d5fb`.
+
 ## New files written entirely for NosGM
 
 For a new file containing only original NosGM work, use:
