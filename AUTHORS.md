@@ -1,6 +1,6 @@
 # NosGM authors and contributors
 
-NosGM is a community-maintained NosTale server emulator derived from work in the OpenNos ecosystem.
+NosGM is a community-maintained NosTale server emulator derived from the OpenNos project.
 
 Copyright remains with each contributor for the code they authored. Renaming namespaces, assemblies, products or executables does not transfer copyright.
 
@@ -28,11 +28,11 @@ The following names are preserved from the upstream OpenNos `AUTHORS.md` file:
 - flowx3, HP algorithm
 - Elektrochemie, encryption algorithm
 
-## Intermediate OpenNos ecosystem work
+## Additional source components
 
-NosGM also contains work inherited through intermediate community sources, including Frostvein and ChickenAPI-related components. Their authors and contributors retain copyright in their respective work.
+NosGM includes ChickenAPI-related source components traced to the NQ-Source snapshot documented in `Data/NosGm.ChickenAPI/NOTICE.md`. Their original authors and contributors retain copyright in their respective work.
 
-Where an exact author cannot yet be identified from a file header, the Git history and upstream repository history remain the authoritative attribution records. See `NOTICE.md` and `docs/PROVENANCE.md`.
+The Git history and verified upstream repository history remain the authoritative attribution records. See `NOTICE.md` and `docs/PROVENANCE.md`.
 
 ## NosGM contributors
 

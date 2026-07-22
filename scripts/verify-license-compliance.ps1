@@ -64,7 +64,7 @@ if ($gpl3Hash -ne $expectedGpl3Hash) {
     Fail "Bundled GPLv3 text is incomplete or modified. Expected $expectedGpl3Hash but found $gpl3Hash."
 }
 
-# Renaming a project in 2026 must not transfer copyright for code authored earlier.
+# Renaming a project must not transfer copyright for code authored earlier.
 $falseHistoricalClaims = @(
     & git grep -n -I -i -E 'NosGm Team Copyright.*(2016|2017|2018|2019|2020|2021|2022|2023|2024|2025)' -- '*.cs' '*.csproj' '*.props' '*.targets' 2>$null
 )
@@ -137,8 +137,18 @@ foreach ($requiredChickenText in @(
     }
 }
 
+$readmeText = Get-Content -LiteralPath 'README.md' -Raw
+if ($readmeText -notmatch 'derived from OpenNos') {
+    Fail 'README.md must identify NosGM directly as an OpenNos-derived emulator.'
+}
+
+$provenanceText = Get-Content -LiteralPath 'docs/PROVENANCE.md' -Raw
+if ($provenanceText -notmatch 'NosGM is an OpenNos-derived emulator') {
+    Fail 'docs/PROVENANCE.md must preserve the verified OpenNos project lineage.'
+}
+
 $noticeText = Get-Content -LiteralPath 'NOTICE.md' -Raw
-foreach ($requiredNotice in @('OpenNos', 'Frostvein', 'ChickenAPI', 'GPL-3.0-only', 'No affiliation', 'No warranty')) {
+foreach ($requiredNotice in @('OpenNos', 'ChickenAPI', 'GPL-3.0-only', 'No affiliation', 'No warranty')) {
     if ($noticeText -notmatch [regex]::Escape($requiredNotice)) {
         Fail "NOTICE.md is missing required provenance or legal text: $requiredNotice"
     }

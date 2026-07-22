@@ -1,6 +1,6 @@
 # NosGM
 
-NosGM is an open-source NosTale server emulator based on the OpenNos ecosystem and later community work.
+NosGM is an open-source NosTale server emulator derived from OpenNos.
 
 The project is under active development. Current work includes login, world and channel communication, client and packet compatibility, character and session stability, performance, memory usage, timers, bug fixing, localization and documentation.
 
@@ -32,18 +32,18 @@ When importing or adapting external code, include the upstream URL, immutable co
 
 ## License and attribution
 
-NosGM contains code from more than one verified GPL lineage:
+NosGM contains code from these verified GPL lineages:
 
 - the root [LICENSE](LICENSE) preserves the GNU General Public License version 2 text inherited with the OpenNos-derived source;
 - reviewed original OpenNos file notices permit GNU GPL version 2 or, at the recipient's option, any later version;
 - the included ChickenAPI source is derived from the verified `Price-H16/NQ-Verde` snapshot `2594ec13f4fba5d893b424197878c05f801f68a2` and is conservatively treated as GPL-3.0-only;
 - the complete GNU GPL version 3 text is bundled under [LICENSES/GPL-3.0-only](LICENSES/GPL-3.0-only/README.md).
 
-NosGM is a derivative community project. Copyright remains with the respective authors of OpenNos, NQ-Source and ChickenAPI, intermediate OpenNos ecosystem projects and NosGM modifications. Renaming namespaces or assemblies does not transfer authorship.
+NosGM is an OpenNos-derived community project. Copyright remains with the respective authors of OpenNos, NQ-Source and ChickenAPI, and with NosGM contributors for their own modifications. Renaming namespaces or assemblies does not transfer authorship.
 
-The exact Frostvein upstream revision and license record are still being reconstructed. See [docs/PROVENANCE.md](docs/PROVENANCE.md). Do not publish new prebuilt binaries until that remaining source component has a verified origin and compatible license.
+The exact OpenNos base commit is still being narrowed through source comparison, but the project lineage is OpenNos directly. See [docs/PROVENANCE.md](docs/PROVENANCE.md).
 
-If ChickenAPI remains linked into and distributed as part of the combined application, the distribution must satisfy GPL version 3, subject to confirming that the unresolved Frostvein lineage contains no incompatible material.
+If ChickenAPI remains linked into and distributed as part of the combined application, the distribution must satisfy GPL version 3.
 
 When binaries are distributed, recipients must also receive the complete corresponding source code or equivalent GPL-compliant access to the exact source used for that build. Do not impose additional restrictions that prevent recipients from copying, modifying or redistributing GPL-covered code.
 

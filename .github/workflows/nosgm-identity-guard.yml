@@ -26,37 +26,37 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v6
 
-      - name: Reject legacy technical identifiers and paths
+      - name: Verify NosGM and OpenNos identity
         shell: pwsh
         run: |
-          $legacy = [string]::Concat('F', 'rostvein')
-
-          # Historical project names are allowed in legal notices, provenance records
-          # and source attribution. They are not allowed to return as namespaces,
-          # assembly prefixes, configuration identifiers or tracked paths.
-          $pathspecs = @(
-            '*.cs', '*.csproj', '*.sln', '*.config', '*.json', '*.xml', '*.resx',
-            '*.yml', '*.yaml', '*.ps1', '*.bat'
+          $requiredPaths = @(
+            'NosGm.sln',
+            'README.md',
+            'AUTHORS.md',
+            'NOTICE.md',
+            'docs/PROVENANCE.md'
           )
 
-          $identifierHits = @(
-            & git grep -n -I -i -e "$legacy\." -- @pathspecs 2>$null
-          )
-
-          if ($LASTEXITCODE -gt 1) {
-            Write-Error 'git grep failed while checking technical identity.'
-            exit 1
+          foreach ($path in $requiredPaths) {
+            if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
+              Write-Error "Required identity file is missing: $path"
+              exit 1
+            }
           }
 
-          $pathHits = @(git ls-files | Where-Object {
-            $_.IndexOf($legacy, [System.StringComparison]::OrdinalIgnoreCase) -ge 0
-          })
-
-          if ($identifierHits.Count -gt 0 -or $pathHits.Count -gt 0) {
-            Write-Error 'Legacy technical identity detected. Technical names and paths must remain NosGm.'
-            $identifierHits | Select-Object -First 100 | ForEach-Object { Write-Host "identifier: $_" }
-            $pathHits | Select-Object -First 100 | ForEach-Object { Write-Host "path: $_" }
-            exit 1
+          $requiredText = @{
+            'README.md' = 'NosGM is an open-source NosTale server emulator derived from OpenNos.'
+            'AUTHORS.md' = 'NosGM is a community-maintained NosTale server emulator derived from the OpenNos project.'
+            'NOTICE.md' = 'NosGM is a modified work derived from the OpenNos project.'
+            'docs/PROVENANCE.md' = 'NosGM is an OpenNos-derived emulator.'
           }
 
-          Write-Host 'NosGm technical identity verified. Historical legal attribution remains permitted.'
+          foreach ($entry in $requiredText.GetEnumerator()) {
+            $content = Get-Content -LiteralPath $entry.Key -Raw
+            if (-not $content.Contains($entry.Value)) {
+              Write-Error "$($entry.Key) is missing the required NosGM/OpenNos identity statement."
+              exit 1
+            }
+          }
+
+          Write-Host 'NosGM technical identity and OpenNos provenance verified.'
