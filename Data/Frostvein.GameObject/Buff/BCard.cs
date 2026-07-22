@@ -1,4 +1,4 @@
-﻿using Game.Configuration;
+using Game.Configuration;
 using Game.Configuration.BCards;
 using Frostvein.Data;
 using Frostvein.GameObject.Battle;
@@ -43,13 +43,11 @@ namespace Frostvein.GameObject
 
         #region Methods
 
-        public void ApplyBCards(BattleEntity target, BattleEntity caster, short x = 0, short y = 0, short partnerBuffLevel = 0, short levelUpgraded = 0)
+        public void ApplyBCards(BattleEntity target, BattleEntity caster, short x = 0, short y = 0,
+            short partnerBuffLevel = 0, short levelUpgraded = 0,
+            BCardExecutionPhase executionPhase = BCardExecutionPhase.Unspecified,
+            SkillCastContext castContext = null, HitContext hitContext = null)
         {
-            /*if (Type != (byte)BCardType.CardType.Buff && (CardId != null || SkillVNum != null))
-            {
-                Console.WriteLine($"BCardId: {BCardId} Type: {(BCardType.CardType)Type} SubType: {SubType} CardId: {CardId?.ToString() ?? "null"} ItemVNum: {ItemVNum?.ToString() ?? "null"} SkillVNum: {SkillVNum?.ToString() ?? "null"} SessionType: {session?.EntityType.ToString() ?? "null"} SenderType: {sender?.EntityType.ToString() ?? "null"}");
-            }*/
-
             int firstData = FirstData;
             int casterLevel = caster.MapMonster?.Owner?.Level ?? caster.Level;
 
@@ -79,8 +77,9 @@ namespace Frostvein.GameObject
 
                     if (skills != null)
                     {
-                        firstData = skills.Find(s => s.SkillVNum == skill.SkillVNum)?.GetSkillBCards().OrderByDescending(s => s.SkillVNum).FirstOrDefault(b => b.Type == Type && b.SubType == SubType).FirstData ?? FirstData;
-                        //firstData = skills.Where(s => s.SkillVNum == skill.SkillVNum).Sum(s => s.GetSkillBCards().Where(b => b.Type == Type && b.SubType == SubType).Sum(b => b.FirstData));
+                        firstData = skills.Find(s => s.SkillVNum == skill.SkillVNum)?.GetSkillBCards()
+                            .OrderByDescending(s => s.SkillVNum)
+                            .FirstOrDefault(b => b.Type == Type && b.SubType == SubType)?.FirstData ?? FirstData;
                         if (firstData == 0)
                         {
                             firstData = FirstData;
@@ -94,28 +93,32 @@ namespace Frostvein.GameObject
                 delayTime = ForceDelay * 100;
             }
 
+            int disposableKey = skill?.SkillVNum == 1098 ? skill.SkillVNum * 1000 : BCardId;
             if (BCardId > 0)
             {
-                target.BCardDisposables[skill?.SkillVNum == 1098 ? skill.SkillVNum * 1000 : BCardId]?.Dispose();
+                target.BCardDisposables[disposableKey]?.Dispose();
             }
 
-            target.BCardDisposables[skill?.SkillVNum == 1098 ? skill.SkillVNum * 1000 : BCardId] =
+            target.BCardDisposables[disposableKey] =
                 Observable.Timer(TimeSpan.FromMilliseconds(delayTime)).Subscribe(o =>
                 {
                     PluginFacility.HandleBCard(new BCardEvent
                     {
                         Target = target,
                         Caster = caster,
-                        Card = card ?? null,
+                        Card = card,
                         BCard = this,
                         LevelUpgraded = levelUpgraded,
                         X = x,
                         Y = y,
-                        Skill = skill ?? null,
+                        Skill = skill,
                         FirstData = firstData,
                         CasterLevel = casterLevel,
                         DelayTime = delayTime,
-                        Duration = duration
+                        Duration = duration,
+                        ExecutionPhase = executionPhase,
+                        CastContext = castContext,
+                        HitContext = hitContext
                     });
                 });
         }
