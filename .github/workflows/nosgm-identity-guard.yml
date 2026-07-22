@@ -18,7 +18,7 @@ concurrency:
 
 jobs:
   identity:
-    name: Enforce NosGm source identity
+    name: Enforce NosGm technical identity
     runs-on: ubuntu-latest
     timeout-minutes: 10
 
@@ -26,20 +26,37 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v6
 
-      - name: Reject legacy identity in tracked text and paths
+      - name: Reject legacy technical identifiers and paths
         shell: pwsh
         run: |
           $legacy = [string]::Concat('F', 'rostvein')
-          $contentHits = @(& git grep -n -I -i -e $legacy -- . 2>$null)
+
+          # Historical project names are allowed in legal notices, provenance records
+          # and source attribution. They are not allowed to return as namespaces,
+          # assembly prefixes, configuration identifiers or tracked paths.
+          $pathspecs = @(
+            '*.cs', '*.csproj', '*.sln', '*.config', '*.json', '*.xml', '*.resx',
+            '*.yml', '*.yaml', '*.ps1', '*.bat'
+          )
+
+          $identifierHits = @(
+            & git grep -n -I -i -e "$legacy\." -- @pathspecs 2>$null
+          )
+
+          if ($LASTEXITCODE -gt 1) {
+            Write-Error 'git grep failed while checking technical identity.'
+            exit 1
+          }
+
           $pathHits = @(git ls-files | Where-Object {
             $_.IndexOf($legacy, [System.StringComparison]::OrdinalIgnoreCase) -ge 0
           })
 
-          if ($contentHits.Count -gt 0 -or $pathHits.Count -gt 0) {
-            Write-Error "Legacy source identity detected. All tracked source identity must remain NosGm."
-            $contentHits | Select-Object -First 100 | ForEach-Object { Write-Host "content: $_" }
+          if ($identifierHits.Count -gt 0 -or $pathHits.Count -gt 0) {
+            Write-Error 'Legacy technical identity detected. Technical names and paths must remain NosGm.'
+            $identifierHits | Select-Object -First 100 | ForEach-Object { Write-Host "identifier: $_" }
             $pathHits | Select-Object -First 100 | ForEach-Object { Write-Host "path: $_" }
             exit 1
           }
 
-          Write-Host "NosGm identity verified: zero legacy references in tracked text and paths."
+          Write-Host 'NosGm technical identity verified. Historical legal attribution remains permitted.'
