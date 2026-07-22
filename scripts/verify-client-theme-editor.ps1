@@ -47,7 +47,24 @@ foreach ($needle in @(
     }
 }
 
-$sourceFiles = Get-ChildItem $tool -Filter *.cs -Recurse
+# Inspect only files committed to Git. The workflow builds before this script runs,
+# so recursive filesystem scans would otherwise mistake generated bin/obj files for
+# source files or bundled binaries.
+$trackedRelativePaths = @(& git -C $root ls-files -- "Tools/NosGM.ClientThemeEditor")
+if ($LASTEXITCODE -ne 0) {
+    throw "Unable to enumerate tracked ClientThemeEditor files."
+}
+
+$sourceFiles = @(
+    $trackedRelativePaths |
+        Where-Object { [System.IO.Path]::GetExtension($_) -ieq ".cs" } |
+        ForEach-Object { Get-Item -LiteralPath (Join-Path $root $_) }
+)
+
+if ($sourceFiles.Count -eq 0) {
+    throw "ClientThemeEditor has no tracked C# source files."
+}
+
 foreach ($file in $sourceFiles) {
     $text = Get-Content $file.FullName -Raw
     if (-not $text.StartsWith("// SPDX-License-Identifier: MIT", [System.StringComparison]::Ordinal)) {
@@ -92,11 +109,14 @@ foreach ($requiredCode in @(
     }
 }
 
-$binaryFiles = Get-ChildItem $tool -Recurse -File | Where-Object {
-    $_.Extension -in @(".exe", ".dll", ".bin", ".dmp")
-}
-if ($binaryFiles) {
-    throw "ClientThemeEditor must not contain client binaries, DLLs or dumps: $($binaryFiles.FullName -join ', ')"
+$binaryExtensions = @(".exe", ".dll", ".bin", ".dmp")
+$trackedBinaryFiles = @(
+    $trackedRelativePaths | Where-Object {
+        $binaryExtensions -contains [System.IO.Path]::GetExtension($_).ToLowerInvariant()
+    }
+)
+if ($trackedBinaryFiles.Count -gt 0) {
+    throw "ClientThemeEditor must not contain tracked client binaries, DLLs or dumps: $($trackedBinaryFiles -join ', ')"
 }
 
 $profiles = Join-Path $tool "profiles"
