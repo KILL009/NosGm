@@ -116,7 +116,7 @@ internal static class Program
         {
             var output = Path.GetFullPath(options.Required("output"));
             EnsureDifferent(output, input, profilePath, themePath);
-            manifest = ThemeEngine.ApplyToOutput(input, output, profile, theme);
+            manifest = SafeThemeApplication.ApplyCopy(input, output, profile, theme);
         }
 
         Console.WriteLine($"Patched SHA-256: {manifest.PatchedSha256}");
