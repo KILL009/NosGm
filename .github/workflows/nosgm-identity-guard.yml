@@ -1,0 +1,45 @@
+name: NosGm identity guard
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nosgm-identity-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  identity:
+    name: Enforce NosGm source identity
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Reject legacy identity in tracked text and paths
+        shell: pwsh
+        run: |
+          $legacy = [string]::Concat('F', 'rostvein')
+          $contentHits = @(& git grep -n -I -i -e $legacy -- . 2>$null)
+          $pathHits = @(git ls-files | Where-Object {
+            $_.IndexOf($legacy, [System.StringComparison]::OrdinalIgnoreCase) -ge 0
+          })
+
+          if ($contentHits.Count -gt 0 -or $pathHits.Count -gt 0) {
+            Write-Error "Legacy source identity detected. All tracked source identity must remain NosGm."
+            $contentHits | Select-Object -First 100 | ForEach-Object { Write-Host "content: $_" }
+            $pathHits | Select-Object -First 100 | ForEach-Object { Write-Host "path: $_" }
+            exit 1
+          }
+
+          Write-Host "NosGm identity verified: zero legacy references in tracked text and paths."
