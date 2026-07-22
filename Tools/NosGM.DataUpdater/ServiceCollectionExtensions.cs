@@ -6,10 +6,9 @@
  * SPDX-License-Identifier: GPL-3.0-only
  */
 
+#if NOSGAME_PACKAGES
 using Microsoft.Extensions.DependencyInjection;
-using NosGM.DataUpdater.Diff;
-using NosGM.DataUpdater.Extraction;
-using NosGM.DataUpdater.Publishing;
+using NosGM.DataUpdater.Translation;
 using Za.NosGame.Fetcher;
 using Za.NosGame.Fetcher.Downloader;
 using Za.NosGame.Fetcher.Extractor;
@@ -21,7 +20,7 @@ namespace NosGM.DataUpdater;
 
 public static class ServiceCollectionExtensions
 {
-    public static IServiceCollection AddNosGMDataUpdater(
+    public static IServiceCollection AddNosGamePackageAdapter(
         this IServiceCollection services,
         UpdaterOptions options)
     {
@@ -50,10 +49,8 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<FileFetcher>();
         services.AddTraductionRessourceServices(useDefaultManager);
         services.AddBCardRessourceServices(useDefaultManager);
-
-        services.AddSingleton<BCardCatalogExtractor>();
-        services.AddSingleton<CatalogDiffPlanner>();
-        services.AddSingleton<GitHubPullRequestPublisher>();
+        services.AddSingleton<IBCardTranslationProvider, NosGameBCardTranslationProvider>();
         return services;
     }
 }
+#endif
