@@ -87,6 +87,8 @@ namespace Game.Configuration.BCards
         public int HitMode { get; set; }
 
         public bool IsCritical { get; set; }
+
+        public DamageCalculationResult DamageResult { get; set; }
     }
 
     /// <summary>
