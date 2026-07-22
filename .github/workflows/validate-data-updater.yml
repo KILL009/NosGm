@@ -1,0 +1,44 @@
+name: Validate NosGM.DataUpdater
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'Tools/NosGM.DataUpdater/**'
+      - '.github/workflows/update-bcard-catalogs.yml'
+      - '.github/workflows/validate-data-updater.yml'
+      - 'scripts/verify-data-updater.ps1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: validate-data-updater-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build .NET 9 updater
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    env:
+      NUGET_AUTH_TOKEN: ${{ secrets.NOSGAME_PACKAGE_TOKEN || secrets.TOKEN || github.token }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up .NET 9 and package source
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 9.0.x
+          source-url: https://nuget.pkg.github.com/noszanou/index.json
+
+      - name: Restore updater
+        run: dotnet restore Tools/NosGM.DataUpdater/NosGM.DataUpdater.csproj
+
+      - name: Build updater
+        run: dotnet build Tools/NosGM.DataUpdater/NosGM.DataUpdater.csproj --configuration Release --no-restore
