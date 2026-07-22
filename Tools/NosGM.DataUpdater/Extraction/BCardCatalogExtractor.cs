@@ -10,9 +10,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using NosGM.DataUpdater.Models;
-using Za.NosGame.RessourceLoader.Traduction;
-using Za.NosGame.Shared;
-using Za.NosGame.Shared.DatEntitys.Enums;
+using NosGM.DataUpdater.Translation;
 
 namespace NosGM.DataUpdater.Extraction;
 
@@ -23,26 +21,23 @@ public sealed class BCardCatalogExtractor
         WriteIndented = true
     };
 
-    private readonly II18NManager _i18nManager;
-    private readonly DatFileFolder _datFileFolder;
     private readonly UpdaterOptions _options;
+    private readonly IBCardTranslationProvider _translationProvider;
 
     public BCardCatalogExtractor(
-        II18NManager i18nManager,
-        DatFileFolder datFileFolder,
-        UpdaterOptions options)
+        UpdaterOptions options,
+        IBCardTranslationProvider translationProvider)
     {
-        _i18nManager = i18nManager;
-        _datFileFolder = datFileFolder;
         _options = options;
+        _translationProvider = translationProvider;
     }
 
     public async Task<CatalogGenerationResult> ExtractAsync(CancellationToken cancellationToken = default)
     {
-        var inputFile = Path.Combine(_datFileFolder.DatFolder, "BCard.dat");
+        var inputFile = _options.BCardFile;
         if (!File.Exists(inputFile))
         {
-            throw new FileNotFoundException("BCard.dat was not found after resource extraction.", inputFile);
+            throw new FileNotFoundException("BCard.dat was not found.", inputFile);
         }
 
         var sourceBytes = await File.ReadAllBytesAsync(inputFile, cancellationToken);
@@ -54,14 +49,14 @@ public sealed class BCardCatalogExtractor
 
         foreach (var configuredLanguage in _options.Languages)
         {
-            if (!Enum.TryParse<RegionLanguageType>(configuredLanguage, true, out var region))
+            var language = configuredLanguage.ToUpperInvariant();
+            if (!_translationProvider.SupportsLanguage(language))
             {
-                unsupportedLanguages.Add(configuredLanguage);
+                unsupportedLanguages.Add(language);
                 continue;
             }
 
-            var language = configuredLanguage.ToUpperInvariant();
-            var types = Parse(lines, region);
+            var types = Parse(lines, language);
             var document = new BCardCatalogDocument(1, language, sourceSha256, types);
             var content = JsonSerializer.Serialize(document, JsonOptions) + Environment.NewLine;
             var path = $"{_options.OutputRoot}/BCard_{language}.json";
@@ -70,15 +65,15 @@ public sealed class BCardCatalogExtractor
 
         if (generatedFiles.Count == 0)
         {
-            var available = string.Join(", ", Enum.GetNames<RegionLanguageType>());
             throw new InvalidOperationException(
-                $"None of the configured languages are supported. Available enum values: {available}");
+                "None of the configured languages have an available translation provider. "
+                + "In local mode place BCard_<LANG>.json maps in the configured translation directory.");
         }
 
         return new CatalogGenerationResult(inputFile, sourceSha256, generatedFiles, unsupportedLanguages);
     }
 
-    private IReadOnlyList<BCardTypeEntry> Parse(string[] lines, RegionLanguageType region)
+    private IReadOnlyList<BCardTypeEntry> Parse(string[] lines, string language)
     {
         var descriptions = new Dictionary<(long Type, string SubjectKey), string>();
         var result = new List<BCardTypeEntry>();
@@ -114,7 +109,7 @@ public sealed class BCardCatalogExtractor
 
             if (string.Equals(key, "NAME", StringComparison.Ordinal))
             {
-                current.Name = Translate(region, value);
+                current.Name = Translate(language, value);
             }
             else if (key.StartsWith("SUBJ", StringComparison.Ordinal))
             {
@@ -132,8 +127,8 @@ public sealed class BCardCatalogExtractor
                 descriptions.TryGetValue((current.Type, subjectKey), out var descriptionId);
                 current.Subtypes.Add(new BCardSubtypeEntry(
                     subtype,
-                    Translate(region, value),
-                    Translate(region, descriptionId ?? "NONE")));
+                    Translate(language, value),
+                    Translate(language, descriptionId ?? "NONE")));
             }
             else if (string.Equals(key, "END", StringComparison.Ordinal))
             {
@@ -148,16 +143,8 @@ public sealed class BCardCatalogExtractor
         return result.OrderBy(static entry => entry.Type).ToArray();
     }
 
-    private string Translate(RegionLanguageType region, string key)
-    {
-        if (string.IsNullOrWhiteSpace(key) || string.Equals(key, "NONE", StringComparison.OrdinalIgnoreCase))
-        {
-            return "NONE";
-        }
-
-        var translated = _i18nManager.GetDataTranslations(GameDataType.BCard, region, key);
-        return string.IsNullOrWhiteSpace(translated) ? key : translated;
-    }
+    private string Translate(string language, string key) =>
+        _translationProvider.Translate(language, key);
 
     private sealed class MutableBCardType(long type)
     {
