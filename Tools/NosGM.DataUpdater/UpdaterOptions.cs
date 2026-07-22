@@ -14,6 +14,8 @@ public sealed record UpdaterOptions(
     string BaseBranch,
     string RepositoryRoot,
     string WorkingDirectory,
+    string BCardFile,
+    string TranslationDirectory,
     string OutputRoot,
     IReadOnlyList<string> Languages,
     bool DownloadClientResources,
@@ -34,8 +36,9 @@ public sealed record UpdaterOptions(
             ?? Environment.GetEnvironmentVariable("GITHUB_WORKSPACE")
             ?? Directory.GetCurrentDirectory();
 
-        var workingDirectory = GetEnvironment("NOSGM_UPDATER_WORK_DIRECTORY")
-            ?? Path.Combine(Path.GetTempPath(), "NosGM.DataUpdater");
+        var workingDirectory = Path.GetFullPath(
+            GetEnvironment("NOSGM_UPDATER_WORK_DIRECTORY")
+            ?? Path.Combine(Path.GetTempPath(), "NosGM.DataUpdater"));
 
         var configuredLanguages = GetEnvironment("NOSGM_UPDATER_LANGUAGES")
             ?.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
@@ -48,10 +51,17 @@ public sealed record UpdaterOptions(
             RepositoryName: GetEnvironment("NOSGM_UPDATER_REPO") ?? "NosGm",
             BaseBranch: GetEnvironment("NOSGM_UPDATER_BASE_BRANCH") ?? "main",
             RepositoryRoot: Path.GetFullPath(repositoryRoot),
-            WorkingDirectory: Path.GetFullPath(workingDirectory),
+            WorkingDirectory: workingDirectory,
+            BCardFile: Path.GetFullPath(
+                GetEnvironment("NOSGM_UPDATER_BCARD_FILE")
+                ?? Path.Combine(workingDirectory, "input", "BCard.dat")),
+            TranslationDirectory: Path.GetFullPath(
+                GetEnvironment("NOSGM_UPDATER_TRANSLATION_DIRECTORY")
+                ?? Path.Combine(workingDirectory, "input", "translations")),
             OutputRoot: NormalizeRepositoryPath(GetEnvironment("NOSGM_UPDATER_OUTPUT_ROOT") ?? "Data/Generated/BCards"),
             Languages: configuredLanguages is { Length: > 0 } ? configuredLanguages : DefaultLanguages,
-            DownloadClientResources: !arguments.Contains("--local-resources"),
+            DownloadClientResources: arguments.Contains("--download-resources")
+                || IsTrue(GetEnvironment("NOSGM_UPDATER_DOWNLOAD_RESOURCES")),
             Publish: arguments.Contains("--publish") || IsTrue(GetEnvironment("NOSGM_UPDATER_PUBLISH")),
             GitHubToken: GetEnvironment("GITHUB_TOKEN") ?? GetEnvironment("NOSGM_DATA_UPDATER_TOKEN"));
     }
@@ -66,6 +76,13 @@ public sealed record UpdaterOptions(
         if (Languages.Count == 0)
         {
             throw new InvalidOperationException("At least one language must be configured.");
+        }
+
+        if (!DownloadClientResources && !File.Exists(BCardFile))
+        {
+            throw new FileNotFoundException(
+                "Local mode requires BCard.dat. Set NOSGM_UPDATER_BCARD_FILE or use --download-resources with the optional package adapter.",
+                BCardFile);
         }
 
         if (Publish && string.IsNullOrWhiteSpace(GitHubToken))
