@@ -11,7 +11,13 @@ $requiredFiles = @(
     'NOTICE.md',
     'THIRD_PARTY_NOTICES.md',
     'docs/LICENSING.md',
-    'docs/PROVENANCE.md'
+    'docs/PROVENANCE.md',
+    'Data/NosGm.ChickenAPI/NOTICE.md',
+    'LICENSES/GPL-3.0-only/README.md',
+    'LICENSES/GPL-3.0-only/01.txt',
+    'LICENSES/GPL-3.0-only/02.txt',
+    'LICENSES/GPL-3.0-only/03.txt',
+    'LICENSES/GPL-3.0-only/04.txt'
 )
 
 foreach ($file in $requiredFiles) {
@@ -21,8 +27,41 @@ foreach ($file in $requiredFiles) {
 }
 
 $licenseText = Get-Content -LiteralPath 'LICENSE' -Raw
-if ($licenseText -notmatch 'GNU GENERAL PUBLIC LICENSE') {
-    Fail 'LICENSE does not contain the expected GNU General Public License text.'
+if ($licenseText -notmatch 'GNU GENERAL PUBLIC LICENSE' -or $licenseText -notmatch 'Version 2, June 1991') {
+    Fail 'LICENSE does not contain the preserved GNU General Public License version 2 text.'
+}
+
+# The complete GPLv3 text is stored in numbered pieces due to the connector's
+# per-write payload limit. Concatenating the raw bytes must reproduce the
+# canonical license byte-for-byte.
+$gpl3Parts = @(
+    'LICENSES/GPL-3.0-only/01.txt',
+    'LICENSES/GPL-3.0-only/02.txt',
+    'LICENSES/GPL-3.0-only/03.txt',
+    'LICENSES/GPL-3.0-only/04.txt'
+)
+$gpl3Stream = [System.IO.MemoryStream]::new()
+try {
+    foreach ($part in $gpl3Parts) {
+        $bytes = [System.IO.File]::ReadAllBytes($part)
+        $gpl3Stream.Write($bytes, 0, $bytes.Length)
+    }
+
+    $sha256 = [System.Security.Cryptography.SHA256]::Create()
+    try {
+        $gpl3Hash = (($sha256.ComputeHash($gpl3Stream.ToArray()) | ForEach-Object { $_.ToString('x2') }) -join '')
+    }
+    finally {
+        $sha256.Dispose()
+    }
+}
+finally {
+    $gpl3Stream.Dispose()
+}
+
+$expectedGpl3Hash = '3972dc9744f6499f0f9b2dbf76696f2ae7ad8af9b23dde66d6af86c9dfb36986'
+if ($gpl3Hash -ne $expectedGpl3Hash) {
+    Fail "Bundled GPLv3 text is incomplete or modified. Expected $expectedGpl3Hash but found $gpl3Hash."
 }
 
 # Renaming a project in 2026 must not transfer copyright for code authored earlier.
@@ -84,8 +123,22 @@ if (Test-Path -LiteralPath $contextPath) {
     }
 }
 
+$chickenNoticeText = Get-Content -LiteralPath 'Data/NosGm.ChickenAPI/NOTICE.md' -Raw
+foreach ($requiredChickenText in @(
+    'Price-H16/NQ-Verde',
+    '2594ec13f4fba5d893b424197878c05f801f68a2',
+    'GPL-3.0-only',
+    '8D199C92-D754-461F-89B0-83C2B4E6DF9F',
+    'DECB5668-600C-49F1-A5C8-CDE5A12C9F5A',
+    'A8289E58-4507-4614-8A28-9FF936BEE009'
+)) {
+    if ($chickenNoticeText -notmatch [regex]::Escape($requiredChickenText)) {
+        Fail "ChickenAPI notice is missing required provenance text: $requiredChickenText"
+    }
+}
+
 $noticeText = Get-Content -LiteralPath 'NOTICE.md' -Raw
-foreach ($requiredNotice in @('OpenNos', 'Frostvein', 'ChickenAPI', 'No affiliation', 'No warranty')) {
+foreach ($requiredNotice in @('OpenNos', 'Frostvein', 'ChickenAPI', 'GPL-3.0-only', 'No affiliation', 'No warranty')) {
     if ($noticeText -notmatch [regex]::Escape($requiredNotice)) {
         Fail "NOTICE.md is missing required provenance or legal text: $requiredNotice"
     }
