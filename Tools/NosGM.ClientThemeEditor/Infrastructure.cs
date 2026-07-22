@@ -3,6 +3,7 @@
 using System.Diagnostics;
 using System.Globalization;
 using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
@@ -18,9 +19,17 @@ internal static class JsonFiles
         UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow
     };
 
+    private const long MaxJsonBytes = 4 * 1024 * 1024;
+
     public static T Read<T>(string path)
     {
         var fullPath = Path.GetFullPath(path);
+        var length = new FileInfo(fullPath).Length;
+        if (length <= 0 || length > MaxJsonBytes)
+        {
+            throw new InvalidDataException($"JSON file '{fullPath}' must be between 1 byte and {MaxJsonBytes} bytes.");
+        }
+
         var json = File.ReadAllText(fullPath);
         return JsonSerializer.Deserialize<T>(json, Options)
             ?? throw new InvalidDataException($"JSON file '{fullPath}' is empty or invalid.");
@@ -30,8 +39,31 @@ internal static class JsonFiles
     {
         var fullPath = Path.GetFullPath(path);
         Directory.CreateDirectory(Path.GetDirectoryName(fullPath)!);
-        var json = JsonSerializer.Serialize(value, Options);
-        File.WriteAllText(fullPath, json + Environment.NewLine);
+        var json = JsonSerializer.Serialize(value, Options) + Environment.NewLine;
+        var bytes = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false).GetBytes(json);
+        if (bytes.LongLength > MaxJsonBytes)
+        {
+            throw new InvalidDataException($"Serialized JSON exceeds the {MaxJsonBytes}-byte limit.");
+        }
+
+        var temporary = fullPath + $".tmp.{Guid.NewGuid():N}";
+        try
+        {
+            using (var stream = new FileStream(temporary, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+            {
+                stream.Write(bytes);
+                stream.Flush(flushToDisk: true);
+            }
+
+            File.Move(temporary, fullPath, overwrite: true);
+        }
+        finally
+        {
+            if (File.Exists(temporary))
+            {
+                File.Delete(temporary);
+            }
+        }
     }
 }
 
@@ -137,16 +169,26 @@ internal static class HexCodec
 
 internal static class PatternMatcher
 {
-    public static IReadOnlyList<int> FindAll(ReadOnlySpan<byte> content, IReadOnlyList<byte?> pattern)
+    public static IReadOnlyList<int> FindAll(
+        ReadOnlySpan<byte> content,
+        IReadOnlyList<byte?> pattern,
+        int stopAfter)
     {
-        if (pattern.Count == 0 || pattern.Count > content.Length)
+        if (pattern.Count == 0 || pattern.Count > content.Length || stopAfter < 1)
         {
             return Array.Empty<int>();
         }
 
+        var anchorIndex = Enumerable.Range(0, pattern.Count).First(index => pattern[index].HasValue);
+        var anchor = pattern[anchorIndex]!.Value;
         var matches = new List<int>();
         for (var offset = 0; offset <= content.Length - pattern.Count; offset++)
         {
+            if (content[offset + anchorIndex] != anchor)
+            {
+                continue;
+            }
+
             var found = true;
             for (var index = 0; index < pattern.Count; index++)
             {
@@ -158,9 +200,15 @@ internal static class PatternMatcher
                 }
             }
 
-            if (found)
+            if (!found)
             {
-                matches.Add(offset);
+                continue;
+            }
+
+            matches.Add(offset);
+            if (matches.Count >= stopAfter)
+            {
+                break;
             }
         }
 
@@ -170,6 +218,8 @@ internal static class PatternMatcher
 
 internal static class PeInspector
 {
+    private const long MaxClientBytes = 1024L * 1024 * 1024;
+
     public static ClientIdentity Inspect(string path)
     {
         var fullPath = Path.GetFullPath(path);
@@ -179,9 +229,10 @@ internal static class PeInspector
         }
 
         var info = new FileInfo(fullPath);
-        if (info.Length < 128)
+        if (info.Length < 128 || info.Length > MaxClientBytes)
         {
-            throw new InvalidDataException("Input is too small to be a valid PE executable.");
+            throw new InvalidDataException(
+                $"Input must be between 128 bytes and {MaxClientBytes} bytes.");
         }
 
         using var stream = File.OpenRead(fullPath);
