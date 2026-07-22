@@ -1,0 +1,49 @@
+# Third-party notices
+
+NosGM includes or references third-party software. Each component remains subject to its own copyright and license terms.
+
+This document records direct dependencies found during the initial compliance review. It must be updated whenever a dependency is added, removed or upgraded. Transitive dependencies must also be reviewed before distributing binaries.
+
+## Source components
+
+| Component | Relationship | License status |
+|---|---|---|
+| OpenNos | Upstream source and project lineage | Original reviewed headers state GPL-2.0-or-later |
+| Frostvein | Intermediate OpenNos ecosystem source | Exact upstream repository, revision and license notice must be recorded in `docs/PROVENANCE.md` |
+| ChickenAPI components | Source projects included in the solution | Exact upstream repository, revision and license for each component must be confirmed in `docs/PROVENANCE.md` |
+| NosGM | Current modifications and new work | Copyright remains with NosGM contributors; upstream rights are preserved |
+
+## Direct NuGet dependencies observed
+
+The following entries were observed in inspected project files. License expressions are taken from the corresponding package metadata where confirmed.
+
+| Package | Observed version | License or review status |
+|---|---:|---|
+| FluentValidation | 11.8.1 | Apache-2.0 |
+| Google.Cloud.Translation.V2 | 3.5.0 | Apache-2.0 |
+| log4net | 3.3.2 | Apache-2.0 |
+| MediatR | 12.2.0 | Apache-2.0 |
+| MongoDB.Driver | 3.10.0 | Apache-2.0 |
+| Newtonsoft.Json | 13.0.4 | MIT |
+| System.Reactive | 6.1.0 | Verify and preserve package license text in release output |
+| WindowsFirewallHelper | 2.2.0.86 | Package uses a linked license; verify the upstream license text before release |
+| Autofac | versions vary by project | Verify package metadata for every resolved version |
+| System.ValueTuple | versions vary by project | Verify package metadata for every resolved version |
+
+Package references do not transfer ownership to NosGM. A release must include all notices and license texts required by the resolved packages.
+
+## Release requirements
+
+Before publishing any executable, DLL, ZIP, installer, container or prebuilt package:
+
+1. Restore the exact dependency graph used for the build.
+2. Export all direct and transitive package names and versions.
+3. Confirm each package license from its package metadata and upstream source.
+4. Review compatibility with the license governing the combined NosGM build.
+5. Include required license and notice files in the distributed archive.
+6. Record the exact NosGM source commit used to produce the binaries.
+7. Provide the complete corresponding source under the applicable GPL terms.
+
+## Proprietary assets
+
+NosTale client files, artwork, maps, text, packets captured from proprietary services and other game assets are not licensed by this repository unless explicitly stated. Do not add proprietary client distributions, leaked server code or assets without a documented legal right to redistribute them.
