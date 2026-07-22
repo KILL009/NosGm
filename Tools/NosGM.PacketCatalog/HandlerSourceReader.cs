@@ -65,8 +65,10 @@ internal sealed class HandlerSourceReader
                     source));
             }
 
+            var implementsPacketHandler = containingType?.BaseList?.Types.Any(type =>
+                SyntaxHelpers.SimpleTypeName(type.Type).TrimEnd('?') == "IPacketHandler") == true;
             var firstParameter = method.ParameterList.Parameters.FirstOrDefault();
-            if (firstParameter?.Type is not null)
+            if (implementsPacketHandler && firstParameter?.Type is not null)
             {
                 typedCandidates.Add(new TypedHandlerCandidate(
                     SyntaxHelpers.SimpleTypeName(firstParameter.Type).TrimEnd('?'),
