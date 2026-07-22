@@ -12,6 +12,7 @@ This register tracks where the code in NosGM came from and which license terms a
 - `36bd96a51c4b4a1e55e8827ca7eb375cc189ad9e` identifies the immutable `noszanou/OpennosTimeSpaceParser` snapshot adapted into `Tools/NosGM.TimeSpaceParser`.
 - `fc1b6dda5d797efc24a053180d30702f8dad162a` identifies the immutable `ImNotAVirus/NostaleWidget` snapshot used for `Tools/NosGM.ClientEnhancements` provenance and adaptation.
 - `eaee2aa9f0e71b9960da586f425f79e628013021` identifies the immutable `Pumba98/OnexExplorer` snapshot adapted into `Tools/NosGM.ResourceExplorer`.
+- `2588cfdc64789a7952c781faaafdf1026ac73e9d` identifies the reviewed `BlowaXD/SaltyEmu` snapshot used for `Tools/NosGM.PacketCatalog`; packet-documentation concepts were introduced in upstream commit `7f849171da82feee1b9fae851a45b3eef9a9cd68`.
 - `9eb44d2a0041b49375fabb730121a01acd7bae87` identifies the immutable `Elendan/Notale-Text-Picker` snapshot adapted into `Tools/NosGM.ClientThemeEditor`.
 - `9d1e61c717b6a49ca221a5f2d855dfa5fa11591c` identifies the reviewed `Pumba98/Nostale-ClientColorizer` snapshot recorded only as prior art; no source, signature or offset is imported.
 
@@ -27,6 +28,7 @@ NosGM is an OpenNos-derived emulator. The exact OpenNos base revision can contin
 | ChickenAPI.Plugins | `https://github.com/Price-H16/NQ-Verde` | Public snapshot `2594ec13f4fba5d893b424197878c05f801f68a2`; matching snapshot `KILL009/NosGuana@4186b11909d036633c8727898bba16fcb53f395c` | Project GUID and inspected AssemblyInfo blob match; upstream snapshot contains GNU GPL version 3 | Verified, treat as GPL-3.0-only |
 | BCardGistUpdater adaptation | `https://github.com/noszanou/BCardGistUpdater` | Snapshot `53153c990ae5b65a603d223eeda504df2a67d5fb`, adapted under `Tools/NosGM.DataUpdater` | Upstream repository includes GNU GPL version 3; adapted files carry GPL-3.0-only SPDX headers and `Tools/NosGM.DataUpdater/NOTICE.md` | Verified |
 | OpennosTimeSpaceParser adaptation | `https://github.com/noszanou/OpennosTimeSpaceParser` | Snapshot `36bd96a51c4b4a1e55e8827ca7eb375cc189ad9e`, adapted under `Tools/NosGM.TimeSpaceParser`; the upstream README records earlier work by Elendan and SEOVA and OpenNos XML-model lineage | Upstream repository includes GNU GPL version 3; adapted files carry GPL-3.0-only SPDX headers and `Tools/NosGM.TimeSpaceParser/NOTICE.md` | Verified; exact intermediate Elendan and SEOVA revisions were not documented and are not guessed |
+| SaltyEmu packet-documentation adaptation | `https://github.com/BlowaXD/SaltyEmu` | Reviewed snapshot `2588cfdc64789a7952c781faaafdf1026ac73e9d`; packet-documentation concept introduced at `7f849171da82feee1b9fae851a45b3eef9a9cd68`; implemented under `Tools/NosGM.PacketCatalog` | Upstream repository contains GNU GPL version 3; the NosGM tool carries GPL-3.0-only SPDX headers, local notice and preserved contributor credit | Verified; NosGM implementation is source-based and does not load upstream assemblies |
 | NostaleWidget adaptation | `https://github.com/ImNotAVirus/NostaleWidget` | Snapshot `fc1b6dda5d797efc24a053180d30702f8dad162a`, adapted under `Tools/NosGM.ClientEnhancements`; reviewed source references DitzProject/ClientModdingAPI and ApourtArtt/DelphiClassInfo without immutable revisions | Upstream `LICENSE` is MIT, Copyright (c) 2022 ApourtArtt; adapted source carries MIT SPDX headers and a local notice | Verified; earlier referenced revisions are not guessed |
 | OnexExplorer adaptation | `https://github.com/Pumba98/OnexExplorer` | Snapshot `eaee2aa9f0e71b9960da586f425f79e628013021`, adapted under `Tools/NosGM.ResourceExplorer`; reviewed UI identifies the repository as a fork maintained by Pumba98 without naming an immutable earlier revision | Upstream `LICENSE` contains Boost Software License 1.0; adapted source carries BSL-1.0 SPDX headers and a local notice | Verified; earlier fork revision is not guessed |
 | Notale-Text-Picker adaptation | `https://github.com/Elendan/Notale-Text-Picker` | Snapshot `9eb44d2a0041b49375fabb730121a01acd7bae87`, adapted under `Tools/NosGM.ClientThemeEditor`; upstream README credits Cryless and Fizo55 | Upstream `LICENSE` is MIT, Copyright (c) 2019 Elendan; adapted source carries MIT SPDX headers and a local notice | Verified |
@@ -42,6 +44,7 @@ NosGM contains these verified license lineages:
 - the ChickenAPI-derived source is conservatively treated as GPL-3.0-only based on its verified NQ-Source snapshot;
 - `Tools/NosGM.DataUpdater` is adapted from GPLv3-licensed BCardGistUpdater and is marked GPL-3.0-only;
 - `Tools/NosGM.TimeSpaceParser` is adapted from GPLv3-licensed Time-Space parser components and is marked GPL-3.0-only;
+- `Tools/NosGM.PacketCatalog` adapts GPLv3-licensed SaltyEmu packet-documentation concepts and is marked GPL-3.0-only;
 - `Tools/NosGM.ClientEnhancements` preserves the MIT License from the reviewed NostaleWidget source;
 - `Tools/NosGM.ResourceExplorer` preserves the Boost Software License 1.0 from the reviewed OnexExplorer source;
 - `Tools/NosGM.ClientThemeEditor` preserves the MIT License from the reviewed Notale-Text-Picker source;
@@ -59,6 +62,7 @@ GPLv3 obligations apply to the GPL-3.0-only components and to combined distribut
 - `Data/NosGm.ChickenAPI/NOTICE.md` records the ChickenAPI evidence and license treatment.
 - `Tools/NosGM.DataUpdater/NOTICE.md` records the BCardGistUpdater source, immutable commit, original author and NosGM modifications.
 - `Tools/NosGM.TimeSpaceParser/NOTICE.md` records the Time-Space parser source, immutable commit, earlier credited contributors, XML-model lineage and NosGM modifications.
+- `Tools/NosGM.PacketCatalog/NOTICE.md` records the SaltyEmu source, reviewed commits, Blowa and contributor credit, GPLv3 treatment and the new source-based NosGM implementation.
 - `Tools/NosGM.ClientEnhancements/NOTICE.md` records the NostaleWidget source, immutable commit, ApourtArtt copyright, MIT license, referenced earlier projects and NosGM safety modifications.
 - `Tools/NosGM.ResourceExplorer/NOTICE.md` records the OnexExplorer source, immutable commit, Boost license, fork uncertainty and NosGM safety modifications.
 - `Tools/NosGM.ClientThemeEditor/NOTICE.md` records the Notale-Text-Picker source, immutable commit, Elendan copyright, Cryless and Fizo55 credits, MIT license, independent ClientColorizer boundary and NosGM safety modifications.
