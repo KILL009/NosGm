@@ -1,0 +1,10 @@
+SPDX-FileCopyrightText: 2016-2017 OpenNos contributors
+SPDX-FileCopyrightText: 2026 NosGM contributors
+SPDX-License-Identifier: GPL-2.0-or-later
+
+This file is derived from the OpenNos Emulator Project.
+The original OpenNos source notice referred to the OpenNos AUTHORS file and licensed the file under GNU GPL version 2 or, at the recipient's option, any later version.
+
+NosGM modified the inherited file, including namespaces, class and connection identifiers, through changes completed on 2026-07-22 and earlier repository history.
+
+See the repository AUTHORS.md, NOTICE.md and docs/PROVENANCE.md files for project-level attribution and provenance.
