@@ -32,11 +32,18 @@ When importing or adapting external code, include the upstream URL, immutable co
 
 ## License and attribution
 
-The repository contains the GNU General Public License version 2 text in [LICENSE](LICENSE). Reviewed original OpenNos file notices state GNU GPL version 2 or, at the recipient's option, any later version.
+NosGM contains code from more than one verified GPL lineage:
 
-NosGM is a derivative community project. Copyright remains with the respective authors of OpenNos, intermediate OpenNos ecosystem projects, ChickenAPI-related components and NosGM modifications. Renaming namespaces or assemblies does not transfer authorship.
+- the root [LICENSE](LICENSE) preserves the GNU General Public License version 2 text inherited with the OpenNos-derived source;
+- reviewed original OpenNos file notices permit GNU GPL version 2 or, at the recipient's option, any later version;
+- the included ChickenAPI source is derived from the verified `Price-H16/NQ-Verde` snapshot `2594ec13f4fba5d893b424197878c05f801f68a2` and is conservatively treated as GPL-3.0-only;
+- the complete GNU GPL version 3 text is bundled under [LICENSES/GPL-3.0-only](LICENSES/GPL-3.0-only/README.md).
 
-Some inherited component origins are still being reconstructed. See [docs/PROVENANCE.md](docs/PROVENANCE.md). Do not publish new prebuilt binaries until every source component required by the build has a verified origin and compatible license.
+NosGM is a derivative community project. Copyright remains with the respective authors of OpenNos, NQ-Source and ChickenAPI, intermediate OpenNos ecosystem projects and NosGM modifications. Renaming namespaces or assemblies does not transfer authorship.
+
+The exact Frostvein upstream revision and license record are still being reconstructed. See [docs/PROVENANCE.md](docs/PROVENANCE.md). Do not publish new prebuilt binaries until that remaining source component has a verified origin and compatible license.
+
+If ChickenAPI remains linked into and distributed as part of the combined application, the distribution must satisfy GPL version 3, subject to confirming that the unresolved Frostvein lineage contains no incompatible material.
 
 When binaries are distributed, recipients must also receive the complete corresponding source code or equivalent GPL-compliant access to the exact source used for that build. Do not impose additional restrictions that prevent recipients from copying, modifying or redistributing GPL-covered code.
 
@@ -52,7 +59,7 @@ NosTale and related names, trademarks, artwork, client data and other proprietar
 
 ## No warranty
 
-NosGM is provided without warranty, to the extent permitted by applicable law. See [LICENSE](LICENSE) for the complete terms.
+NosGM is provided without warranty, to the extent permitted by applicable law. See the applicable GPL texts and [NOTICE.md](NOTICE.md) for details.
 
 ## Community
 
