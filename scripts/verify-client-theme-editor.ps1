@@ -8,6 +8,7 @@ $required = @(
     "NOTICE.md",
     "README.md",
     "NosGM.ClientThemeEditor.csproj",
+    "SafeThemeApplication.cs",
     "docs/LEGACY_RESEARCH.md",
     "themes/example-theme.json"
 )
@@ -23,9 +24,12 @@ foreach ($needle in @(
     "Elendan/Notale-Text-Picker",
     "9eb44d2a0041b49375fabb730121a01acd7bae87",
     "Copyright (c) 2019 Elendan",
+    "Cryless",
+    "Fizo55",
     "Pumba98/Nostale-ClientColorizer",
     "9d1e61c717b6a49ca221a5f2d855dfa5fa11591c",
-    "no ClientColorizer source code is copied"
+    "no ClientColorizer source code is copied",
+    "no ClientColorizer pattern, signature or offset is distributed"
 )) {
     if (-not $notice.Contains($needle, [System.StringComparison]::Ordinal)) {
         throw "ClientThemeEditor notice is missing: $needle"
@@ -33,14 +37,25 @@ foreach ($needle in @(
 }
 
 $project = Get-Content (Join-Path $tool "NosGM.ClientThemeEditor.csproj") -Raw
-if (-not $project.Contains("<TargetFramework>net9.0</TargetFramework>")) {
-    throw "ClientThemeEditor must target net9.0."
+foreach ($needle in @(
+    "<TargetFramework>net9.0</TargetFramework>",
+    "<Nullable>enable</Nullable>",
+    "<TreatWarningsAsErrors>true</TreatWarningsAsErrors>"
+)) {
+    if (-not $project.Contains($needle, [System.StringComparison]::Ordinal)) {
+        throw "ClientThemeEditor project is missing: $needle"
+    }
 }
 
-$source = Get-ChildItem $tool -Filter *.cs -Recurse | ForEach-Object {
-    Get-Content $_.FullName -Raw
+$sourceFiles = Get-ChildItem $tool -Filter *.cs -Recurse
+foreach ($file in $sourceFiles) {
+    $text = Get-Content $file.FullName -Raw
+    if (-not $text.StartsWith("// SPDX-License-Identifier: MIT", [System.StringComparison]::Ordinal)) {
+        throw "Missing MIT SPDX header: $($file.FullName)"
+    }
 }
-$joined = $source -join "`n"
+
+$joined = ($sourceFiles | ForEach-Object { Get-Content $_.FullName -Raw }) -join "`n"
 
 foreach ($forbidden in @(
     "Process.Start",
@@ -66,11 +81,29 @@ foreach ($requiredCode in @(
     "ExpectedMatches",
     "ExpectedOriginalHex",
     "ResearchOnly",
-    "WriteAtomically",
+    "ValidateContentIdentity",
+    "WritePatchedAtomically",
+    "SafeThemeApplication",
+    "NosGM.ThemeBackups",
     "Restore"
 )) {
     if (-not $joined.Contains($requiredCode, [System.StringComparison]::Ordinal)) {
         throw "Required ClientThemeEditor safety control missing: $requiredCode"
+    }
+}
+
+$binaryFiles = Get-ChildItem $tool -Recurse -File | Where-Object {
+    $_.Extension -in @(".exe", ".dll", ".bin", ".dmp")
+}
+if ($binaryFiles) {
+    throw "ClientThemeEditor must not contain client binaries, DLLs or dumps: $($binaryFiles.FullName -join ', ')"
+}
+
+$profiles = Join-Path $tool "profiles"
+if (Test-Path $profiles) {
+    $activeProfiles = Get-ChildItem $profiles -File -Recurse
+    if ($activeProfiles) {
+        throw "The first ClientThemeEditor release must not ship active client signature profiles."
     }
 }
 
