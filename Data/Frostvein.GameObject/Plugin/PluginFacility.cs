@@ -1,4 +1,4 @@
-﻿using Game.Configuration.BCards;
+using Game.Configuration.BCards;
 using Frostvein.Packets.Packets.ClientPackets;
 using Frostvein.Core;
 using Frostvein.Domain;
@@ -120,12 +120,20 @@ namespace Game.Configuration
             var cardType = (CardType)evnt.BCard.Type;
             if (_bcardHandler == null || !_bcardHandler.TryGetValue(cardType, out Action<BCardEvent> action))
             {
+                // Calculation-only BCards are data consumed by DamageHelper/stat loaders. They are not
+                // missing executable handlers and must not flood the logs as false positives.
+                if (BCardExecutionClassifier.IsPassiveCalculationOnly(cardType))
+                {
+                    return;
+                }
+
                 string warningKey = string.Join(":",
                     (byte)cardType,
                     evnt.BCard.SubType,
                     evnt.BCard.SkillVNum?.ToString() ?? "-",
                     evnt.BCard.CardId?.ToString() ?? "-",
-                    evnt.BCard.BCardId);
+                    evnt.BCard.BCardId,
+                    (byte)evnt.ExecutionPhase);
 
                 lock (MissingBCardWarningsLock)
                 {
@@ -133,12 +141,14 @@ namespace Game.Configuration
                     {
                         Logger.Warn(
                             $"[BCARD_HANDLER_MISSING] Type={(byte)cardType} Name={cardType} " +
-                            $"SubType={evnt.BCard.SubType} SkillVNum={FormatNullable(evnt.BCard.SkillVNum)} " +
+                            $"SubType={evnt.BCard.SubType} Phase={evnt.ExecutionPhase} " +
+                            $"SkillVNum={FormatNullable(evnt.BCard.SkillVNum)} " +
                             $"CardId={FormatNullable(evnt.BCard.CardId)} BCardId={evnt.BCard.BCardId} " +
                             $"FirstData={evnt.FirstData} RawFirstData={evnt.BCard.FirstData} " +
                             $"SecondData={evnt.BCard.SecondData} ThirdData={evnt.BCard.ThirdData} " +
                             $"CastType={evnt.BCard.CastType} IsLevelDivided={evnt.BCard.IsLevelDivided} " +
                             $"LevelUpgraded={evnt.LevelUpgraded} CasterLevel={evnt.CasterLevel} " +
+                            $"CastId={FormatCastId(evnt.CastContext)} " +
                             $"Caster={DescribeEntity(evnt.Caster)} Target={DescribeEntity(evnt.Target)}");
                     }
                 }
@@ -154,11 +164,12 @@ namespace Game.Configuration
             {
                 Logger.Error(
                     $"[BCARD_HANDLER_FAILED] Type={(byte)cardType} Name={cardType} " +
-                    $"SubType={evnt.BCard.SubType} SkillVNum={FormatNullable(evnt.BCard.SkillVNum)} " +
+                    $"SubType={evnt.BCard.SubType} Phase={evnt.ExecutionPhase} " +
+                    $"SkillVNum={FormatNullable(evnt.BCard.SkillVNum)} " +
                     $"CardId={FormatNullable(evnt.BCard.CardId)} BCardId={evnt.BCard.BCardId} " +
                     $"FirstData={evnt.FirstData} SecondData={evnt.BCard.SecondData} " +
-                    $"ThirdData={evnt.BCard.ThirdData} Caster={DescribeEntity(evnt.Caster)} " +
-                    $"Target={DescribeEntity(evnt.Target)}",
+                    $"ThirdData={evnt.BCard.ThirdData} CastId={FormatCastId(evnt.CastContext)} " +
+                    $"Caster={DescribeEntity(evnt.Caster)} Target={DescribeEntity(evnt.Target)}",
                     exception);
             }
         }
@@ -209,6 +220,9 @@ namespace Game.Configuration
 
             return entity == null ? "null" : "BattleEntity";
         }
+
+        private static string FormatCastId(SkillCastContext context) =>
+            context == null ? "-" : context.CastId.ToString("N");
 
         private static string FormatNullable<T>(T? value) where T : struct =>
             value.HasValue ? value.Value.ToString() : "-";

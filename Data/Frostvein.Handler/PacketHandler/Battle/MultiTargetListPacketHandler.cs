@@ -1,16 +1,20 @@
-﻿using Frostvein.Packets.Packets.ClientPackets;
+using Frostvein.Packets.Packets.ClientPackets;
 using Frostvein.Core;
 using Frostvein.Domain;
 using Frostvein.GameObject;
 using Frostvein.GameObject.Battle;
 using Frostvein.GameObject.Helpers;
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
 
 namespace Frostvein.Handler.PacketHandler.Battle
 {
     public class MultiTargetListPacketHandler : IPacketHandler
     {
+        private const int MaximumTargetsPerPacket = 50;
+
         #region Instantiation
 
         public MultiTargetListPacketHandler(ClientSession session)
@@ -48,20 +52,63 @@ namespace Frostvein.Handler.PacketHandler.Battle
                 return;
             }
 
-            if (multiTargetListPacket.TargetsAmount > 0 && multiTargetListPacket.Targets == null)
+            if (multiTargetListPacket.TargetsAmount == 0)
             {
-                Session.SendPacket($"say 1 0 10 Action has been logged");
+                Session.Character.MTListTargetQueue.Clear();
                 return;
             }
 
-            if (multiTargetListPacket.TargetsAmount > 0 && multiTargetListPacket.TargetsAmount == multiTargetListPacket.Targets.Count && multiTargetListPacket.Targets != null)
+            if (multiTargetListPacket.TargetsAmount != multiTargetListPacket.Targets.Count ||
+                multiTargetListPacket.TargetsAmount > MaximumTargetsPerPacket)
             {
-                Session.Character.MTListTargetQueue.Clear();
-                foreach (MultiTargetListSubPacket subpacket in multiTargetListPacket.Targets)
-                {
-                    Session.Character.MTListTargetQueue.Push(new MTListHitTarget(subpacket.TargetType, subpacket.TargetId,TargetHitType.AOETargetHit));
-                }
+                RejectTargetList();
+                return;
             }
+
+            var targetKeys = new HashSet<string>();
+            var validatedTargets = new List<MTListHitTarget>(multiTargetListPacket.Targets.Count);
+
+            foreach (MultiTargetListSubPacket subpacket in multiTargetListPacket.Targets)
+            {
+                if (subpacket == null || subpacket.TargetId <= 0)
+                {
+                    RejectTargetList();
+                    return;
+                }
+
+                string targetKey = $"{(byte)subpacket.TargetType}:{subpacket.TargetId}";
+                if (!targetKeys.Add(targetKey))
+                {
+                    RejectTargetList();
+                    return;
+                }
+
+                BattleEntity target = Session.Character.MapInstance.BattleEntities.FirstOrDefault(entity =>
+                    entity != null && entity.UserType == subpacket.TargetType &&
+                    entity.MapEntityId == subpacket.TargetId);
+
+                if (target == null || target.Hp <= 0)
+                {
+                    RejectTargetList();
+                    return;
+                }
+
+                validatedTargets.Add(new MTListHitTarget(subpacket.TargetType, subpacket.TargetId,
+                    TargetHitType.AOETargetHit));
+            }
+
+            Session.Character.MTListTargetQueue.Clear();
+            foreach (MTListHitTarget target in validatedTargets)
+            {
+                Session.Character.MTListTargetQueue.Push(target);
+            }
+        }
+
+        private void RejectTargetList()
+        {
+            Session.Character.MTListTargetQueue.Clear();
+            Session.SendPacket(StaticPacketHelper.Cancel());
+            Session.SendPacket("say 1 0 10 Action has been logged");
         }
 
         #endregion
