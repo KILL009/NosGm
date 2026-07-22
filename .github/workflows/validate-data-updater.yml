@@ -20,24 +20,20 @@ concurrency:
 
 jobs:
   build:
-    name: Build .NET 9 updater
+    name: Build package-free .NET 9 core
     runs-on: ubuntu-latest
     timeout-minutes: 15
-
-    env:
-      NUGET_AUTH_TOKEN: ${{ secrets.NOSGAME_PACKAGE_TOKEN || secrets.TOKEN || github.token }}
 
     steps:
       - name: Check out repository
         uses: actions/checkout@v6
 
-      - name: Set up .NET 9 and package source
+      - name: Set up .NET 9
         uses: actions/setup-dotnet@v5
         with:
           dotnet-version: 9.0.x
-          source-url: https://nuget.pkg.github.com/noszanou/index.json
 
-      - name: Restore updater
+      - name: Restore updater core
         id: restore
         continue-on-error: true
         shell: bash
@@ -45,7 +41,7 @@ jobs:
           set -o pipefail
           dotnet restore Tools/NosGM.DataUpdater/NosGM.DataUpdater.csproj --verbosity minimal 2>&1 | tee updater-restore.log
 
-      - name: Build updater
+      - name: Build updater core
         id: build
         if: steps.restore.outcome == 'success'
         continue-on-error: true
