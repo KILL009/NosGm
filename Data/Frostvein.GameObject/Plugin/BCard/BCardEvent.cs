@@ -80,6 +80,8 @@ namespace Game.Configuration.BCards
 
         public int HitIndex { get; set; }
 
+        public TargetHitType TargetHitType { get; set; }
+
         public int RawDamage { get; set; }
 
         public int FinalDamage { get; set; }
@@ -87,6 +89,8 @@ namespace Game.Configuration.BCards
         public int HitMode { get; set; }
 
         public bool IsCritical { get; set; }
+
+        public DamageCalculationResult DamageResult { get; set; }
     }
 
     /// <summary>
