@@ -121,10 +121,14 @@ jobs:
           $output | ForEach-Object { Write-Host $_ }
           if ($exitCode -ne 0) { exit $exitCode }
 
-      - name: Commit migration
+      - name: Commit core migration
         if: steps.migration-check.outputs.needed == 'true'
         shell: pwsh
         run: |
+          # Workflow files are restored before publishing because GitHub protects
+          # workflow mutations from this job token. They are migrated immediately
+          # afterwards through the authenticated repository API.
+          git restore --source=HEAD --staged --worktree -- .github/workflows
           git add --all
           if (-not (git status --porcelain)) {
             throw "Identity migration produced no changes."
