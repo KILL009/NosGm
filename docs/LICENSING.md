@@ -61,6 +61,8 @@ Every adapted tool must include:
 
 `Tools/NosGM.ResourceExplorer` follows this policy for its BSL-1.0 adaptation of `Pumba98/OnexExplorer@eaee2aa9f0e71b9960da586f425f79e628013021`, preserving credit to Pumba98, OnexExplorer contributors and their respective upstream contributors.
 
+`Tools/NosGM.ClientThemeEditor` follows this policy for its MIT-licensed adaptation of `Elendan/Notale-Text-Picker@9eb44d2a0041b49375fabb730121a01acd7bae87`, preserving Copyright (c) 2019 Elendan and the upstream credits to Cryless and Fizo55. `Pumba98/Nostale-ClientColorizer@9d1e61c717b6a49ca221a5f2d855dfa5fa11591c` is recorded only as prior art because no reuse license was found; no source code, signature or offset is imported from it.
+
 Client resource tooling has additional safeguards:
 
 - source archives are opened read-only;
@@ -80,6 +82,19 @@ Client-side memory research has additional safeguards:
 - reversible patches and complete restoration on shutdown;
 - no proprietary executable, memory dump, capture or asset in the repository;
 - signatures and active features require tests for the exact supported client revision.
+
+Client executable theme tooling has additional safeguards:
+
+- no active signature profile is distributed until measured and tested against the exact authorized target executable;
+- file name, PE architecture, file version, file length and SHA-256 must all match;
+- every pattern declares an exact expected match count and cannot consist entirely of wildcards;
+- every write verifies the expected original bytes and rejects overlapping ranges;
+- the default mode writes a separate copy rather than replacing the input;
+- in-place mode creates and hashes a backup before temporary-file replacement;
+- restoration requires both the current patched hash and backup hash to match the manifest;
+- no administrator requirement, process-memory access, injector, packet behavior or gameplay automation;
+- no proprietary executable, modified client, memory dump or client asset is committed;
+- unlicensed prior art may inform feature names only, never copied implementation, signature or offset data.
 
 ## New files written entirely for NosGM
 
