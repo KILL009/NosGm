@@ -35,7 +35,7 @@ public class BrokenPacket : PacketDefinition
 using Synthetic.Packets;
 namespace Synthetic.Handlers;
 
-public class Handler
+public class Handler : IPacketHandler
 {
     public void Handle(HelloPacket packet) { }
 
