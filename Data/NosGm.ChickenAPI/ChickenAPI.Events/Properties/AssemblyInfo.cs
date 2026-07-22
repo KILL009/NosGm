@@ -8,9 +8,9 @@ using System.Runtime.InteropServices;
 [assembly: AssemblyTitle("ChickenApi.Events")]
 [assembly: AssemblyDescription("")]
 [assembly: AssemblyConfiguration("")]
-[assembly: AssemblyCompany("")]
+[assembly: AssemblyCompany("NQ-Source, ChickenAPI and NosGM contributors")]
 [assembly: AssemblyProduct("ChickenApi.Events")]
-[assembly: AssemblyCopyright("Copyright ©  2020")]
+[assembly: AssemblyCopyright("Portions Copyright © 2020 NQ-Source and ChickenAPI contributors; modifications Copyright © 2026 NosGM contributors")]
 [assembly: AssemblyTrademark("")]
 [assembly: AssemblyCulture("")]
 
