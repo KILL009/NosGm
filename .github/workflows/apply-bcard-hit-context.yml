@@ -1,0 +1,136 @@
+name: Apply BCard hit context propagation
+
+on:
+  push:
+    branches:
+      - refactor/propagate-bcard-hit-context
+
+permissions:
+  contents: write
+
+jobs:
+  migrate:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out branch
+        uses: actions/checkout@v6
+        with:
+          ref: refactor/propagate-bcard-hit-context
+          fetch-depth: 0
+
+      - name: Add contextual BCard execution helper
+        shell: python
+        run: |
+          from pathlib import Path
+
+          hit_path = Path("Data/Frostvein.GameObject/Battle/HitRequest.cs")
+          hit_text = hit_path.read_text(encoding="utf-8-sig")
+          marker = """        public HitContext CreateHitContext(BattleEntity target, int hitIndex = 0)\n        {\n"""
+          helper = """        /// <summary>\n        /// Executes one BCard with the cast and hit metadata belonging to this request.\n        /// This is the only supported entry point for BCards fired by a resolved combat impact.\n        /// </summary>\n        public void ApplyBCard(BCard bcard, BattleEntity target, BattleEntity caster,\n            BCardExecutionPhase executionPhase, short x = 0, short y = 0,\n            short partnerBuffLevel = 0, short levelUpgraded = 0)\n        {\n            if (bcard == null || target == null || caster == null)\n            {\n                return;\n            }\n\n            HitContext hitContext = LastHitContext;\n            if (hitContext == null &&\n                (executionPhase == BCardExecutionPhase.Hit ||\n                 executionPhase == BCardExecutionPhase.ReceiveHit ||\n                 executionPhase == BCardExecutionPhase.Kill))\n            {\n                hitContext = CreateHitContext(target);\n                LastHitContext = hitContext;\n            }\n\n            bcard.ApplyBCards(target, caster, x, y, partnerBuffLevel, levelUpgraded,\n                executionPhase, CastContext, hitContext);\n        }\n\n"""
+          if hit_text.count(marker) != 1:
+              raise SystemExit("Could not locate HitRequest.CreateHitContext marker")
+          hit_path.write_text(hit_text.replace(marker, helper + marker), encoding="utf-8")
+
+      - name: Propagate context through monster, mate and PvP BCards
+        shell: python
+        run: |
+          from pathlib import Path
+
+          PHASE = "Game.Configuration.BCards.BCardExecutionPhase"
+
+          def replace_section(path, start, end, replacements):
+              text = path.read_text(encoding="utf-8-sig")
+              start_index = text.index(start)
+              end_index = text.index(end, start_index)
+              section = text[start_index:end_index]
+              total = 0
+              for old, new in replacements:
+                  count = section.count(old)
+                  if count:
+                      section = section.replace(old, new)
+                      total += count
+              if total == 0:
+                  raise SystemExit(f"No BCard calls migrated in {path}")
+              path.write_text(text[:start_index] + section + text[end_index:], encoding="utf-8")
+              print(f"{path}: migrated {total} BCard calls")
+
+          replace_section(
+              Path("Data/Frostvein.GameObject/Map/MapMonster.cs"),
+              "        public void OnReceiveHit(HitRequest hitRequest)",
+              "        public void RemoveBuff(short cardId)",
+              [
+                  ("s.ApplyBCards(BattleEntity, attackerBattleEntity);",
+                   f"hitRequest.ApplyBCard(s, BattleEntity, attackerBattleEntity, {PHASE}.Hit);"),
+                  ("s.ApplyBCards(attackerBattleEntity, attackerBattleEntity);",
+                   f"hitRequest.ApplyBCard(s, attackerBattleEntity, attackerBattleEntity, {PHASE}.Hit);"),
+                  ("s.ApplyBCards(attackerBattleEntity, BattleEntity);",
+                   f"hitRequest.ApplyBCard(s, attackerBattleEntity, BattleEntity, {PHASE}.ReceiveHit);"),
+                  ("s.ApplyBCards(BattleEntity, BattleEntity);",
+                   f"hitRequest.ApplyBCard(s, BattleEntity, BattleEntity, {PHASE}.ReceiveHit);"),
+                  ("cardd.ApplyBCards(attackerBattleEntity, BattleEntity);",
+                   f"hitRequest.ApplyBCard(cardd, attackerBattleEntity, BattleEntity, {PHASE}.ReceiveHit);"),
+                  ("cardd.ApplyBCards(BattleEntity, BattleEntity);",
+                   f"hitRequest.ApplyBCard(cardd, BattleEntity, BattleEntity, {PHASE}.ReceiveHit);"),
+                  (".ForEach(s => s.ApplyBCards(BattleEntity, attackerBattleEntity));",
+                   f".ForEach(s => hitRequest.ApplyBCard(s, BattleEntity, attackerBattleEntity, {PHASE}.Hit));")
+              ])
+
+          replace_section(
+              Path("Data/Frostvein.GameObject/Mate.cs"),
+              "        public void HitRequest(HitRequest hitRequest)",
+              "        public void HitTrainer(",
+              [
+                  ("s.ApplyBCards(BattleEntity, attackerBattleEntity);",
+                   f"hitRequest.ApplyBCard(s, BattleEntity, attackerBattleEntity, {PHASE}.Hit);"),
+                  ("s.ApplyBCards(attackerBattleEntity, attackerBattleEntity);",
+                   f"hitRequest.ApplyBCard(s, attackerBattleEntity, attackerBattleEntity, {PHASE}.Hit);"),
+                  ("s.ApplyBCards(attackerBattleEntity, BattleEntity);",
+                   f"hitRequest.ApplyBCard(s, attackerBattleEntity, BattleEntity, {PHASE}.ReceiveHit);"),
+                  ("s.ApplyBCards(BattleEntity, BattleEntity);",
+                   f"hitRequest.ApplyBCard(s, BattleEntity, BattleEntity, {PHASE}.ReceiveHit);"),
+                  ("cardd.ApplyBCards(attackerBattleEntity, BattleEntity);",
+                   f"hitRequest.ApplyBCard(cardd, attackerBattleEntity, BattleEntity, {PHASE}.ReceiveHit);"),
+                  ("cardd.ApplyBCards(BattleEntity, BattleEntity);",
+                   f"hitRequest.ApplyBCard(cardd, BattleEntity, BattleEntity, {PHASE}.ReceiveHit);"),
+                  (".ForEach(s => s.ApplyBCards(BattleEntity, attackerBattleEntity));",
+                   f".ForEach(s => hitRequest.ApplyBCard(s, BattleEntity, attackerBattleEntity, {PHASE}.Hit));")
+              ])
+
+          replace_section(
+              Path("Data/Frostvein.Extension/Extension/Packet/BattleExt.cs"),
+              "        public static void PvpHit(this ClientSession Session, HitRequest hitRequest, ClientSession target)",
+              "        public static void RageLimitReached(ClientSession Session)",
+              [
+                  ("s.ApplyBCards(target.Character.BattleEntity, Session.Character.BattleEntity);",
+                   f"hitRequest.ApplyBCard(s, target.Character.BattleEntity, Session.Character.BattleEntity, {PHASE}.Hit);"),
+                  ("s.ApplyBCards(Session.Character.BattleEntity, Session.Character.BattleEntity);",
+                   f"hitRequest.ApplyBCard(s, Session.Character.BattleEntity, Session.Character.BattleEntity, {PHASE}.Hit);"),
+                  ("card.ApplyBCards(Session.Character.BattleEntity, target.Character.BattleEntity);",
+                   f"hitRequest.ApplyBCard(card, Session.Character.BattleEntity, target.Character.BattleEntity, {PHASE}.ReceiveHit);"),
+                  ("card.ApplyBCards(target.Character.BattleEntity, target.Character.BattleEntity);",
+                   f"hitRequest.ApplyBCard(card, target.Character.BattleEntity, target.Character.BattleEntity, {PHASE}.ReceiveHit);"),
+                  ("s.ApplyBCards(battleEntity, battleEntityDefense);",
+                   f"hitRequest.ApplyBCard(s, battleEntity, battleEntityDefense, {PHASE}.ReceiveHit);"),
+                  ("s.ApplyBCards(battleEntityDefense, battleEntityDefense);",
+                   f"hitRequest.ApplyBCard(s, battleEntityDefense, battleEntityDefense, {PHASE}.ReceiveHit);"),
+                  ("s.ApplyBCards(Session.Character.BattleEntity, target.Character.BattleEntity);",
+                   f"hitRequest.ApplyBCard(s, Session.Character.BattleEntity, target.Character.BattleEntity, {PHASE}.ReceiveHit);"),
+                  ("s.ApplyBCards(target.Character.BattleEntity, target.Character.BattleEntity);",
+                   f"hitRequest.ApplyBCard(s, target.Character.BattleEntity, target.Character.BattleEntity, {PHASE}.ReceiveHit);"),
+                  (".ForEach(s => s.ApplyBCards(target.Character.BattleEntity, Session.Character.BattleEntity));",
+                   f".ForEach(s => hitRequest.ApplyBCard(s, target.Character.BattleEntity, Session.Character.BattleEntity, {PHASE}.Hit));")
+              ])
+
+          Path(".github/workflows/apply-bcard-hit-context.yml").unlink()
+
+      - name: Commit context propagation
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "refactor: propagate hit context through combat BCards"
+          git push origin HEAD:refactor/propagate-bcard-hit-context
