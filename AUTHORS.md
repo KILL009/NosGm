@@ -42,6 +42,8 @@ NosGM includes ChickenAPI-related source components traced to the NQ-Source snap
 
 `Tools/NosGM.PacketCatalog` adapts packet-documentation concepts from `BlowaXD/SaltyEmu` commit `2588cfdc64789a7952c781faaafdf1026ac73e9d`, including the earlier packet-documentator work introduced at `7f849171da82feee1b9fae851a45b3eef9a9cd68`. Credit remains with Blowa, SaltyEmu contributors and contributors recorded in the upstream Git history. Detailed attribution is preserved in `Tools/NosGM.PacketCatalog/NOTICE.md`.
 
+`Tools/NosGM.ClientThemeEditor` adapts the MIT-licensed GM-tag and right-click color workflow from `Elendan/Notale-Text-Picker` commit `9eb44d2a0041b49375fabb730121a01acd7bae87`. Credit remains with Elendan; the upstream README also credits Cryless and Fizo55. `Pumba98/Nostale-ClientColorizer@9d1e61c717b6a49ca221a5f2d855dfa5fa11591c` is recorded only as prior art for independently implemented object-label and weapon-glow categories, with no copied code or signatures. Detailed attribution is preserved in `Tools/NosGM.ClientThemeEditor/NOTICE.md`.
+
 The Git history and verified upstream repository history remain the authoritative attribution records. See `NOTICE.md` and `docs/PROVENANCE.md`.
 
 ## NosGM contributors
