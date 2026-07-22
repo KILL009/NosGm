@@ -32,6 +32,8 @@ The following names are preserved from the upstream OpenNos `AUTHORS.md` file:
 
 NosGM includes ChickenAPI-related source components traced to the NQ-Source snapshot documented in `Data/NosGm.ChickenAPI/NOTICE.md`. Their original authors and contributors retain copyright in their respective work.
 
+`Tools/NosGM.DataUpdater` is adapted from `noszanou/BCardGistUpdater` commit `53153c990ae5b65a603d223eeda504df2a67d5fb`. Credit belongs to `noszanou` and every contributor recorded in that upstream repository's Git history. The detailed attribution and modification list are preserved in `Tools/NosGM.DataUpdater/NOTICE.md`.
+
 The Git history and verified upstream repository history remain the authoritative attribution records. See `NOTICE.md` and `docs/PROVENANCE.md`.
 
 ## NosGM contributors
