@@ -24,6 +24,18 @@ It is intentionally separated from the login, master and world-server runtime. T
 
 Generated catalogs belong under `Data/Generated/BCards`. Proprietary client archives and extracted binary assets must not be committed.
 
+## Time-Space tooling
+
+`Tools/NosGM.TimeSpaceParser` is an external .NET 9 command-line tool that converts operator-supplied Time-Space packet captures into deterministic XML and validation reports for the current NosGM scripted-instance model.
+
+It is adapted from `noszanou/OpennosTimeSpaceParser@36bd96a51c4b4a1e55e8827ca7eb375cc189ad9e`, remains under GPL-3.0-only and preserves the recorded credits to Elendan, SEOVA and OpenNos XML-model contributors. See its [README](Tools/NosGM.TimeSpaceParser/README.md) and [notice](Tools/NosGM.TimeSpaceParser/NOTICE.md).
+
+## Client enhancement research
+
+`Tools/NosGM.ClientEnhancements` is an optional x86 client-compatibility foundation kept outside the server solution. Its first release provides an exact client identity probe, strict profile validation, safe pattern parsing, memory-range checks and reversible patch infrastructure. It contains no injector, packet injection or active gameplay modification.
+
+The component is adapted from concepts in `ImNotAVirus/NostaleWidget@fc1b6dda5d797efc24a053180d30702f8dad162a`, Copyright (c) 2022 ApourtArtt, under the MIT License. Signature-dependent features remain disabled until the exact target executable is validated. See its [README](Tools/NosGM.ClientEnhancements/README.md) and [notice](Tools/NosGM.ClientEnhancements/NOTICE.md).
+
 ## Contributing
 
 Developers, testers, packet researchers, bug hunters, technical writers and experienced NosTale players are welcome.
@@ -40,19 +52,21 @@ When importing or adapting external code, include the upstream URL, immutable co
 
 ## License and attribution
 
-NosGM contains code from these verified GPL lineages:
+NosGM contains code from multiple verified license lineages:
 
 - the root [LICENSE](LICENSE) preserves the GNU General Public License version 2 text inherited with the OpenNos-derived source;
 - reviewed original OpenNos file notices permit GNU GPL version 2 or, at the recipient's option, any later version;
 - the included ChickenAPI source is derived from the verified `Price-H16/NQ-Verde` snapshot `2594ec13f4fba5d893b424197878c05f801f68a2` and is conservatively treated as GPL-3.0-only;
 - `Tools/NosGM.DataUpdater` is adapted from `noszanou/BCardGistUpdater@53153c990ae5b65a603d223eeda504df2a67d5fb` and is GPL-3.0-only;
+- `Tools/NosGM.TimeSpaceParser` is adapted from `noszanou/OpennosTimeSpaceParser@36bd96a51c4b4a1e55e8827ca7eb375cc189ad9e` and is GPL-3.0-only;
+- `Tools/NosGM.ClientEnhancements` preserves the MIT License from `ImNotAVirus/NostaleWidget@fc1b6dda5d797efc24a053180d30702f8dad162a`;
 - the complete GNU GPL version 3 text is bundled under [LICENSES/GPL-3.0-only](LICENSES/GPL-3.0-only/README.md).
 
-NosGM is an OpenNos-derived community project. Copyright remains with the respective authors of OpenNos, NQ-Source, ChickenAPI and BCardGistUpdater, and with NosGM contributors for their own modifications. Renaming namespaces or assemblies does not transfer authorship.
+NosGM is an OpenNos-derived community project. Copyright remains with the respective authors of OpenNos, NQ-Source, ChickenAPI and the adapted external tools, and with NosGM contributors for their own modifications. Renaming namespaces or assemblies does not transfer authorship.
 
 The exact OpenNos base commit is still being narrowed through source comparison, but the project lineage is OpenNos directly. See [docs/PROVENANCE.md](docs/PROVENANCE.md).
 
-If GPL-3.0-only components remain linked into or are distributed with a combined application, the applicable distribution must satisfy GPL version 3.
+If GPL-3.0-only components remain linked into or are distributed with a combined application, the applicable distribution must satisfy GPL version 3. MIT-covered portions must retain their copyright and permission notice.
 
 When binaries are distributed, recipients must also receive the complete corresponding source code or equivalent GPL-compliant access to the exact source used for that build. Do not impose additional restrictions that prevent recipients from copying, modifying or redistributing GPL-covered code.
 
@@ -68,7 +82,7 @@ NosTale and related names, trademarks, artwork, client data and other proprietar
 
 ## No warranty
 
-NosGM is provided without warranty, to the extent permitted by applicable law. See the applicable GPL texts and [NOTICE.md](NOTICE.md) for details.
+NosGM is provided without warranty, to the extent permitted by applicable law. See the applicable license texts and [NOTICE.md](NOTICE.md) for details.
 
 ## Community
 
