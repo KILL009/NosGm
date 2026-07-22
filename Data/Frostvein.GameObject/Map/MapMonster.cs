@@ -855,8 +855,9 @@ namespace Frostvein.GameObject
                 var attackerBattleEntity = hitRequest.Mate == null
                     ? new BattleEntity(hitRequest.Session.Character, hitRequest.Skill)
                     : new BattleEntity(hitRequest.Mate);
-                var damage = DamageHelper.Instance.CalculateDamage(attackerBattleEntity, new BattleEntity(this),
-                    hitRequest.Skill, ref hitmode, ref onyxWings, ref zephyrWings, ref dragonBuff);
+                DamageCalculationResult damageResult = hitRequest.CalculateDamage(attackerBattleEntity,
+                    new BattleEntity(this), ref hitmode, ref onyxWings, ref zephyrWings, ref dragonBuff);
+                var damage = damageResult.FinalDamage;
 
                 if (Monster.BCards.Find(s =>
                     s.Type == (byte)CardType.LightAndShadow &&
