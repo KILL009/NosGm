@@ -6,7 +6,7 @@
     <ProjectGuid>{AB3A47F3-3B2A-484A-B768-7C6CF5C83386}</ProjectGuid>
     <OutputType>Exe</OutputType>
     <AssemblyName>NosGm.Login</AssemblyName>
-    <TargetFrameworkVersion>v4.8</TargetFrameworkVersion>
+    <TargetFrameworkVersion>v4.8.1</TargetFrameworkVersion>
     <TargetFrameworkProfile />
     <FileAlignment>512</FileAlignment>
     <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
@@ -79,7 +79,7 @@
     <StartupObject>NosGm.Login.Program</StartupObject>
   </PropertyGroup>
   <PropertyGroup>
-    <ApplicationIcon>favicon.ico</ApplicationIcon>
+    <ApplicationIcon>nosgm-emulator-icon.ico</ApplicationIcon>
   </PropertyGroup>
   <ItemGroup>
     <Reference Include="System">
@@ -215,6 +215,7 @@
   <ItemGroup>
     <Content Include="favicon.ico" />
     <Content Include="Files\Resources\logo_raw_no_slogan.ico" />
+    <Content Include="nosgm-emulator-icon.ico" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <Import Project="$(SlowCheetahTargets)" Condition="Exists('$(SlowCheetahTargets)')" Label="SlowCheetah" />

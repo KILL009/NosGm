@@ -8,7 +8,7 @@
     <OutputType>Exe</OutputType>
     <RootNamespace>NosGm.Master.Server</RootNamespace>
     <AssemblyName>NosGm.Master.Server</AssemblyName>
-    <TargetFrameworkVersion>v4.8</TargetFrameworkVersion>
+    <TargetFrameworkVersion>v4.8.1</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
     <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
     <TargetFrameworkProfile />
@@ -41,7 +41,7 @@
     <Prefer32Bit>true</Prefer32Bit>
   </PropertyGroup>
   <PropertyGroup>
-    <ApplicationIcon>favicon.ico</ApplicationIcon>
+    <ApplicationIcon>nosgm-emulator-icon.ico</ApplicationIcon>
   </PropertyGroup>
   <PropertyGroup>
     <StartupObject>NosGm.Master.Server.Program</StartupObject>
@@ -153,6 +153,7 @@
   <ItemGroup>
     <Content Include="favicon.ico" />
     <Content Include="Files\Resources\logo_raw_no_slogan.ico" />
+    <Content Include="nosgm-emulator-icon.ico" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\..\NosGm.SCS\NosGm.SCS.csproj">

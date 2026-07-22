@@ -19,7 +19,7 @@ namespace NosGm.World.Resource {
     // a través de una herramienta como ResGen o Visual Studio.
     // Para agregar o quitar un miembro, edite el archivo .ResX y, a continuación, vuelva a ejecutar ResGen
     // con la opción /str o recompile su proyecto de VS.
-    [global::System.CodeDom.Compiler.GeneratedCodeAttribute("System.Resources.Tools.StronglyTypedResourceBuilder", "17.0.0.0")]
+    [global::System.CodeDom.Compiler.GeneratedCodeAttribute("System.Resources.Tools.StronglyTypedResourceBuilder", "18.0.0.0")]
     [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
     [global::System.Runtime.CompilerServices.CompilerGeneratedAttribute()]
     internal class LocalizedResources {
@@ -2914,11 +2914,38 @@ namespace NosGm.World.Resource {
         }
         
         /// <summary>
+        ///   Busca una cadena traducida similar a Language changed to {0}. Future server messages will use this language..
+        /// </summary>
+        internal static string LANGUAGE_CHANGED {
+            get {
+                return ResourceManager.GetString("LANGUAGE_CHANGED", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Busca una cadena traducida similar a Unsupported language. Available languages: {0}..
+        /// </summary>
+        internal static string LANGUAGE_NOT_SUPPORTED {
+            get {
+                return ResourceManager.GetString("LANGUAGE_NOT_SUPPORTED", resourceCulture);
+            }
+        }
+        
+        /// <summary>
         ///   Busca una cadena traducida similar a Only {0} allowed!.
         /// </summary>
         internal static string LANGUAGE_REQUIRED {
             get {
                 return ResourceManager.GetString("LANGUAGE_REQUIRED", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Busca una cadena traducida similar a The language could not be saved. Please try again in a moment..
+        /// </summary>
+        internal static string LANGUAGE_SAVE_ERROR {
+            get {
+                return ResourceManager.GetString("LANGUAGE_SAVE_ERROR", resourceCulture);
             }
         }
         
