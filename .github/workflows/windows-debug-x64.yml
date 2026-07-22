@@ -28,14 +28,23 @@ jobs:
           vs-version: '[17.0,18.0)'
           msbuild-architecture: x64
 
+      - name: Prepare diagnostics directory
+        shell: pwsh
+        run: New-Item -ItemType Directory -Force -Path artifacts | Out-Null
+
       - name: Restore NuGet packages
         shell: pwsh
-        run: nuget restore NosGm.sln -NonInteractive -Verbosity normal
+        run: |
+          $output = & nuget restore NosGm.sln -NonInteractive -Verbosity detailed 2>&1
+          $exitCode = $LASTEXITCODE
+          $output | Tee-Object -FilePath artifacts/restore.log | ForEach-Object { Write-Host $_ }
+          "NuGetExitCode=$exitCode" | Out-File artifacts/restore-exit-code.txt
+          # Continue so the build log reveals the actual project/configuration failure too.
+          exit 0
 
       - name: Build complete solution in Debug x64
         shell: pwsh
         run: |
-          New-Item -ItemType Directory -Force -Path artifacts | Out-Null
           $output = & msbuild NosGm.sln `
             /t:Rebuild `
             /m `
@@ -48,7 +57,7 @@ jobs:
             /fl `
             /flp:"logfile=artifacts/debug-x64.log;verbosity=diagnostic" 2>&1
           $exitCode = $LASTEXITCODE
-          $output | ForEach-Object { Write-Host $_ }
+          $output | Tee-Object -FilePath artifacts/build-console.log | ForEach-Object { Write-Host $_ }
           exit $exitCode
 
       - name: Upload diagnostics
@@ -57,5 +66,5 @@ jobs:
         with:
           name: nosgm-debug-x64-diagnostics
           path: artifacts/
-          if-no-files-found: warn
+          if-no-files-found: error
           retention-days: 14
