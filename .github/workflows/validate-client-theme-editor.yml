@@ -1,0 +1,45 @@
+name: Validate NosGM.ClientThemeEditor
+
+on:
+  pull_request:
+    paths:
+      - "Tools/NosGM.ClientThemeEditor/**"
+      - "scripts/verify-client-theme-editor.ps1"
+      - ".github/workflows/validate-client-theme-editor.yml"
+      - "AUTHORS.md"
+      - "NOTICE.md"
+      - "THIRD_PARTY_NOTICES.md"
+      - "README.md"
+      - "docs/PROVENANCE.md"
+      - "docs/LICENSING.md"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    runs-on: windows-2022
+    timeout-minutes: 15
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up .NET 9
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 9.0.x
+
+      - name: Restore
+        run: dotnet restore Tools/NosGM.ClientThemeEditor/NosGM.ClientThemeEditor.csproj
+
+      - name: Build Release
+        run: dotnet build Tools/NosGM.ClientThemeEditor/NosGM.ClientThemeEditor.csproj --configuration Release --no-restore
+
+      - name: Run synthetic regression test
+        run: dotnet run --project Tools/NosGM.ClientThemeEditor/NosGM.ClientThemeEditor.csproj --configuration Release --no-build -- self-test
+
+      - name: Run attribution and safety checks
+        shell: pwsh
+        run: ./scripts/verify-client-theme-editor.ps1
