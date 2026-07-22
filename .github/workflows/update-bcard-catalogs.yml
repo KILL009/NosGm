@@ -35,25 +35,32 @@ jobs:
         with:
           ref: main
 
-      - name: Require dedicated package-read token
+      - name: Detect package access
+        id: package_access
         shell: bash
         run: |
           if [ -z "$NUGET_AUTH_TOKEN" ]; then
-            echo "::error::Create the NOSGAME_PACKAGE_TOKEN repository secret with read:packages access to the noszanou GitHub Packages feed."
-            exit 1
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Automatic BCard extraction is skipped because NOSGAME_PACKAGE_TOKEN is not configured. Local mode remains available."
+          else
+            echo "available=true" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Set up .NET 9 and package source
+        if: steps.package_access.outputs.available == 'true'
         uses: actions/setup-dotnet@v5
         with:
           dotnet-version: 9.0.x
           source-url: https://nuget.pkg.github.com/noszanou/index.json
 
       - name: Restore updater with download adapter
+        if: steps.package_access.outputs.available == 'true'
         run: dotnet restore Tools/NosGM.DataUpdater/NosGM.DataUpdater.csproj -p:EnableNosGamePackages=true
 
       - name: Build updater with download adapter
+        if: steps.package_access.outputs.available == 'true'
         run: dotnet build Tools/NosGM.DataUpdater/NosGM.DataUpdater.csproj --configuration Release --no-restore -p:EnableNosGamePackages=true
 
       - name: Extract data and open pull request when changed
+        if: steps.package_access.outputs.available == 'true'
         run: dotnet run --project Tools/NosGM.DataUpdater/NosGM.DataUpdater.csproj --configuration Release --no-build -p:EnableNosGamePackages=true -- --download-resources --publish
