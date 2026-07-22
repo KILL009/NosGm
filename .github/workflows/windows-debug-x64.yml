@@ -32,9 +32,39 @@ jobs:
           vs-version: '[17.0,18.0)'
           msbuild-architecture: x64
 
-      - name: Prepare diagnostics directory
+      - name: Prepare diagnostics and inspect stale metadata
         shell: pwsh
-        run: New-Item -ItemType Directory -Force -Path artifacts | Out-Null
+        run: |
+          New-Item -ItemType Directory -Force -Path artifacts | Out-Null
+
+          $trackedGenerated = @(git ls-files | Where-Object { $_ -match '(^|/)(bin|obj)/' })
+          "Tracked generated files: $($trackedGenerated.Count)" | Tee-Object -FilePath artifacts/generated-metadata.txt
+          $trackedGenerated | Add-Content artifacts/generated-metadata.txt
+
+          $frameworkHits = New-Object System.Collections.Generic.List[string]
+          foreach ($file in (git ls-files '*.csproj' '*.props' '*.targets' '*.json')) {
+            if (-not (Test-Path -LiteralPath $file -PathType Leaf)) { continue }
+            try {
+              $matches = Select-String -LiteralPath $file -Pattern 'v4\.8\.1|net481' -AllMatches
+              foreach ($match in $matches) {
+                $frameworkHits.Add("$file:$($match.LineNumber):$($match.Line.Trim())")
+              }
+            }
+            catch { }
+          }
+          "Tracked net481 references: $($frameworkHits.Count)" | Add-Content artifacts/generated-metadata.txt
+          $frameworkHits | Add-Content artifacts/generated-metadata.txt
+
+      - name: Remove all bin and obj directories
+        shell: pwsh
+        run: |
+          $directories = @(Get-ChildItem -Path . -Directory -Recurse -Force |
+            Where-Object { $_.Name -in @('bin', 'obj') } |
+            Sort-Object FullName -Descending)
+          Write-Host "Removing $($directories.Count) generated directories."
+          foreach ($directory in $directories) {
+            Remove-Item -LiteralPath $directory.FullName -Recurse -Force
+          }
 
       - name: Restore NuGet packages
         shell: pwsh
