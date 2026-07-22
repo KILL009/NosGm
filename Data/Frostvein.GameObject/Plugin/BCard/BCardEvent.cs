@@ -100,6 +100,8 @@ namespace Game.Configuration.BCards
     /// </summary>
     public static class BCardExecutionClassifier
     {
+        private const byte DistanceDamagePerCellSubtype = 21;
+
         public static BCardExecutionKind GetKind(BCardType.CardType type, byte subtype)
         {
             if (type == BCardType.CardType.StealBuff)
@@ -116,6 +118,14 @@ namespace Game.Configuration.BCards
                     default:
                         return BCardExecutionKind.Executable;
                 }
+            }
+
+            // Modern SP12 data reuses the old HideBarrelSkill numeric type for the
+            // Festering Curse distance-based damage modifier. It is consumed by the
+            // structured damage adapter and has no executable lifecycle of its own.
+            if (type == BCardType.CardType.HideBarrelSkill && subtype == DistanceDamagePerCellSubtype)
+            {
+                return BCardExecutionKind.PassiveCalculation;
             }
 
             return GetKind(type);
