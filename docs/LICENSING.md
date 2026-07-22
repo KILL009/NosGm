@@ -57,6 +57,19 @@ Every adapted tool must include:
 
 `Tools/NosGM.TimeSpaceParser` follows this policy for its adaptation of `noszanou/OpennosTimeSpaceParser@36bd96a51c4b4a1e55e8827ca7eb375cc189ad9e`, while preserving the upstream credits to Elendan, SEOVA and OpenNos XML-model contributors.
 
+`Tools/NosGM.ClientEnhancements` follows this policy for its MIT-licensed adaptation of `ImNotAVirus/NostaleWidget@fc1b6dda5d797efc24a053180d30702f8dad162a`, preserving Copyright (c) 2022 ApourtArtt and the reviewed references to DitzProject/ClientModdingAPI and ApourtArtt/DelphiClassInfo.
+
+Client-side memory research has additional safeguards:
+
+- no injector, automatic loader or server-side DLL deployment;
+- exact executable version, architecture and SHA-256 validation before activation;
+- no unverified-client override;
+- no packet injection, movement, combat or farming automation;
+- original-byte validation before every write;
+- reversible patches and complete restoration on shutdown;
+- no proprietary executable, memory dump, capture or asset in the repository;
+- signatures and active features require tests for the exact supported client revision.
+
 ## New files written entirely for NosGM
 
 For a new file containing only original NosGM work, use:

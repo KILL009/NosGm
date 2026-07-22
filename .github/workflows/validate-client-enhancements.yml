@@ -1,0 +1,42 @@
+name: Validate NosGM.ClientEnhancements
+
+on:
+  pull_request:
+    paths:
+      - 'Tools/NosGM.ClientEnhancements/**'
+      - '.github/workflows/validate-client-enhancements.yml'
+      - 'AUTHORS.md'
+      - 'NOTICE.md'
+      - 'THIRD_PARTY_NOTICES.md'
+      - 'docs/PROVENANCE.md'
+      - 'docs/LICENSING.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test-x86:
+    runs-on: windows-2022
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Configure Win32 build
+        run: >-
+          cmake
+          -S Tools/NosGM.ClientEnhancements
+          -B build/client-enhancements
+          -A Win32
+          -DNOSGM_CLIENT_ENHANCEMENTS_BUILD_TESTS=ON
+
+      - name: Build Release
+        run: cmake --build build/client-enhancements --config Release --parallel
+
+      - name: Run tests
+        run: ctest --test-dir build/client-enhancements -C Release --output-on-failure
+
+      - name: Run attribution and safety checks
+        shell: pwsh
+        run: ./Tools/NosGM.ClientEnhancements/scripts/verify-client-enhancements.ps1
