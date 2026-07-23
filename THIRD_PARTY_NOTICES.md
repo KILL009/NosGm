@@ -19,9 +19,11 @@ This document records direct dependencies found during the compliance review. It
 | OnexExplorer | `Tools/NosGM.ResourceExplorer` adapts archive layouts and DAT/LST text decoding from `Pumba98/OnexExplorer@eaee2aa9f0e71b9960da586f425f79e628013021` | BSL-1.0; attribution and complete license text preserved in the component directory |
 | Notale-Text-Picker | `Tools/NosGM.ClientThemeEditor` adapts the GM-tag and right-click color workflow from `Elendan/Notale-Text-Picker@9eb44d2a0041b49375fabb730121a01acd7bae87` | MIT; Copyright (c) 2019 Elendan; Cryless and Fizo55 credits preserved in the component notice |
 | Nostale-ClientColorizer | Reviewed at `Pumba98/Nostale-ClientColorizer@9d1e61c717b6a49ca221a5f2d855dfa5fa11591c` only as prior art for object-label and weapon-glow categories | No reuse license found in the reviewed tree; no code, signatures or offsets imported |
+| HexTaleLauncher | Reviewed at `Mati18505/HexTaleLauncher@50aa50580aa35a45b156a1899a340a25e50f7fb5` only as prior art for differential updates and repair | Frontend metadata declared MIT, but no repository-wide backend license was found; no source, binary, artwork, endpoint or signing material imported |
+| NosGM Launcher | Original NosGM implementation under `Launcher/`, kept outside `NosGm.sln` and intended for later extraction into a dedicated repository | MIT under `Launcher/LICENSE`; prior-art credit and boundaries preserved in `Launcher/NOTICE.md` |
 | NosGM | Current modifications and new work | Copyright remains with NosGM contributors; upstream rights are preserved |
 
-The component-specific evidence is described in each tool's `NOTICE.md` and in `docs/PROVENANCE.md`. Complete GPLv3 text is bundled under `LICENSES/GPL-3.0-only/`; MIT and Boost texts are bundled in their respective tool directories.
+The component-specific evidence is described in each tool's `NOTICE.md`, `Launcher/NOTICE.md` and in `docs/PROVENANCE.md`. Complete GPLv3 text is bundled under `LICENSES/GPL-3.0-only/`; MIT and Boost texts are bundled in their respective component directories.
 
 ## Direct NuGet dependencies observed
 
@@ -43,7 +45,7 @@ The following entries were observed in inspected project files. License expressi
 | Za.NosGame.Fetcher | 1.0.21 | Used only by `Tools/NosGM.DataUpdater`; verify package metadata and preserve required notices before redistributing the tool |
 | Za.NosGame.RessourceLoader | 1.0.21 | Used only by `Tools/NosGM.DataUpdater`; verify package metadata and preserve required notices before redistributing the tool |
 
-`Tools/NosGM.TimeSpaceParser`, `Tools/NosGM.ResourceExplorer` and `Tools/NosGM.ClientThemeEditor` have no third-party NuGet dependency; they use only the .NET 9 base class library.
+`Tools/NosGM.TimeSpaceParser`, `Tools/NosGM.ResourceExplorer`, `Tools/NosGM.ClientThemeEditor` and all current `Launcher/` projects have no third-party NuGet dependency; they use only the .NET 9 base class library and WPF platform assemblies where applicable.
 
 `Tools/NosGM.PacketCatalog` uses `Microsoft.CodeAnalysis.CSharp` 5.6.0 for syntax-only source parsing. It does not compile or execute NosGM server assemblies.
 
