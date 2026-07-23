@@ -35,7 +35,29 @@ jobs:
         run: dotnet restore Launcher/NosGM.Launcher.sln
 
       - name: Build Release
-        run: dotnet build Launcher/NosGM.Launcher.sln --configuration Release --no-restore
+        id: launcher-build
+        shell: pwsh
+        run: |
+          $log = Join-Path $PWD "launcher-build.log"
+          dotnet build Launcher/NosGM.Launcher.sln --configuration Release --no-restore *> $log
+          $exitCode = $LASTEXITCODE
+          Get-Content $log
+          "exit_code=$exitCode" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          exit 0
+
+      - name: Upload launcher build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: launcher-build-log
+          path: launcher-build.log
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Fail when launcher build failed
+        if: steps.launcher-build.outputs.exit_code != '0'
+        shell: pwsh
+        run: exit 1
 
       - name: Run updater synthetic regression test
         run: dotnet run --project Launcher/tests/NosGM.Updater.SelfTest/NosGM.Updater.SelfTest.csproj --configuration Release --no-build
