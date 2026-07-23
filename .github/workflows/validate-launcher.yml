@@ -1,0 +1,45 @@
+name: Validate NosGM Launcher
+
+on:
+  pull_request:
+    paths:
+      - "Launcher/**"
+      - "scripts/verify-launcher.ps1"
+      - ".github/workflows/validate-launcher.yml"
+      - "AUTHORS.md"
+      - "NOTICE.md"
+      - "THIRD_PARTY_NOTICES.md"
+      - "README.md"
+      - "docs/PROVENANCE.md"
+      - "docs/LICENSING.md"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    runs-on: windows-2022
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up .NET 9
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 9.0.x
+
+      - name: Restore
+        run: dotnet restore Launcher/NosGM.Launcher.sln
+
+      - name: Build Release
+        run: dotnet build Launcher/NosGM.Launcher.sln --configuration Release --no-restore
+
+      - name: Run updater synthetic regression test
+        run: dotnet run --project Launcher/tests/NosGM.Updater.SelfTest/NosGM.Updater.SelfTest.csproj --configuration Release --no-build
+
+      - name: Run launcher safety and attribution checks
+        shell: pwsh
+        run: ./scripts/verify-launcher.ps1

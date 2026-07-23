@@ -1,0 +1,12 @@
+<Application x:Class="NosGM.Launcher.App"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             StartupUri="MainWindow.xaml">
+    <Application.Resources>
+        <Style TargetType="Button">
+            <Setter Property="Padding" Value="16,9" />
+            <Setter Property="Margin" Value="4" />
+            <Setter Property="MinWidth" Value="110" />
+        </Style>
+    </Application.Resources>
+</Application>
