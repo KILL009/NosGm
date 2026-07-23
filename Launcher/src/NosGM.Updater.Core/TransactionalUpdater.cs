@@ -4,21 +4,18 @@ namespace NosGM.Updater.Core;
 
 public sealed class TransactionalUpdater
 {
-    private sealed record BackupEntry(string RelativePath, string DestinationPath, string BackupPath, bool HadOriginal);
+    private sealed record BackupEntry(string DestinationPath, string BackupPath, bool HadOriginal);
 
     public async Task<UpdateResult> ApplyAsync(
         string installRoot,
         UpdatePlan plan,
-        ManagedInstallState previousState,
         IContentSource contentSource,
         IProgress<UpdateProgress>? progress = null,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(plan);
-        ArgumentNullException.ThrowIfNull(previousState);
         ArgumentNullException.ThrowIfNull(contentSource);
         ManifestValidator.Validate(plan.Manifest, requireSignature: true);
-        InstallStateStore.Validate(previousState);
 
         var root = Path.GetFullPath(installRoot);
         Directory.CreateDirectory(root);
@@ -37,6 +34,7 @@ public sealed class TransactionalUpdater
 
         var downloadedBytes = 0L;
         var downloadedFiles = 0;
+        var commitStarted = false;
         try
         {
             foreach (var file in plan.Downloads)
@@ -74,10 +72,10 @@ public sealed class TransactionalUpdater
                 downloadedFiles,
                 plan.Downloads.Count));
 
+            commitStarted = true;
             return await CommitAsync(
                 root,
                 plan,
-                previousState,
                 stagingRoot,
                 rollbackRoot,
                 transactionRoot,
@@ -85,7 +83,11 @@ public sealed class TransactionalUpdater
         }
         catch
         {
-            TryDeleteDirectory(transactionRoot);
+            if (!commitStarted)
+            {
+                TryDeleteDirectory(transactionRoot);
+            }
+
             throw;
         }
     }
@@ -93,7 +95,6 @@ public sealed class TransactionalUpdater
     private static async Task<UpdateResult> CommitAsync(
         string root,
         UpdatePlan plan,
-        ManagedInstallState previousState,
         string stagingRoot,
         string rollbackRoot,
         string transactionRoot,
@@ -130,7 +131,7 @@ public sealed class TransactionalUpdater
                     File.Move(destination, backup, overwrite: false);
                 }
 
-                backups.Add(new BackupEntry(file.Path, destination, backup, hadOriginal));
+                backups.Add(new BackupEntry(destination, backup, hadOriginal));
                 Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
                 File.Move(staged, destination, overwrite: false);
                 installedDestinations.Add(destination);
@@ -147,7 +148,7 @@ public sealed class TransactionalUpdater
                     File.Move(destination, backup, overwrite: false);
                 }
 
-                backups.Add(new BackupEntry(deletePath, destination, backup, hadOriginal));
+                backups.Add(new BackupEntry(destination, backup, hadOriginal));
             }
 
             var newState = InstallStateStore.FromManifest(plan.Manifest);
