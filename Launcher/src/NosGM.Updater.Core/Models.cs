@@ -43,12 +43,42 @@ public sealed record ManagedInstallState
         = new Dictionary<string, ManagedFileState>(StringComparer.OrdinalIgnoreCase);
 }
 
+public sealed class VerifiedReleaseManifest
+{
+    internal VerifiedReleaseManifest(ReleaseManifest manifest, string publicKeyFingerprint)
+    {
+        var files = manifest.Files.Select(file => file with { }).ToArray();
+        var deletes = manifest.Delete.ToArray();
+        Manifest = manifest with
+        {
+            Files = Array.AsReadOnly(files),
+            Delete = Array.AsReadOnly(deletes)
+        };
+        PublicKeyFingerprint = publicKeyFingerprint;
+    }
+
+    public ReleaseManifest Manifest { get; }
+    public string PublicKeyFingerprint { get; }
+}
+
 public sealed record UpdatePlan
 {
-    public required ReleaseManifest Manifest { get; init; }
-    public IReadOnlyList<ReleaseFile> Downloads { get; init; } = Array.Empty<ReleaseFile>();
-    public IReadOnlyList<string> Deletes { get; init; } = Array.Empty<string>();
-    public IReadOnlyList<string> IgnoredDeletes { get; init; } = Array.Empty<string>();
+    internal UpdatePlan(
+        ReleaseManifest manifest,
+        IReadOnlyList<ReleaseFile> downloads,
+        IReadOnlyList<string> deletes,
+        IReadOnlyList<string> ignoredDeletes)
+    {
+        Manifest = manifest;
+        Downloads = Array.AsReadOnly(downloads.ToArray());
+        Deletes = Array.AsReadOnly(deletes.ToArray());
+        IgnoredDeletes = Array.AsReadOnly(ignoredDeletes.ToArray());
+    }
+
+    public ReleaseManifest Manifest { get; }
+    public IReadOnlyList<ReleaseFile> Downloads { get; }
+    public IReadOnlyList<string> Deletes { get; }
+    public IReadOnlyList<string> IgnoredDeletes { get; }
     public long DownloadBytes => Downloads.Sum(file => file.Size);
 }
 
