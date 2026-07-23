@@ -22,14 +22,15 @@ internal sealed class LauncherController
         }
 
         var manifest = await DownloadManifestAsync(cancellationToken);
-        ManifestSecurity.Verify(manifest, TrustedChannel.KeyId, TrustedChannel.PublicKeyPem);
+        var verifiedManifest = ManifestSecurity.Verify(
+            manifest,
+            TrustedChannel.KeyId,
+            TrustedChannel.PublicKeyPem);
         EnforceMinimumLauncherVersion(manifest.MinimumLauncherVersion);
 
-        var state = await InstallStateStore.LoadAsync(settings.InstallRoot, cancellationToken);
         var plan = await UpdatePlanner.CreateAsync(
             settings.InstallRoot,
-            manifest,
-            state,
+            verifiedManifest,
             progress,
             cancellationToken);
 
@@ -43,7 +44,6 @@ internal sealed class LauncherController
         var result = await updater.ApplyAsync(
             settings.InstallRoot,
             plan,
-            state,
             source,
             progress,
             cancellationToken);
