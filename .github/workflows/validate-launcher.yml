@@ -35,7 +35,7 @@ jobs:
         run: dotnet restore Launcher/NosGM.Launcher.sln
 
       - name: Build Release
-        id: launcher-build
+        id: launcher_build
         shell: pwsh
         run: |
           $log = Join-Path $PWD "launcher-build.log"
@@ -55,7 +55,7 @@ jobs:
           retention-days: 7
 
       - name: Fail when launcher build failed
-        if: steps.launcher-build.outputs.exit_code != '0'
+        if: steps.launcher_build.outputs.exit_code != '0'
         shell: pwsh
         run: exit 1
 
