@@ -36,6 +36,13 @@ public static class ManifestValidator
             throw new InvalidDataException("Manifest signature is required.");
         }
 
+        if (manifest.Signature is null ||
+            manifest.Signature.Length > 512 ||
+            manifest.Signature.Any(char.IsWhiteSpace))
+        {
+            throw new InvalidDataException("Manifest signature encoding is invalid.");
+        }
+
         if (manifest.Files is null || manifest.Delete is null)
         {
             throw new InvalidDataException("Manifest file and delete collections cannot be null.");
