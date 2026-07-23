@@ -67,9 +67,14 @@ jobs:
         shell: pwsh
         run: |
           $log = Join-Path $PWD "launcher-guard.log"
-          ./scripts/verify-launcher.ps1 *> $log
+          $previousNativePreference = $PSNativeCommandUseErrorActionPreference
+          $PSNativeCommandUseErrorActionPreference = $false
+          & pwsh -NoLogo -NoProfile -File ./scripts/verify-launcher.ps1 *> $log
           $exitCode = $LASTEXITCODE
-          Get-Content $log
+          $PSNativeCommandUseErrorActionPreference = $previousNativePreference
+          if (Test-Path $log) {
+            Get-Content $log
+          }
           "exit_code=$exitCode" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
           exit 0
 
