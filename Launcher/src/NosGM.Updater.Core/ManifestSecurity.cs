@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: MIT
 
 using System.Security.Cryptography;
-using System.Text;
 using System.Text.Json;
 
 namespace NosGM.Updater.Core;
@@ -57,6 +56,7 @@ public static class ManifestSecurity
         ManifestValidator.Validate(unsignedManifest, requireSignature: false);
         using var key = ECDsa.Create();
         key.ImportFromPem(privateKeyPem);
+        EnsureP256(key);
         var signature = key.SignData(
             CreateCanonicalPayload(unsignedManifest),
             HashAlgorithmName.SHA256,
@@ -64,7 +64,10 @@ public static class ManifestSecurity
         return Convert.ToBase64String(signature);
     }
 
-    public static void Verify(ReleaseManifest manifest, string expectedKeyId, string publicKeyPem)
+    public static VerifiedReleaseManifest Verify(
+        ReleaseManifest manifest,
+        string expectedKeyId,
+        string publicKeyPem)
     {
         ManifestValidator.Validate(manifest, requireSignature: true);
         if (!string.Equals(manifest.KeyId, expectedKeyId, StringComparison.Ordinal))
@@ -85,6 +88,7 @@ public static class ManifestSecurity
 
         using var key = ECDsa.Create();
         key.ImportFromPem(publicKeyPem);
+        EnsureP256(key);
         var valid = key.VerifyData(
             CreateCanonicalPayload(manifest),
             signature,
@@ -95,13 +99,25 @@ public static class ManifestSecurity
         {
             throw new CryptographicException("Manifest signature verification failed.");
         }
+
+        return new VerifiedReleaseManifest(manifest, PublicKeyFingerprint(publicKeyPem));
     }
 
     public static string PublicKeyFingerprint(string publicKeyPem)
     {
         using var key = ECDsa.Create();
         key.ImportFromPem(publicKeyPem);
+        EnsureP256(key);
         var subjectPublicKeyInfo = key.ExportSubjectPublicKeyInfo();
         return Convert.ToHexString(SHA256.HashData(subjectPublicKeyInfo));
+    }
+
+    private static void EnsureP256(ECDsa key)
+    {
+        if (key.KeySize != 256)
+        {
+            throw new CryptographicException(
+                $"Release key must use ECDSA P-256; imported key size is {key.KeySize} bits.");
+        }
     }
 }
