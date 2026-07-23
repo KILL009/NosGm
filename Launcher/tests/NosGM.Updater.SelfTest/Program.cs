@@ -36,23 +36,31 @@ internal static class Program
                 keyId,
                 privateKeyPem,
                 Array.Empty<string>());
-            ManifestSecurity.Verify(manifestOne, keyId, publicKeyPem);
+            var verifiedOne = ManifestSecurity.Verify(manifestOne, keyId, publicKeyPem);
+            var verifiedFirstPath = verifiedOne.Manifest.Files[0].Path;
+            ((List<ReleaseFile>)manifestOne.Files)[0] = manifestOne.Files[0] with
+            {
+                Path = "mutated-after-verify.bin"
+            };
+            Require(verifiedOne.Manifest.Files[0].Path == verifiedFirstPath,
+                "Verified manifest changed after the caller mutated its original list.");
 
-            var stateZero = await InstallStateStore.LoadAsync(installRoot);
-            var planOne = await UpdatePlanner.CreateAsync(installRoot, manifestOne, stateZero);
+            var planOne = await UpdatePlanner.CreateAsync(installRoot, verifiedOne);
             await using (var source = new DirectoryContentSource(releaseOneRoot))
             {
                 var result = await new TransactionalUpdater().ApplyAsync(
                     installRoot,
                     planOne,
-                    stateZero,
                     source);
                 Require(result.DownloadedFiles == 2, "First release did not install two files.");
             }
 
-            await VerifyInstalledManifestAsync(installRoot, manifestOne);
+            await VerifyInstalledManifestAsync(installRoot, verifiedOne.Manifest);
             var stateOne = await InstallStateStore.LoadAsync(installRoot);
             Require(stateOne.ReleaseId == "release-1", "First release state was not saved.");
+            var noOpPlan = await UpdatePlanner.CreateAsync(installRoot, verifiedOne);
+            Require(noOpPlan.Downloads.Count == 0 && noOpPlan.Deletes.Count == 0,
+                "An unchanged managed release did not produce a no-op plan.");
 
             var unmanagedPath = Path.Combine(installRoot, "user-note.txt");
             await File.WriteAllTextAsync(unmanagedPath, "player-owned");
@@ -68,10 +76,10 @@ internal static class Program
                 "release-2",
                 keyId,
                 privateKeyPem,
-                ["data/base.dat", "user-note.txt"]);
-            ManifestSecurity.Verify(manifestTwo, keyId, publicKeyPem);
+                ["user-note.txt"]);
+            var verifiedTwo = ManifestSecurity.Verify(manifestTwo, keyId, publicKeyPem);
 
-            var planTwo = await UpdatePlanner.CreateAsync(installRoot, manifestTwo, stateOne);
+            var planTwo = await UpdatePlanner.CreateAsync(installRoot, verifiedTwo);
             Require(planTwo.Deletes.SequenceEqual(["data/base.dat"]),
                 "Managed deletion was not planned correctly.");
             Require(planTwo.IgnoredDeletes.SequenceEqual(["user-note.txt"]),
@@ -82,7 +90,6 @@ internal static class Program
                 var result = await new TransactionalUpdater().ApplyAsync(
                     installRoot,
                     planTwo,
-                    stateOne,
                     source);
                 Require(result.IgnoredDeletes.Count == 1, "Ignored deletion was not reported.");
             }
@@ -91,6 +98,43 @@ internal static class Program
                 "Managed obsolete file was not removed.");
             Require(File.Exists(unmanagedPath), "Unmanaged player file was deleted.");
             await VerifyInstalledManifestAsync(installRoot, manifestTwo);
+
+            var collisionPath = Path.Combine(installRoot, "custom.dll");
+            await File.WriteAllTextAsync(collisionPath, "player-owned-collision");
+            var collisionManifestUnsigned = manifestTwo with
+            {
+                Files = manifestTwo.Files.Concat(
+                    new[]
+                    {
+                        new ReleaseFile
+                        {
+                            Path = "custom.dll",
+                            Url = "custom.dll",
+                            Size = 4,
+                            Sha256 = Convert.ToHexString(SHA256.HashData("test"u8.ToArray()))
+                        }
+                    }).ToArray(),
+                Signature = string.Empty
+            };
+            var collisionManifest = collisionManifestUnsigned with
+            {
+                Signature = ManifestSecurity.Sign(collisionManifestUnsigned, privateKeyPem)
+            };
+            var verifiedCollision = ManifestSecurity.Verify(collisionManifest, keyId, publicKeyPem);
+            await ExpectInvalidDataAsync(
+                () => UpdatePlanner.CreateAsync(installRoot, verifiedCollision),
+                "Unmanaged existing-file collision was accepted.");
+            Require(await File.ReadAllTextAsync(collisionPath) == "player-owned-collision",
+                "Collision test changed an unmanaged file.");
+
+            using (var wrongCurve = ECDsa.Create(ECCurve.NamedCurves.nistP384))
+            {
+                ExpectCryptographicFailure(
+                    () => ManifestSecurity.Sign(
+                        manifestTwo with { Signature = string.Empty },
+                        wrongCurve.ExportECPrivateKeyPem()),
+                    "A non-P-256 release key was accepted.");
+            }
 
             var tamperedManifest = manifestTwo with { ReleaseId = "release-2-tampered" };
             ExpectCryptographicFailure(
@@ -128,8 +172,8 @@ internal static class Program
                 privateKeyPem,
                 Array.Empty<string>());
 
-            var stateTwo = await InstallStateStore.LoadAsync(installRoot);
-            var planThree = await UpdatePlanner.CreateAsync(installRoot, manifestThree, stateTwo);
+            var verifiedThree = ManifestSecurity.Verify(manifestThree, keyId, publicKeyPem);
+            var planThree = await UpdatePlanner.CreateAsync(installRoot, verifiedThree);
             var installedClient = Path.Combine(installRoot, "NostaleClientX.exe");
             var beforeFailedUpdate = await Hashing.Sha256FileAsync(installedClient);
             await File.WriteAllBytesAsync(
@@ -142,7 +186,6 @@ internal static class Program
                     () => new TransactionalUpdater().ApplyAsync(
                         installRoot,
                         planThree,
-                        stateTwo,
                         source),
                     "Corrupted staged download was accepted.");
             }
@@ -252,6 +295,20 @@ internal static class Program
         try
         {
             action();
+        }
+        catch (InvalidDataException)
+        {
+            return;
+        }
+
+        throw new InvalidOperationException(message);
+    }
+
+    private static async Task ExpectInvalidDataAsync(Func<Task> action, string message)
+    {
+        try
+        {
+            await action();
         }
         catch (InvalidDataException)
         {
