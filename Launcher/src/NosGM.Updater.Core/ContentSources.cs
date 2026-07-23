@@ -22,7 +22,7 @@ public sealed class HttpContentSource : IContentSource
             throw new ArgumentException("Content base URI must be an absolute clean HTTPS URI.", nameof(baseUri));
         }
 
-        var normalized = baseUri.AbsoluteUri.EndsWith('/', StringComparison.Ordinal)
+        var normalized = baseUri.AbsoluteUri.EndsWith("/", StringComparison.Ordinal)
             ? baseUri
             : new Uri(baseUri.AbsoluteUri + '/', UriKind.Absolute);
         _baseUri = normalized;

@@ -12,7 +12,7 @@ public static class SafePaths
         if (string.IsNullOrWhiteSpace(relativePath) ||
             !string.Equals(relativePath, relativePath.Trim(), StringComparison.Ordinal) ||
             relativePath.Length > 512 ||
-            relativePath.StartsWith('/', StringComparison.Ordinal) ||
+            relativePath.StartsWith("/", StringComparison.Ordinal) ||
             relativePath.Contains("//", StringComparison.Ordinal) ||
             Path.IsPathRooted(relativePath) ||
             relativePath.Any(char.IsControl))
