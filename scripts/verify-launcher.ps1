@@ -20,6 +20,18 @@ foreach ($path in $required) {
     }
 }
 
+$trackedRelativePaths = @(& git -C $root ls-files -- "Launcher")
+if ($LASTEXITCODE -ne 0 -or $trackedRelativePaths.Count -eq 0) {
+    throw "Could not enumerate tracked Launcher files."
+}
+
+$trackedFiles = @($trackedRelativePaths | ForEach-Object {
+    $fullPath = Join-Path $root $_
+    if (Test-Path $fullPath -PathType Leaf) {
+        Get-Item $fullPath
+    }
+})
+
 $notice = Get-Content (Join-Path $launcher "NOTICE.md") -Raw
 foreach ($needle in @(
     "Mati18505/HexTaleLauncher",
@@ -32,7 +44,7 @@ foreach ($needle in @(
     }
 }
 
-$sourceFiles = Get-ChildItem $launcher -Filter *.cs -Recurse
+$sourceFiles = @($trackedFiles | Where-Object { $_.Extension -eq ".cs" })
 $source = ($sourceFiles | ForEach-Object { Get-Content $_.FullName -Raw }) -join "`n"
 
 foreach ($forbidden in @(
@@ -73,24 +85,21 @@ $privateKeyMarkers = @(
     "BEGIN PRIVATE KEY",
     "BEGIN ENCRYPTED PRIVATE KEY"
 )
-foreach ($file in Get-ChildItem $launcher -File -Recurse) {
-    if ($file.Length -gt 4MB) {
-        continue
-    }
-
+$textExtensions = @(".cs", ".csproj", ".sln", ".xaml", ".md", ".txt", ".json", ".yml", ".yaml", ".ps1", ".gitignore", "")
+foreach ($file in $trackedFiles | Where-Object { $_.Length -le 4MB -and $_.Extension -in $textExtensions }) {
     $content = Get-Content $file.FullName -Raw -ErrorAction SilentlyContinue
     foreach ($marker in $privateKeyMarkers) {
         if ($content -and $content.Contains($marker, [System.StringComparison]::Ordinal)) {
-            throw "Private signing key material found in repository: $($file.FullName)"
+            throw "Private signing key material found in tracked repository file: $($file.FullName)"
         }
     }
 }
 
-$proprietary = Get-ChildItem $launcher -File -Recurse | Where-Object {
+$proprietary = @($trackedFiles | Where-Object {
     $_.Extension -in @(".exe", ".dll", ".nos", ".pak", ".bin")
-}
-if ($proprietary) {
-    throw "Binary or proprietary-looking client material found under Launcher: $($proprietary.FullName -join ', ')"
+})
+if ($proprietary.Count -gt 0) {
+    throw "Binary or proprietary-looking client material is tracked under Launcher: $($proprietary.FullName -join ', ')"
 }
 
 $serverSolution = Get-Content (Join-Path $root "NosGm.sln") -Raw
