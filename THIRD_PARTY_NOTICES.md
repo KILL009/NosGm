@@ -17,6 +17,8 @@ This document records direct dependencies found during the compliance review. It
 | SaltyEmu | `Tools/NosGM.PacketCatalog` adapts packet-documentation concepts from `BlowaXD/SaltyEmu@2588cfdc64789a7952c781faaafdf1026ac73e9d`, including packet-documentator commit `7f849171da82feee1b9fae851a45b3eef9a9cd68` | GPL-3.0-only; attribution preserved in `Tools/NosGM.PacketCatalog/NOTICE.md` |
 | NostaleWidget | `Tools/NosGM.ClientEnhancements` adapts client compatibility, pattern scanning and reversible modification concepts from `ImNotAVirus/NostaleWidget@fc1b6dda5d797efc24a053180d30702f8dad162a` | MIT; Copyright (c) 2022 ApourtArtt; license and attribution preserved in the component directory |
 | OnexExplorer | `Tools/NosGM.ResourceExplorer` adapts archive layouts and DAT/LST text decoding from `Pumba98/OnexExplorer@eaee2aa9f0e71b9960da586f425f79e628013021` | BSL-1.0; attribution and complete license text preserved in the component directory |
+| Notale-Text-Picker | `Tools/NosGM.ClientThemeEditor` adapts the GM-tag and right-click color workflow from `Elendan/Notale-Text-Picker@9eb44d2a0041b49375fabb730121a01acd7bae87` | MIT; Copyright (c) 2019 Elendan; Cryless and Fizo55 credits preserved in the component notice |
+| Nostale-ClientColorizer | Reviewed at `Pumba98/Nostale-ClientColorizer@9d1e61c717b6a49ca221a5f2d855dfa5fa11591c` only as prior art for object-label and weapon-glow categories | No reuse license found in the reviewed tree; no code, signatures or offsets imported |
 | NosGM | Current modifications and new work | Copyright remains with NosGM contributors; upstream rights are preserved |
 
 The component-specific evidence is described in each tool's `NOTICE.md` and in `docs/PROVENANCE.md`. Complete GPLv3 text is bundled under `LICENSES/GPL-3.0-only/`; MIT and Boost texts are bundled in their respective tool directories.
@@ -41,7 +43,7 @@ The following entries were observed in inspected project files. License expressi
 | Za.NosGame.Fetcher | 1.0.21 | Used only by `Tools/NosGM.DataUpdater`; verify package metadata and preserve required notices before redistributing the tool |
 | Za.NosGame.RessourceLoader | 1.0.21 | Used only by `Tools/NosGM.DataUpdater`; verify package metadata and preserve required notices before redistributing the tool |
 
-`Tools/NosGM.TimeSpaceParser` and `Tools/NosGM.ResourceExplorer` have no third-party NuGet dependency; they use only the .NET 9 base class library.
+`Tools/NosGM.TimeSpaceParser`, `Tools/NosGM.ResourceExplorer` and `Tools/NosGM.ClientThemeEditor` have no third-party NuGet dependency; they use only the .NET 9 base class library.
 
 `Tools/NosGM.PacketCatalog` uses `Microsoft.CodeAnalysis.CSharp` 5.6.0 for syntax-only source parsing. It does not compile or execute NosGM server assemblies.
 

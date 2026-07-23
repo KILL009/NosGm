@@ -48,6 +48,14 @@ It validates duplicate headers, duplicate indexes, unreachable `SerializeToEnd` 
 
 The component is adapted from concepts in `ImNotAVirus/NostaleWidget@fc1b6dda5d797efc24a053180d30702f8dad162a`, Copyright (c) 2022 ApourtArtt, under the MIT License. Signature-dependent features remain disabled until the exact target executable is validated. See its [README](Tools/NosGM.ClientEnhancements/README.md) and [notice](Tools/NosGM.ClientEnhancements/NOTICE.md).
 
+## Client theme tooling
+
+`Tools/NosGM.ClientThemeEditor` is a standalone, package-free .NET 9 tool for planning and applying color-only themes to an authorized exact x86 client executable. It validates file name, architecture, version, length, SHA-256, signature count and original bytes before writing.
+
+The default mode creates a separate copy. Guarded in-place mode creates a hash-verified backup, writes through a temporary file, records a restoration manifest and refuses restoration when either file has changed unexpectedly. The first release ships without active signatures for client `0.9.3.3255`.
+
+The GM-tag and right-click workflow is adapted from `Elendan/Notale-Text-Picker@9eb44d2a0041b49375fabb730121a01acd7bae87` under the MIT License, preserving credit to Elendan, Cryless and Fizo55. `Pumba98/Nostale-ClientColorizer@9d1e61c717b6a49ca221a5f2d855dfa5fa11591c` is recorded only as independently reviewed prior art for object-label and weapon-glow categories; no code, signatures or offsets are copied because no reuse license was found. See the tool [README](Tools/NosGM.ClientThemeEditor/README.md) and [notice](Tools/NosGM.ClientThemeEditor/NOTICE.md).
+
 ## Contributing
 
 Developers, testers, packet researchers, bug hunters, technical writers and experienced NosTale players are welcome.
@@ -74,6 +82,7 @@ NosGM contains code from multiple verified license lineages:
 - `Tools/NosGM.PacketCatalog` adapts packet-documentation concepts from `BlowaXD/SaltyEmu@2588cfdc64789a7952c781faaafdf1026ac73e9d` and is GPL-3.0-only;
 - `Tools/NosGM.ClientEnhancements` preserves the MIT License from `ImNotAVirus/NostaleWidget@fc1b6dda5d797efc24a053180d30702f8dad162a`;
 - `Tools/NosGM.ResourceExplorer` preserves the Boost Software License 1.0 from `Pumba98/OnexExplorer@eaee2aa9f0e71b9960da586f425f79e628013021`;
+- `Tools/NosGM.ClientThemeEditor` preserves the MIT License from `Elendan/Notale-Text-Picker@9eb44d2a0041b49375fabb730121a01acd7bae87`;
 - the complete GNU GPL version 3 text is bundled under [LICENSES/GPL-3.0-only](LICENSES/GPL-3.0-only/README.md).
 
 NosGM is an OpenNos-derived community project. Copyright remains with the respective authors of OpenNos, NQ-Source, ChickenAPI and the adapted external tools, and with NosGM contributors for their own modifications. Renaming namespaces or assemblies does not transfer authorship.
