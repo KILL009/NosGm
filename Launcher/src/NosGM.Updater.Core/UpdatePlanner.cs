@@ -6,26 +6,35 @@ public static class UpdatePlanner
 {
     public static async Task<UpdatePlan> CreateAsync(
         string installRoot,
-        ReleaseManifest manifest,
-        ManagedInstallState state,
+        VerifiedReleaseManifest verifiedManifest,
         IProgress<UpdateProgress>? progress = null,
         CancellationToken cancellationToken = default)
     {
+        ArgumentNullException.ThrowIfNull(verifiedManifest);
+        var manifest = verifiedManifest.Manifest;
         ManifestValidator.Validate(manifest, requireSignature: true);
-        InstallStateStore.Validate(state);
 
         var root = Path.GetFullPath(installRoot);
         Directory.CreateDirectory(root);
+        var state = await InstallStateStore.LoadAsync(root, cancellationToken);
         var downloads = new List<ReleaseFile>();
         var totalFiles = manifest.Files.Count;
         var completedFiles = 0;
+        var managedPaths = state.Files.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase);
 
         foreach (var file in manifest.Files.OrderBy(item => item.Path, StringComparer.Ordinal))
         {
             cancellationToken.ThrowIfCancellationRequested();
             var localPath = SafePaths.ResolveManagedPath(root, file.Path);
+            if (Directory.Exists(localPath))
+            {
+                throw new InvalidDataException(
+                    $"Release file '{file.Path}' conflicts with an existing directory.");
+            }
+
+            var exists = File.Exists(localPath);
             var matches = false;
-            if (File.Exists(localPath))
+            if (exists)
             {
                 var info = new FileInfo(localPath);
                 if (info.Length == file.Size)
@@ -37,6 +46,12 @@ public static class UpdatePlanner
 
             if (!matches)
             {
+                if (exists && !managedPaths.Contains(file.Path))
+                {
+                    throw new InvalidDataException(
+                        $"Release file '{file.Path}' conflicts with an existing file not managed by NosGM.");
+                }
+
                 downloads.Add(file);
             }
 
@@ -50,9 +65,14 @@ public static class UpdatePlanner
                 totalFiles));
         }
 
-        var managedPaths = state.Files.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase);
-        var deletes = new List<string>();
-        var ignoredDeletes = new List<string>();
+        var desiredPaths = manifest.Files
+            .Select(file => file.Path)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var deletes = state.Files.Keys
+            .Where(path => !desiredPaths.Contains(path))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var ignoredDeletes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
         foreach (var deletePath in manifest.Delete.OrderBy(item => item, StringComparer.Ordinal))
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -67,12 +87,10 @@ public static class UpdatePlanner
             }
         }
 
-        return new UpdatePlan
-        {
-            Manifest = manifest,
-            Downloads = downloads,
-            Deletes = deletes,
-            IgnoredDeletes = ignoredDeletes
-        };
+        return new UpdatePlan(
+            manifest,
+            downloads,
+            deletes.OrderBy(path => path, StringComparer.Ordinal).ToArray(),
+            ignoredDeletes.OrderBy(path => path, StringComparer.Ordinal).ToArray());
     }
 }
