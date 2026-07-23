@@ -48,15 +48,15 @@ $sourceFiles = @($trackedFiles | Where-Object { $_.Extension -eq ".cs" })
 $source = ($sourceFiles | ForEach-Object { Get-Content $_.FullName -Raw }) -join "`n"
 
 foreach ($forbidden in @(
-    "MD5.Create",
-    "HashAlgorithmName.MD5",
-    "Verb = \"runas\"",
-    "AllowAutoRedirect = true",
-    "WriteProcessMemory",
-    "VirtualProtect",
-    "DllImport",
-    "ffi-napi",
-    "hextale.xyz"
+    'MD5.Create',
+    'HashAlgorithmName.MD5',
+    'Verb = "runas"',
+    'AllowAutoRedirect = true',
+    'WriteProcessMemory',
+    'VirtualProtect',
+    'DllImport',
+    'ffi-napi',
+    'hextale.xyz'
 )) {
     if ($source.Contains($forbidden, [System.StringComparison]::OrdinalIgnoreCase)) {
         throw "Forbidden launcher primitive or upstream endpoint found: $forbidden"
