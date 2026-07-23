@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MIT
 
+using System.IO;
 using NosGM.Updater.Core;
 
 namespace NosGM.Launcher;
