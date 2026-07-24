@@ -31,75 +31,68 @@ namespace NosGm.GameObject.Plugin.Event.Handler
     }
 
     /// <summary>
-    /// Publishes a narrow, signed read model for the public portal. The portal never receives a
-    /// game-database connection string and only sees fields explicitly copied into this snapshot.
-    /// Set NOSGM_PUBLIC_SNAPSHOT_DIRECTORY and NOSGM_PUBLIC_SNAPSHOT_KEY_BASE64 to enable it.
+    /// Exports a deliberately small, signed public read model. The Internet-facing portal receives
+    /// this file instead of database credentials or direct access to the legacy data layer.
     /// </summary>
-    internal sealed class PublicSnapshotPublisher
+    internal static class PublicSnapshotPublisher
     {
         private const int SchemaVersion = 1;
-        private static readonly Lazy<PublicSnapshotPublisher> LazyInstance =
-            new Lazy<PublicSnapshotPublisher>(() => new PublicSnapshotPublisher());
+        private static readonly object StartLock = new object();
         private static readonly UTF8Encoding Utf8WithoutBom = new UTF8Encoding(false);
-        private static readonly HashSet<string> SupportedLanguages = new HashSet<string>(
-            new[] { "es", "en", "de", "fr", "it", "pl", "cs", "ru", "ja", "zh-CN" },
-            StringComparer.OrdinalIgnoreCase);
-
-        private readonly object _startLock = new object();
-        private readonly JsonSerializerSettings _jsonSettings = new JsonSerializerSettings
+        private static readonly JsonSerializerSettings JsonSettings = new JsonSerializerSettings
         {
             ContractResolver = new CamelCasePropertyNamesContractResolver(),
             DateFormatString = "o",
             Formatting = Formatting.None,
             NullValueHandling = NullValueHandling.Ignore
         };
+        private static readonly HashSet<string> SupportedLanguages = new HashSet<string>(
+            new[] { "es", "en", "de", "fr", "it", "pl", "cs", "ru", "ja", "zh-CN" },
+            StringComparer.OrdinalIgnoreCase);
+        private static readonly DateTimeOffset UnixEpoch =
+            new DateTimeOffset(1970, 1, 1, 0, 0, 0, TimeSpan.Zero);
 
-        private Timer _timer;
-        private string _directory;
-        private string _snapshotPath;
-        private string _newsPath;
-        private string _keyId;
-        private byte[] _key;
-        private int _intervalSeconds;
-        private int _leaderChannel;
-        private int _publishing;
-        private bool _started;
-        private HashSet<long> _excludedCharacterIds;
-        private HashSet<string> _excludedCharacterNames;
+        private static Timer _timer;
+        private static byte[] _key;
+        private static string _keyId;
+        private static string _directory;
+        private static string _snapshotPath;
+        private static string _newsPath;
+        private static int _intervalSeconds;
+        private static int _leaderChannel;
+        private static int _publishing;
+        private static bool _started;
+        private static HashSet<long> _excludedCharacterIds;
+        private static HashSet<string> _excludedCharacterNames;
 
         public static void Start()
         {
-            LazyInstance.Value.StartCore();
-        }
-
-        private void StartCore()
-        {
-            lock (_startLock)
+            lock (StartLock)
             {
                 if (_started)
                 {
                     return;
                 }
 
-                string configuredDirectory = Environment.GetEnvironmentVariable("NOSGM_PUBLIC_SNAPSHOT_DIRECTORY");
-                string configuredKey = Environment.GetEnvironmentVariable("NOSGM_PUBLIC_SNAPSHOT_KEY_BASE64");
-                if (string.IsNullOrWhiteSpace(configuredDirectory) || string.IsNullOrWhiteSpace(configuredKey))
+                string directory = ReadEnvironment("NOSGM_PUBLIC_SNAPSHOT_DIRECTORY", string.Empty, 4096);
+                string encodedKey = ReadEnvironment("NOSGM_PUBLIC_SNAPSHOT_KEY_BASE64", string.Empty, 4096);
+                if (string.IsNullOrWhiteSpace(directory) || string.IsNullOrWhiteSpace(encodedKey))
                 {
                     return;
                 }
 
-                byte[] decodedKey;
+                byte[] key;
                 try
                 {
-                    decodedKey = Convert.FromBase64String(configuredKey.Trim());
+                    key = Convert.FromBase64String(encodedKey);
                 }
                 catch (FormatException)
                 {
-                    Logger.Warn("[PUBLIC_SNAPSHOT] NOSGM_PUBLIC_SNAPSHOT_KEY_BASE64 is not valid Base64.");
+                    Logger.Warn("[PUBLIC_SNAPSHOT] NOSGM_PUBLIC_SNAPSHOT_KEY_BASE64 is invalid.");
                     return;
                 }
 
-                if (decodedKey.Length < 32)
+                if (key.Length < 32)
                 {
                     Logger.Warn("[PUBLIC_SNAPSHOT] Signing key must contain at least 32 bytes.");
                     return;
@@ -107,38 +100,47 @@ namespace NosGm.GameObject.Plugin.Event.Handler
 
                 try
                 {
-                    _directory = Path.GetFullPath(Environment.ExpandEnvironmentVariables(configuredDirectory.Trim()));
+                    _directory = Path.GetFullPath(Environment.ExpandEnvironmentVariables(directory));
                     Directory.CreateDirectory(_directory);
                 }
                 catch (Exception exception)
                 {
-                    Logger.Warn("[PUBLIC_SNAPSHOT] Snapshot directory could not be prepared: " + exception.Message);
+                    Logger.Warn("[PUBLIC_SNAPSHOT] Directory setup failed: " + exception.Message);
                     return;
                 }
 
-                _key = decodedKey;
-                _keyId = ReadTextEnvironment("NOSGM_PUBLIC_SNAPSHOT_KEY_ID", "nosgm-live-v1", 64);
+                _key = key;
+                _keyId = LimitToken(ReadEnvironment("NOSGM_PUBLIC_SNAPSHOT_KEY_ID", "nosgm-live-v1", 64), 64);
+                if (string.IsNullOrWhiteSpace(_keyId))
+                {
+                    _keyId = "nosgm-live-v1";
+                }
+
                 _snapshotPath = Path.Combine(_directory, "public-snapshot.json");
-                _newsPath = ReadTextEnvironment(
+                _newsPath = ReadEnvironment(
                     "NOSGM_PUBLIC_NEWS_FILE",
                     Path.Combine(_directory, "public-news.json"),
                     4096);
-                _intervalSeconds = ReadIntegerEnvironment("NOSGM_PUBLIC_SNAPSHOT_INTERVAL_SECONDS", 30, 15, 600);
-                _leaderChannel = ReadIntegerEnvironment("NOSGM_PUBLIC_SNAPSHOT_LEADER_CHANNEL", 1, 1, 255);
-                _excludedCharacterIds = ReadLongSetEnvironment("NOSGM_PUBLIC_EXCLUDED_CHARACTER_IDS");
-                _excludedCharacterNames = ReadStringSetEnvironment("NOSGM_PUBLIC_EXCLUDED_CHARACTER_NAMES");
+                _intervalSeconds = ReadInteger("NOSGM_PUBLIC_SNAPSHOT_INTERVAL_SECONDS", 30, 15, 600);
+                _leaderChannel = ReadInteger("NOSGM_PUBLIC_SNAPSHOT_LEADER_CHANNEL", 1, 1, 255);
+                _excludedCharacterIds = ReadLongSet("NOSGM_PUBLIC_EXCLUDED_CHARACTER_IDS");
+                _excludedCharacterNames = ReadStringSet("NOSGM_PUBLIC_EXCLUDED_CHARACTER_NAMES");
 
                 _timer = new Timer(
-                    _ => PublishSafely(),
+                    state => PublishSafely(),
                     null,
                     TimeSpan.FromSeconds(10),
                     TimeSpan.FromSeconds(_intervalSeconds));
                 _started = true;
-                Logger.Info($"[PUBLIC_SNAPSHOT] Enabled. Leader channel={_leaderChannel}, interval={_intervalSeconds}s.");
+                Logger.Info(string.Format(
+                    CultureInfo.InvariantCulture,
+                    "[PUBLIC_SNAPSHOT] Enabled. Leader channel={0}, interval={1}s.",
+                    _leaderChannel,
+                    _intervalSeconds));
             }
         }
 
-        private void PublishSafely()
+        private static void PublishSafely()
         {
             if (Interlocked.Exchange(ref _publishing, 1) != 0)
             {
@@ -155,11 +157,11 @@ namespace NosGm.GameObject.Plugin.Event.Handler
             }
             finally
             {
-                Volatile.Write(ref _publishing, 0);
+                Interlocked.Exchange(ref _publishing, 0);
             }
         }
 
-        private void Publish()
+        private static void Publish()
         {
             int channelId = ServerManager.Instance.ChannelId;
             if (channelId <= 0)
@@ -168,7 +170,7 @@ namespace NosGm.GameObject.Plugin.Event.Handler
             }
 
             DateTimeOffset now = DateTimeOffset.UtcNow;
-            WriteHeartbeat(channelId, now);
+            WriteChannelHeartbeat(channelId, now);
             if (channelId != _leaderChannel)
             {
                 return;
@@ -176,12 +178,11 @@ namespace NosGm.GameObject.Plugin.Event.Handler
 
             List<ServiceRecord> channels = ReadChannelHeartbeats(now);
             bool loginOnline = ProbeTcp(
-                ReadTextEnvironment("NOSGM_PUBLIC_LOGIN_HOST", "127.0.0.1", 255),
-                ReadIntegerEnvironment("NOSGM_PUBLIC_LOGIN_PORT", 4000, 1, 65535),
+                ReadEnvironment("NOSGM_PUBLIC_LOGIN_HOST", "127.0.0.1", 255),
+                ReadInteger("NOSGM_PUBLIC_LOGIN_PORT", 4000, 1, 65535),
                 750);
-            bool anyChannelOnline = channels.Any(channel =>
-                string.Equals(channel.Health, "Online", StringComparison.Ordinal));
-            bool anyKnownChannel = channels.Count > 0;
+            bool anyChannelOnline = channels.Any(service =>
+                string.Equals(service.Health, "Online", StringComparison.Ordinal));
 
             var services = new List<ServiceRecord>
             {
@@ -196,23 +197,23 @@ namespace NosGm.GameObject.Plugin.Event.Handler
                 {
                     Id = "world",
                     Name = "World",
-                    Health = anyChannelOnline ? "Online" : anyKnownChannel ? "Degraded" : "Offline",
+                    Health = anyChannelOnline ? "Online" : channels.Count > 0 ? "Degraded" : "Offline",
                     OnlinePlayers = 0
                 }
             };
-            services.AddRange(channels.OrderBy(ChannelSortKey));
+            services.AddRange(channels.OrderBy(ChannelNumber));
 
             var payload = new SnapshotPayload
             {
-                ServerName = ReadTextEnvironment("NOSGM_PUBLIC_SERVER_NAME", "NosGM", 40),
+                ServerName = LimitText(ReadEnvironment("NOSGM_PUBLIC_SERVER_NAME", "NosGM", 40), 40),
                 ObservedAt = now,
                 News = LoadNews(),
                 Services = services,
                 Rankings = BuildRankings()
             };
 
-            string payloadJson = JsonConvert.SerializeObject(payload, _jsonSettings);
-            string signature = ComputeSignature(payloadJson);
+            string payloadJson = JsonConvert.SerializeObject(payload, JsonSettings);
+            string signature = Sign(payloadJson);
             string envelope = "{\"schemaVersion\":" + SchemaVersion.ToString(CultureInfo.InvariantCulture)
                               + ",\"keyId\":" + JsonConvert.ToString(_keyId)
                               + ",\"payload\":" + payloadJson
@@ -221,7 +222,7 @@ namespace NosGm.GameObject.Plugin.Event.Handler
             WriteAtomic(_snapshotPath, envelope);
         }
 
-        private void WriteHeartbeat(int channelId, DateTimeOffset observedAt)
+        private static void WriteChannelHeartbeat(int channelId, DateTimeOffset observedAt)
         {
             int onlinePlayers = ServerManager.Instance.Sessions.Count();
             var heartbeat = new ChannelHeartbeat
@@ -229,25 +230,27 @@ namespace NosGm.GameObject.Plugin.Event.Handler
                 Id = "channel-" + channelId.ToString(CultureInfo.InvariantCulture),
                 Name = "Channel " + channelId.ToString(CultureInfo.InvariantCulture),
                 Health = "Online",
-                OnlinePlayers = Math.Max(0, onlinePlayers),
+                OnlinePlayers = onlinePlayers < 0 ? 0 : onlinePlayers,
                 ObservedAt = observedAt
             };
-            string path = Path.Combine(
-                _directory,
-                "channel-" + channelId.ToString(CultureInfo.InvariantCulture) + ".json");
-            WriteAtomic(path, JsonConvert.SerializeObject(heartbeat, _jsonSettings));
+
+            WriteAtomic(
+                Path.Combine(_directory, heartbeat.Id + ".json"),
+                JsonConvert.SerializeObject(heartbeat, JsonSettings));
         }
 
-        private List<ServiceRecord> ReadChannelHeartbeats(DateTimeOffset now)
+        private static List<ServiceRecord> ReadChannelHeartbeats(DateTimeOffset now)
         {
             var result = new List<ServiceRecord>();
-            TimeSpan staleAfter = TimeSpan.FromSeconds(Math.Max(45, _intervalSeconds * 3));
+            TimeSpan staleAfter = TimeSpan.FromSeconds(System.Math.Max(45, _intervalSeconds * 3));
+
             foreach (string path in Directory.EnumerateFiles(_directory, "channel-*.json", SearchOption.TopDirectoryOnly))
             {
                 try
                 {
-                    var heartbeat = JsonConvert.DeserializeObject<ChannelHeartbeat>(File.ReadAllText(path, Encoding.UTF8));
-                    if (heartbeat == null || !IsSafeServiceId(heartbeat.Id))
+                    var heartbeat = JsonConvert.DeserializeObject<ChannelHeartbeat>(
+                        File.ReadAllText(path, Encoding.UTF8));
+                    if (heartbeat == null || !IsChannelId(heartbeat.Id))
                     {
                         continue;
                     }
@@ -263,14 +266,21 @@ namespace NosGm.GameObject.Plugin.Event.Handler
                     result.Add(new ServiceRecord
                     {
                         Id = heartbeat.Id,
-                        Name = string.IsNullOrWhiteSpace(heartbeat.Name) ? heartbeat.Id : LimitText(heartbeat.Name, 80),
+                        Name = string.IsNullOrWhiteSpace(heartbeat.Name)
+                            ? heartbeat.Id
+                            : LimitText(heartbeat.Name, 80),
                         Health = fresh ? "Online" : "Offline",
-                        OnlinePlayers = fresh ? Math.Max(0, heartbeat.OnlinePlayers) : 0
+                        OnlinePlayers = fresh && heartbeat.OnlinePlayers > 0
+                            ? heartbeat.OnlinePlayers
+                            : 0
                     });
                 }
-                catch (Exception exception) when (exception is IOException || exception is UnauthorizedAccessException || exception is JsonException)
+                catch (Exception exception) when (
+                    exception is IOException
+                    || exception is UnauthorizedAccessException
+                    || exception is JsonException)
                 {
-                    Logger.Warn("[PUBLIC_SNAPSHOT] Invalid channel heartbeat " + Path.GetFileName(path) + ": " + exception.Message);
+                    Logger.Warn("[PUBLIC_SNAPSHOT] Invalid heartbeat " + Path.GetFileName(path) + ": " + exception.Message);
                 }
             }
 
@@ -280,19 +290,18 @@ namespace NosGm.GameObject.Plugin.Event.Handler
                 .ToList();
         }
 
-        private Dictionary<string, List<RankingRecord>> BuildRankings()
+        private static Dictionary<string, List<RankingRecord>> BuildRankings()
         {
-            List<CharacterDTO> activeCharacters = DAOFactory.CharacterDAO.LoadAll()
+            List<CharacterDTO> active = DAOFactory.CharacterDAO.LoadAll()
                 .Where(IsPublishableCharacter)
                 .ToList();
-
-            List<CharacterDTO> reputationCharacters = DAOFactory.CharacterDAO.GetTopReputation()
+            List<CharacterDTO> reputation = DAOFactory.CharacterDAO.GetTopReputation()
                 .Where(IsPublishableCharacter)
                 .ToList();
 
             return new Dictionary<string, List<RankingRecord>>(StringComparer.OrdinalIgnoreCase)
             {
-                ["combat"] = activeCharacters
+                ["combat"] = active
                     .OrderByDescending(character => character.DuelWon)
                     .ThenByDescending(character => character.TalentWin)
                     .ThenByDescending(character => character.Level)
@@ -301,19 +310,19 @@ namespace NosGm.GameObject.Plugin.Event.Handler
                     .Select((character, index) => ToRanking(
                         character,
                         index + 1,
-                        Math.Max(0, character.DuelWon),
+                        NonNegative(Convert.ToInt64(character.DuelWon)),
                         "duelWins"))
                     .ToList(),
-                ["reputation"] = reputationCharacters
+                ["reputation"] = reputation
                     .OrderByDescending(character => character.Reputation)
                     .Take(50)
                     .Select((character, index) => ToRanking(
                         character,
                         index + 1,
-                        Math.Max(0L, character.Reputation),
+                        NonNegative(character.Reputation),
                         "reputation"))
                     .ToList(),
-                ["hero"] = activeCharacters
+                ["hero"] = active
                     .OrderByDescending(character => character.HeroLevel)
                     .ThenByDescending(character => character.HeroXp)
                     .ThenByDescending(character => character.Level)
@@ -321,13 +330,13 @@ namespace NosGm.GameObject.Plugin.Event.Handler
                     .Select((character, index) => ToRanking(
                         character,
                         index + 1,
-                        Math.Max(0L, character.HeroXp),
+                        NonNegative(character.HeroXp),
                         "heroXp"))
                     .ToList()
             };
         }
 
-        private bool IsPublishableCharacter(CharacterDTO character)
+        private static bool IsPublishableCharacter(CharacterDTO character)
         {
             if (character == null
                 || character.State != CharacterState.Active
@@ -342,18 +351,20 @@ namespace NosGm.GameObject.Plugin.Event.Handler
         }
 
         private static RankingRecord ToRanking(CharacterDTO character, int position, long score, string metric)
-            => new RankingRecord
+        {
+            return new RankingRecord
             {
                 Position = position,
-                CharacterName = SanitizeCharacterName(character.Name),
-                Level = Math.Max(0, character.Level),
-                HeroLevel = Math.Max(0, character.HeroLevel),
-                Reputation = Math.Max(0L, character.Reputation),
-                Score = score,
+                CharacterName = LimitText(character.Name, 32),
+                Level = Convert.ToInt32(character.Level),
+                HeroLevel = Convert.ToInt32(character.HeroLevel),
+                Reputation = NonNegative(character.Reputation),
+                Score = NonNegative(score),
                 Metric = metric
             };
+        }
 
-        private List<NewsRecord> LoadNews()
+        private static List<NewsRecord> LoadNews()
         {
             if (string.IsNullOrWhiteSpace(_newsPath) || !File.Exists(_newsPath))
             {
@@ -362,9 +373,11 @@ namespace NosGm.GameObject.Plugin.Event.Handler
 
             try
             {
-                var items = JsonConvert.DeserializeObject<List<NewsRecord>>(File.ReadAllText(_newsPath, Encoding.UTF8))
-                            ?? new List<NewsRecord>();
-                return items
+                var news = JsonConvert.DeserializeObject<List<NewsRecord>>(
+                               File.ReadAllText(_newsPath, Encoding.UTF8))
+                           ?? new List<NewsRecord>();
+
+                return news
                     .Where(IsValidNews)
                     .OrderByDescending(item => item.PublishedAt)
                     .Take(200)
@@ -379,7 +392,10 @@ namespace NosGm.GameObject.Plugin.Event.Handler
                     })
                     .ToList();
             }
-            catch (Exception exception) when (exception is IOException || exception is UnauthorizedAccessException || exception is JsonException)
+            catch (Exception exception) when (
+                exception is IOException
+                || exception is UnauthorizedAccessException
+                || exception is JsonException)
             {
                 Logger.Warn("[PUBLIC_SNAPSHOT] News file could not be read: " + exception.Message);
                 return new List<NewsRecord>();
@@ -387,15 +403,17 @@ namespace NosGm.GameObject.Plugin.Event.Handler
         }
 
         private static bool IsValidNews(NewsRecord item)
-            => item != null
-               && IsSafeToken(item.Id, 80)
-               && IsSafeToken(item.Slug, 100)
-               && SupportedLanguages.Contains(NormalizeLanguage(item.Language))
-               && !string.IsNullOrWhiteSpace(item.Title)
-               && !string.IsNullOrWhiteSpace(item.Summary)
-               && item.PublishedAt > DateTimeOffset.UnixEpoch;
+        {
+            return item != null
+                   && IsSafeToken(item.Id, 80)
+                   && IsSafeToken(item.Slug, 100)
+                   && SupportedLanguages.Contains(NormalizeLanguage(item.Language))
+                   && !string.IsNullOrWhiteSpace(item.Title)
+                   && !string.IsNullOrWhiteSpace(item.Summary)
+                   && item.PublishedAt > UnixEpoch;
+        }
 
-        private string ComputeSignature(string payloadJson)
+        private static string Sign(string payloadJson)
         {
             string signedText = SchemaVersion.ToString(CultureInfo.InvariantCulture)
                                 + "\n" + _keyId
@@ -413,19 +431,27 @@ namespace NosGm.GameObject.Plugin.Event.Handler
                 using (var client = new TcpClient())
                 {
                     IAsyncResult result = client.BeginConnect(host, port, null, null);
-                    using (result.AsyncWaitHandle)
+                    WaitHandle waitHandle = result.AsyncWaitHandle;
+                    try
                     {
-                        if (!result.AsyncWaitHandle.WaitOne(timeoutMilliseconds))
+                        if (!waitHandle.WaitOne(timeoutMilliseconds))
                         {
                             return false;
                         }
+                    }
+                    finally
+                    {
+                        waitHandle.Close();
                     }
 
                     client.EndConnect(result);
                     return client.Connected;
                 }
             }
-            catch (Exception exception) when (exception is SocketException || exception is IOException || exception is ObjectDisposedException)
+            catch (Exception exception) when (
+                exception is SocketException
+                || exception is IOException
+                || exception is ObjectDisposedException)
             {
                 return false;
             }
@@ -443,12 +469,12 @@ namespace NosGm.GameObject.Plugin.Event.Handler
                     {
                         File.Replace(temporaryPath, destinationPath, null, true);
                     }
-                    catch (PlatformNotSupportedException)
+                    catch (IOException)
                     {
                         File.Delete(destinationPath);
                         File.Move(temporaryPath, destinationPath);
                     }
-                    catch (IOException)
+                    catch (PlatformNotSupportedException)
                     {
                         File.Delete(destinationPath);
                         File.Move(temporaryPath, destinationPath);
@@ -476,85 +502,115 @@ namespace NosGm.GameObject.Plugin.Event.Handler
             }
             catch
             {
-                // A stale auxiliary file is harmless and will be retried later.
+                // A temporary or stale heartbeat can be retried on the next publication cycle.
             }
         }
 
-        private static int ChannelSortKey(ServiceRecord service)
+        private static int ChannelNumber(ServiceRecord service)
         {
             int separator = service.Id.LastIndexOf('-');
             int channel;
             return separator >= 0
-                   && int.TryParse(service.Id.Substring(separator + 1), NumberStyles.None, CultureInfo.InvariantCulture, out channel)
+                   && int.TryParse(
+                       service.Id.Substring(separator + 1),
+                       NumberStyles.None,
+                       CultureInfo.InvariantCulture,
+                       out channel)
                 ? channel
                 : int.MaxValue;
         }
 
-        private static bool IsSafeServiceId(string value)
-            => IsSafeToken(value, 64) && value.StartsWith("channel-", StringComparison.OrdinalIgnoreCase);
+        private static long NonNegative(long value)
+        {
+            return value < 0 ? 0 : value;
+        }
+
+        private static bool IsChannelId(string value)
+        {
+            return IsSafeToken(value, 64)
+                   && value.StartsWith("channel-", StringComparison.OrdinalIgnoreCase);
+        }
 
         private static bool IsSafeToken(string value, int maximumLength)
-            => !string.IsNullOrWhiteSpace(value)
-               && value.Length <= maximumLength
-               && value.All(character => char.IsLetterOrDigit(character) || character == '-' || character == '_' || character == '.');
+        {
+            return !string.IsNullOrWhiteSpace(value)
+                   && value.Length <= maximumLength
+                   && value.All(character =>
+                       char.IsLetterOrDigit(character)
+                       || character == '-'
+                       || character == '_'
+                       || character == '.');
+        }
 
         private static string LimitToken(string value, int maximumLength)
-            => new string((value ?? string.Empty)
-                .Where(character => char.IsLetterOrDigit(character) || character == '-' || character == '_' || character == '.')
+        {
+            return new string((value ?? string.Empty)
+                .Where(character =>
+                    char.IsLetterOrDigit(character)
+                    || character == '-'
+                    || character == '_'
+                    || character == '.')
                 .Take(maximumLength)
                 .ToArray());
+        }
 
         private static string LimitText(string value, int maximumLength)
-            => new string((value ?? string.Empty)
+        {
+            return new string((value ?? string.Empty)
                 .Where(character => !char.IsControl(character))
                 .Take(maximumLength)
                 .ToArray())
                 .Trim();
-
-        private static string SanitizeCharacterName(string value)
-        {
-            string result = LimitText(value, 32);
-            return string.IsNullOrWhiteSpace(result) ? "Unknown" : result;
         }
 
         private static string NormalizeLanguage(string value)
         {
-            if (string.Equals(value, "zh", StringComparison.OrdinalIgnoreCase)
-                || string.Equals(value, "zh-cn", StringComparison.OrdinalIgnoreCase)
-                || string.Equals(value, "cn", StringComparison.OrdinalIgnoreCase))
+            string language = (value ?? string.Empty).Trim();
+            if (string.Equals(language, "zh", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(language, "zh-cn", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(language, "cn", StringComparison.OrdinalIgnoreCase))
             {
                 return "zh-CN";
             }
 
-            if (string.Equals(value, "cz", StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(language, "cz", StringComparison.OrdinalIgnoreCase))
             {
                 return "cs";
             }
 
-            if (string.Equals(value, "jp", StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(language, "jp", StringComparison.OrdinalIgnoreCase))
             {
                 return "ja";
             }
 
-            return (value ?? string.Empty).Trim().ToLowerInvariant();
+            return language.ToLowerInvariant();
         }
 
-        private static int ReadIntegerEnvironment(string name, int fallback, int minimum, int maximum)
+        private static int ReadInteger(string name, int fallback, int minimum, int maximum)
         {
             int parsed;
             string value = Environment.GetEnvironmentVariable(name);
-            return int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out parsed)
-                ? Math.Max(minimum, Math.Min(maximum, parsed))
-                : fallback;
+            if (!int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out parsed))
+            {
+                return fallback;
+            }
+
+            return System.Math.Max(minimum, System.Math.Min(maximum, parsed));
         }
 
-        private static string ReadTextEnvironment(string name, string fallback, int maximumLength)
+        private static string ReadEnvironment(string name, string fallback, int maximumLength)
         {
             string value = Environment.GetEnvironmentVariable(name);
-            return LimitText(string.IsNullOrWhiteSpace(value) ? fallback : value, maximumLength);
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                value = fallback;
+            }
+
+            value = value.Trim();
+            return value.Length <= maximumLength ? value : value.Substring(0, maximumLength);
         }
 
-        private static HashSet<long> ReadLongSetEnvironment(string name)
+        private static HashSet<long> ReadLongSet(string name)
         {
             var result = new HashSet<long>();
             string value = Environment.GetEnvironmentVariable(name);
@@ -575,84 +631,61 @@ namespace NosGm.GameObject.Plugin.Event.Handler
             return result;
         }
 
-        private static HashSet<string> ReadStringSetEnvironment(string name)
+        private static HashSet<string> ReadStringSet(string name)
         {
             string value = Environment.GetEnvironmentVariable(name);
-            return new HashSet<string>(
-                string.IsNullOrWhiteSpace(value)
-                    ? Enumerable.Empty<string>()
-                    : value.Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries)
-                        .Select(item => item.Trim())
-                        .Where(item => item.Length > 0),
-                StringComparer.OrdinalIgnoreCase);
+            IEnumerable<string> values = string.IsNullOrWhiteSpace(value)
+                ? Enumerable.Empty<string>()
+                : value.Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(item => item.Trim())
+                    .Where(item => item.Length > 0);
+            return new HashSet<string>(values, StringComparer.OrdinalIgnoreCase);
         }
 
         private sealed class SnapshotPayload
         {
             public string ServerName { get; set; }
-
             public DateTimeOffset ObservedAt { get; set; }
-
             public List<NewsRecord> News { get; set; }
-
             public List<ServiceRecord> Services { get; set; }
-
             public Dictionary<string, List<RankingRecord>> Rankings { get; set; }
         }
 
         private sealed class ChannelHeartbeat
         {
             public string Id { get; set; }
-
             public string Name { get; set; }
-
             public string Health { get; set; }
-
             public int OnlinePlayers { get; set; }
-
             public DateTimeOffset ObservedAt { get; set; }
         }
 
         private sealed class ServiceRecord
         {
             public string Id { get; set; }
-
             public string Name { get; set; }
-
             public string Health { get; set; }
-
             public int OnlinePlayers { get; set; }
         }
 
         private sealed class NewsRecord
         {
             public string Id { get; set; }
-
             public string Slug { get; set; }
-
             public string Title { get; set; }
-
             public string Summary { get; set; }
-
             public DateTimeOffset PublishedAt { get; set; }
-
             public string Language { get; set; }
         }
 
         private sealed class RankingRecord
         {
             public int Position { get; set; }
-
             public string CharacterName { get; set; }
-
             public int Level { get; set; }
-
             public int HeroLevel { get; set; }
-
             public long Reputation { get; set; }
-
             public long Score { get; set; }
-
             public string Metric { get; set; }
         }
     }
