@@ -28,8 +28,21 @@ BEGIN
         INCLUDE (AccountId, ActionKey, ActionDate, CharacterId);
 END;
 
--- Preserve actions already completed before this migration so an account cannot
--- claim the same reward or refresh again on the deployment day.
+IF NOT EXISTS
+(
+    SELECT 1
+    FROM sys.indexes
+    WHERE object_id = OBJECT_ID(N'dbo.AccountDailyAction')
+      AND name = N'IX_AccountDailyAction_ActionDate'
+)
+BEGIN
+    CREATE INDEX IX_AccountDailyAction_ActionDate
+        ON dbo.AccountDailyAction(ActionDate)
+        INCLUDE (AccountId, ActionKey, CharacterId, CompletedAtUtc);
+END;
+
+-- Preserve only actions completed on the deployment day. GeneralLog remains the
+-- historical audit source, while AccountDailyAction stores short-lived state.
 IF OBJECT_ID(N'dbo.GeneralLog', N'U') IS NOT NULL
 BEGIN
     ;WITH ExistingActions AS
@@ -42,6 +55,7 @@ BEGIN
             MAX([Timestamp]) AS CompletedAt
         FROM dbo.GeneralLog
         WHERE AccountId IS NOT NULL
+          AND CONVERT(DATE, [Timestamp]) = CONVERT(DATE, GETDATE())
           AND LogData IN
           (
               N'DAILY_REWARD',
@@ -64,7 +78,7 @@ BEGIN
         source.ActionKey,
         source.ActionDate,
         source.CharacterId,
-        CONVERT(DATETIME2(3), source.CompletedAt)
+        SYSUTCDATETIME()
     FROM ExistingActions AS source
     WHERE NOT EXISTS
     (
@@ -75,3 +89,6 @@ BEGIN
           AND target.ActionDate = source.ActionDate
     );
 END;
+
+DELETE FROM dbo.AccountDailyAction
+WHERE ActionDate < DATEADD(DAY, -31, CONVERT(DATE, GETDATE()));
