@@ -205,7 +205,7 @@ internal static class Program
             !string.IsNullOrEmpty(uri.Fragment) ||
             uri.Host.EndsWith(".invalid", StringComparison.OrdinalIgnoreCase) ||
             uri.AbsolutePath.Contains("//", StringComparison.Ordinal) ||
-            (requireTrailingSlash && !uri.AbsolutePath.EndsWith('/', StringComparison.Ordinal)))
+            (requireTrailingSlash && !uri.AbsolutePath.EndsWith("/", StringComparison.Ordinal)))
         {
             throw new ArgumentException(
                 requireTrailingSlash
