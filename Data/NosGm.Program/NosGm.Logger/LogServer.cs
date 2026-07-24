@@ -1,14 +1,16 @@
 ﻿using System;
+using System.Collections.Concurrent;
 using System.Diagnostics;
-using System.Net.Sockets;
 using System.Net;
+using System.Net.Sockets;
 using System.Reflection;
-using System.Text;
-using System.Threading.Tasks;
 using System.Runtime.CompilerServices;
+using System.Text;
+using System.Threading;
+using System.Threading.Tasks;
+using NosGm.Configuration;
 using NosGm.Domain;
 using NosGm.LogServer.MongoDB;
-using NosGm.Configuration;
 
 namespace NosGm.LoggerService
 {
@@ -16,55 +18,59 @@ namespace NosGm.LoggerService
     {
         public static class Logger
         {
-            private static string IPAdress { get; set; } = "127.0.0.1";
-            private static int Port { get; set; } = 1912;
+            private const int QueueCapacity = 4096;
+            private static readonly string IPAdress = "127.0.0.1";
+            private static readonly int Port = 1912;
+            private static readonly BlockingCollection<string> SendQueue =
+                new BlockingCollection<string>(new ConcurrentQueue<string>(), QueueCapacity);
+            private static readonly UdpClient Client = new UdpClient();
+            private static readonly IPEndPoint EndPoint = new IPEndPoint(IPAddress.Parse(IPAdress), Port);
+            private static readonly object LoadOutputSync = new object();
+            private static readonly Thread SenderThread = new Thread(ProcessQueue)
+            {
+                IsBackground = true,
+                Name = "NosGM-Log-UDP"
+            };
 
-            public static async Task LogAsync(string Input, LogType LogType, [CallerMemberName] string caller = "", [CallerFilePath] string file = "", [CallerLineNumber] int line = 0)
+            private static long _droppedMessages;
+
+            static Logger()
+            {
+                SenderThread.Start();
+            }
+
+            public static long DroppedMessages => Interlocked.Read(ref _droppedMessages);
+
+            public static async Task LogAsync(string input, LogType logType,
+                [CallerMemberName] string caller = "", [CallerFilePath] string file = "",
+                [CallerLineNumber] int line = 0)
             {
                 try
                 {
-                    switch (LogType)
+                    if (logType == LogType.ERROR)
                     {
-                        //In case something should be handled other than sending a Log to the Server
-                        case LogType.ERROR:
-                            await LogService.Generate(Input, LogType);
-                            break;
-                        case LogType.WARNING:
-                        case LogType.INFO:
-                        case LogType.Character:
-                        case LogType.CharacterAction:
-                        case LogType.CharacterCommand:
-                        case LogType.CharacterStaffCommand:
-                        case LogType.Trade:
-                        case LogType.Bet:
-                        case LogType.UpgradeEquipment:
-                        case LogType.UpgradeSpecialistCard:
-                        case LogType.UpgradeSpecialistCardPerfection:
-                        case LogType.SumResistance:
-                        case LogType.BazaarBuy:
-                        case LogType.BazaarSell:
-                        case LogType.BazaarMod:
-                        case LogType.Ban:
-                        case LogType.Kick:
-                        case LogType.Mute:
-                        case LogType.Exploit:
-                            break;
+                        await LogService.Generate(input, logType).ConfigureAwait(false);
                     }
-                    string Time = DateTime.Now.ToString($"[HH:mm:ss][{LogType}]");
-                    await SendInfoAsync($"{Time} {Input}");
+
+                    string time = DateTime.Now.ToString($"[HH:mm:ss][{logType}]");
+                    Enqueue($"{time} {input}");
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine(ex.ToString());
+                    Console.WriteLine(ex);
                 }
-                
             }
 
-            public static async Task UpdateLoadOutput(string Input, LogType logType)
+            public static Task UpdateLoadOutput(string input, LogType logType)
             {
-                await Task.Run(() => LogConfiguration.LoadOutput += $"{Input} | ");
-                string Time = DateTime.Now.ToString($"[HH:mm:ss][LOAD]");
-                await SendInfoAsync($"{Time} {Input}");
+                lock (LoadOutputSync)
+                {
+                    LogConfiguration.LoadOutput += $"{input} | ";
+                }
+
+                string time = DateTime.Now.ToString("[HH:mm:ss][LOAD]");
+                Enqueue($"{time} {input}");
+                return Task.CompletedTask;
             }
 
             public static string NameOfCallingClass()
@@ -88,22 +94,28 @@ namespace NosGm.LoggerService
                 return fullName;
             }
 
-            private static void SendInfo(string message)
+            private static void Enqueue(string message)
             {
-                Socket s = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp);
-                IPAddress broadcast = IPAddress.Parse(IPAdress);
-                byte[] sendbuf = Encoding.ASCII.GetBytes(message);
-                IPEndPoint ep = new IPEndPoint(broadcast, Port);
-                s.SendTo(sendbuf, ep);
+                if (!SendQueue.TryAdd(message))
+                {
+                    Interlocked.Increment(ref _droppedMessages);
+                }
             }
 
-            private static async Task SendInfoAsync(string message)
+            private static void ProcessQueue()
             {
-                Socket s = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp);
-                IPAddress broadcast = IPAddress.Parse(IPAdress);
-                byte[] sendbuf = Encoding.ASCII.GetBytes(message);
-                IPEndPoint ep = new IPEndPoint(broadcast, Port);
-                await Task.Run(() => s.SendTo(sendbuf, ep));
+                foreach (string message in SendQueue.GetConsumingEnumerable())
+                {
+                    try
+                    {
+                        byte[] buffer = Encoding.UTF8.GetBytes(message);
+                        Client.Send(buffer, buffer.Length, EndPoint);
+                    }
+                    catch
+                    {
+                        Interlocked.Increment(ref _droppedMessages);
+                    }
+                }
             }
         }
     }
