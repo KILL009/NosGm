@@ -36,7 +36,6 @@ namespace NosGm.LoggerService
 
             static Logger()
             {
-                LogPipelineMonitor.RecordUdpSent(0, QueueCapacity);
                 SenderThread.Start();
             }
 
