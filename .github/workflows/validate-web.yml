@@ -23,6 +23,8 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+        with:
+          show-progress: false
 
       - name: Set up .NET 9
         uses: actions/setup-dotnet@v4
@@ -30,10 +32,19 @@ jobs:
           dotnet-version: 9.0.x
 
       - name: Restore
-        run: dotnet restore Web/NosGM.Web.sln
+        run: dotnet restore Web/NosGM.Web.sln --verbosity quiet
 
       - name: Build Release
-        run: dotnet build Web/NosGM.Web.sln -c Release --no-restore
+        shell: bash
+        run: |
+          set +e
+          dotnet build Web/NosGM.Web.sln -c Release --no-restore --verbosity minimal > /tmp/nosgm-web-build.log 2>&1
+          exit_code=$?
+          if [ "$exit_code" -ne 0 ]; then
+            grep -E '(^|[[:space:]])error (CS|MSB)[0-9]+|Build FAILED' /tmp/nosgm-web-build.log || tail -n 120 /tmp/nosgm-web-build.log
+            exit "$exit_code"
+          fi
+          tail -n 20 /tmp/nosgm-web-build.log
 
       - name: Run deterministic self-test
         run: dotnet run --project Web/tests/NosGM.Web.SelfTest/NosGM.Web.SelfTest.csproj -c Release --no-build
