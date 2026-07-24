@@ -8,6 +8,7 @@ using NosGm.GameObject;
 using NosGm.GameObject.Helpers;
 using NosGm.GameObject.Networking;
 using NosGm.GameObject.Service;
+using NosGm.Handler.Services;
 using NosGm.Master.Library.Client;
 using System;
 using System.IO;
@@ -188,7 +189,8 @@ namespace NosGm.Handler.BasicPacket.CharScreen
 
                 #region CharacterLife
 
-                Session.Character.Life = Observable.Interval(TimeSpan.FromMilliseconds(300)).Subscribe(x => Session?.Character?.CharacterLife());
+                Session.Character.Life = null;
+                CharacterLifeScheduler.EnsureStarted();
 
                 #endregion
 
