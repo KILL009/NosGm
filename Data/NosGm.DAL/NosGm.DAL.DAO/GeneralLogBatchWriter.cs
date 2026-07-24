@@ -8,6 +8,7 @@ using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Linq;
 using System.Threading;
 
 namespace NosGm.DAL.DAO
@@ -17,7 +18,7 @@ namespace NosGm.DAL.DAO
         private const int BatchSize = 200;
         private const int FlushIntervalMilliseconds = 250;
         private const int MaximumAttempts = 3;
-        private const int QueueCapacity = 5000;
+        private const int QueueCapacity = LogPipelineMonitor.DefaultGeneralLogQueueCapacity;
 
         private static readonly BlockingCollection<QueuedGeneralLog> Queue =
             new BlockingCollection<QueuedGeneralLog>(
@@ -41,21 +42,22 @@ namespace NosGm.DAL.DAO
 
         public static bool TryEnqueue(GeneralLogDTO generalLog)
         {
+            LogPipelineOperation operation = LogPipelineMonitor.CurrentOperation;
             if (generalLog == null || Volatile.Read(ref _stopping) != 0 || Queue.IsAddingCompleted)
             {
-                LogPipelineMonitor.RecordGeneralLogFallback();
+                LogPipelineMonitor.RecordGeneralLogFallback(operation);
                 return false;
             }
 
-            var queued = new QueuedGeneralLog(Clone(generalLog), 1);
+            var queued = new QueuedGeneralLog(Clone(generalLog), 1, operation);
             if (!Queue.TryAdd(queued))
             {
-                LogPipelineMonitor.RecordGeneralLogFallback();
+                LogPipelineMonitor.RecordGeneralLogFallback(operation);
                 LogPipelineMonitor.UpdateGeneralLogQueue(Queue.Count, QueueCapacity);
                 return false;
             }
 
-            LogPipelineMonitor.RecordGeneralLogEnqueued(Queue.Count, QueueCapacity);
+            LogPipelineMonitor.RecordGeneralLogEnqueued(operation, Queue.Count, QueueCapacity);
             return true;
         }
 
@@ -136,14 +138,30 @@ namespace NosGm.DAL.DAO
                 }
 
                 stopwatch.Stop();
-                LogPipelineMonitor.RecordGeneralLogWrite(batch.Count, stopwatch.ElapsedTicks, true);
+                RecordBatchResult(batch, stopwatch.ElapsedTicks, true);
             }
             catch (Exception exception)
             {
                 stopwatch.Stop();
-                LogPipelineMonitor.RecordGeneralLogWrite(batch.Count, stopwatch.ElapsedTicks, false);
+                RecordBatchResult(batch, stopwatch.ElapsedTicks, false);
                 Logger.Error($"Unable to persist a GeneralLog batch containing {batch.Count} records.", exception);
                 RetryOrDrop(batch);
+            }
+        }
+
+        private static void RecordBatchResult(
+            IEnumerable<QueuedGeneralLog> batch,
+            long elapsedStopwatchTicks,
+            bool success)
+        {
+            foreach (IGrouping<LogPipelineOperation, QueuedGeneralLog> group in
+                     batch.GroupBy(queued => queued.Operation))
+            {
+                LogPipelineMonitor.RecordGeneralLogWrite(
+                    group.Key,
+                    group.Count(),
+                    elapsedStopwatchTicks,
+                    success);
             }
         }
 
@@ -153,9 +171,12 @@ namespace NosGm.DAL.DAO
             foreach (QueuedGeneralLog queued in batch)
             {
                 if (queued.Attempt >= MaximumAttempts || Queue.IsAddingCompleted ||
-                    !Queue.TryAdd(new QueuedGeneralLog(queued.Value, queued.Attempt + 1)))
+                    !Queue.TryAdd(new QueuedGeneralLog(
+                        queued.Value,
+                        queued.Attempt + 1,
+                        queued.Operation)))
                 {
-                    LogPipelineMonitor.RecordGeneralLogDropped();
+                    LogPipelineMonitor.RecordGeneralLogDropped(queued.Operation);
                 }
             }
         }
@@ -176,15 +197,21 @@ namespace NosGm.DAL.DAO
 
         private sealed class QueuedGeneralLog
         {
-            public QueuedGeneralLog(GeneralLogDTO value, int attempt)
+            public QueuedGeneralLog(
+                GeneralLogDTO value,
+                int attempt,
+                LogPipelineOperation operation)
             {
                 Value = value;
                 Attempt = attempt;
+                Operation = operation;
             }
 
             public GeneralLogDTO Value { get; }
 
             public int Attempt { get; }
+
+            public LogPipelineOperation Operation { get; }
         }
     }
 }
