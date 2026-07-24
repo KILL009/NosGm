@@ -21,7 +21,8 @@ public sealed record PublicNewsItem(
     string Slug,
     string Title,
     string Summary,
-    DateTimeOffset PublishedAt);
+    DateTimeOffset PublishedAt,
+    string Language = "en");
 
 public sealed record PublicServiceStatus(
     string Id,
@@ -34,17 +35,22 @@ public sealed record PublicServerStatus(
     ServiceHealth OverallHealth,
     int OnlinePlayers,
     IReadOnlyList<PublicServiceStatus> Services,
-    DateTimeOffset ObservedAt);
+    DateTimeOffset ObservedAt,
+    bool IsStale = false);
 
 public sealed record PublicRankingEntry(
     int Position,
     string CharacterName,
     int Level,
     int HeroLevel,
-    long Reputation);
+    long Reputation,
+    long Score = 0,
+    string Metric = "reputation");
 
 public sealed record PublicPortalMetadata(
     string ServerName,
     string ClientVersion,
     bool LauncherDownloadAvailable,
-    IReadOnlyList<string> SupportedLanguages);
+    IReadOnlyList<string> SupportedLanguages,
+    string ApiVersion = "v1",
+    string DataSource = "signed-snapshot");
