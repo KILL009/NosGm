@@ -1,0 +1,62 @@
+name: Validate NosGM Launcher Package
+
+on:
+  pull_request:
+    paths:
+      - "Launcher/**"
+      - ".github/workflows/validate-launcher-package.yml"
+      - "AUTHORS.md"
+      - "NOTICE.md"
+      - "THIRD_PARTY_NOTICES.md"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  package-smoke-test:
+    runs-on: windows-2022
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up .NET 9
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 9.0.x
+
+      - name: Generate ephemeral release key
+        shell: pwsh
+        run: |
+          $root = Join-Path $env:RUNNER_TEMP "nosgm-launcher-package"
+          New-Item -ItemType Directory -Path $root -Force | Out-Null
+          dotnet run --project Launcher/src/NosGM.ManifestBuilder --configuration Release -- keygen `
+            --private-key (Join-Path $root "private.pem") `
+            --public-key (Join-Path $root "public.pem")
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Publish and verify clean launcher package
+        shell: pwsh
+        run: |
+          $root = Join-Path $env:RUNNER_TEMP "nosgm-launcher-package"
+          $package = Join-Path $root "output"
+          ./Launcher/scripts/publish-launcher.ps1 `
+            -Version "0.0.0-ci" `
+            -ManifestUri "https://updates.example.test/nosgm/release-manifest.json" `
+            -ContentBaseUri "https://updates.example.test/nosgm/content/" `
+            -KeyId "nosgm-ci-key" `
+            -PublicKeyPath (Join-Path $root "public.pem") `
+            -OutputDirectory $package `
+            -Runtime win-x64
+          ./Launcher/scripts/verify-launcher-package.ps1 -PackageDirectory $package
+
+      - name: Remove ephemeral signing key
+        if: always()
+        shell: pwsh
+        run: |
+          $key = Join-Path $env:RUNNER_TEMP "nosgm-launcher-package/private.pem"
+          if (Test-Path $key) {
+            Remove-Item $key -Force
+          }
