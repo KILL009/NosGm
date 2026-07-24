@@ -35,7 +35,9 @@ namespace NosGm.Handler.BasicPacket.CharScreen
 
         public async Task DeleteCharacterAsync(CharacterDeletePacket characterDeletePacket)
         {
-            var lastDelete = DAOFactory.GeneralLogDAO.LoadByAccount(Session.Account.AccountId).OrderByDescending(d => d.LogId).FirstOrDefault(c => c.LogType == "Deleted");
+            GeneralLogDTO lastDelete = DAOFactory.GeneralLogDAO.LoadLatestByAccountAndType(
+                Session.Account.AccountId,
+                "Deleted");
 
             if (lastDelete?.Timestamp.AddMinutes(5) > DateTime.Now)
             {
