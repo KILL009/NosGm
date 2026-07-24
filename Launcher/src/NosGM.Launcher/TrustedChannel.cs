@@ -20,7 +20,7 @@ internal static class TrustedChannel
            string.IsNullOrEmpty(contentUri.UserInfo) &&
            string.IsNullOrEmpty(contentUri.Query) &&
            string.IsNullOrEmpty(contentUri.Fragment) &&
-           contentUri.AbsolutePath.EndsWith('/', StringComparison.Ordinal) &&
+           contentUri.AbsolutePath.EndsWith("/", StringComparison.Ordinal) &&
            !manifestUri.Host.EndsWith(".invalid", StringComparison.OrdinalIgnoreCase) &&
            !contentUri.Host.EndsWith(".invalid", StringComparison.OrdinalIgnoreCase) &&
            !string.Equals(KeyId, "UNCONFIGURED", StringComparison.Ordinal) &&
