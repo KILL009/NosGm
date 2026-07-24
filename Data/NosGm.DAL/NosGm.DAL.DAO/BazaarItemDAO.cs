@@ -22,11 +22,11 @@ namespace NosGm.DAL.DAO
             {
                 using (var context = DataAccessHelper.CreateContext())
                 {
-                    var BazaarItem = context.BazaarItem.FirstOrDefault(c => c.BazaarItemId.Equals(bazaarItemId));
+                    BazaarItem bazaarItem = context.BazaarItem.FirstOrDefault(c => c.BazaarItemId == bazaarItemId);
 
-                    if (BazaarItem != null)
+                    if (bazaarItem != null)
                     {
-                        context.BazaarItem.Remove(BazaarItem);
+                        context.BazaarItem.Remove(bazaarItem);
                         context.SaveChanges();
                     }
 
@@ -47,16 +47,16 @@ namespace NosGm.DAL.DAO
             {
                 using (var context = DataAccessHelper.CreateContext())
                 {
-                    var bazaarItemId = bazaarItem.BazaarItemId;
-                    var entity = context.BazaarItem.FirstOrDefault(c => c.BazaarItemId.Equals(bazaarItemId));
+                    long bazaarItemId = bazaarItem.BazaarItemId;
+                    BazaarItem entity = context.BazaarItem.FirstOrDefault(c => c.BazaarItemId == bazaarItemId);
 
                     if (entity == null)
                     {
-                        bazaarItem = insert(bazaarItem, context);
+                        bazaarItem = Insert(bazaarItem, context);
                         return SaveResult.Inserted;
                     }
 
-                    bazaarItem = update(entity, bazaarItem, context);
+                    bazaarItem = Update(entity, bazaarItem, context);
                     return SaveResult.Updated;
                 }
             }
@@ -71,12 +71,54 @@ namespace NosGm.DAL.DAO
         {
             using (var context = DataAccessHelper.CreateContext())
             {
-                var result = new List<BazaarItemDTO>();
-                foreach (var bazaarItem in context.BazaarItem)
+                return context.BazaarItem.AsNoTracking()
+                    .Select(entity => new BazaarItemDTO
+                    {
+                        AccountId = entity.AccountId,
+                        RegistrationIP = entity.RegistrationIP,
+                        CurrentIp = entity.CurrentIp,
+                        Amount = entity.Amount,
+                        BazaarItemId = entity.BazaarItemId,
+                        DateStart = entity.DateStart,
+                        Duration = entity.Duration,
+                        IsPackage = entity.IsPackage,
+                        ItemInstanceId = entity.ItemInstanceId,
+                        MedalUsed = entity.MedalUsed,
+                        Price = entity.Price,
+                        SellerId = entity.SellerId
+                    })
+                    .ToList();
+            }
+        }
+
+        public IEnumerable<BazaarItemLoadDTO> LoadAllHydrated()
+        {
+            using (var context = DataAccessHelper.CreateContext())
+            {
+                List<BazaarItem> entities = context.BazaarItem.AsNoTracking()
+                    .Include(entity => entity.Character)
+                    .Include(entity => entity.ItemInstance)
+                    .ToList();
+
+                var result = new List<BazaarItemLoadDTO>(entities.Count);
+                foreach (BazaarItem entity in entities)
                 {
-                    var dto = new BazaarItemDTO();
-                    BazaarItemMapper.ToBazaarItemDTO(bazaarItem, dto);
-                    result.Add(dto);
+                    var bazaarItem = new BazaarItemDTO();
+                    BazaarItemMapper.ToBazaarItemDTO(entity, bazaarItem);
+
+                    ItemInstanceDTO itemInstance = null;
+                    if (entity.ItemInstance != null)
+                    {
+                        itemInstance = new ItemInstanceDTO();
+                        ItemInstanceMapper.ToItemInstanceDTO(entity.ItemInstance, itemInstance);
+                    }
+
+                    result.Add(new BazaarItemLoadDTO
+                    {
+                        BazaarItem = bazaarItem,
+                        ItemInstance = itemInstance,
+                        OwnerName = entity.Character?.Name
+                    });
                 }
 
                 return result;
@@ -90,13 +132,11 @@ namespace NosGm.DAL.DAO
                 using (var context = DataAccessHelper.CreateContext())
                 {
                     var dto = new BazaarItemDTO();
-                    if (BazaarItemMapper.ToBazaarItemDTO(
-                        context.BazaarItem.FirstOrDefault(i => i.BazaarItemId.Equals(bazaarItemId)), dto))
-                    {
-                        return dto;
-                    }
-
-                    return null;
+                    return BazaarItemMapper.ToBazaarItemDTO(
+                        context.BazaarItem.AsNoTracking()
+                            .FirstOrDefault(item => item.BazaarItemId == bazaarItemId), dto)
+                        ? dto
+                        : null;
                 }
             }
             catch (Exception e)
@@ -112,13 +152,17 @@ namespace NosGm.DAL.DAO
             {
                 using (var context = DataAccessHelper.CreateContext())
                 {
-                    foreach (var entity in context.BazaarItem.Where(e =>
-                        DbFunctions.AddDays(DbFunctions.AddHours(e.DateStart, e.Duration), e.MedalUsed ? 30 : 7) <
-                        DateTime.Now))
+                    List<BazaarItem> expiredItems = context.BazaarItem.Where(entity =>
+                            DbFunctions.AddDays(DbFunctions.AddHours(entity.DateStart, entity.Duration),
+                                entity.MedalUsed ? 30 : 7) < DateTime.Now)
+                        .ToList();
+
+                    if (expiredItems.Count == 0)
                     {
-                        context.BazaarItem.Remove(entity);
+                        return;
                     }
 
+                    context.BazaarItem.RemoveRange(expiredItems);
                     context.SaveChanges();
                 }
             }
@@ -130,46 +174,47 @@ namespace NosGm.DAL.DAO
 
         public IEnumerable<BazaarItemDTO> LoadByCharacterId(long characterId)
         {
-            var result = new List<BazaarItemDTO>();
             try
             {
-                var context = DataAccessHelper.CreateContext();
-                var bazaarItems = context.BazaarItem.Where(i => i.SellerId.Equals(characterId));
-
-                var dto = new BazaarItemDTO();
-
-                foreach (var item in bazaarItems)
+                using (var context = DataAccessHelper.CreateContext())
                 {
-                    if (BazaarItemMapper.ToBazaarItemDTO(item, dto))
-                    {
-                        result.Add(dto);
-                    }
+                    return context.BazaarItem.AsNoTracking()
+                        .Where(item => item.SellerId == characterId)
+                        .Select(entity => new BazaarItemDTO
+                        {
+                            AccountId = entity.AccountId,
+                            RegistrationIP = entity.RegistrationIP,
+                            CurrentIp = entity.CurrentIp,
+                            Amount = entity.Amount,
+                            BazaarItemId = entity.BazaarItemId,
+                            DateStart = entity.DateStart,
+                            Duration = entity.Duration,
+                            IsPackage = entity.IsPackage,
+                            ItemInstanceId = entity.ItemInstanceId,
+                            MedalUsed = entity.MedalUsed,
+                            Price = entity.Price,
+                            SellerId = entity.SellerId
+                        })
+                        .ToList();
                 }
-
-                return result;
             }
             catch (Exception e)
             {
                 Logger.Log.Error("LoadByCharacterId", e);
-                return null;
+                return Enumerable.Empty<BazaarItemDTO>();
             }
         }
 
-        private static BazaarItemDTO insert(BazaarItemDTO bazaarItem, NosGmContext context)
+        private static BazaarItemDTO Insert(BazaarItemDTO bazaarItem, NosGmContext context)
         {
             var entity = new BazaarItem();
             BazaarItemMapper.ToBazaarItem(bazaarItem, entity);
             context.BazaarItem.Add(entity);
             context.SaveChanges();
-            if (BazaarItemMapper.ToBazaarItemDTO(entity, bazaarItem))
-            {
-                return bazaarItem;
-            }
-
-            return null;
+            return BazaarItemMapper.ToBazaarItemDTO(entity, bazaarItem) ? bazaarItem : null;
         }
 
-        private static BazaarItemDTO update(BazaarItem entity, BazaarItemDTO bazaarItem, NosGmContext context)
+        private static BazaarItemDTO Update(BazaarItem entity, BazaarItemDTO bazaarItem, NosGmContext context)
         {
             if (entity != null)
             {
@@ -177,12 +222,7 @@ namespace NosGm.DAL.DAO
                 context.SaveChanges();
             }
 
-            if (BazaarItemMapper.ToBazaarItemDTO(entity, bazaarItem))
-            {
-                return bazaarItem;
-            }
-
-            return null;
+            return BazaarItemMapper.ToBazaarItemDTO(entity, bazaarItem) ? bazaarItem : null;
         }
 
         #endregion
