@@ -69,6 +69,7 @@
     <ApplicationIcon>nosgm-emulator-icon.ico</ApplicationIcon>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="IAccountDailyActionDAO.cs" />
     <Compile Include="IBattlePassAccountLogDAO.cs" />
     <Compile Include="IBattlePassPrizeDAO.cs" />
     <Compile Include="IBattlePassQuestDAO.cs" />
