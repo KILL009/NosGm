@@ -8,6 +8,7 @@ namespace NosGm.DAL
         #region Members
 
         private static IAccountDAO _accountDAO;
+        private static IAccountDailyActionDAO _accountDailyActionDAO;
         private static IBattlePassAccountLogDAO _battlePassAccountLogDAO;
         private static IBattlePassQuestDAO _battlePassQuestDAO;
         private static IBattlePassPrizeDAO _battlePassPrizeDAOM;
@@ -77,6 +78,9 @@ namespace NosGm.DAL
 
         #region Properties
         public static IAccountDAO AccountDAO => _accountDAO ?? (_accountDAO = new AccountDAO());
+
+        public static IAccountDailyActionDAO AccountDailyActionDAO =>
+            _accountDailyActionDAO ?? (_accountDailyActionDAO = new AccountDailyActionDAO());
 
         public static IBattlePassAccountLogDAO BattlePassAccountLogDAO => _battlePassAccountLogDAO ??= new BattlePassAccountLogDAO();
 

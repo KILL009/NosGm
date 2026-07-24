@@ -4,10 +4,12 @@ using NosGm.DAL.EF.Helpers;
 using NosGm.DAL.Interface;
 using NosGm.Data;
 using NosGm.Data.Enums;
+using NosGm.Domain;
 using NosGm.Mapper.Mappers;
 using System;
 using System.Collections.Generic;
 using System.Data.Entity;
+using System.Diagnostics;
 using System.Linq;
 using System.Threading.Tasks;
 
@@ -16,6 +18,22 @@ namespace NosGm.DAL.DAO
     public class GeneralLogDAO : IGeneralLogDAO
     {
         #region Methods
+
+        public bool Enqueue(GeneralLogDTO generalLog)
+        {
+            if (generalLog == null)
+            {
+                return false;
+            }
+
+            EnsureTimestamp(generalLog);
+            if (GeneralLogBatchWriter.TryEnqueue(generalLog))
+            {
+                return true;
+            }
+
+            return Insert(generalLog) != null;
+        }
 
         public bool ExistsForAccount(long accountId, string logData, DateTime fromInclusive, DateTime toExclusive)
         {
@@ -42,6 +60,8 @@ namespace NosGm.DAL.DAO
             }
         }
 
+        public bool FlushPending(TimeSpan timeout) => GeneralLogBatchWriter.Flush(timeout);
+
         public bool IdAlreadySet(long id)
         {
             try
@@ -65,6 +85,8 @@ namespace NosGm.DAL.DAO
                 return null;
             }
 
+            var stopwatch = Stopwatch.StartNew();
+            bool success = false;
             try
             {
                 using (var context = DataAccessHelper.CreateContext())
@@ -75,13 +97,19 @@ namespace NosGm.DAL.DAO
                     context.GeneralLog.Add(entity);
                     context.SaveChanges();
 
-                    return GeneralLogMapper.ToGeneralLogDTO(entity, generalLog) ? generalLog : null;
+                    success = GeneralLogMapper.ToGeneralLogDTO(entity, generalLog);
+                    return success ? generalLog : null;
                 }
             }
             catch (Exception e)
             {
                 Logger.Error(e);
                 return null;
+            }
+            finally
+            {
+                stopwatch.Stop();
+                LogPipelineMonitor.RecordGeneralLogWrite(1, stopwatch.ElapsedTicks, success);
             }
         }
 
@@ -271,7 +299,7 @@ namespace NosGm.DAL.DAO
         public void WriteGeneralLog(long accountId, string ipAddress, long? characterId, string logType,
             string logData)
         {
-            Insert(new GeneralLogDTO
+            Enqueue(new GeneralLogDTO
             {
                 AccountId = accountId,
                 CharacterId = characterId,
@@ -289,6 +317,8 @@ namespace NosGm.DAL.DAO
                 return null;
             }
 
+            var stopwatch = Stopwatch.StartNew();
+            bool success = false;
             try
             {
                 using (var context = DataAccessHelper.CreateContext())
@@ -299,13 +329,19 @@ namespace NosGm.DAL.DAO
                     context.GeneralLog.Add(entity);
                     await context.SaveChangesAsync().ConfigureAwait(false);
 
-                    return GeneralLogMapper.ToGeneralLogDTO(entity, generalLog) ? generalLog : null;
+                    success = GeneralLogMapper.ToGeneralLogDTO(entity, generalLog);
+                    return success ? generalLog : null;
                 }
             }
             catch (Exception e)
             {
                 Logger.Error(e);
                 return null;
+            }
+            finally
+            {
+                stopwatch.Stop();
+                LogPipelineMonitor.RecordGeneralLogWrite(1, stopwatch.ElapsedTicks, success);
             }
         }
 

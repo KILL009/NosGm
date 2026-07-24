@@ -47,6 +47,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="AccountDAO.cs" />
+    <Compile Include="AccountDailyActionDAO.cs" />
     <Compile Include="BattlePassAccountLogDAO.cs" />
     <Compile Include="BattlePassPrizeDAO.cs" />
     <Compile Include="BattlePassQuestDAO.cs" />
@@ -78,6 +79,7 @@
     <Compile Include="FamilyCharacterDAO.cs" />
     <Compile Include="FamilyDAO.cs" />
     <Compile Include="FamilyLogDAO.cs" />
+    <Compile Include="GeneralLogBatchWriter.cs" />
     <Compile Include="GeneralLogDAO.cs" />
     <Compile Include="GmCaseDAO.cs" />
     <Compile Include="GmSanctionDAO.cs" />

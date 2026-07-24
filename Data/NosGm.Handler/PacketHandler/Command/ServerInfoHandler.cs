@@ -86,12 +86,18 @@ namespace NosGm.Handler.PacketHandler.Command
                     ShowSecurityMetrics();
                     break;
 
+                case "logs":
+                case "log":
+                    ShowLogMetrics(arguments.Skip(1).FirstOrDefault());
+                    break;
+
                 case "reset":
                     ServerPerformanceMonitor.Instance.Reset();
                     PacketSecurityMonitor.Instance.Reset();
-                    SendPerformanceLine("NosGM performance and packet guard counters were reset.", 11);
+                    LogPipelineMonitor.Reset();
+                    SendPerformanceLine("NosGM performance, packet guard and log pipeline counters were reset.", 11);
                     Logger.LogUserEvent("PERF_RESET", Session.GenerateIdentity(),
-                        "Runtime, network, packet handler and packet guard counters reset.");
+                        "Runtime, network, packet handler, packet guard and log pipeline counters reset.");
                     break;
 
                 case "help":
@@ -263,6 +269,7 @@ namespace NosGm.Handler.PacketHandler.Command
             ServerManager manager = ServerManager.Instance;
             PerformanceSnapshot metrics = ServerPerformanceMonitor.Instance.Capture();
             PacketSecuritySnapshot security = PacketSecurityMonitor.Instance.Capture();
+            LogPipelineSnapshot logPipeline = LogPipelineMonitor.Capture();
             List<ClientSession> sessions = manager.Sessions.ToList();
             MapInstance[] mapInstances = ServerManager._mapinstances.Values
                 .Where(map => map != null)
@@ -302,9 +309,10 @@ namespace NosGm.Handler.PacketHandler.Command
             SendPerformanceLine(
                 $"GC Gen0 {metrics.Gen0Collections} | Gen1 {metrics.Gen1Collections} | Gen2 {metrics.Gen2Collections}");
 
-            string health = BuildHealthSummary(metrics, security, sessions.Count, mapInstances.Length);
+            string health = BuildHealthSummary(
+                metrics, security, logPipeline, sessions.Count, mapInstances.Length);
             SendPerformanceLine($"Health: {health}", health == "OK" ? (byte)10 : (byte)12);
-            SendPerformanceLine("Use $Perf packets, $Perf maps, $Perf security or $Perf help.", 11);
+            SendPerformanceLine("Use $Perf packets, $Perf maps, $Perf security, $Perf logs or $Perf help.", 11);
         }
 
         private void ShowPacketMetrics(string sortArgument)
@@ -387,6 +395,45 @@ namespace NosGm.Handler.PacketHandler.Command
             }
         }
 
+        private void ShowLogMetrics(string argument)
+        {
+            if (string.Equals(argument, "flush", StringComparison.OrdinalIgnoreCase))
+            {
+                bool flushed = DAOFactory.GeneralLogDAO.FlushPending(TimeSpan.FromSeconds(5));
+                SendPerformanceLine(
+                    flushed
+                        ? "GeneralLog queue flushed successfully."
+                        : "GeneralLog queue did not empty within five seconds.",
+                    flushed ? (byte)10 : (byte)11);
+            }
+
+            LogPipelineSnapshot metrics = LogPipelineMonitor.Capture();
+            bool dailyActionAvailable = DAOFactory.AccountDailyActionDAO.IsAvailable();
+
+            SendPerformanceLine("========== NosGM Log Pipeline ==========", 11);
+            SendPerformanceLine(
+                $"Daily action table {(dailyActionAvailable ? "READY" : "MISSING")} | Attempts {metrics.DailyActionAttempts:N0} | Claimed {metrics.DailyActionClaimed:N0} | Duplicates {metrics.DailyActionDuplicates:N0}",
+                dailyActionAvailable ? (byte)10 : (byte)11);
+            SendPerformanceLine(
+                $"Daily action unavailable {metrics.DailyActionUnavailable:N0} | Errors {metrics.DailyActionErrors:N0}");
+            SendPerformanceLine(
+                $"GeneralLog queue {metrics.GeneralLogQueueDepth:N0}/{metrics.GeneralLogQueueCapacity:N0} | Enqueued {metrics.GeneralLogEnqueued:N0} | Written {metrics.GeneralLogWritten:N0}");
+            SendPerformanceLine(
+                $"GeneralLog batches {metrics.GeneralLogBatches:N0} | Avg {metrics.GeneralLogAverageBatchMilliseconds:N3} ms | Max {metrics.GeneralLogMaximumBatchMilliseconds:N3} ms");
+            SendPerformanceLine(
+                $"GeneralLog fallbacks {metrics.GeneralLogQueueFallbacks:N0} | Dropped {metrics.GeneralLogDropped:N0} | Errors {metrics.GeneralLogWriteErrors:N0}");
+            SendPerformanceLine(
+                $"UDP queue {metrics.UdpQueueDepth:N0}/{metrics.UdpQueueCapacity:N0} | Enqueued {metrics.UdpEnqueued:N0} | Sent {metrics.UdpSent:N0}");
+            SendPerformanceLine(
+                $"UDP dropped {metrics.UdpDropped:N0} | Errors {metrics.UdpErrors:N0}");
+            SendPerformanceLine(
+                $"Mongo attempts {metrics.MongoAttempts:N0} | Success {metrics.MongoSucceeded:N0} | Errors {metrics.MongoErrors:N0} | Avg {metrics.MongoAverageMilliseconds:N3} ms | Max {metrics.MongoMaximumMilliseconds:N3} ms");
+
+            string health = BuildLogHealth(metrics, dailyActionAvailable);
+            SendPerformanceLine($"Log health: {health}", health == "OK" ? (byte)10 : (byte)12);
+            SendPerformanceLine("Use $Perf logs flush to wait for pending GeneralLog batches.", 11);
+        }
+
         private void ShowPerformanceHelp()
         {
             SendPerformanceLine("========== $Perf help ==========", 11);
@@ -398,7 +445,9 @@ namespace NosGm.Handler.PacketHandler.Command
             SendPerformanceLine("$Perf packets errors: handlers with the most exceptions.");
             SendPerformanceLine("$Perf maps: map instances ordered by players and entities.");
             SendPerformanceLine("$Perf security: packet floods, blocked handlers and disconnects.");
-            SendPerformanceLine("$Perf reset: clear performance, security and peak counters.");
+            SendPerformanceLine("$Perf logs: GeneralLog, daily action, UDP and Mongo telemetry.");
+            SendPerformanceLine("$Perf logs flush: wait up to five seconds for queued GeneralLogs.");
+            SendPerformanceLine("$Perf reset: clear performance, security, log and peak counters.");
         }
 
         private static HandlerSort ParseHandlerSort(string argument)
@@ -425,6 +474,7 @@ namespace NosGm.Handler.PacketHandler.Command
         private static string BuildHealthSummary(
             PerformanceSnapshot metrics,
             PacketSecuritySnapshot security,
+            LogPipelineSnapshot logPipeline,
             int sessionCount,
             int mapCount)
         {
@@ -453,6 +503,49 @@ namespace NosGm.Handler.PacketHandler.Command
             if (security.Disconnects > 0)
             {
                 warnings.Add("PACKET FLOOD");
+            }
+            if (logPipeline.GeneralLogDropped > 0 || logPipeline.UdpDropped > 0)
+            {
+                warnings.Add("LOG DROPPING");
+            }
+            if (logPipeline.GeneralLogWriteErrors > 0 || logPipeline.UdpErrors > 0 ||
+                logPipeline.MongoErrors > 0 || logPipeline.DailyActionErrors > 0)
+            {
+                warnings.Add("LOG ERRORS");
+            }
+            if (logPipeline.GeneralLogQueueCapacity > 0 &&
+                logPipeline.GeneralLogQueueDepth >= logPipeline.GeneralLogQueueCapacity * 0.8)
+            {
+                warnings.Add("LOG QUEUE HIGH");
+            }
+
+            return warnings.Count == 0 ? "OK" : string.Join(" | ", warnings);
+        }
+
+        private static string BuildLogHealth(LogPipelineSnapshot metrics, bool dailyActionAvailable)
+        {
+            var warnings = new List<string>();
+            if (!dailyActionAvailable)
+            {
+                warnings.Add("DAILY TABLE MISSING");
+            }
+            if (metrics.GeneralLogQueueCapacity > 0 &&
+                metrics.GeneralLogQueueDepth >= metrics.GeneralLogQueueCapacity * 0.8)
+            {
+                warnings.Add("QUEUE HIGH");
+            }
+            if (metrics.GeneralLogDropped > 0 || metrics.UdpDropped > 0)
+            {
+                warnings.Add("DROPPING");
+            }
+            if (metrics.GeneralLogWriteErrors > 0 || metrics.UdpErrors > 0 ||
+                metrics.MongoErrors > 0 || metrics.DailyActionErrors > 0)
+            {
+                warnings.Add("ERRORS");
+            }
+            if (metrics.GeneralLogMaximumBatchMilliseconds >= 1000)
+            {
+                warnings.Add("DB SLOW");
             }
 
             return warnings.Count == 0 ? "OK" : string.Join(" | ", warnings);

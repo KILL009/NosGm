@@ -10,7 +10,11 @@ namespace NosGm.DAL.Interface
     {
         #region Methods
 
+        bool Enqueue(GeneralLogDTO generalLog);
+
         bool ExistsForAccount(long accountId, string logData, DateTime fromInclusive, DateTime toExclusive);
+
+        bool FlushPending(TimeSpan timeout);
 
         bool IdAlreadySet(long id);
 

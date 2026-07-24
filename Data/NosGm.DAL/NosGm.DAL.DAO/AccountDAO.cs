@@ -9,6 +9,7 @@ using NosGm.LoggerService;
 using System;
 using System.Collections.Generic;
 using System.Data.Entity;
+using System.Diagnostics;
 using System.Linq;
 using System.Threading.Tasks;
 
@@ -161,28 +162,51 @@ namespace NosGm.DAL.DAO
         public async Task WriteGeneralLog(long accountId, string ipAddress, long? characterId, GeneralLogType logType,
             string logData)
         {
+            var dto = new GeneralLogDTO
+            {
+                AccountId = accountId,
+                IpAddress = ipAddress,
+                Timestamp = DateTime.Now,
+                LogType = logType.ToString(),
+                LogData = logData,
+                CharacterId = characterId
+            };
+
+            if (GeneralLogBatchWriter.TryEnqueue(dto))
+            {
+                return;
+            }
+
+            var stopwatch = Stopwatch.StartNew();
+            bool success = false;
             try
             {
                 using (var context = DataAccessHelper.CreateContext())
                 {
                     var log = new GeneralLog
                     {
-                        AccountId = accountId,
-                        IpAddress = ipAddress,
-                        Timestamp = DateTime.Now,
-                        LogType = logType.ToString(),
-                        LogData = logData,
-                        CharacterId = characterId
+                        AccountId = dto.AccountId,
+                        IpAddress = dto.IpAddress,
+                        Timestamp = dto.Timestamp,
+                        LogType = dto.LogType,
+                        LogData = dto.LogData,
+                        CharacterId = dto.CharacterId
                     };
 
                     context.GeneralLog.Add(log);
                     await context.SaveChangesAsync().ConfigureAwait(false);
+                    success = true;
                 }
             }
             catch (Exception e)
             {
                 await LoggerService.LogServer.Logger.LogAsync($"Message: {e.Message} | Source: {e.Source} | Data: {e.Data}", LogType.ERROR)
                     .ConfigureAwait(false);
+            }
+            finally
+            {
+                stopwatch.Stop();
+                LogPipelineMonitor.RecordGeneralLogWrite(1, stopwatch.ElapsedTicks, success);
             }
         }
 
