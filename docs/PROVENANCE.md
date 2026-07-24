@@ -16,6 +16,7 @@ This register tracks where the code in NosGM came from and which license terms a
 - `9eb44d2a0041b49375fabb730121a01acd7bae87` identifies the immutable `Elendan/Notale-Text-Picker` snapshot adapted into `Tools/NosGM.ClientThemeEditor`.
 - `9d1e61c717b6a49ca221a5f2d855dfa5fa11591c` identifies the reviewed `Pumba98/Nostale-ClientColorizer` snapshot recorded only as prior art; no source, signature or offset is imported.
 - `50aa50580aa35a45b156a1899a340a25e50f7fb5` identifies the reviewed `Mati18505/HexTaleLauncher` snapshot recorded only as prior art for differential updates and repair. The NosGM launcher is an independent implementation and imports no HexTaleLauncher source, binary, artwork, endpoint or signing material.
+- `aaaa3b6a39d944de45653b2a5db3105bc4c86d6d` identifies the reviewed `KILL009/noswings-website-old` snapshot recorded only as historical product-map and security prior art for `Web/`. NosGM Web is an independent implementation and imports no legacy source, credential, endpoint, commercial theme, image, font or asset.
 
 NosGM is an OpenNos-derived emulator. The exact OpenNos base revision can continue to be narrowed through file and commit comparison, but no separate emulator lineage is claimed.
 
@@ -36,6 +37,8 @@ NosGM is an OpenNos-derived emulator. The exact OpenNos base revision can contin
 | Nostale-ClientColorizer prior-art review | `https://github.com/Pumba98/Nostale-ClientColorizer` | Snapshot `9d1e61c717b6a49ca221a5f2d855dfa5fa11591c`, reviewed only to identify object-label and weapon-glow feature categories | No reuse license found in the reviewed repository tree | No code, signatures or offsets imported; future implementation must be independent |
 | HexTaleLauncher prior-art review | `https://github.com/Mati18505/HexTaleLauncher` | Snapshot `50aa50580aa35a45b156a1899a340a25e50f7fb5`, reviewed only for differential-update and repair concepts | Frontend package metadata declares MIT, but no repository-wide license covering all reviewed backend sources was found | No source, binaries, artwork, endpoints or signing material imported; `Launcher/` is original NosGM work |
 | NosGM Launcher | `Launcher/` in `https://github.com/KILL009/NosGm` pending extraction to a dedicated repository | NosGM Git history beginning with the launcher foundation branch | Original NosGM work under the MIT License in `Launcher/LICENSE`; prior-art boundaries recorded in `Launcher/NOTICE.md` | In development; no active production channel or proprietary client content included |
+| noswings-website-old prior-art review | `https://github.com/KILL009/noswings-website-old` | Snapshot `aaaa3b6a39d944de45653b2a5db3105bc4c86d6d`, reviewed only for historical public-portal requirements and security lessons | No repository-wide reuse license established; reviewed styles identify a commercially licensed ThemeForest design | No legacy source, credential, endpoint, theme, image, font or asset imported |
+| NosGM Web | `Web/` in `https://github.com/KILL009/NosGm` pending extraction to a dedicated repository | NosGM Git history beginning with the web foundation branch | Original NosGM work under the MIT License in `Web/LICENSE`; prior-art boundaries recorded in `Web/NOTICE.md` | In development; package-free public portal with no accounts, payments, production endpoints or proprietary content |
 | NosGM modifications | `https://github.com/KILL009/NosGm` | Git history after the source import | Copyright held by the respective NosGM contributors | Verified by repository history |
 
 ## License structure
@@ -52,6 +55,7 @@ NosGM contains these verified license lineages:
 - `Tools/NosGM.ResourceExplorer` preserves the Boost Software License 1.0 from the reviewed OnexExplorer source;
 - `Tools/NosGM.ClientThemeEditor` preserves the MIT License from the reviewed Notale-Text-Picker source;
 - `Launcher/` is original NosGM work distributed under the MIT License in `Launcher/LICENSE` and is kept outside the server solution;
+- `Web/` is original NosGM work distributed under the MIT License in `Web/LICENSE` and is kept outside the server solution;
 - a complete GPL version 3 license copy is bundled under `LICENSES/GPL-3.0-only/`.
 
 GPLv3 obligations apply to the GPL-3.0-only components and to combined distributions when those license terms govern the combination. MIT and Boost notices must accompany their respective covered components as required.
@@ -71,6 +75,7 @@ GPLv3 obligations apply to the GPL-3.0-only components and to combined distribut
 - `Tools/NosGM.ResourceExplorer/NOTICE.md` records the OnexExplorer source, immutable commit, Boost license, fork uncertainty and NosGM safety modifications.
 - `Tools/NosGM.ClientThemeEditor/NOTICE.md` records the Notale-Text-Picker source, immutable commit, Elendan copyright, Cryless and Fizo55 credits, MIT license, independent ClientColorizer boundary and NosGM safety modifications.
 - `Launcher/NOTICE.md` records the HexTaleLauncher prior-art review, immutable revision, Mati18505 credit, lack of copied implementation and the independent NosGM security design.
+- `Web/NOTICE.md` records the noswings-website-old prior-art review, immutable revision, commercial-theme boundary and the independent NosGM implementation.
 - File-specific `.license` sidecars restore attribution for inherited OpenNos files whose project header was renamed during the NosGM identity migration.
 
 ## Continuing provenance work
