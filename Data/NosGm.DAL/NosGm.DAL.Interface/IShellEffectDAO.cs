@@ -10,6 +10,8 @@ namespace NosGm.DAL.Interface
     {
         #region Methods
 
+        int CleanupDuplicateNonRuneEffects(long characterId, int maximumEffects = 15);
+
         DeleteResult DeleteByEquipmentSerialId(Guid id, bool isRune = false);
 
         ShellEffectDTO InsertOrUpdate(ShellEffectDTO shelleffect);
