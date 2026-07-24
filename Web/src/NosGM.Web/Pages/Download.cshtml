@@ -1,0 +1,24 @@
+@page
+@model DownloadModel
+@{
+    ViewData["Title"] = Model.T("download.title");
+}
+<section class="page-hero"><div class="shell"><p class="eyebrow">NosGM Launcher</p><h1>@Model.T("download.title")</h1><p>@Model.T("download.body")</p></div></section>
+<section class="section shell">
+    <div class="download-panel">
+        <div class="download-mark">N</div>
+        <div class="download-copy">
+            <h2>NosGM Launcher</h2>
+            <dl><div><dt>@Model.T("client.version")</dt><dd>@Model.Options.ClientVersion</dd></div><div><dt>@Model.T("launcher.version")</dt><dd>foundation</dd></div></dl>
+            <p>@Model.T("download.security")</p>
+        </div>
+        @if (Model.Options.IsLauncherDownloadAvailable)
+        {
+            <a class="button button-primary" href="@Model.Options.LauncherDownloadUrl" rel="noopener noreferrer">@Model.T("nav.download")</a>
+        }
+        else
+        {
+            <span class="button button-disabled" aria-disabled="true">@Model.T("download.unavailable")</span>
+        }
+    </div>
+</section>

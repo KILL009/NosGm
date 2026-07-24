@@ -1,0 +1,6 @@
+@page
+@model ErrorModel
+@{
+    ViewData["Title"] = Model.T("error.title");
+}
+<section class="page-hero"><div class="shell"><p class="eyebrow">Safe stop</p><h1>@Model.T("error.title")</h1><p>@Model.T("error.body")</p><a class="button button-primary" asp-page="/Index">@Model.T("nav.home")</a></div></section>

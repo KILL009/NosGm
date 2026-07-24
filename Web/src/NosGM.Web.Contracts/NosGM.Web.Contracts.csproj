@@ -1,0 +1,5 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>Versioned public portal contracts for NosGM Web.</Description>
+  </PropertyGroup>
+</Project>

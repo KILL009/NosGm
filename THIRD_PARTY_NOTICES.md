@@ -21,9 +21,11 @@ This document records direct dependencies found during the compliance review. It
 | Nostale-ClientColorizer | Reviewed at `Pumba98/Nostale-ClientColorizer@9d1e61c717b6a49ca221a5f2d855dfa5fa11591c` only as prior art for object-label and weapon-glow categories | No reuse license found in the reviewed tree; no code, signatures or offsets imported |
 | HexTaleLauncher | Reviewed at `Mati18505/HexTaleLauncher@50aa50580aa35a45b156a1899a340a25e50f7fb5` only as prior art for differential updates and repair | Frontend metadata declared MIT, but no repository-wide backend license was found; no source, binary, artwork, endpoint or signing material imported |
 | NosGM Launcher | Original NosGM implementation under `Launcher/`, kept outside `NosGm.sln` and intended for later extraction into a dedicated repository | MIT under `Launcher/LICENSE`; prior-art credit and boundaries preserved in `Launcher/NOTICE.md` |
+| noswings-website-old | Reviewed at `KILL009/noswings-website-old@aaaa3b6a39d944de45653b2a5db3105bc4c86d6d` only as historical product-map and security prior art for `Web/` | No repository-wide reuse license established; reviewed UI references a commercial ThemeForest license; no source, credential, endpoint, theme, image, font or asset imported |
+| NosGM Web | Original package-free ASP.NET Core implementation under `Web/`, kept outside `NosGm.sln` and intended for later extraction into a dedicated repository | MIT under `Web/LICENSE`; prior-art credit and boundaries preserved in `Web/NOTICE.md` |
 | NosGM | Current modifications and new work | Copyright remains with NosGM contributors; upstream rights are preserved |
 
-The component-specific evidence is described in each tool's `NOTICE.md`, `Launcher/NOTICE.md` and in `docs/PROVENANCE.md`. Complete GPLv3 text is bundled under `LICENSES/GPL-3.0-only/`; MIT and Boost texts are bundled in their respective component directories.
+The component-specific evidence is described in each tool's `NOTICE.md`, `Launcher/NOTICE.md`, `Web/NOTICE.md` and in `docs/PROVENANCE.md`. Complete GPLv3 text is bundled under `LICENSES/GPL-3.0-only/`; MIT and Boost texts are bundled in their respective component directories.
 
 ## Direct NuGet dependencies observed
 
@@ -45,7 +47,7 @@ The following entries were observed in inspected project files. License expressi
 | Za.NosGame.Fetcher | 1.0.21 | Used only by `Tools/NosGM.DataUpdater`; verify package metadata and preserve required notices before redistributing the tool |
 | Za.NosGame.RessourceLoader | 1.0.21 | Used only by `Tools/NosGM.DataUpdater`; verify package metadata and preserve required notices before redistributing the tool |
 
-`Tools/NosGM.TimeSpaceParser`, `Tools/NosGM.ResourceExplorer`, `Tools/NosGM.ClientThemeEditor` and all current `Launcher/` projects have no third-party NuGet dependency; they use only the .NET 9 base class library and WPF platform assemblies where applicable.
+`Tools/NosGM.TimeSpaceParser`, `Tools/NosGM.ResourceExplorer`, `Tools/NosGM.ClientThemeEditor`, all current `Launcher/` projects and all current `Web/` projects have no third-party NuGet dependency; they use only the applicable .NET 9 shared framework and WPF platform assemblies where required.
 
 `Tools/NosGM.PacketCatalog` uses `Microsoft.CodeAnalysis.CSharp` 5.6.0 for syntax-only source parsing. It does not compile or execute NosGM server assemblies.
 

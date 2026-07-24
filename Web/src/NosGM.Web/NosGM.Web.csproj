@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <PropertyGroup>
+    <AssemblyName>NosGM.Web</AssemblyName>
+    <RootNamespace>NosGM.Web</RootNamespace>
+    <Description>Secure public web portal foundation for NosGM.</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\NosGM.Web.Contracts\NosGM.Web.Contracts.csproj" />
+  </ItemGroup>
+</Project>

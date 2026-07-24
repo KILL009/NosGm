@@ -1,0 +1,27 @@
+@page
+@model StatusModel
+@{
+    ViewData["Title"] = Model.T("status.title");
+}
+<section class="page-hero"><div class="shell"><p class="eyebrow">Pulse</p><h1>@Model.T("status.title")</h1><p>@Model.T("status.body")</p></div></section>
+<section class="section shell">
+@if (Model.Snapshot is not null)
+{
+    <div class="status-summary">
+        <div><span>@Model.T("server.status")</span><strong class="@Model.HealthClass(Model.Snapshot.OverallHealth)">@Model.Health(Model.Snapshot.OverallHealth)</strong></div>
+        <div><span>@Model.T("online.players")</span><strong>@Model.Snapshot.OnlinePlayers</strong></div>
+        <div><span>@Model.T("updated")</span><strong>@Model.Snapshot.ObservedAt.ToString("u")</strong></div>
+    </div>
+    <div class="table-wrap">
+        <table>
+            <thead><tr><th>@Model.T("service")</th><th>@Model.T("state")</th><th>@Model.T("players")</th></tr></thead>
+            <tbody>
+            @foreach (var service in Model.Snapshot.Services)
+            {
+                <tr><td>@service.Name</td><td><span class="status-dot @Model.HealthClass(service.Health)"></span>@Model.Health(service.Health)</td><td>@service.OnlinePlayers</td></tr>
+            }
+            </tbody>
+        </table>
+    </div>
+}
+</section>

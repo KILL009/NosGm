@@ -1,0 +1,24 @@
+@page
+@model RankingsModel
+@{
+    ViewData["Title"] = Model.T("rankings.title");
+}
+<section class="page-hero"><div class="shell"><p class="eyebrow">Hall of signals</p><h1>@Model.T("rankings.title")</h1><p>@Model.T("rankings.body")</p></div></section>
+<section class="section shell">
+    <nav class="tabs" aria-label="Ranking types">
+        <a class="@(Model.SelectedKind == RankingKind.Combat ? "active" : null)" asp-page="/Rankings" asp-route-kind="combat">@Model.T("ranking.combat")</a>
+        <a class="@(Model.SelectedKind == RankingKind.Reputation ? "active" : null)" asp-page="/Rankings" asp-route-kind="reputation">@Model.T("ranking.reputation")</a>
+        <a class="@(Model.SelectedKind == RankingKind.Hero ? "active" : null)" asp-page="/Rankings" asp-route-kind="hero">@Model.T("ranking.hero")</a>
+    </nav>
+    <div class="table-wrap">
+        <table>
+            <thead><tr><th>@Model.T("rank")</th><th>@Model.T("player")</th><th>@Model.T("level")</th><th>@Model.T("hero.level")</th><th>@Model.T("reputation")</th></tr></thead>
+            <tbody>
+            @foreach (var entry in Model.Entries)
+            {
+                <tr><td class="rank-number">#@entry.Position</td><td>@entry.CharacterName</td><td>@entry.Level</td><td>@entry.HeroLevel</td><td>@entry.Reputation.ToString("N0")</td></tr>
+            }
+            </tbody>
+        </table>
+    </div>
+</section>
