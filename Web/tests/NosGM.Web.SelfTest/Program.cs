@@ -27,9 +27,11 @@ try
 {
     var key = Encoding.UTF8.GetBytes("NosGM-self-test-key-that-is-at-least-thirty-two-bytes-long");
     var observedAt = DateTimeOffset.UtcNow;
-    var payloadJson = $$"""
-        {"serverName":"NosGM","observedAt":"{{observedAt:O}}","news":[{"id":"launch-1","slug":"server-launch","title":"Servidor listo","summary":"Datos reales publicados desde la red privada.","publishedAt":"{{observedAt.AddMinutes(-1):O}}","language":"es"},{"id":"launch-1-en","slug":"server-launch","title":"Server ready","summary":"Live data published from the private network.","publishedAt":"{{observedAt.AddMinutes(-1):O}}","language":"en"}],"services":[{"id":"login","name":"Login","health":"Online","onlinePlayers":0},{"id":"world","name":"World","health":"Online","onlinePlayers":0},{"id":"channel-1","name":"Channel 1","health":"Online","onlinePlayers":17}],"rankings":{"combat":[{"position":1,"characterName":"Blade","level":99,"heroLevel":80,"reputation":900000,"score":42,"metric":"duelWins"}],"reputation":[{"position":1,"characterName":"Nova","level":99,"heroLevel":80,"reputation":1200000,"score":1200000,"metric":"reputation"}],"hero":[{"position":1,"characterName":"Astra","level":99,"heroLevel":90,"reputation":800000,"score":123456789,"metric":"heroXp"}]}}
-        """;
+    var payloadJson = """
+        {"serverName":"NosGM","observedAt":"__OBSERVED__","news":[{"id":"launch-1","slug":"server-launch","title":"Servidor listo","summary":"Datos reales publicados desde la red privada.","publishedAt":"__PUBLISHED__","language":"es"},{"id":"launch-1-en","slug":"server-launch","title":"Server ready","summary":"Live data published from the private network.","publishedAt":"__PUBLISHED__","language":"en"}],"services":[{"id":"login","name":"Login","health":"Online","onlinePlayers":0},{"id":"world","name":"World","health":"Online","onlinePlayers":0},{"id":"channel-1","name":"Channel 1","health":"Online","onlinePlayers":17}],"rankings":{"combat":[{"position":1,"characterName":"Blade","level":99,"heroLevel":80,"reputation":900000,"score":42,"metric":"duelWins"}],"reputation":[{"position":1,"characterName":"Nova","level":99,"heroLevel":80,"reputation":1200000,"score":1200000,"metric":"reputation"}],"hero":[{"position":1,"characterName":"Astra","level":99,"heroLevel":90,"reputation":800000,"score":123456789,"metric":"heroXp"}]}}
+        """
+        .Replace("__OBSERVED__", observedAt.ToString("O"), StringComparison.Ordinal)
+        .Replace("__PUBLISHED__", observedAt.AddMinutes(-1).ToString("O"), StringComparison.Ordinal);
     var signature = SignedSnapshotPortalDataSource.ComputeSignatureBase64(
         SignedSnapshotPortalDataSource.SupportedSchemaVersion,
         "nosgm-live-v1",
