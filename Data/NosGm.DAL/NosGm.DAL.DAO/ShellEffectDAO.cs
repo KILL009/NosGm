@@ -16,17 +16,78 @@ namespace NosGm.DAL.DAO
     {
         #region Methods
 
+        public int CleanupDuplicateNonRuneEffects(long characterId, int maximumEffects = 15)
+        {
+            if (characterId <= 0 || maximumEffects < 1)
+            {
+                return 0;
+            }
+
+            try
+            {
+                using (var context = DataAccessHelper.CreateContext())
+                using (var transaction = context.Database.BeginTransaction())
+                {
+                    IQueryable<Guid> characterSerials = context.ItemInstance
+                        .Where(item => item.CharacterId == characterId && item.EquipmentSerialId.HasValue)
+                        .Select(item => item.EquipmentSerialId.Value)
+                        .Distinct();
+
+                    List<Guid> duplicateSerials = context.ShellEffect
+                        .Where(effect => !effect.IsRune && characterSerials.Contains(effect.EquipmentSerialId))
+                        .GroupBy(effect => effect.EquipmentSerialId)
+                        .Where(group => group.Count() > maximumEffects)
+                        .Select(group => group.Key)
+                        .ToList();
+
+                    if (duplicateSerials.Count == 0)
+                    {
+                        transaction.Commit();
+                        return 0;
+                    }
+
+                    List<ItemInstance> affectedItems = context.ItemInstance
+                        .Where(item => item.CharacterId == characterId &&
+                                       item.EquipmentSerialId.HasValue &&
+                                       duplicateSerials.Contains(item.EquipmentSerialId.Value))
+                        .ToList();
+
+                    foreach (ItemInstance item in affectedItems)
+                    {
+                        item.ShellRarity = null;
+                    }
+
+                    List<ShellEffect> duplicateEffects = context.ShellEffect
+                        .Where(effect => !effect.IsRune && duplicateSerials.Contains(effect.EquipmentSerialId))
+                        .ToList();
+
+                    context.ShellEffect.RemoveRange(duplicateEffects);
+                    context.SaveChanges();
+                    transaction.Commit();
+
+                    return duplicateSerials.Count;
+                }
+            }
+            catch (Exception e)
+            {
+                Logger.Error($"Unable to clean duplicate shell effects for CharacterId {characterId}.", e);
+                return 0;
+            }
+        }
+
         public DeleteResult DeleteByEquipmentSerialId(Guid id, bool isRune)
         {
             try
             {
                 using (var context = DataAccessHelper.CreateContext())
                 {
-                    var deleteentities = context.ShellEffect.Where(s => s.EquipmentSerialId == id && s.IsRune == isRune)
+                    List<ShellEffect> deleteEntities = context.ShellEffect
+                        .Where(effect => effect.EquipmentSerialId == id && effect.IsRune == isRune)
                         .ToList();
-                    if (deleteentities.Count != 0)
+
+                    if (deleteEntities.Count != 0)
                     {
-                        context.ShellEffect.RemoveRange(deleteentities);
+                        context.ShellEffect.RemoveRange(deleteEntities);
                         context.SaveChanges();
                     }
 
@@ -40,24 +101,25 @@ namespace NosGm.DAL.DAO
             }
         }
 
-        public ShellEffectDTO InsertOrUpdate(ShellEffectDTO shelleffect)
+        public ShellEffectDTO InsertOrUpdate(ShellEffectDTO shellEffect)
         {
             try
             {
                 using (var context = DataAccessHelper.CreateContext())
                 {
-                    var shelleffectId = shelleffect.ShellEffectId;
-                    var entity = context.ShellEffect.FirstOrDefault(c => c.ShellEffectId.Equals(shelleffectId));
+                    long shellEffectId = shellEffect.ShellEffectId;
+                    ShellEffect entity = context.ShellEffect.FirstOrDefault(c => c.ShellEffectId == shellEffectId);
 
-                    if (entity == null) return insert(shelleffect, context);
-                    return update(entity, shelleffect, context);
+                    return entity == null
+                        ? Insert(shellEffect, context)
+                        : Update(entity, shellEffect, context);
                 }
             }
             catch (Exception e)
             {
-                Logger.Error(string.Format(Language.Instance.GetMessageFromKey("INSERT_ERROR"), shelleffect, e.Message),
+                Logger.Error(string.Format(Language.Instance.GetMessageFromKey("INSERT_ERROR"), shellEffect, e.Message),
                     e);
-                return shelleffect;
+                return shellEffect;
             }
         }
 
@@ -65,34 +127,44 @@ namespace NosGm.DAL.DAO
         {
             try
             {
-                if (!shellEffects.Any()) return;
+                if (!shellEffects.Any())
+                {
+                    return;
+                }
 
                 using (var context = DataAccessHelper.CreateContext())
                 {
-                    void insert(ShellEffectDTO shelleffect)
+                    void InsertEffect(ShellEffectDTO shellEffect)
                     {
-                        var _entity = new ShellEffect();
-                        ShellEffectMapper.ToShellEffect(shelleffect, _entity);
-                        context.ShellEffect.Add(_entity);
+                        var entity = new ShellEffect();
+                        ShellEffectMapper.ToShellEffect(shellEffect, entity);
+                        context.ShellEffect.Add(entity);
                         context.SaveChanges();
-                        shelleffect.ShellEffectId = _entity.ShellEffectId;
+                        shellEffect.ShellEffectId = entity.ShellEffectId;
                     }
 
-                    void update(ShellEffect _entity, ShellEffectDTO shelleffect)
+                    void UpdateEffect(ShellEffect entity, ShellEffectDTO shellEffect)
                     {
-                        if (_entity != null) ShellEffectMapper.ToShellEffect(shelleffect, _entity);
+                        if (entity != null)
+                        {
+                            ShellEffectMapper.ToShellEffect(shellEffect, entity);
+                        }
                     }
 
-
-                    foreach (var item in shellEffects)
+                    foreach (ShellEffectDTO item in shellEffects)
                     {
                         item.EquipmentSerialId = equipmentSerialId;
-                        var entity = context.ShellEffect.FirstOrDefault(c => c.ShellEffectId == item.ShellEffectId);
+                        ShellEffect entity = context.ShellEffect
+                            .FirstOrDefault(c => c.ShellEffectId == item.ShellEffectId);
 
                         if (entity == null)
-                            insert(item);
+                        {
+                            InsertEffect(item);
+                        }
                         else
-                            update(entity, item);
+                        {
+                            UpdateEffect(entity, item);
+                        }
                     }
 
                     context.SaveChanges();
@@ -109,7 +181,8 @@ namespace NosGm.DAL.DAO
             using (var context = DataAccessHelper.CreateContext())
             {
                 var result = new List<ShellEffectDTO>();
-                foreach (var entity in context.ShellEffect.Where(c => c.EquipmentSerialId == id && c.IsRune == isRune))
+                foreach (ShellEffect entity in context.ShellEffect
+                             .Where(c => c.EquipmentSerialId == id && c.IsRune == isRune))
                 {
                     var dto = new ShellEffectDTO();
                     ShellEffectMapper.ToShellEffectDTO(entity, dto);
@@ -120,52 +193,31 @@ namespace NosGm.DAL.DAO
             }
         }
 
-        private static ShellEffectDTO insert(ShellEffectDTO shelleffect, NosGmContext context)
-        {
-            var entity = new ShellEffect();
-            ShellEffectMapper.ToShellEffect(shelleffect, entity);
-            context.ShellEffect.Add(entity);
-            context.SaveChanges();
-            if (ShellEffectMapper.ToShellEffectDTO(entity, shelleffect)) return shelleffect;
-
-            return null;
-        }
-
-        private static ShellEffectDTO update(ShellEffect entity, ShellEffectDTO shelleffect, NosGmContext context)
-        {
-            if (entity != null)
-            {
-                ShellEffectMapper.ToShellEffect(shelleffect, entity);
-                context.SaveChanges();
-            }
-
-            if (ShellEffectMapper.ToShellEffectDTO(entity, shelleffect)) return shelleffect;
-
-            return null;
-        }
-
         public async Task InsertOrUpdateFromListAsync(List<ShellEffectDTO> shellEffects, Guid equipmentSerialId)
         {
             try
             {
-                if (!shellEffects.Any()) return;
+                if (!shellEffects.Any())
+                {
+                    return;
+                }
 
                 using (var context = DataAccessHelper.CreateContext())
                 {
-                    async Task InsertAsync(ShellEffectDTO shelleffect)
+                    async Task InsertAsync(ShellEffectDTO shellEffect)
                     {
-                        var _entity = new ShellEffect();
-                        ShellEffectMapper.ToShellEffect(shelleffect, _entity);
-                        context.ShellEffect.Add(_entity);
+                        var entity = new ShellEffect();
+                        ShellEffectMapper.ToShellEffect(shellEffect, entity);
+                        context.ShellEffect.Add(entity);
                         await context.SaveChangesAsync().ConfigureAwait(false);
-                        shelleffect.ShellEffectId = _entity.ShellEffectId;
+                        shellEffect.ShellEffectId = entity.ShellEffectId;
                     }
 
-                    async Task UpdateAsync(ShellEffect entity, ShellEffectDTO shelleffect)
+                    async Task UpdateAsync(ShellEffect entity, ShellEffectDTO shellEffect)
                     {
                         if (entity != null)
                         {
-                            ShellEffectMapper.ToShellEffect(shelleffect, entity);
+                            ShellEffectMapper.ToShellEffect(shellEffect, entity);
                             await context.SaveChangesAsync().ConfigureAwait(false);
                         }
                     }
@@ -173,7 +225,8 @@ namespace NosGm.DAL.DAO
                     foreach (ShellEffectDTO item in shellEffects)
                     {
                         item.EquipmentSerialId = equipmentSerialId;
-                        var entity = context.ShellEffect.FirstOrDefault(c => c.ShellEffectId == item.ShellEffectId);
+                        ShellEffect entity = context.ShellEffect
+                            .FirstOrDefault(c => c.ShellEffectId == item.ShellEffectId);
 
                         if (entity == null)
                         {
@@ -192,6 +245,26 @@ namespace NosGm.DAL.DAO
             {
                 Logger.Error(e);
             }
+        }
+
+        private static ShellEffectDTO Insert(ShellEffectDTO shellEffect, NosGmContext context)
+        {
+            var entity = new ShellEffect();
+            ShellEffectMapper.ToShellEffect(shellEffect, entity);
+            context.ShellEffect.Add(entity);
+            context.SaveChanges();
+            return ShellEffectMapper.ToShellEffectDTO(entity, shellEffect) ? shellEffect : null;
+        }
+
+        private static ShellEffectDTO Update(ShellEffect entity, ShellEffectDTO shellEffect, NosGmContext context)
+        {
+            if (entity != null)
+            {
+                ShellEffectMapper.ToShellEffect(shellEffect, entity);
+                context.SaveChanges();
+            }
+
+            return ShellEffectMapper.ToShellEffectDTO(entity, shellEffect) ? shellEffect : null;
         }
 
         #endregion
