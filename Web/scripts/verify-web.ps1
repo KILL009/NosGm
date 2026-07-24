@@ -22,6 +22,8 @@ $forbidden = @(
     'ThemeForest',
     'UseForwardedHeaders',
     'ConnectionStrings',
+    'DataAccessHelper',
+    'NosGm.DAL',
     '-----BEGIN PRIVATE KEY-----',
     '-----BEGIN EC PRIVATE KEY-----'
 )
@@ -33,7 +35,7 @@ foreach ($needle in $forbidden) {
 
 $projectFiles = Get-ChildItem $root -Recurse -Filter *.csproj | Get-Content -Raw
 if (($projectFiles -join "`n") -match '<PackageReference') {
-    throw 'NosGM Web foundation must remain package-free.'
+    throw 'NosGM Web must remain package-free.'
 }
 
 $required = @(
@@ -42,7 +44,11 @@ $required = @(
     'AddRateLimiter',
     'UseAntiforgery',
     'MaxRequestBodySize',
-    'SafeDemoPortalDataSource',
+    'SignedSnapshotPortalDataSource',
+    'HMACSHA256',
+    'FixedTimeEquals',
+    '/api/v1/public',
+    'PublicSnapshotHealthCheck',
     'ValidateCatalogs'
 )
 foreach ($needle in $required) {
@@ -51,4 +57,8 @@ foreach ($needle in $required) {
     }
 }
 
-Write-Host 'NosGM Web safety and provenance checks passed.'
+if ($source.Contains('SafeDemoPortalDataSource', [StringComparison]::Ordinal)) {
+    throw 'Synthetic portal data source must not be present.'
+}
+
+Write-Host 'NosGM Web signed API safety and provenance checks passed.'

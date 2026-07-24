@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - 'Web/**'
+      - 'Data/NosGm.GameObject/Plugin/Event/Handler/Handler/RankingEvent.cs'
       - '.github/workflows/validate-web.yml'
       - 'AUTHORS.md'
       - 'NOTICE.md'
@@ -22,6 +23,8 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+        with:
+          show-progress: false
 
       - name: Set up .NET 9
         uses: actions/setup-dotnet@v4
@@ -29,10 +32,28 @@ jobs:
           dotnet-version: 9.0.x
 
       - name: Restore
-        run: dotnet restore Web/NosGM.Web.sln
+        run: dotnet restore Web/NosGM.Web.sln --verbosity quiet
 
       - name: Build Release
-        run: dotnet build Web/NosGM.Web.sln -c Release --no-restore
+        shell: bash
+        run: |
+          set +e
+          dotnet build Web/NosGM.Web.sln -c Release --no-restore --verbosity minimal > /tmp/nosgm-web-build.log 2>&1
+          exit_code=$?
+          if [ "$exit_code" -ne 0 ]; then
+            grep -E '(^|[[:space:]])error (CS|MSB)[0-9]+|Build FAILED' /tmp/nosgm-web-build.log || tail -n 120 /tmp/nosgm-web-build.log
+            exit "$exit_code"
+          fi
+          tail -n 20 /tmp/nosgm-web-build.log
+
+      - name: Upload web build diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nosgm-web-build-log
+          path: /tmp/nosgm-web-build.log
+          if-no-files-found: error
+          retention-days: 7
 
       - name: Run deterministic self-test
         run: dotnet run --project Web/tests/NosGM.Web.SelfTest/NosGM.Web.SelfTest.csproj -c Release --no-build
@@ -40,12 +61,104 @@ jobs:
       - name: Publish portal
         run: dotnet publish Web/src/NosGM.Web/NosGM.Web.csproj -c Release --no-build -o artifacts/web
 
+      - name: Create signed public snapshot fixture
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/web/App_Data
+          python - <<'PY'
+          import base64
+          import hashlib
+          import hmac
+          import json
+          from datetime import datetime, timezone
+          from pathlib import Path
+
+          key = b'NosGM-CI-signing-key-with-at-least-32-bytes'
+          key_id = 'nosgm-live-v1'
+          observed_at = datetime.now(timezone.utc).isoformat()
+          payload = {
+              'serverName': 'NosGM',
+              'observedAt': observed_at,
+              'news': [
+                  {
+                      'id': 'ci-news-es',
+                      'slug': 'ci-news',
+                      'title': 'Noticias reales verificadas',
+                      'summary': 'Instantanea firmada para la prueba de integracion.',
+                      'publishedAt': observed_at,
+                      'language': 'es',
+                  },
+                  {
+                      'id': 'ci-news-en',
+                      'slug': 'ci-news',
+                      'title': 'Verified live news',
+                      'summary': 'Signed snapshot used by the integration test.',
+                      'publishedAt': observed_at,
+                      'language': 'en',
+                  },
+              ],
+              'services': [
+                  {'id': 'login', 'name': 'Login', 'health': 'Online', 'onlinePlayers': 0},
+                  {'id': 'world', 'name': 'World', 'health': 'Online', 'onlinePlayers': 0},
+                  {'id': 'channel-1', 'name': 'Channel 1', 'health': 'Online', 'onlinePlayers': 17},
+              ],
+              'rankings': {
+                  'combat': [
+                      {
+                          'position': 1,
+                          'characterName': 'Blade',
+                          'level': 99,
+                          'heroLevel': 80,
+                          'reputation': 900000,
+                          'score': 42,
+                          'metric': 'duelWins',
+                      }
+                  ],
+                  'reputation': [
+                      {
+                          'position': 1,
+                          'characterName': 'Nova',
+                          'level': 99,
+                          'heroLevel': 80,
+                          'reputation': 1200000,
+                          'score': 1200000,
+                          'metric': 'reputation',
+                      }
+                  ],
+                  'hero': [
+                      {
+                          'position': 1,
+                          'characterName': 'Astra',
+                          'level': 99,
+                          'heroLevel': 90,
+                          'reputation': 800000,
+                          'score': 123456789,
+                          'metric': 'heroXp',
+                      }
+                  ],
+              },
+          }
+          payload_json = json.dumps(payload, ensure_ascii=False, separators=(',', ':'))
+          signed_text = f'1\n{key_id}\n{payload_json}'.encode('utf-8')
+          signature = base64.b64encode(hmac.new(key, signed_text, hashlib.sha256).digest()).decode('ascii')
+          envelope = (
+              '{"schemaVersion":1,"keyId":"' + key_id + '","payload":'
+              + payload_json + ',"signature":"' + signature + '"}'
+          )
+          Path('artifacts/web/App_Data/public-snapshot.json').write_text(envelope, encoding='utf-8')
+          Path('/tmp/nosgm-web-key.txt').write_text(base64.b64encode(key).decode('ascii'), encoding='ascii')
+          PY
+
       - name: Smoke-test published portal
         shell: bash
         run: |
           set -euo pipefail
           export ASPNETCORE_ENVIRONMENT=Development
           export ASPNETCORE_URLS=http://127.0.0.1:5080
+          export PublicData__HmacKeyBase64="$(cat /tmp/nosgm-web-key.txt)"
+          export PublicData__KeyId=nosgm-live-v1
+          export PublicData__SnapshotPath="$PWD/artifacts/web/App_Data/public-snapshot.json"
           dotnet artifacts/web/NosGM.Web.dll > /tmp/nosgm-web.log 2>&1 &
           web_pid=$!
           cleanup() {
@@ -67,6 +180,8 @@ jobs:
             exit 1
           fi
 
+          curl --fail --silent --show-error http://localhost:5080/health/ready > /dev/null
+
           curl --fail --silent --show-error --dump-header /tmp/nosgm-web.headers \
             --output /tmp/nosgm-web.home 'http://localhost:5080/?lang=es'
           grep -Fq 'NosGM' /tmp/nosgm-web.home
@@ -74,7 +189,7 @@ jobs:
           grep -Eiq '^x-frame-options: DENY' /tmp/nosgm-web.headers
 
           curl --fail --silent --show-error \
-            http://localhost:5080/api/public/metadata > /tmp/nosgm-web.metadata.json
+            http://localhost:5080/api/v1/public/metadata > /tmp/nosgm-web.metadata.json
           python - <<'PY'
           import json
           from pathlib import Path
@@ -83,19 +198,52 @@ jobs:
           assert data['serverName'] == 'NosGM'
           assert data['clientVersion'] == '0.9.3.3255'
           assert data['launcherDownloadAvailable'] is False
+          assert data['apiVersion'] == 'v1'
+          assert data['dataSource'] == 'signed-snapshot'
           assert len(data['supportedLanguages']) == 10
           PY
 
           curl --fail --silent --show-error \
-            http://localhost:5080/api/public/status > /tmp/nosgm-web.status.json
+            http://localhost:5080/api/v1/public/status > /tmp/nosgm-web.status.json
           python - <<'PY'
           import json
           from pathlib import Path
 
           data = json.loads(Path('/tmp/nosgm-web.status.json').read_text(encoding='utf-8'))
           assert data['serverName'] == 'NosGM'
-          assert len(data['services']) >= 3
+          assert data['onlinePlayers'] == 17
+          assert data['overallHealth'] == 'Online'
+          assert data['isStale'] is False
+          assert len(data['services']) == 3
           PY
+
+          curl --fail --silent --show-error \
+            'http://localhost:5080/api/v1/public/news?lang=es&limit=5' > /tmp/nosgm-web.news.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          data = json.loads(Path('/tmp/nosgm-web.news.json').read_text(encoding='utf-8'))
+          assert len(data) == 1
+          assert data[0]['language'] == 'es'
+          PY
+
+          curl --fail --silent --show-error \
+            'http://localhost:5080/api/v1/public/rankings/combat?limit=20' > /tmp/nosgm-web.ranking.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          data = json.loads(Path('/tmp/nosgm-web.ranking.json').read_text(encoding='utf-8'))
+          assert len(data) == 1
+          assert data[0]['characterName'] == 'Blade'
+          assert data[0]['metric'] == 'duelWins'
+          PY
+
+          curl --fail --silent --show-error --dump-header /tmp/nosgm-web.legacy.headers \
+            --output /dev/null http://localhost:5080/api/public/status
+          grep -Eiq '^deprecation: true' /tmp/nosgm-web.legacy.headers
+          grep -Eiq '^sunset: Thu, 31 Dec 2026 23:59:59 GMT' /tmp/nosgm-web.legacy.headers
 
       - name: Run web safety and provenance checks
         shell: pwsh
