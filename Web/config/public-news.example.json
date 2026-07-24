@@ -1,0 +1,18 @@
+[
+  {
+    "id": "welcome-2026",
+    "slug": "welcome-to-nosgm",
+    "title": "Bienvenido a NosGM",
+    "summary": "El servidor está preparando su apertura. Consulta aquí las noticias oficiales y el estado de los canales.",
+    "publishedAt": "2026-07-24T12:00:00+00:00",
+    "language": "es"
+  },
+  {
+    "id": "welcome-2026-en",
+    "slug": "welcome-to-nosgm",
+    "title": "Welcome to NosGM",
+    "summary": "The server is preparing for launch. Check official news and channel status here.",
+    "publishedAt": "2026-07-24T12:00:00+00:00",
+    "language": "en"
+  }
+]
