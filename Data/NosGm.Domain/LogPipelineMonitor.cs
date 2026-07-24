@@ -12,6 +12,52 @@ namespace NosGm.Domain
         Error = 3
     }
 
+    public sealed class LogPipelineOperation
+    {
+        internal LogPipelineOperation(LogPipelineCounterState state)
+        {
+            State = state;
+        }
+
+        internal LogPipelineCounterState State { get; }
+    }
+
+    internal sealed class LogPipelineCounterState
+    {
+        public LogPipelineCounterState()
+        {
+            Operation = new LogPipelineOperation(this);
+        }
+
+        public LogPipelineOperation Operation { get; }
+
+        public long GeneralLogEnqueued;
+        public long GeneralLogQueueFallbacks;
+        public long GeneralLogDropped;
+        public long GeneralLogWritten;
+        public long GeneralLogBatches;
+        public long GeneralLogWriteErrors;
+        public long GeneralLogTotalBatchTicks;
+        public long GeneralLogMaximumBatchTicks;
+
+        public long DailyActionAttempts;
+        public long DailyActionClaimed;
+        public long DailyActionDuplicates;
+        public long DailyActionUnavailable;
+        public long DailyActionErrors;
+
+        public long UdpEnqueued;
+        public long UdpSent;
+        public long UdpDropped;
+        public long UdpErrors;
+
+        public long MongoAttempts;
+        public long MongoSucceeded;
+        public long MongoErrors;
+        public long MongoTotalTicks;
+        public long MongoMaximumTicks;
+    }
+
     public sealed class LogPipelineSnapshot
     {
         public int GeneralLogQueueDepth { get; internal set; }
@@ -37,6 +83,7 @@ namespace NosGm.Domain
         public long UdpSent { get; internal set; }
         public long UdpDropped { get; internal set; }
         public long UdpErrors { get; internal set; }
+        public long UdpInFlight { get; internal set; }
 
         public long MongoAttempts { get; internal set; }
         public long MongoSucceeded { get; internal set; }
@@ -47,212 +94,250 @@ namespace NosGm.Domain
 
     public static class LogPipelineMonitor
     {
+        public const int DefaultGeneralLogQueueCapacity = 5000;
+        public const int DefaultUdpQueueCapacity = 4096;
+
+        private static LogPipelineCounterState _state = new LogPipelineCounterState();
+
         private static int _generalLogQueueDepth;
-        private static int _generalLogQueueCapacity;
-        private static long _generalLogEnqueued;
-        private static long _generalLogQueueFallbacks;
-        private static long _generalLogDropped;
-        private static long _generalLogWritten;
-        private static long _generalLogBatches;
-        private static long _generalLogWriteErrors;
-        private static long _generalLogTotalBatchTicks;
-        private static long _generalLogMaximumBatchTicks;
-
-        private static long _dailyActionAttempts;
-        private static long _dailyActionClaimed;
-        private static long _dailyActionDuplicates;
-        private static long _dailyActionUnavailable;
-        private static long _dailyActionErrors;
-
+        private static int _generalLogQueueCapacity = DefaultGeneralLogQueueCapacity;
         private static int _udpQueueDepth;
-        private static int _udpQueueCapacity;
-        private static long _udpEnqueued;
-        private static long _udpSent;
-        private static long _udpDropped;
-        private static long _udpErrors;
+        private static int _udpQueueCapacity = DefaultUdpQueueCapacity;
 
-        private static long _mongoAttempts;
-        private static long _mongoSucceeded;
-        private static long _mongoErrors;
-        private static long _mongoTotalTicks;
-        private static long _mongoMaximumTicks;
+        public static LogPipelineOperation CurrentOperation =>
+            Volatile.Read(ref _state).Operation;
 
-        public static void RecordGeneralLogEnqueued(int queueDepth, int queueCapacity)
+        public static void RecordGeneralLogEnqueued(int queueDepth, int queueCapacity) =>
+            RecordGeneralLogEnqueued(CurrentOperation, queueDepth, queueCapacity);
+
+        public static void RecordGeneralLogEnqueued(
+            LogPipelineOperation operation,
+            int queueDepth,
+            int queueCapacity)
         {
-            Interlocked.Increment(ref _generalLogEnqueued);
-            Volatile.Write(ref _generalLogQueueDepth, queueDepth);
-            Volatile.Write(ref _generalLogQueueCapacity, queueCapacity);
+            LogPipelineCounterState state = Resolve(operation);
+            Interlocked.Increment(ref state.GeneralLogEnqueued);
+            UpdateGeneralLogQueue(queueDepth, queueCapacity);
         }
 
         public static void UpdateGeneralLogQueue(int queueDepth, int queueCapacity)
         {
-            Volatile.Write(ref _generalLogQueueDepth, queueDepth);
-            Volatile.Write(ref _generalLogQueueCapacity, queueCapacity);
+            Volatile.Write(ref _generalLogQueueDepth, Math.Max(0, queueDepth));
+            Volatile.Write(ref _generalLogQueueCapacity,
+                queueCapacity > 0 ? queueCapacity : DefaultGeneralLogQueueCapacity);
         }
 
-        public static void RecordGeneralLogFallback()
+        public static void RecordGeneralLogFallback() =>
+            RecordGeneralLogFallback(CurrentOperation);
+
+        public static void RecordGeneralLogFallback(LogPipelineOperation operation)
         {
-            Interlocked.Increment(ref _generalLogQueueFallbacks);
+            LogPipelineCounterState state = Resolve(operation);
+            Interlocked.Increment(ref state.GeneralLogQueueFallbacks);
         }
 
-        public static void RecordGeneralLogDropped(int count = 1)
+        public static void RecordGeneralLogDropped(int count = 1) =>
+            RecordGeneralLogDropped(CurrentOperation, count);
+
+        public static void RecordGeneralLogDropped(LogPipelineOperation operation, int count = 1)
         {
-            if (count > 0)
+            if (count <= 0)
             {
-                Interlocked.Add(ref _generalLogDropped, count);
+                return;
             }
+
+            LogPipelineCounterState state = Resolve(operation);
+            Interlocked.Add(ref state.GeneralLogDropped, count);
         }
 
-        public static void RecordGeneralLogWrite(int recordCount, long elapsedStopwatchTicks, bool success)
+        public static void RecordGeneralLogWrite(
+            int recordCount,
+            long elapsedStopwatchTicks,
+            bool success) =>
+            RecordGeneralLogWrite(CurrentOperation, recordCount, elapsedStopwatchTicks, success);
+
+        public static void RecordGeneralLogWrite(
+            LogPipelineOperation operation,
+            int recordCount,
+            long elapsedStopwatchTicks,
+            bool success)
         {
-            Interlocked.Increment(ref _generalLogBatches);
-            Interlocked.Add(ref _generalLogTotalBatchTicks, Math.Max(0, elapsedStopwatchTicks));
-            AtomicMaximum(ref _generalLogMaximumBatchTicks, elapsedStopwatchTicks);
+            LogPipelineCounterState state = Resolve(operation);
+            Interlocked.Increment(ref state.GeneralLogBatches);
+            Interlocked.Add(ref state.GeneralLogTotalBatchTicks, Math.Max(0, elapsedStopwatchTicks));
+            AtomicMaximum(ref state.GeneralLogMaximumBatchTicks, elapsedStopwatchTicks);
 
             if (success)
             {
-                Interlocked.Add(ref _generalLogWritten, Math.Max(0, recordCount));
+                Interlocked.Add(ref state.GeneralLogWritten, Math.Max(0, recordCount));
             }
             else
             {
-                Interlocked.Increment(ref _generalLogWriteErrors);
+                Interlocked.Increment(ref state.GeneralLogWriteErrors);
             }
         }
 
         public static void RecordDailyAction(DailyActionClaimResult result)
         {
-            Interlocked.Increment(ref _dailyActionAttempts);
+            LogPipelineCounterState state = Volatile.Read(ref _state);
+            Interlocked.Increment(ref state.DailyActionAttempts);
             switch (result)
             {
                 case DailyActionClaimResult.Claimed:
-                    Interlocked.Increment(ref _dailyActionClaimed);
+                    Interlocked.Increment(ref state.DailyActionClaimed);
                     break;
                 case DailyActionClaimResult.AlreadyClaimed:
-                    Interlocked.Increment(ref _dailyActionDuplicates);
+                    Interlocked.Increment(ref state.DailyActionDuplicates);
                     break;
                 case DailyActionClaimResult.StorageUnavailable:
-                    Interlocked.Increment(ref _dailyActionUnavailable);
+                    Interlocked.Increment(ref state.DailyActionUnavailable);
                     break;
                 default:
-                    Interlocked.Increment(ref _dailyActionErrors);
+                    Interlocked.Increment(ref state.DailyActionErrors);
                     break;
             }
         }
 
-        public static void RecordUdpEnqueued(int queueDepth, int queueCapacity)
+        public static void RecordUdpEnqueued(int queueDepth, int queueCapacity) =>
+            RecordUdpEnqueued(CurrentOperation, queueDepth, queueCapacity);
+
+        public static void RecordUdpEnqueued(
+            LogPipelineOperation operation,
+            int queueDepth,
+            int queueCapacity)
         {
-            Interlocked.Increment(ref _udpEnqueued);
-            Volatile.Write(ref _udpQueueDepth, queueDepth);
-            Volatile.Write(ref _udpQueueCapacity, queueCapacity);
+            LogPipelineCounterState state = Resolve(operation);
+            Interlocked.Increment(ref state.UdpEnqueued);
+            UpdateUdpQueue(queueDepth, queueCapacity);
         }
 
-        public static void RecordUdpSent(int queueDepth, int queueCapacity)
+        public static void RecordUdpSent(int queueDepth, int queueCapacity) =>
+            RecordUdpSent(CurrentOperation, queueDepth, queueCapacity);
+
+        public static void RecordUdpSent(
+            LogPipelineOperation operation,
+            int queueDepth,
+            int queueCapacity)
         {
-            Interlocked.Increment(ref _udpSent);
-            Volatile.Write(ref _udpQueueDepth, queueDepth);
-            Volatile.Write(ref _udpQueueCapacity, queueCapacity);
+            LogPipelineCounterState state = Resolve(operation);
+            Interlocked.Increment(ref state.UdpSent);
+            UpdateUdpQueue(queueDepth, queueCapacity);
         }
 
-        public static void RecordUdpDropped(int queueDepth, int queueCapacity)
+        public static void RecordUdpDropped(int queueDepth, int queueCapacity) =>
+            RecordUdpDropped(CurrentOperation, queueDepth, queueCapacity);
+
+        public static void RecordUdpDropped(
+            LogPipelineOperation operation,
+            int queueDepth,
+            int queueCapacity)
         {
-            Interlocked.Increment(ref _udpDropped);
-            Volatile.Write(ref _udpQueueDepth, queueDepth);
-            Volatile.Write(ref _udpQueueCapacity, queueCapacity);
+            LogPipelineCounterState state = Resolve(operation);
+            Interlocked.Increment(ref state.UdpDropped);
+            UpdateUdpQueue(queueDepth, queueCapacity);
         }
 
-        public static void RecordUdpError(int queueDepth, int queueCapacity)
+        public static void RecordUdpError(int queueDepth, int queueCapacity) =>
+            RecordUdpError(CurrentOperation, queueDepth, queueCapacity);
+
+        public static void RecordUdpError(
+            LogPipelineOperation operation,
+            int queueDepth,
+            int queueCapacity)
         {
-            Interlocked.Increment(ref _udpErrors);
-            Volatile.Write(ref _udpQueueDepth, queueDepth);
-            Volatile.Write(ref _udpQueueCapacity, queueCapacity);
+            LogPipelineCounterState state = Resolve(operation);
+            Interlocked.Increment(ref state.UdpErrors);
+            UpdateUdpQueue(queueDepth, queueCapacity);
         }
 
-        public static void RecordMongoWrite(long elapsedStopwatchTicks, bool success)
+        public static void UpdateUdpQueue(int queueDepth, int queueCapacity)
         {
-            Interlocked.Increment(ref _mongoAttempts);
-            Interlocked.Add(ref _mongoTotalTicks, Math.Max(0, elapsedStopwatchTicks));
-            AtomicMaximum(ref _mongoMaximumTicks, elapsedStopwatchTicks);
+            Volatile.Write(ref _udpQueueDepth, Math.Max(0, queueDepth));
+            Volatile.Write(ref _udpQueueCapacity,
+                queueCapacity > 0 ? queueCapacity : DefaultUdpQueueCapacity);
+        }
+
+        public static void RecordMongoWrite(long elapsedStopwatchTicks, bool success) =>
+            RecordMongoWrite(CurrentOperation, elapsedStopwatchTicks, success);
+
+        public static void RecordMongoWrite(
+            LogPipelineOperation operation,
+            long elapsedStopwatchTicks,
+            bool success)
+        {
+            LogPipelineCounterState state = Resolve(operation);
+            Interlocked.Increment(ref state.MongoAttempts);
+            Interlocked.Add(ref state.MongoTotalTicks, Math.Max(0, elapsedStopwatchTicks));
+            AtomicMaximum(ref state.MongoMaximumTicks, elapsedStopwatchTicks);
             if (success)
             {
-                Interlocked.Increment(ref _mongoSucceeded);
+                Interlocked.Increment(ref state.MongoSucceeded);
             }
             else
             {
-                Interlocked.Increment(ref _mongoErrors);
+                Interlocked.Increment(ref state.MongoErrors);
             }
         }
 
         public static LogPipelineSnapshot Capture()
         {
-            long generalBatches = Interlocked.Read(ref _generalLogBatches);
-            long mongoAttempts = Interlocked.Read(ref _mongoAttempts);
+            LogPipelineCounterState state = Volatile.Read(ref _state);
+            long generalBatches = Interlocked.Read(ref state.GeneralLogBatches);
+            long mongoAttempts = Interlocked.Read(ref state.MongoAttempts);
+            long udpEnqueued = Interlocked.Read(ref state.UdpEnqueued);
+            long udpSent = Interlocked.Read(ref state.UdpSent);
+            long udpDropped = Interlocked.Read(ref state.UdpDropped);
 
             return new LogPipelineSnapshot
             {
                 GeneralLogQueueDepth = Volatile.Read(ref _generalLogQueueDepth),
                 GeneralLogQueueCapacity = Volatile.Read(ref _generalLogQueueCapacity),
-                GeneralLogEnqueued = Interlocked.Read(ref _generalLogEnqueued),
-                GeneralLogQueueFallbacks = Interlocked.Read(ref _generalLogQueueFallbacks),
-                GeneralLogDropped = Interlocked.Read(ref _generalLogDropped),
-                GeneralLogWritten = Interlocked.Read(ref _generalLogWritten),
+                GeneralLogEnqueued = Interlocked.Read(ref state.GeneralLogEnqueued),
+                GeneralLogQueueFallbacks = Interlocked.Read(ref state.GeneralLogQueueFallbacks),
+                GeneralLogDropped = Interlocked.Read(ref state.GeneralLogDropped),
+                GeneralLogWritten = Interlocked.Read(ref state.GeneralLogWritten),
                 GeneralLogBatches = generalBatches,
-                GeneralLogWriteErrors = Interlocked.Read(ref _generalLogWriteErrors),
+                GeneralLogWriteErrors = Interlocked.Read(ref state.GeneralLogWriteErrors),
                 GeneralLogAverageBatchMilliseconds = StopwatchTicksToMilliseconds(
-                    generalBatches == 0 ? 0 : Interlocked.Read(ref _generalLogTotalBatchTicks) / generalBatches),
+                    generalBatches == 0
+                        ? 0
+                        : Interlocked.Read(ref state.GeneralLogTotalBatchTicks) / generalBatches),
                 GeneralLogMaximumBatchMilliseconds = StopwatchTicksToMilliseconds(
-                    Interlocked.Read(ref _generalLogMaximumBatchTicks)),
+                    Interlocked.Read(ref state.GeneralLogMaximumBatchTicks)),
 
-                DailyActionAttempts = Interlocked.Read(ref _dailyActionAttempts),
-                DailyActionClaimed = Interlocked.Read(ref _dailyActionClaimed),
-                DailyActionDuplicates = Interlocked.Read(ref _dailyActionDuplicates),
-                DailyActionUnavailable = Interlocked.Read(ref _dailyActionUnavailable),
-                DailyActionErrors = Interlocked.Read(ref _dailyActionErrors),
+                DailyActionAttempts = Interlocked.Read(ref state.DailyActionAttempts),
+                DailyActionClaimed = Interlocked.Read(ref state.DailyActionClaimed),
+                DailyActionDuplicates = Interlocked.Read(ref state.DailyActionDuplicates),
+                DailyActionUnavailable = Interlocked.Read(ref state.DailyActionUnavailable),
+                DailyActionErrors = Interlocked.Read(ref state.DailyActionErrors),
 
                 UdpQueueDepth = Volatile.Read(ref _udpQueueDepth),
                 UdpQueueCapacity = Volatile.Read(ref _udpQueueCapacity),
-                UdpEnqueued = Interlocked.Read(ref _udpEnqueued),
-                UdpSent = Interlocked.Read(ref _udpSent),
-                UdpDropped = Interlocked.Read(ref _udpDropped),
-                UdpErrors = Interlocked.Read(ref _udpErrors),
+                UdpEnqueued = udpEnqueued,
+                UdpSent = udpSent,
+                UdpDropped = udpDropped,
+                UdpErrors = Interlocked.Read(ref state.UdpErrors),
+                UdpInFlight = Math.Max(0, udpEnqueued - udpSent - udpDropped),
 
                 MongoAttempts = mongoAttempts,
-                MongoSucceeded = Interlocked.Read(ref _mongoSucceeded),
-                MongoErrors = Interlocked.Read(ref _mongoErrors),
+                MongoSucceeded = Interlocked.Read(ref state.MongoSucceeded),
+                MongoErrors = Interlocked.Read(ref state.MongoErrors),
                 MongoAverageMilliseconds = StopwatchTicksToMilliseconds(
-                    mongoAttempts == 0 ? 0 : Interlocked.Read(ref _mongoTotalTicks) / mongoAttempts),
+                    mongoAttempts == 0
+                        ? 0
+                        : Interlocked.Read(ref state.MongoTotalTicks) / mongoAttempts),
                 MongoMaximumMilliseconds = StopwatchTicksToMilliseconds(
-                    Interlocked.Read(ref _mongoMaximumTicks))
+                    Interlocked.Read(ref state.MongoMaximumTicks))
             };
         }
 
         public static void Reset()
         {
-            Interlocked.Exchange(ref _generalLogEnqueued, 0);
-            Interlocked.Exchange(ref _generalLogQueueFallbacks, 0);
-            Interlocked.Exchange(ref _generalLogDropped, 0);
-            Interlocked.Exchange(ref _generalLogWritten, 0);
-            Interlocked.Exchange(ref _generalLogBatches, 0);
-            Interlocked.Exchange(ref _generalLogWriteErrors, 0);
-            Interlocked.Exchange(ref _generalLogTotalBatchTicks, 0);
-            Interlocked.Exchange(ref _generalLogMaximumBatchTicks, 0);
-
-            Interlocked.Exchange(ref _dailyActionAttempts, 0);
-            Interlocked.Exchange(ref _dailyActionClaimed, 0);
-            Interlocked.Exchange(ref _dailyActionDuplicates, 0);
-            Interlocked.Exchange(ref _dailyActionUnavailable, 0);
-            Interlocked.Exchange(ref _dailyActionErrors, 0);
-
-            Interlocked.Exchange(ref _udpEnqueued, 0);
-            Interlocked.Exchange(ref _udpSent, 0);
-            Interlocked.Exchange(ref _udpDropped, 0);
-            Interlocked.Exchange(ref _udpErrors, 0);
-
-            Interlocked.Exchange(ref _mongoAttempts, 0);
-            Interlocked.Exchange(ref _mongoSucceeded, 0);
-            Interlocked.Exchange(ref _mongoErrors, 0);
-            Interlocked.Exchange(ref _mongoTotalTicks, 0);
-            Interlocked.Exchange(ref _mongoMaximumTicks, 0);
+            Interlocked.Exchange(ref _state, new LogPipelineCounterState());
         }
+
+        private static LogPipelineCounterState Resolve(LogPipelineOperation operation) =>
+            operation?.State ?? Volatile.Read(ref _state);
 
         private static void AtomicMaximum(ref long target, long value)
         {
