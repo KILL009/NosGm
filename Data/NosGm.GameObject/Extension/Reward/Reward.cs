@@ -37,17 +37,6 @@ namespace NosGm.GameObject.Extension
             try
             {
                 session.Character.GiftAdd(11008, 1);
-                session.SendPacket(session.Character.GenerateSay("You claimed your Daily Reward!", 12));
-
-                DAOFactory.GeneralLogDAO.Enqueue(new GeneralLogDTO
-                {
-                    AccountId = session.Account.AccountId,
-                    CharacterId = session.Character.CharacterId,
-                    Timestamp = DateTime.Now,
-                    IpAddress = session.IpAddress,
-                    LogData = DailyRewardKey,
-                    LogType = "World"
-                });
             }
             catch (Exception exception)
             {
@@ -56,6 +45,29 @@ namespace NosGm.GameObject.Extension
                     DailyRewardKey,
                     actionDate);
                 Logger.Error("Unable to grant the daily reward.", exception);
+                return;
+            }
+
+            try
+            {
+                session.SendPacket(session.Character.GenerateSay("You claimed your Daily Reward!", 12));
+            }
+            catch (Exception exception)
+            {
+                Logger.Error("Daily reward was granted but its confirmation message failed.", exception);
+            }
+
+            if (!DAOFactory.GeneralLogDAO.Enqueue(new GeneralLogDTO
+                {
+                    AccountId = session.Account.AccountId,
+                    CharacterId = session.Character.CharacterId,
+                    Timestamp = DateTime.Now,
+                    IpAddress = session.IpAddress,
+                    LogData = DailyRewardKey,
+                    LogType = "World"
+                }))
+            {
+                Logger.Error($"Daily reward audit log failed for account {session.Account.AccountId}.");
             }
         }
 
