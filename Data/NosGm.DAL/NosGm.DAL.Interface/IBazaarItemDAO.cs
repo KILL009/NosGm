@@ -14,6 +14,8 @@ namespace NosGm.DAL.Interface
 
         IEnumerable<BazaarItemDTO> LoadAll();
 
+        IEnumerable<BazaarItemLoadDTO> LoadAllHydrated();
+
         BazaarItemDTO LoadById(long bazaarItemId);
 
         void RemoveOutDated();
