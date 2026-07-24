@@ -46,6 +46,15 @@ jobs:
           fi
           tail -n 20 /tmp/nosgm-web-build.log
 
+      - name: Upload web build diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nosgm-web-build-log
+          path: /tmp/nosgm-web-build.log
+          if-no-files-found: error
+          retention-days: 7
+
       - name: Run deterministic self-test
         run: dotnet run --project Web/tests/NosGM.Web.SelfTest/NosGM.Web.SelfTest.csproj -c Release --no-build
 
