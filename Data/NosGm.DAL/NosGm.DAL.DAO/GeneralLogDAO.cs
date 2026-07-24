@@ -17,6 +17,30 @@ namespace NosGm.DAL.DAO
     {
         #region Methods
 
+        public bool ExistsForAccount(long accountId, string logData, DateTime fromInclusive, DateTime toExclusive)
+        {
+            if (string.IsNullOrWhiteSpace(logData) || toExclusive <= fromInclusive)
+            {
+                return false;
+            }
+
+            try
+            {
+                using (var context = DataAccessHelper.CreateContext())
+                {
+                    return context.GeneralLog.AsNoTracking().Any(log =>
+                        log.AccountId == accountId &&
+                        log.LogData == logData &&
+                        log.Timestamp >= fromInclusive &&
+                        log.Timestamp < toExclusive);
+                }
+            }
+            catch (Exception e)
+            {
+                Logger.Error(e);
+                return false;
+            }
+        }
 
         public bool IdAlreadySet(long id)
         {
@@ -24,7 +48,7 @@ namespace NosGm.DAL.DAO
             {
                 using (var context = DataAccessHelper.CreateContext())
                 {
-                    return context.GeneralLog.Any(gl => gl.LogId == id);
+                    return context.GeneralLog.AsNoTracking().Any(gl => gl.LogId == id);
                 }
             }
             catch (Exception e)
@@ -36,17 +60,22 @@ namespace NosGm.DAL.DAO
 
         public GeneralLogDTO Insert(GeneralLogDTO generalLog)
         {
+            if (generalLog == null)
+            {
+                return null;
+            }
+
             try
             {
                 using (var context = DataAccessHelper.CreateContext())
                 {
+                    EnsureTimestamp(generalLog);
                     var entity = new GeneralLog();
                     GeneralLogMapper.ToGeneralLog(generalLog, entity);
                     context.GeneralLog.Add(entity);
                     context.SaveChanges();
-                    if (GeneralLogMapper.ToGeneralLogDTO(entity, generalLog)) return generalLog;
 
-                    return null;
+                    return GeneralLogMapper.ToGeneralLogDTO(entity, generalLog) ? generalLog : null;
                 }
             }
             catch (Exception e)
@@ -56,31 +85,49 @@ namespace NosGm.DAL.DAO
             }
         }
 
-       
-
-        public SaveResult InsertOrUpdate(ref GeneralLogDTO GeneralLog)
+        [Obsolete("GeneralLog is append-only. Use Insert for new log records.")]
+        public SaveResult InsertOrUpdate(ref GeneralLogDTO generalLog)
         {
+            if (generalLog == null)
+            {
+                return SaveResult.Error;
+            }
+
+            if (generalLog.LogId <= 0)
+            {
+                GeneralLogDTO inserted = Insert(generalLog);
+                if (inserted == null)
+                {
+                    return SaveResult.Error;
+                }
+
+                generalLog = inserted;
+                return SaveResult.Inserted;
+            }
+
             try
             {
                 using (var context = DataAccessHelper.CreateContext())
                 {
-                    var LogId = GeneralLog.LogId;
-                    var entity = context.GeneralLog.FirstOrDefault(c => c.LogId.Equals(LogId));
-
+                    long logId = generalLog.LogId;
+                    GeneralLog entity = context.GeneralLog.FirstOrDefault(log => log.LogId == logId);
                     if (entity == null)
                     {
-                        GeneralLog = insert(GeneralLog, context);
-                        return SaveResult.Inserted;
+                        return SaveResult.Error;
                     }
 
-                    GeneralLog = update(entity, GeneralLog, context);
+                    EnsureTimestamp(generalLog);
+                    GeneralLogMapper.ToGeneralLog(generalLog, entity);
+                    context.Entry(entity).State = EntityState.Modified;
+                    context.SaveChanges();
+                    GeneralLogMapper.ToGeneralLogDTO(entity, generalLog);
                     return SaveResult.Updated;
                 }
             }
             catch (Exception e)
             {
                 Logger.Error(
-                    string.Format(Language.Instance.GetMessageFromKey("UPDATE_GeneralLog_ERROR"), GeneralLog.LogId,
+                    string.Format(Language.Instance.GetMessageFromKey("UPDATE_GeneralLog_ERROR"), generalLog.LogId,
                         e.Message), e);
                 return SaveResult.Error;
             }
@@ -90,15 +137,9 @@ namespace NosGm.DAL.DAO
         {
             using (var context = DataAccessHelper.CreateContext())
             {
-                var result = new List<GeneralLogDTO>();
-                foreach (var generalLog in context.GeneralLog)
-                {
-                    var dto = new GeneralLogDTO();
-                    GeneralLogMapper.ToGeneralLogDTO(generalLog, dto);
-                    result.Add(dto);
-                }
-
-                return result;
+                return Project(context.GeneralLog.AsNoTracking())
+                    .OrderBy(log => log.LogId)
+                    .ToList();
             }
         }
 
@@ -106,34 +147,32 @@ namespace NosGm.DAL.DAO
         {
             using (var context = DataAccessHelper.CreateContext())
             {
-                var result = new List<GeneralLogDTO>();
-                foreach (var GeneralLog in context.GeneralLog.Where(s => s.AccountId == accountId))
-                {
-                    var dto = new GeneralLogDTO();
-                    GeneralLogMapper.ToGeneralLogDTO(GeneralLog, dto);
-                    result.Add(dto);
-                }
-
-                return result;
+                return Project(context.GeneralLog.AsNoTracking().Where(log => log.AccountId == accountId))
+                    .OrderBy(log => log.LogId)
+                    .ToList();
             }
         }
 
         public IEnumerable<GeneralLogDTO> LoadByIp(string ip)
         {
+            if (string.IsNullOrWhiteSpace(ip))
+            {
+                return new List<GeneralLogDTO>();
+            }
+
+            string cleanIp = ip.Replace("tcp://", string.Empty);
+            int separatorIndex = cleanIp.LastIndexOf(':');
+            if (separatorIndex > 0)
+            {
+                cleanIp = cleanIp.Substring(0, separatorIndex);
+            }
+
             using (var context = DataAccessHelper.CreateContext())
             {
-                var cleanIp = ip.Replace("tcp://", "");
-                cleanIp = cleanIp.Substring(0,
-                    cleanIp.LastIndexOf(":") > 0 ? cleanIp.LastIndexOf(":") : cleanIp.Length);
-                var result = new List<GeneralLogDTO>();
-                foreach (var GeneralLog in context.GeneralLog.Where(s => s.IpAddress.Contains(cleanIp)))
-                {
-                    var dto = new GeneralLogDTO();
-                    GeneralLogMapper.ToGeneralLogDTO(GeneralLog, dto);
-                    result.Add(dto);
-                }
-
-                return result;
+                return Project(context.GeneralLog.AsNoTracking()
+                        .Where(log => log.IpAddress != null && log.IpAddress.Contains(cleanIp)))
+                    .OrderByDescending(log => log.Timestamp)
+                    .ToList();
             }
         }
 
@@ -141,58 +180,86 @@ namespace NosGm.DAL.DAO
         {
             using (var context = DataAccessHelper.CreateContext())
             {
-                var result = new List<GeneralLogDTO>();
+                IQueryable<GeneralLog> query = context.GeneralLog.AsNoTracking()
+                    .Where(log => log.LogType == logType && log.CharacterId == characterId);
+
                 if (onlyToday)
                 {
-                    DateTime today = DateTime.Now.Date;
-                    foreach (var log in context.GeneralLog.Where(c => c.LogType.Equals(logType) && c.CharacterId == characterId))
-                    {
-                        if (log.Timestamp.Year == today.Year && log.Timestamp.Month == today.Month && log.Timestamp.Day == today.Day)
-                        {
-                            var dto = new GeneralLogDTO();
-                            GeneralLogMapper.ToGeneralLogDTO(log, dto);
-                            result.Add(dto);
-                        }
-                    }
+                    DateTime start = DateTime.Now.Date;
+                    DateTime end = start.AddDays(1);
+                    query = query.Where(log => log.Timestamp >= start && log.Timestamp < end);
                 }
-                else
-                {
-                    foreach (var log in context.GeneralLog.Where(c => c.LogType.Equals(logType) && c.CharacterId == characterId))
-                    {
-                        var dto = new GeneralLogDTO();
-                        GeneralLogMapper.ToGeneralLogDTO(log, dto);
-                        result.Add(dto);
-                    }
-                }
-                return result;
+
+                return Project(query)
+                    .OrderBy(log => log.Timestamp)
+                    .ThenBy(log => log.LogId)
+                    .ToList();
             }
         }
 
-        public IEnumerable<GeneralLogDTO> LoadByLogTypeAndAccountId(string logType, long? LogId)
+        public IEnumerable<GeneralLogDTO> LoadByLogTypeAndAccountId(string logType, long? accountId)
         {
             using (var context = DataAccessHelper.CreateContext())
             {
-                var result = new List<GeneralLogDTO>();
-                foreach (var log in context.GeneralLog.Where(c => c.LogType.Equals(logType) && c.LogId == LogId))
-                {
-                    var dto = new GeneralLogDTO();
-                    GeneralLogMapper.ToGeneralLogDTO(log, dto);
-                    result.Add(dto);
-                }
+                return Project(context.GeneralLog.AsNoTracking()
+                        .Where(log => log.LogType == logType && log.AccountId == accountId))
+                    .OrderByDescending(log => log.Timestamp)
+                    .ThenByDescending(log => log.LogId)
+                    .ToList();
+            }
+        }
 
-                return result;
+        public GeneralLogDTO LoadLatestByAccountAndType(long accountId, string logType)
+        {
+            using (var context = DataAccessHelper.CreateContext())
+            {
+                return Project(context.GeneralLog.AsNoTracking()
+                        .Where(log => log.AccountId == accountId && log.LogType == logType))
+                    .OrderByDescending(log => log.Timestamp)
+                    .ThenByDescending(log => log.LogId)
+                    .FirstOrDefault();
+            }
+        }
+
+        public GeneralLogDTO LoadLatestByType(string logType, long? characterId)
+        {
+            using (var context = DataAccessHelper.CreateContext())
+            {
+                return Project(context.GeneralLog.AsNoTracking()
+                        .Where(log => log.LogType == logType && log.CharacterId == characterId))
+                    .OrderByDescending(log => log.Timestamp)
+                    .ThenByDescending(log => log.LogId)
+                    .FirstOrDefault();
+            }
+        }
+
+        public IEnumerable<GeneralLogDTO> LoadRecentByAccount(long accountId, int take)
+        {
+            int safeTake = Math.Max(1, Math.Min(500, take));
+            using (var context = DataAccessHelper.CreateContext())
+            {
+                return Project(context.GeneralLog.AsNoTracking().Where(log => log.AccountId == accountId))
+                    .OrderByDescending(log => log.Timestamp)
+                    .ThenByDescending(log => log.LogId)
+                    .Take(safeTake)
+                    .ToList();
             }
         }
 
         public void SetCharIdNull(long? characterId)
         {
+            if (!characterId.HasValue)
+            {
+                return;
+            }
+
             try
             {
                 using (var context = DataAccessHelper.CreateContext())
                 {
-                    foreach (var log in context.GeneralLog.Where(c => c.CharacterId == characterId))
-                        log.CharacterId = null;
-                    context.SaveChanges();
+                    context.Database.ExecuteSqlCommand(
+                        "UPDATE dbo.GeneralLog SET CharacterId = NULL WHERE CharacterId = @p0",
+                        characterId.Value);
                 }
             }
             catch (Exception e)
@@ -201,85 +268,38 @@ namespace NosGm.DAL.DAO
             }
         }
 
-        public void WriteGeneralLog(long LogId, string ipAddress, long? characterId, string logType, string logData)
+        public void WriteGeneralLog(long accountId, string ipAddress, long? characterId, string logType,
+            string logData)
         {
+            Insert(new GeneralLogDTO
+            {
+                AccountId = accountId,
+                CharacterId = characterId,
+                IpAddress = ipAddress,
+                LogType = logType,
+                LogData = logData,
+                Timestamp = DateTime.Now
+            });
+        }
+
+        public async Task<GeneralLogDTO> InsertAsync(GeneralLogDTO generalLog)
+        {
+            if (generalLog == null)
+            {
+                return null;
+            }
+
             try
             {
                 using (var context = DataAccessHelper.CreateContext())
                 {
-                    var log = new GeneralLog
-                    {
-                        LogId = LogId,
-                        IpAddress = ipAddress,
-                        Timestamp = DateTime.Now,
-                        LogType = logType,
-                        LogData = logData,
-                        CharacterId = characterId
-                    };
-
-                    context.GeneralLog.Add(log);
-                    context.SaveChanges();
-                }
-            }
-            catch (Exception e)
-            {
-                Logger.Error(e);
-            }
-        }
-
-        private static GeneralLogDTO insert(GeneralLogDTO GeneralLog, NosGmContext context)
-        {
-            var entity = new GeneralLog();
-            GeneralLogMapper.ToGeneralLog(GeneralLog, entity);
-            context.GeneralLog.Add(entity);
-            context.SaveChanges();
-            GeneralLogMapper.ToGeneralLogDTO(entity, GeneralLog);
-            return GeneralLog;
-        }
-
-        private static GeneralLogDTO update(GeneralLog entity, GeneralLogDTO GeneralLog, NosGmContext context)
-        {
-            if (entity != null)
-            {
-                GeneralLogMapper.ToGeneralLog(GeneralLog, entity);
-                context.Entry(entity).State = EntityState.Modified;
-                context.SaveChanges();
-            }
-
-            if (GeneralLogMapper.ToGeneralLogDTO(entity, GeneralLog)) return GeneralLog;
-
-            return null;
-        }
-
-        private GeneralLogDTO Update(GeneralLog entity, GeneralLogDTO generalLog, NosGmContext context)
-        {
-            if (entity != null)
-            {
-                GeneralLogMapper.ToGeneralLog(generalLog, entity);
-                context.SaveChanges();
-            }
-
-            if (GeneralLogMapper.ToGeneralLogDTO(entity, generalLog)) return generalLog;
-
-            return null;
-        }
-
-        public async Task<GeneralLogDTO> InsertAsync (GeneralLogDTO generalLog)
-        {
-            try
-            {
-                using (var context = DataAccessHelper.CreateContext())
-                {
+                    EnsureTimestamp(generalLog);
                     var entity = new GeneralLog();
                     GeneralLogMapper.ToGeneralLog(generalLog, entity);
                     context.GeneralLog.Add(entity);
                     await context.SaveChangesAsync().ConfigureAwait(false);
-                    if (GeneralLogMapper.ToGeneralLogDTO(entity, generalLog))
-                    {
-                        return generalLog;
-                    }
 
-                    return null;
+                    return GeneralLogMapper.ToGeneralLogDTO(entity, generalLog) ? generalLog : null;
                 }
             }
             catch (Exception e)
@@ -287,6 +307,28 @@ namespace NosGm.DAL.DAO
                 Logger.Error(e);
                 return null;
             }
+        }
+
+        private static void EnsureTimestamp(GeneralLogDTO generalLog)
+        {
+            if (generalLog.Timestamp == default(DateTime))
+            {
+                generalLog.Timestamp = DateTime.Now;
+            }
+        }
+
+        private static IQueryable<GeneralLogDTO> Project(IQueryable<GeneralLog> query)
+        {
+            return query.Select(log => new GeneralLogDTO
+            {
+                AccountId = log.AccountId,
+                CharacterId = log.CharacterId,
+                IpAddress = log.IpAddress,
+                LogData = log.LogData,
+                LogId = log.LogId,
+                LogType = log.LogType,
+                Timestamp = log.Timestamp
+            });
         }
 
         #endregion
