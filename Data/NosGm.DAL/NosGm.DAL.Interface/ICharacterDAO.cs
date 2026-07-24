@@ -29,17 +29,15 @@ namespace NosGm.DAL.Interface
 
         IEnumerable<CharacterDTO> LoadAllByAccount(long accountId);
 
-        IEnumerable<CharacterDTO> LoadByAccount(long accountId);
+        IEnumerable<CharacterDTO> LoadByAccount(long accountId);        
 
         CharacterDTO LoadById(long characterId);
 
         CharacterDTO LoadByName(string name);
 
-        IDictionary<long, string> LoadNamesByIds(IEnumerable<long> characterIds);
-
         CharacterDTO LoadBySlot(long accountId, byte slot);
 
-        bool CheckNameAlreadyExists(string name);
+        public bool CheckNameAlreadyExists(string name);
 
         #endregion
     }
