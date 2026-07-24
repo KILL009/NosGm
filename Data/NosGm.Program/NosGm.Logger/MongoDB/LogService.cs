@@ -3,23 +3,19 @@ using NosGm.Domain;
 using NosGm.LogServer.MongoDB.LogServiceModel;
 using MongoDB.Driver;
 using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
 using System.Threading.Tasks;
 
 namespace NosGm.LogServer.MongoDB
 {
     public static class LogService
     {
+        private static readonly Lazy<MongoClient> Client =
+            new Lazy<MongoClient>(() => new MongoClient(LogConfiguration.ConnectionString));
+
+        private static IMongoDatabase Database => Client.Value.GetDatabase(LogConfiguration.DatabaseName);
+
         public static async Task Generate(string information, LogType logType)
         {
-            var client = new MongoClient(LogConfiguration.ConnectionString);
-            var database = client.GetDatabase(LogConfiguration.DatabaseName);
-
-            var loadCollection = database.GetCollection<LoadServiceModel>(LogConfiguration.LoadServiceModel);
-            var errorCollection = database.GetCollection<ErrorServiceModel>(LogConfiguration.ErrorServiceModel);
-
             switch (logType)
             {
                 case LogType.LOAD:
@@ -28,7 +24,10 @@ namespace NosGm.LogServer.MongoDB
                         Information = information,
                         DateTime = DateTime.Now
                     };
-                    await Task.Run(() => loadCollection.InsertOne(load));
+                    await Database
+                        .GetCollection<LoadServiceModel>(LogConfiguration.LoadServiceModel)
+                        .InsertOneAsync(load)
+                        .ConfigureAwait(false);
                     break;
 
                 case LogType.ERROR:
@@ -37,7 +36,10 @@ namespace NosGm.LogServer.MongoDB
                         Information = information,
                         DateTime = DateTime.Now
                     };
-                    await Task.Run(() => errorCollection.InsertOne(error));
+                    await Database
+                        .GetCollection<ErrorServiceModel>(LogConfiguration.ErrorServiceModel)
+                        .InsertOneAsync(error)
+                        .ConfigureAwait(false);
                     break;
             }
         }
