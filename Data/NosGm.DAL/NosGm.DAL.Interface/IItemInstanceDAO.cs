@@ -29,8 +29,6 @@ namespace NosGm.DAL.Interface
 
         ItemInstanceDTO LoadById(Guid id);
 
-        IDictionary<Guid, ItemInstanceDTO> LoadByIds(IEnumerable<Guid> ids);
-
         ItemInstanceDTO LoadBySlotAndType(long characterId, short slot, InventoryType type);
 
         IEnumerable<ItemInstanceDTO> LoadByType(long characterId, InventoryType type);
