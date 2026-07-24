@@ -9,7 +9,16 @@
     <LangVersion>latest</LangVersion>
     <AssemblyName>NosGM.Launcher</AssemblyName>
     <RootNamespace>NosGM.Launcher</RootNamespace>
+    <Product>NosGM Launcher</Product>
+    <Company>NosGM contributors</Company>
+    <Authors>NosGM contributors</Authors>
+    <Description>Signed transactional updater and launcher for an authorized NosTale client installation.</Description>
+    <Copyright>Copyright © 2026 NosGM contributors</Copyright>
+    <RepositoryUrl>https://github.com/KILL009/NosGm</RepositoryUrl>
   </PropertyGroup>
+  <ItemGroup Condition="Exists('TrustedChannel.Generated.cs')">
+    <Compile Remove="TrustedChannel.Placeholder.cs" />
+  </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\NosGM.Updater.Core\NosGM.Updater.Core.csproj" />
   </ItemGroup>

@@ -3,6 +3,7 @@
 .vs/
 artifacts/
 secrets/
+src/NosGM.Launcher/TrustedChannel.Generated.cs
 *.private.pem
 *.pfx
 *.snk

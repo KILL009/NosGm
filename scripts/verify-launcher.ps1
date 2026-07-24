@@ -7,10 +7,14 @@ $required = @(
     "LICENSE",
     "NOTICE.md",
     "README.md",
+    "RELEASING.md",
     "NosGM.Launcher.sln",
+    "scripts/publish-launcher.ps1",
+    "scripts/verify-launcher-package.ps1",
     "src/NosGM.Updater.Core/NosGM.Updater.Core.csproj",
     "src/NosGM.ManifestBuilder/NosGM.ManifestBuilder.csproj",
     "src/NosGM.Launcher/NosGM.Launcher.csproj",
+    "src/NosGM.Launcher/TrustedChannel.Placeholder.cs",
     "tests/NosGM.Updater.SelfTest/NosGM.Updater.SelfTest.csproj"
 )
 
@@ -77,6 +81,8 @@ foreach ($requiredCode in @(
     "RecoverLockedAsync",
     "import-pending:",
     "ValidateCatalogs",
+    "TrustedChannelConfiguration",
+    "PublicKeyBase64",
     "Español",
     "English",
     "Deutsch",
@@ -91,14 +97,14 @@ foreach ($requiredCode in @(
     "UseShellExecute = true"
 )) {
     if (-not $source.Contains($requiredCode, [System.StringComparison]::Ordinal)) {
-        throw "Required launcher safety or language control missing: $requiredCode"
+        throw "Required launcher safety, release, or language control missing: $requiredCode"
     }
 }
 
 $privateKeyMarkers = @(
-    "BEGIN EC PRIVATE KEY",
-    "BEGIN PRIVATE KEY",
-    "BEGIN ENCRYPTED PRIVATE KEY"
+    "-----BEGIN EC PRIVATE KEY-----",
+    "-----BEGIN PRIVATE KEY-----",
+    "-----BEGIN ENCRYPTED PRIVATE KEY-----"
 )
 $textExtensions = @(".cs", ".csproj", ".sln", ".xaml", ".md", ".txt", ".json", ".yml", ".yaml", ".ps1", ".gitignore", "")
 foreach ($file in $trackedFiles | Where-Object { $_.Length -le 4MB -and $_.Extension -in $textExtensions }) {
