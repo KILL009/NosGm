@@ -64,7 +64,7 @@ The local `.nosgm/update.lock` file is opened with exclusive sharing during impo
 ## Projects
 
 - `src/NosGM.Updater.Core`: manifest validation, signature verification, path sandboxing, planning, streaming downloads, staging, rollback, installation locking, import and crash recovery.
-- `src/NosGM.ManifestBuilder`: package-free CLI for generating signing keys, building signed manifests and verifying releases.
+- `src/NosGM.ManifestBuilder`: package-free CLI for generating signing keys, building and verifying manifests, calculating public-key fingerprints and generating trusted public channel source.
 - `src/NosGM.Launcher`: multilingual WPF shell for importing, checking, repairing and launching the client.
 - `tests/NosGM.Updater.SelfTest`: package-free synthetic regression suite, including interrupted-commit recovery.
 
@@ -103,16 +103,23 @@ dotnet run --project Launcher/src/NosGM.ManifestBuilder -- build `
 
 Manifest URLs are relative to the trusted content base URI compiled into the launcher. The builder refuses reparse points and excludes its own output when that output sits inside the release directory.
 
-## Configure the release channel
+## Configure and publish the launcher
 
-`src/NosGM.Launcher/TrustedChannel.cs` intentionally ships disabled. Before publishing a launcher build, set:
+Development builds use `TrustedChannel.Placeholder.cs`, which keeps the channel disabled with `.invalid` URLs. Release builds must generate `TrustedChannel.Generated.cs` from a clean HTTPS channel and the public half of the P-256 release key. The generated source is ignored by Git and replaces the placeholder only during publication.
 
-- the HTTPS manifest URI;
-- the HTTPS content base URI;
-- the expected `keyId`;
-- the public-key PEM.
+Use the guarded publishing pipeline:
 
-The launcher refuses `.invalid`, non-HTTPS and key-mismatched channels.
+```powershell
+./Launcher/scripts/publish-launcher.ps1 `
+  -Version "1.0.0" `
+  -ManifestUri "https://updates.example.org/nosgm/release-manifest.json" `
+  -ContentBaseUri "https://updates.example.org/nosgm/content/" `
+  -KeyId "nosgm-release-1" `
+  -PublicKeyPath "C:\NosGM\public\nosgm-release-public.pem" `
+  -OutputDirectory "C:\NosGM\releases\launcher-1.0.0-win-x64"
+```
+
+The resulting self-contained package includes `release-info.json`, SHA-256 metadata for every delivered file, the exact Git source commit and required license and attribution documents. See [`RELEASING.md`](RELEASING.md) for the complete trust boundary, verification and optional Authenticode process.
 
 ## Boundaries
 
