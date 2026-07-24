@@ -23,6 +23,23 @@ A release is accepted only when:
 
 The private release-signing key is never part of the launcher, repository or web server. Only the public key is pinned in the launcher build.
 
+## Launcher languages
+
+The WPF interface includes complete built-in navigation, state, confirmation and progress catalogs for:
+
+- Spanish (`es`)
+- English (`en`)
+- German (`de`)
+- French (`fr`)
+- Italian (`it`)
+- Polish (`pl`)
+- Czech (`cz`)
+- Russian (`ru`)
+- Japanese (`jp`)
+- Simplified Chinese (`cn`)
+
+The selected language is saved in the per-user launcher settings and can be changed without restarting. Catalog validation runs before the main window is initialized and refuses incomplete languages. Low-level exception details remain unchanged so diagnostics preserve their original technical meaning.
+
 ## Existing installation import
 
 The launcher can explicitly adopt an existing authorized client installation after downloading and verifying the signed release manifest.
@@ -48,7 +65,7 @@ The local `.nosgm/update.lock` file is opened with exclusive sharing during impo
 
 - `src/NosGM.Updater.Core`: manifest validation, signature verification, path sandboxing, planning, streaming downloads, staging, rollback, installation locking, import and crash recovery.
 - `src/NosGM.ManifestBuilder`: package-free CLI for generating signing keys, building signed manifests and verifying releases.
-- `src/NosGM.Launcher`: WPF shell for importing, checking, repairing and launching the client.
+- `src/NosGM.Launcher`: multilingual WPF shell for importing, checking, repairing and launching the client.
 - `tests/NosGM.Updater.SelfTest`: package-free synthetic regression suite, including interrupted-commit recovery.
 
 ## Build

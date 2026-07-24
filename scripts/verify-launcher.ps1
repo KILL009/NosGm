@@ -76,11 +76,22 @@ foreach ($requiredCode in @(
     "InstallLock",
     "RecoverLockedAsync",
     "import-pending:",
+    "ValidateCatalogs",
+    "Español",
+    "English",
+    "Deutsch",
+    "Français",
+    "Italiano",
+    "Polski",
+    "Čeština",
+    "Русский",
+    "日本語",
+    "中文",
     "IgnoredDeletes",
     "UseShellExecute = true"
 )) {
     if (-not $source.Contains($requiredCode, [System.StringComparison]::Ordinal)) {
-        throw "Required launcher safety control missing: $requiredCode"
+        throw "Required launcher safety or language control missing: $requiredCode"
     }
 }
 
