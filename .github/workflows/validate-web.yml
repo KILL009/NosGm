@@ -158,7 +158,7 @@ jobs:
           export ASPNETCORE_URLS=http://127.0.0.1:5080
           export PublicData__HmacKeyBase64="$(cat /tmp/nosgm-web-key.txt)"
           export PublicData__KeyId=nosgm-live-v1
-          export PublicData__SnapshotPath=App_Data/public-snapshot.json
+          export PublicData__SnapshotPath="$PWD/artifacts/web/App_Data/public-snapshot.json"
           dotnet artifacts/web/NosGM.Web.dll > /tmp/nosgm-web.log 2>&1 &
           web_pid=$!
           cleanup() {
