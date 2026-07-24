@@ -2,9 +2,9 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="NosGM Launcher"
-        Width="940"
+        Width="980"
         Height="560"
-        MinWidth="840"
+        MinWidth="880"
         MinHeight="510"
         WindowStartupLocation="CenterScreen">
     <Grid Margin="28">
@@ -43,10 +43,12 @@
                     <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
                 <TextBlock x:Name="InstallationLabelTextBlock" Grid.Column="0" VerticalAlignment="Center" FontWeight="SemiBold" Text="Instalación:" />
                 <TextBox x:Name="InstallRootTextBox" Grid.Column="1" Margin="12,0" IsReadOnly="True" />
-                <Button x:Name="OpenFolderButton" Grid.Column="2" Click="OpenFolder_Click" Content="Abrir carpeta" />
+                <Button x:Name="BrowseFolderButton" Grid.Column="2" Margin="0,0,8,0" Click="BrowseFolder_Click" Content="Examinar" />
+                <Button x:Name="OpenFolderButton" Grid.Column="3" Click="OpenFolder_Click" Content="Abrir carpeta" />
             </Grid>
         </Border>
 
