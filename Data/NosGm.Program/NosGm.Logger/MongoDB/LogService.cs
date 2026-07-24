@@ -3,6 +3,7 @@ using NosGm.Domain;
 using NosGm.LogServer.MongoDB.LogServiceModel;
 using MongoDB.Driver;
 using System;
+using System.Diagnostics;
 using System.Threading.Tasks;
 
 namespace NosGm.LogServer.MongoDB
@@ -16,31 +17,47 @@ namespace NosGm.LogServer.MongoDB
 
         public static async Task Generate(string information, LogType logType)
         {
-            switch (logType)
+            var stopwatch = Stopwatch.StartNew();
+            bool success = false;
+            try
             {
-                case LogType.LOAD:
-                    var load = new LoadServiceModel
-                    {
-                        Information = information,
-                        DateTime = DateTime.Now
-                    };
-                    await Database
-                        .GetCollection<LoadServiceModel>(LogConfiguration.LoadServiceModel)
-                        .InsertOneAsync(load)
-                        .ConfigureAwait(false);
-                    break;
+                switch (logType)
+                {
+                    case LogType.LOAD:
+                        var load = new LoadServiceModel
+                        {
+                            Information = information,
+                            DateTime = DateTime.Now
+                        };
+                        await Database
+                            .GetCollection<LoadServiceModel>(LogConfiguration.LoadServiceModel)
+                            .InsertOneAsync(load)
+                            .ConfigureAwait(false);
+                        success = true;
+                        break;
 
-                case LogType.ERROR:
-                    var error = new ErrorServiceModel
-                    {
-                        Information = information,
-                        DateTime = DateTime.Now
-                    };
-                    await Database
-                        .GetCollection<ErrorServiceModel>(LogConfiguration.ErrorServiceModel)
-                        .InsertOneAsync(error)
-                        .ConfigureAwait(false);
-                    break;
+                    case LogType.ERROR:
+                        var error = new ErrorServiceModel
+                        {
+                            Information = information,
+                            DateTime = DateTime.Now
+                        };
+                        await Database
+                            .GetCollection<ErrorServiceModel>(LogConfiguration.ErrorServiceModel)
+                            .InsertOneAsync(error)
+                            .ConfigureAwait(false);
+                        success = true;
+                        break;
+
+                    default:
+                        success = true;
+                        break;
+                }
+            }
+            finally
+            {
+                stopwatch.Stop();
+                LogPipelineMonitor.RecordMongoWrite(stopwatch.ElapsedTicks, success);
             }
         }
     }
