@@ -11,23 +11,24 @@ namespace NosGM.Launcher;
 
 internal sealed class LauncherController
 {
+    public Task<RecoveryResult> RecoverAsync(
+        LauncherSettings settings,
+        IProgress<UpdateProgress>? progress,
+        CancellationToken cancellationToken)
+        => TransactionRecovery.RecoverAsync(settings.InstallRoot, progress, cancellationToken);
+
     public async Task<(UpdatePlan Plan, UpdateResult? Result)> CheckAndApplyAsync(
         LauncherSettings settings,
         bool apply,
         IProgress<UpdateProgress>? progress,
         CancellationToken cancellationToken)
     {
-        if (!TrustedChannel.IsConfigured)
-        {
-            throw new InvalidOperationException(
-                "This build has no trusted release channel. Configure TrustedChannel.cs before publishing.");
-        }
-
-        var manifest = await DownloadManifestAsync(cancellationToken);
-        var verifiedManifest = ManifestSecurity.Verify(
-            manifest,
-            TrustedChannel.KeyId,
-            TrustedChannel.PublicKeyPem);
+        _ = await TransactionRecovery.RecoverAsync(
+            settings.InstallRoot,
+            progress,
+            cancellationToken);
+        var verifiedManifest = await GetVerifiedManifestAsync(cancellationToken);
+        var manifest = verifiedManifest.Manifest;
         EnforceMinimumLauncherVersion(manifest.MinimumLauncherVersion);
 
         var plan = await UpdatePlanner.CreateAsync(
@@ -50,6 +51,20 @@ internal sealed class LauncherController
             progress,
             cancellationToken);
         return (plan, result);
+    }
+
+    public async Task<ImportResult> ImportExistingAsync(
+        LauncherSettings settings,
+        IProgress<UpdateProgress>? progress,
+        CancellationToken cancellationToken)
+    {
+        var verifiedManifest = await GetVerifiedManifestAsync(cancellationToken);
+        EnforceMinimumLauncherVersion(verifiedManifest.Manifest.MinimumLauncherVersion);
+        return await ExistingInstallImporter.AdoptAsync(
+            settings.InstallRoot,
+            verifiedManifest,
+            progress,
+            cancellationToken);
     }
 
     public static void LaunchGame(LauncherSettings settings)
@@ -80,6 +95,26 @@ internal sealed class LauncherController
             ArgumentList = { Path.GetFullPath(settings.InstallRoot) },
             UseShellExecute = false
         });
+    }
+
+    private static async Task<VerifiedReleaseManifest> GetVerifiedManifestAsync(
+        CancellationToken cancellationToken)
+    {
+        EnsureTrustedChannel();
+        var manifest = await DownloadManifestAsync(cancellationToken);
+        return ManifestSecurity.Verify(
+            manifest,
+            TrustedChannel.KeyId,
+            TrustedChannel.PublicKeyPem);
+    }
+
+    private static void EnsureTrustedChannel()
+    {
+        if (!TrustedChannel.IsConfigured)
+        {
+            throw new InvalidOperationException(
+                "This build has no trusted release channel. Configure TrustedChannel.cs before publishing.");
+        }
     }
 
     private static async Task<ReleaseManifest> DownloadManifestAsync(CancellationToken cancellationToken)

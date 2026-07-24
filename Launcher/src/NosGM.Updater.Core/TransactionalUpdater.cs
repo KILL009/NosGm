@@ -20,6 +20,8 @@ public sealed class TransactionalUpdater
         var root = Path.GetFullPath(installRoot);
         Directory.CreateDirectory(root);
         SafePaths.EnsureNoReparsePoints(root, root);
+        using var installLock = InstallLock.Acquire(root);
+        _ = await TransactionRecovery.RecoverLockedAsync(root, progress, cancellationToken);
 
         var metadataRoot = InstallStateStore.GetMetadataRoot(root);
         Directory.CreateDirectory(metadataRoot);
@@ -31,6 +33,10 @@ public sealed class TransactionalUpdater
         var rollbackRoot = Path.Combine(transactionRoot, "rollback");
         Directory.CreateDirectory(stagingRoot);
         Directory.CreateDirectory(rollbackRoot);
+        var journal = await TransactionRecovery.BeginStagingAsync(
+            transactionRoot,
+            plan,
+            cancellationToken);
 
         var downloadedBytes = 0L;
         var downloadedFiles = 0;
@@ -64,6 +70,12 @@ public sealed class TransactionalUpdater
             }
 
             cancellationToken.ThrowIfCancellationRequested();
+            journal = await TransactionRecovery.PrepareCommitAsync(
+                root,
+                transactionRoot,
+                plan,
+                journal,
+                cancellationToken);
             progress?.Report(new UpdateProgress(
                 "commit",
                 null,
@@ -79,6 +91,7 @@ public sealed class TransactionalUpdater
                 stagingRoot,
                 rollbackRoot,
                 transactionRoot,
+                journal,
                 progress);
         }
         catch
@@ -98,6 +111,7 @@ public sealed class TransactionalUpdater
         string stagingRoot,
         string rollbackRoot,
         string transactionRoot,
+        TransactionJournal journal,
         IProgress<UpdateProgress>? progress)
     {
         var backups = new List<BackupEntry>();
@@ -113,6 +127,11 @@ public sealed class TransactionalUpdater
                 Directory.CreateDirectory(Path.GetDirectoryName(stateBackupPath)!);
                 File.Copy(statePath, stateBackupPath, overwrite: false);
             }
+
+            journal = await TransactionRecovery.MarkCommittingAsync(
+                transactionRoot,
+                journal,
+                CancellationToken.None);
 
             foreach (var file in plan.Downloads)
             {
@@ -153,6 +172,10 @@ public sealed class TransactionalUpdater
 
             var newState = InstallStateStore.FromManifest(plan.Manifest);
             await InstallStateStore.SaveAsync(root, newState, CancellationToken.None);
+            journal = await TransactionRecovery.MarkStateSavedAsync(
+                transactionRoot,
+                journal,
+                CancellationToken.None);
 
             progress?.Report(new UpdateProgress(
                 "complete",
