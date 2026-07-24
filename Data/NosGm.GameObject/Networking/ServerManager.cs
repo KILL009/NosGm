@@ -1716,10 +1716,11 @@ namespace NosGm.GameObject.Networking
                     session.Character.Mates?.ForEach(s => session.SendPacket(s.GenerateScPacket()));
                     session.SendPackets(session.Character.GeneratePst());
 
-                     if (session.Character.Size != 106)
-                     {
-                         session.SendPacket(session.Character.GenerateScal());
-                     }            
+                    if (session.Character.Size == 10)
+                    {
+                        session.Character.Size = 106;
+                        session.SendPacket(session.Character.GenerateScal());
+                    }
 
                     if (session.CurrentMapInstance?.IsDancing == true && !session.Character.IsDancing)
                     {

@@ -844,11 +844,10 @@ namespace NosGm.GameObject
 
         public ConcurrentBag<ShellEffectDTO> ShellEffectSecondary { get; set; }
 
-        // size cambio a 106 client "0.9.3.3254"
-        public static int DefaultCharacterSize =>
-       ServerConfiguration.GameVersion == "0.9.3.3254"
-           ? 106
-           : 10;
+        /// <summary>
+        /// Tamaño predeterminado compatible con el cliente 0.9.3.3254.
+        /// </summary>
+        public static int DefaultCharacterSize => 106;
 
         public int Size { get; set; } = DefaultCharacterSize;
 

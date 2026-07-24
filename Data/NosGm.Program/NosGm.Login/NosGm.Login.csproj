@@ -213,7 +213,6 @@
     </PackageReference>
   </ItemGroup>
   <ItemGroup>
-    <Content Include="favicon.ico" />
     <Content Include="Files\Resources\logo_raw_no_slogan.ico" />
     <Content Include="nosgm-emulator-icon.ico" />
   </ItemGroup>
