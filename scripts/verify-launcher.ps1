@@ -72,6 +72,10 @@ foreach ($requiredCode in @(
     "CheckCertificateRevocationList = true",
     "transactions",
     "rollback",
+    "journal.json",
+    "InstallLock",
+    "RecoverLockedAsync",
+    "import-pending:",
     "IgnoredDeletes",
     "UseShellExecute = true"
 )) {

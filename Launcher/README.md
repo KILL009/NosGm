@@ -17,16 +17,39 @@ A release is accepted only when:
 - all downloads finish in a staging directory before commit;
 - replaced or deleted managed files are moved into rollback storage before activation;
 - only files recorded in the local managed-install state may be removed;
+- one exclusive installation lock prevents concurrent update, import and recovery operations;
+- a durable transaction journal recovers or finalizes interrupted commits on the next launch;
 - the game is launched without administrator elevation.
 
 The private release-signing key is never part of the launcher, repository or web server. Only the public key is pinned in the launcher build.
 
+## Existing installation import
+
+The launcher can explicitly adopt an existing authorized client installation after downloading and verifying the signed release manifest.
+
+Import does not copy, delete or replace client files. It records only existing files whose relative paths appear in the signed manifest. Matching files are accepted as-is; mismatched files are marked as managed so a later **Repair** operation may replace them. Missing files remain untracked until downloaded. Extra player files and paths outside the signed manifest are never adopted.
+
+An installation that already has a non-empty `.nosgm/state.json` cannot be imported again.
+
+## Crash recovery
+
+Each update writes `.nosgm/transactions/<id>/journal.json` before installation files are changed. The journal records the target managed state, planned operations and whether each destination existed before commit.
+
+On startup:
+
+- staging-only and prepared transactions are discarded because no installation change began;
+- interrupted commits are rolled back from durable backup files;
+- transactions whose target state was already atomically saved are finalized without undoing a completed release;
+- malformed journals or missing recovery evidence stop automatic updates instead of guessing.
+
+The local `.nosgm/update.lock` file is opened with exclusive sharing during import, recovery and update operations. Its presence alone does not indicate that the installation is locked; the operating-system file handle is authoritative.
+
 ## Projects
 
-- `src/NosGM.Updater.Core`: manifest validation, signature verification, path sandboxing, planning, streaming downloads, staging and rollback.
+- `src/NosGM.Updater.Core`: manifest validation, signature verification, path sandboxing, planning, streaming downloads, staging, rollback, installation locking, import and crash recovery.
 - `src/NosGM.ManifestBuilder`: package-free CLI for generating signing keys, building signed manifests and verifying releases.
-- `src/NosGM.Launcher`: minimal WPF shell for checking, repairing and launching the client.
-- `tests/NosGM.Updater.SelfTest`: package-free synthetic regression suite.
+- `src/NosGM.Launcher`: WPF shell for importing, checking, repairing and launching the client.
+- `tests/NosGM.Updater.SelfTest`: package-free synthetic regression suite, including interrupted-commit recovery.
 
 ## Build
 

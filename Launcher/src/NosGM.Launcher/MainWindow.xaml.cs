@@ -24,15 +24,33 @@ public partial class MainWindow : Window
         {
             _settings = await LauncherSettingsStore.LoadAsync();
             InstallRootTextBox.Text = _settings.InstallRoot;
+            var recovery = await _controller.RecoverAsync(
+                _settings,
+                progress: null,
+                CancellationToken.None);
+
             ChannelStatusRun.Text = TrustedChannel.IsConfigured
                 ? $"configurado con clave {TrustedChannel.KeyId}"
                 : "desactivado hasta fijar HTTPS, keyId y clave pública";
-            StatusTextBlock.Text = TrustedChannel.IsConfigured
-                ? "Listo para comprobar actualizaciones"
-                : "Base segura instalada";
-            DetailTextBlock.Text = TrustedChannel.IsConfigured
-                ? "El launcher verificará la firma del manifiesto antes de leer cualquier ruta de actualización."
-                : "La interfaz no descargará nada mientras TrustedChannel.cs conserve los valores de ejemplo.";
+            var recoveredCount = recovery.RecoveredTransactions +
+                                 recovery.FinalizedTransactions +
+                                 recovery.DiscardedTransactions;
+            if (recoveredCount > 0)
+            {
+                StatusTextBlock.Text = "Recuperación automática completada";
+                DetailTextBlock.Text =
+                    $"Se procesaron {recoveredCount} transacciones pendientes sin tocar archivos ajenos.";
+            }
+            else
+            {
+                StatusTextBlock.Text = TrustedChannel.IsConfigured
+                    ? "Listo para comprobar actualizaciones"
+                    : "Base segura instalada";
+                DetailTextBlock.Text = TrustedChannel.IsConfigured
+                    ? "El launcher verificará la firma del manifiesto antes de leer cualquier ruta de actualización."
+                    : "La interfaz no descargará nada mientras TrustedChannel.cs conserve los valores de ejemplo.";
+            }
+
             SetButtonsEnabled(true);
         }
         catch (Exception exception)
@@ -46,6 +64,21 @@ public partial class MainWindow : Window
 
     private async void Repair_Click(object sender, RoutedEventArgs e)
         => await RunUpdateAsync(apply: true, "Verificando y reparando...");
+
+    private async void Import_Click(object sender, RoutedEventArgs e)
+    {
+        var choice = MessageBox.Show(
+            this,
+            "La importación registrará únicamente archivos existentes cuyas rutas aparezcan en el manifiesto firmado. " +
+            "Los archivos distintos podrán ser reemplazados posteriormente al pulsar Reparar. Los archivos extra no se tocarán.\n\n¿Continuar?",
+            "Importar instalación existente",
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Warning);
+        if (choice == MessageBoxResult.Yes)
+        {
+            await RunImportAsync();
+        }
+    }
 
     private void Play_Click(object sender, RoutedEventArgs e)
     {
@@ -77,16 +110,38 @@ public partial class MainWindow : Window
         }
     }
 
+    private async Task RunImportAsync()
+    {
+        BeginOperation("Analizando instalación existente...");
+        var progress = new Progress<UpdateProgress>(UpdateProgress);
+        try
+        {
+            var result = await _controller.ImportExistingAsync(
+                _settings,
+                progress,
+                _operationCancellation!.Token);
+            StatusTextBlock.Text = "Instalación importada";
+            DetailTextBlock.Text =
+                $"{result.ManagedFiles} archivos administrados: {result.MatchingFiles} correctos, " +
+                $"{result.RepairFiles} para reparar y {result.MissingFiles} ausentes.";
+        }
+        catch (OperationCanceledException)
+        {
+            StatusTextBlock.Text = "Operación cancelada";
+        }
+        catch (Exception exception)
+        {
+            ShowError(exception);
+        }
+        finally
+        {
+            SetButtonsEnabled(true);
+        }
+    }
+
     private async Task RunUpdateAsync(bool apply, string status)
     {
-        _operationCancellation?.Cancel();
-        _operationCancellation?.Dispose();
-        _operationCancellation = new CancellationTokenSource();
-        SetButtonsEnabled(false);
-        StatusTextBlock.Text = status;
-        DetailTextBlock.Text = string.Empty;
-        UpdateProgressBar.Value = 0;
-
+        BeginOperation(status);
         var progress = new Progress<UpdateProgress>(UpdateProgress);
         try
         {
@@ -94,7 +149,7 @@ public partial class MainWindow : Window
                 _settings,
                 apply,
                 progress,
-                _operationCancellation.Token);
+                _operationCancellation!.Token);
 
             if (operation.Plan.Downloads.Count == 0 && operation.Plan.Deletes.Count == 0)
             {
@@ -132,6 +187,17 @@ public partial class MainWindow : Window
         }
     }
 
+    private void BeginOperation(string status)
+    {
+        _operationCancellation?.Cancel();
+        _operationCancellation?.Dispose();
+        _operationCancellation = new CancellationTokenSource();
+        SetButtonsEnabled(false);
+        StatusTextBlock.Text = status;
+        DetailTextBlock.Text = string.Empty;
+        UpdateProgressBar.Value = 0;
+    }
+
     private void UpdateProgress(UpdateProgress update)
     {
         var percent = update.TotalBytes > 0
@@ -150,6 +216,7 @@ public partial class MainWindow : Window
 
     private void SetButtonsEnabled(bool enabled)
     {
+        ImportButton.IsEnabled = enabled && TrustedChannel.IsConfigured;
         CheckButton.IsEnabled = enabled && TrustedChannel.IsConfigured;
         RepairButton.IsEnabled = enabled && TrustedChannel.IsConfigured;
         PlayButton.IsEnabled = enabled;
