@@ -5,11 +5,14 @@ using NosGm.Domain;
 using System;
 using System.Data.SqlClient;
 using System.Linq;
+using System.Threading;
 
 namespace NosGm.DAL.DAO
 {
     public class AccountDailyActionDAO : IAccountDailyActionDAO
     {
+        private static int _retentionChecked;
+
         public bool IsAvailable()
         {
             try
@@ -38,6 +41,8 @@ namespace NosGm.DAL.DAO
                 LogPipelineMonitor.RecordDailyAction(result);
                 return result;
             }
+
+            EnsureRetentionCleanup();
 
             try
             {
@@ -102,6 +107,32 @@ namespace NosGm.DAL.DAO
             {
                 Logger.Error("Unable to release account daily action claim.", exception);
                 return false;
+            }
+        }
+
+        private static void EnsureRetentionCleanup()
+        {
+            if (Interlocked.CompareExchange(ref _retentionChecked, 1, 0) != 0)
+            {
+                return;
+            }
+
+            try
+            {
+                using (var context = DataAccessHelper.CreateContext())
+                {
+                    context.Database.ExecuteSqlCommand(
+                        @"DELETE FROM dbo.AccountDailyAction
+                          WHERE ActionDate < DATEADD(DAY, -31, CONVERT(DATE, GETDATE()))");
+                }
+            }
+            catch (SqlException exception) when (exception.Number == 208)
+            {
+                // TryClaim reports the missing migration with the appropriate result.
+            }
+            catch (Exception exception)
+            {
+                Logger.Error("Unable to purge expired AccountDailyAction rows.", exception);
             }
         }
     }
