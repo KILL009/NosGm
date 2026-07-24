@@ -93,10 +93,11 @@ namespace NosGm.Handler.BasicPacket.CharScreen
 
                 #endregion
 
-                #region Load General Logs
+                #region General Logs
 
+                // GeneralLog is persisted audit history, not character session state.
+                // Keeping this collection empty avoids materializing every account log at login.
                 character.GeneralLogs = new ThreadSafeGenericList<GeneralLogDTO>();
-                character.GeneralLogs.AddRange(DAOFactory.GeneralLogDAO.LoadByAccount(Session.Account.AccountId).Where(s => s.LogType == "DailyReward" || s.CharacterId == character.CharacterId).ToList());
 
                 #endregion
 
