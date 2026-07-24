@@ -53,7 +53,7 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Debug|x86'">
     <PlatformTarget>x86</PlatformTarget>
     <OutputPath>bin\x86\Debug\</OutputPath>
-    <DefineConstants>TRACE;DEBUG</DefineConstants>
+    <DefineConstants>DEBUG;TRACE</DefineConstants>
     <CodeAnalysisRuleSet>..\..\..\ProjectRuleset.ruleset</CodeAnalysisRuleSet>
     <LangVersion>latest</LangVersion>
   </PropertyGroup>
@@ -101,6 +101,7 @@
     <Compile Include="ItemPluginType.cs" />
     <Compile Include="ItemTraceType.cs" />
     <Compile Include="LoginFailType.cs" />
+    <Compile Include="LogPipelineMonitor.cs" />
     <Compile Include="LogType.cs" />
     <Compile Include="MapInstanceType.cs" />
     <Compile Include="FamilyLogType.cs" />
@@ -178,6 +179,7 @@
     <Compile Include="WpPortalType.cs" />
   </ItemGroup>
   <ItemGroup>
+    <Reference Include="System" />
     <Reference Include="System.Net.Http" />
   </ItemGroup>
   <ItemGroup>
