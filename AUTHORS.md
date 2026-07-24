@@ -46,6 +46,8 @@ NosGM includes ChickenAPI-related source components traced to the NQ-Source snap
 
 `Launcher/` is original NosGM work. Its differential-update and repair design was informed by a prior-art review of `Mati18505/HexTaleLauncher@50aa50580aa35a45b156a1899a340a25e50f7fb5`; credit for that earlier project remains with Mati18505 and its contributors. No HexTaleLauncher implementation, binary, artwork, endpoint or signing material is copied. Detailed boundaries are preserved in `Launcher/NOTICE.md`.
 
+`Web/` is original NosGM work under the MIT License. Its product map was informed by a security review of the historical `KILL009/noswings-website-old@aaaa3b6a39d944de45653b2a5db3105bc4c86d6d` repository. No source code, credential, endpoint, commercial ThemeForest theme, image, font or other asset from that repository is copied. Detailed boundaries are preserved in `Web/NOTICE.md`.
+
 The Git history and verified upstream repository history remain the authoritative attribution records. See `NOTICE.md` and `docs/PROVENANCE.md`.
 
 ## NosGM contributors
