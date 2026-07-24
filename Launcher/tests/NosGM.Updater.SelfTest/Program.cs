@@ -196,6 +196,8 @@ internal static class Program
             Require((await InstallStateStore.LoadAsync(installRoot)).ReleaseId == "release-2",
                 "Failed update changed managed state.");
 
+            await PhaseTwoSelfTest.RunAsync(root, keyId, privateKeyPem, publicKeyPem);
+
             Console.WriteLine("NosGM updater synthetic self-test passed.");
             Console.WriteLine($"Release public-key fingerprint: {ManifestSecurity.PublicKeyFingerprint(publicKeyPem)}");
             return 0;
