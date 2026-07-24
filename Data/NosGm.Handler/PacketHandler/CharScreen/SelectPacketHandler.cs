@@ -231,6 +231,17 @@ namespace NosGm.Handler.Packets.CharScreenPackets
 
                 #endregion
 
+                #region RemoveAllDupedShell
+
+                int cleanedShells = DAOFactory.ShellEffectDAO.CleanupDuplicateNonRuneEffects(
+                    Session.Character.CharacterId);
+                if (cleanedShells > 0)
+                {
+                    Logger.Warn($"Removed duplicate shell effects from {cleanedShells} equipment serials for CharacterId {Session.Character.CharacterId}.");
+                }
+
+                #endregion
+
                 #region Enter the World
 
                 Session.SendPacket("OK");
@@ -238,20 +249,6 @@ namespace NosGm.Handler.Packets.CharScreenPackets
                 CommunicationServiceClient.Instance.ConnectCharacter(ServerManager.Instance.WorldId, character.CharacterId);
 
                 character.Channel = ServerManager.Instance;
-
-                #endregion
-
-                #region RemoveAllDupedShell
-
-                foreach (var e in DAOFactory.ItemInstanceDAO.LoadByCharacterId(Session.Character.CharacterId))
-                {
-                    var count = DAOFactory.ShellEffectDAO.LoadByEquipmentSerialId(e.EquipmentSerialId).Where(s => !s.IsRune).Count();
-                    if (count > 15)
-                    {
-                        e.ShellRarity = null;
-                        DAOFactory.ShellEffectDAO.DeleteByEquipmentSerialId(e.EquipmentSerialId);
-                    }
-                }
 
                 #endregion
             }
