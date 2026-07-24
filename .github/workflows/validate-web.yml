@@ -40,6 +40,63 @@ jobs:
       - name: Publish portal
         run: dotnet publish Web/src/NosGM.Web/NosGM.Web.csproj -c Release --no-build -o artifacts/web
 
+      - name: Smoke-test published portal
+        shell: bash
+        run: |
+          set -euo pipefail
+          export ASPNETCORE_ENVIRONMENT=Development
+          export ASPNETCORE_URLS=http://127.0.0.1:5080
+          dotnet artifacts/web/NosGM.Web.dll > /tmp/nosgm-web.log 2>&1 &
+          web_pid=$!
+          cleanup() {
+            kill "$web_pid" 2>/dev/null || true
+            wait "$web_pid" 2>/dev/null || true
+          }
+          trap cleanup EXIT
+
+          ready=0
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent --show-error http://localhost:5080/health/live > /dev/null; then
+              ready=1
+              break
+            fi
+            sleep 1
+          done
+          if [ "$ready" -ne 1 ]; then
+            cat /tmp/nosgm-web.log
+            exit 1
+          fi
+
+          curl --fail --silent --show-error --dump-header /tmp/nosgm-web.headers \
+            --output /tmp/nosgm-web.home 'http://localhost:5080/?lang=es'
+          grep -Fq 'NosGM' /tmp/nosgm-web.home
+          grep -Eiq "^content-security-policy: .*default-src 'none'" /tmp/nosgm-web.headers
+          grep -Eiq '^x-frame-options: DENY' /tmp/nosgm-web.headers
+
+          curl --fail --silent --show-error \
+            http://localhost:5080/api/public/metadata > /tmp/nosgm-web.metadata.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          data = json.loads(Path('/tmp/nosgm-web.metadata.json').read_text(encoding='utf-8'))
+          assert data['serverName'] == 'NosGM'
+          assert data['clientVersion'] == '0.9.3.3255'
+          assert data['launcherDownloadAvailable'] is False
+          assert len(data['supportedLanguages']) == 10
+          PY
+
+          curl --fail --silent --show-error \
+            http://localhost:5080/api/public/status > /tmp/nosgm-web.status.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          data = json.loads(Path('/tmp/nosgm-web.status.json').read_text(encoding='utf-8'))
+          assert data['serverName'] == 'NosGM'
+          assert len(data['services']) >= 3
+          PY
+
       - name: Run web safety and provenance checks
         shell: pwsh
         run: ./Web/scripts/verify-web.ps1
