@@ -1,5 +1,7 @@
-﻿using NosGm.DAL;
+﻿using NosGm.Core;
+using NosGm.DAL;
 using NosGm.Data;
+using NosGm.Domain;
 using System;
 
 namespace NosGm.GameObject.Service
@@ -12,52 +14,71 @@ namespace NosGm.GameObject.Service
 
         public static void RefreshPrimalQuest(ClientSession session)
         {
-            if (WasRunToday(session, PrimalQuestRefreshKey))
+            ExecuteDailyAction(session, PrimalQuestRefreshKey, () =>
             {
-                return;
-            }
-
-            session.SendPacket(session.Character.GenerateSay("Your Primal Quests have been refreshed", 12));
-            session.Character.PrimalQuestCount = 0;
-            WriteRefreshLog(session, PrimalQuestRefreshKey);
+                session.SendPacket(session.Character.GenerateSay("Your Primal Quests have been refreshed", 12));
+                session.Character.PrimalQuestCount = 0;
+            });
         }
 
         public static void DuelCountRefresh(ClientSession session)
         {
-            if (WasRunToday(session, DuelCountRefreshKey))
+            ExecuteDailyAction(session, DuelCountRefreshKey, () =>
             {
-                return;
-            }
-
-            session.SendPacket(session.Character.GenerateSay("Your Duel Count has been refreshed.", 12));
-            session.Character.DuelCount = 0;
-            WriteRefreshLog(session, DuelCountRefreshKey);
+                session.SendPacket(session.Character.GenerateSay("Your Duel Count has been refreshed.", 12));
+                session.Character.DuelCount = 0;
+            });
         }
 
         public static void IceFlowerRefresh(ClientSession session)
         {
-            if (WasRunToday(session, IceFlowerRefreshKey))
+            ExecuteDailyAction(session, IceFlowerRefreshKey, () =>
+            {
+                session.Character.HasDoneIceFlowerQuest = false;
+            });
+        }
+
+        private static void ExecuteDailyAction(ClientSession session, string actionKey, Action action)
+        {
+            DateTime actionDate = DateTime.Now.Date;
+            DailyActionClaimResult claim = DAOFactory.AccountDailyActionDAO.TryClaim(
+                session.Account.AccountId,
+                session.Character.CharacterId,
+                actionKey,
+                actionDate);
+
+            if (claim == DailyActionClaimResult.AlreadyClaimed)
             {
                 return;
             }
 
-            session.Character.HasDoneIceFlowerQuest = false;
-            WriteRefreshLog(session, IceFlowerRefreshKey);
-        }
+            if (claim != DailyActionClaimResult.Claimed)
+            {
+                Logger.Error(
+                    $"Daily action {actionKey} failed for account {session.Account.AccountId}. Result: {claim}.");
+                session.SendPacket(session.Character.GenerateSay(
+                    "Daily action service is temporarily unavailable.", 11));
+                return;
+            }
 
-        private static bool WasRunToday(ClientSession session, string actionKey)
-        {
-            DateTime today = DateTime.Now.Date;
-            return DAOFactory.GeneralLogDAO.ExistsForAccount(
-                session.Account.AccountId,
-                actionKey,
-                today,
-                today.AddDays(1));
+            try
+            {
+                action();
+                WriteRefreshLog(session, actionKey);
+            }
+            catch (Exception exception)
+            {
+                DAOFactory.AccountDailyActionDAO.ReleaseClaim(
+                    session.Account.AccountId,
+                    actionKey,
+                    actionDate);
+                Logger.Error($"Unable to complete daily action {actionKey}.", exception);
+            }
         }
 
         private static void WriteRefreshLog(ClientSession session, string actionKey)
         {
-            DAOFactory.GeneralLogDAO.Insert(new GeneralLogDTO
+            DAOFactory.GeneralLogDAO.Enqueue(new GeneralLogDTO
             {
                 AccountId = session.Account.AccountId,
                 CharacterId = session.Character.CharacterId,
