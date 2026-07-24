@@ -1,5 +1,6 @@
 ﻿using NosGm.Data;
 using NosGm.Data.Enums;
+using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 
@@ -8,6 +9,8 @@ namespace NosGm.DAL.Interface
     public interface IGeneralLogDAO
     {
         #region Methods
+
+        bool ExistsForAccount(long accountId, string logData, DateTime fromInclusive, DateTime toExclusive);
 
         bool IdAlreadySet(long id);
 
@@ -26,6 +29,12 @@ namespace NosGm.DAL.Interface
         IEnumerable<GeneralLogDTO> LoadByLogType(string logType, long? characterId, bool onlyToday = false);
 
         IEnumerable<GeneralLogDTO> LoadByLogTypeAndAccountId(string logType, long? accountId);
+
+        GeneralLogDTO LoadLatestByAccountAndType(long accountId, string logType);
+
+        GeneralLogDTO LoadLatestByType(string logType, long? characterId);
+
+        IEnumerable<GeneralLogDTO> LoadRecentByAccount(long accountId, int take);
 
         void SetCharIdNull(long? characterId);
 

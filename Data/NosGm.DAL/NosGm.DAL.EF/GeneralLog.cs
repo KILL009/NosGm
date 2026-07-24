@@ -21,7 +21,7 @@ namespace NosGm.DAL.EF
 
         [Key] public long LogId { get; set; }
 
-        public string LogType { get; set; }
+        [MaxLength(64)] public string LogType { get; set; }
 
         public DateTime Timestamp { get; set; }
 

@@ -1,72 +1,109 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Threading.Tasks;
+using System.Threading;
 
 namespace NosGm.SCS.Threading
 {
     public class SequentialItemProcessor<TItem>
     {
+        private readonly ManualResetEventSlim _idle = new ManualResetEventSlim(true);
         private readonly object _syncObj = new object();
         private readonly Action<TItem> _processMethod;
         private readonly Queue<TItem> _queue;
-        private Task _currentProcessTask;
+
         private bool _isProcessing;
         private bool _isRunning;
 
         public SequentialItemProcessor(Action<TItem> processMethod)
         {
-            this._processMethod = processMethod;
-            this._queue = new Queue<TItem>();
+            _processMethod = processMethod ?? throw new ArgumentNullException(nameof(processMethod));
+            _queue = new Queue<TItem>();
+        }
+
+        public int QueueDepth
+        {
+            get
+            {
+                lock (_syncObj)
+                {
+                    return _queue.Count;
+                }
+            }
         }
 
         public void EnqueueMessage(TItem item)
         {
-            lock (this._syncObj)
+            bool startWorker = false;
+            lock (_syncObj)
             {
-                if (!this._isRunning)
+                if (!_isRunning)
+                {
                     return;
-                this._queue.Enqueue(item);
-                if (this._isProcessing)
-                    return;
-                this._currentProcessTask = Task.Factory.StartNew(new Action(this.ProcessItem));
+                }
+
+                _queue.Enqueue(item);
+                if (!_isProcessing)
+                {
+                    _isProcessing = true;
+                    _idle.Reset();
+                    startWorker = true;
+                }
+            }
+
+            if (startWorker)
+            {
+                ThreadPool.QueueUserWorkItem(ProcessItems);
             }
         }
 
-        public void Start() => this._isRunning = true;
+        public void Start()
+        {
+            lock (_syncObj)
+            {
+                _isRunning = true;
+            }
+        }
 
         public void Stop()
         {
-            this._isRunning = false;
-            lock (this._syncObj)
-                this._queue.Clear();
-            if (!this._isProcessing)
-                return;
-            try
+            lock (_syncObj)
             {
-                this._currentProcessTask.Wait();
+                _isRunning = false;
+                _queue.Clear();
+                if (!_isProcessing)
+                {
+                    _idle.Set();
+                }
             }
-            catch
-            {
-            }
+
+            _idle.Wait();
         }
 
-        private void ProcessItem()
+        private void ProcessItems(object state)
         {
-            TItem obj;
-            lock (this._syncObj)
+            while (true)
             {
-                if (!this._isRunning || this._isProcessing || this._queue.Count <= 0)
-                    return;
-                this._isProcessing = true;
-                obj = this._queue.Dequeue();
-            }
-            this._processMethod(obj);
-            lock (this._syncObj)
-            {
-                this._isProcessing = false;
-                if (!this._isRunning || this._queue.Count <= 0)
-                    return;
-                this._currentProcessTask = Task.Factory.StartNew(new Action(this.ProcessItem));
+                TItem item;
+                lock (_syncObj)
+                {
+                    if (!_isRunning || _queue.Count == 0)
+                    {
+                        _isProcessing = false;
+                        _idle.Set();
+                        return;
+                    }
+
+                    item = _queue.Dequeue();
+                }
+
+                try
+                {
+                    _processMethod(item);
+                }
+                catch (Exception)
+                {
+                    // The messenger owns error handling for individual messages.
+                }
             }
         }
     }

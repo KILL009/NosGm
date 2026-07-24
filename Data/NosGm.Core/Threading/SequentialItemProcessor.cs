@@ -5,141 +5,120 @@ using System.Threading;
 namespace NosGm.Core.Threading
 {
     /// <summary>
-    ///     This class is used to process items sequentially in a multithreaded manner.
+    /// Processes queued items sequentially while allowing producers to enqueue
+    /// from multiple threads. A single ThreadPool worker drains the queue instead
+    /// of scheduling one work item for every message.
     /// </summary>
-    /// <typeparam name="TItem">Type of item to process</typeparam>
+    /// <typeparam name="TItem">Type of item to process.</typeparam>
     public class SequentialItemProcessor<TItem>
     {
-        #region Instantiation
+        private readonly ManualResetEventSlim _idle = new ManualResetEventSlim(true);
+        private readonly Action<TItem> _processMethod;
+        private readonly Queue<TItem> _queue;
+        private readonly object _syncObj = new object();
 
-        /// <summary>
-        ///     Creates a new SequentialItemProcessor object.
-        /// </summary>
-        /// <param name="processMethod">
-        ///     The method delegate that is called to actually process items
-        /// </param>
+        private bool _isProcessing;
+        private bool _isRunning;
+
         public SequentialItemProcessor(Action<TItem> processMethod)
         {
-            _processMethod = processMethod;
+            _processMethod = processMethod ?? throw new ArgumentNullException(nameof(processMethod));
             _queue = new Queue<TItem>();
         }
 
-        #endregion
-
-        #region Members
-
-        /// <summary>
-        ///     The method delegate that is called to actually process items.
-        /// </summary>
-        private readonly Action<TItem> _processMethod;
-
-        /// <summary>
-        ///     Item queue. Used to process items sequentially.
-        /// </summary>
-        private readonly Queue<TItem> _queue;
-
-        /// <summary>
-        ///     An object to synchronize threads.
-        /// </summary>
-        private readonly object _syncObj = new object();
-
-        /// <summary>
-        ///     Indicates state of the item processing.
-        /// </summary>
-        private bool _isProcessing;
-
-        /// <summary>
-        ///     A boolean value to control running of SequentialItemProcessor.
-        /// </summary>
-        private bool _isRunning;
-
-        #endregion
-
-        #region Methods
-
-        public void ClearQueue()
+        public int QueueDepth
         {
-            _queue.Clear();
-        }
-
-        /// <summary>
-        ///     Adds an item to queue to process the item.
-        /// </summary>
-        /// <param name="item">Item to add to the queue</param>
-        public void EnqueueMessage(TItem item)
-        {
-            // Add the item to the queue and start a new Task if needed
-            lock (_syncObj)
+            get
             {
-                if (!_isRunning) return;
-
-                _queue.Enqueue(item);
-
-                if (!_isProcessing) ThreadPool.QueueUserWorkItem(ProcessItem);
+                lock (_syncObj)
+                {
+                    return _queue.Count;
+                }
             }
         }
 
-        /// <summary>
-        ///     Starts processing of items.
-        /// </summary>
-        public void Start()
+        public void ClearQueue()
         {
-            _isRunning = true;
-        }
-
-        /// <summary>
-        ///     Stops processing of items and waits stopping of current item.
-        /// </summary>
-        public void Stop()
-        {
-            _isRunning = false;
-
-            //Clear all incoming messages
             lock (_syncObj)
             {
                 _queue.Clear();
             }
         }
 
-        /// <summary>
-        ///     This method runs on a new seperated Task (thread) to process items on the queue.
-        /// </summary>
-        /// <param name="state">todo: describe state parameter on processItem</param>
-        private void ProcessItem(object state)
+        public void EnqueueMessage(TItem item)
         {
-            //Try to get an item from queue to process it.
-            TItem itemToProcess;
+            bool startWorker = false;
             lock (_syncObj)
             {
-                if (!_isRunning || _isProcessing) return;
+                if (!_isRunning)
+                {
+                    return;
+                }
 
-                if (_queue.Count <= 0) return;
-
-                _isProcessing = true;
-                itemToProcess = _queue.Dequeue();
+                _queue.Enqueue(item);
+                if (!_isProcessing)
+                {
+                    _isProcessing = true;
+                    _idle.Reset();
+                    startWorker = true;
+                }
             }
 
-            try
+            if (startWorker)
             {
-                //Process the item (by calling the _processMethod delegate)
-                _processMethod(itemToProcess);
-            }
-            catch (Exception)
-            {
-                // do nothing
-            }
-
-            //Process next item if available
-            lock (_syncObj)
-            {
-                _isProcessing = false;
-                if (!_isRunning || _queue.Count <= 0) return;
-
-                //Start a new task
-                ThreadPool.QueueUserWorkItem(ProcessItem);
+                ThreadPool.QueueUserWorkItem(ProcessItems);
             }
         }
 
-        #endregion
+        public void Start()
+        {
+            lock (_syncObj)
+            {
+                _isRunning = true;
+            }
+        }
+
+        public void Stop()
+        {
+            lock (_syncObj)
+            {
+                _isRunning = false;
+                _queue.Clear();
+                if (!_isProcessing)
+                {
+                    _idle.Set();
+                }
+            }
+
+            _idle.Wait();
+        }
+
+        private void ProcessItems(object state)
+        {
+            while (true)
+            {
+                TItem itemToProcess;
+                lock (_syncObj)
+                {
+                    if (!_isRunning || _queue.Count == 0)
+                    {
+                        _isProcessing = false;
+                        _idle.Set();
+                        return;
+                    }
+
+                    itemToProcess = _queue.Dequeue();
+                }
+
+                try
+                {
+                    _processMethod(itemToProcess);
+                }
+                catch (Exception)
+                {
+                    // Message dispatch failures are handled by the owning messenger.
+                }
+            }
+        }
     }
 }

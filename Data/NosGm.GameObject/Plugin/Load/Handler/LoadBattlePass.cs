@@ -3,10 +3,7 @@ using NosGm.DAL;
 using NosGm.Data;
 using NosGm.GameObject.Networking;
 using System;
-using System.Collections.Generic;
 using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace NosGm.GameObject.Plugin.Load
 {
@@ -17,10 +14,9 @@ namespace NosGm.GameObject.Plugin.Load
             ServerManager.Instance.BattlePassQuests = DAOFactory.BattlePassQuestDAO.LoadAll().ToList();
             ServerManager.Instance.BattlePassPrizes = DAOFactory.BattlePassPrizeDAO.LoadAll().ToList();
 
-
-            GeneralLogDTO dailyBp = DAOFactory.GeneralLogDAO.LoadByLogType("DAILY_BP", null).LastOrDefault();
-            GeneralLogDTO weeklyBp = DAOFactory.GeneralLogDAO.LoadByLogType("WEEKLY_BP", null).LastOrDefault();
-            GeneralLogDTO seasonBp = DAOFactory.GeneralLogDAO.LoadByLogType("SEASON_BP", null).LastOrDefault();
+            GeneralLogDTO dailyBp = DAOFactory.GeneralLogDAO.LoadLatestByType("DAILY_BP", null);
+            GeneralLogDTO weeklyBp = DAOFactory.GeneralLogDAO.LoadLatestByType("WEEKLY_BP", null);
+            GeneralLogDTO seasonBp = DAOFactory.GeneralLogDAO.LoadLatestByType("SEASON_BP", null);
 
             if (dailyBp == null)
             {
@@ -33,19 +29,16 @@ namespace NosGm.GameObject.Plugin.Load
 
                 DAOFactory.GeneralLogDAO.Insert(dailyBp);
             }
-            else
+            else if (dailyBp.Timestamp.Date.AddDays(1) < DateTime.UtcNow)
             {
-                if (dailyBp.Timestamp.Date.AddDays(1) < DateTime.UtcNow)
+                dailyBp = new GeneralLogDTO
                 {
-                    dailyBp = new GeneralLogDTO
-                    {
-                        LogType = "DAILY_BP",
-                        LogData = "daily bp start",
-                        Timestamp = DateTime.UtcNow
-                    };
+                    LogType = "DAILY_BP",
+                    LogData = "daily bp start",
+                    Timestamp = DateTime.UtcNow
+                };
 
-                    DAOFactory.GeneralLogDAO.Insert(dailyBp);
-                }
+                DAOFactory.GeneralLogDAO.Insert(dailyBp);
             }
 
             if (weeklyBp == null)
@@ -59,19 +52,16 @@ namespace NosGm.GameObject.Plugin.Load
 
                 DAOFactory.GeneralLogDAO.Insert(weeklyBp);
             }
-            else
+            else if (weeklyBp.Timestamp.Date.AddDays(7) < DateTime.UtcNow)
             {
-                if (weeklyBp.Timestamp.Date.AddDays(7) < DateTime.UtcNow)
+                weeklyBp = new GeneralLogDTO
                 {
-                    weeklyBp = new GeneralLogDTO
-                    {
-                        LogType = "WEEKLY_BP",
-                        LogData = "weekly bp start",
-                        Timestamp = DateTime.UtcNow
-                    };
+                    LogType = "WEEKLY_BP",
+                    LogData = "weekly bp start",
+                    Timestamp = DateTime.UtcNow
+                };
 
-                    DAOFactory.GeneralLogDAO.Insert(weeklyBp);
-                }
+                DAOFactory.GeneralLogDAO.Insert(weeklyBp);
             }
 
             if (seasonBp == null)
@@ -85,19 +75,16 @@ namespace NosGm.GameObject.Plugin.Load
 
                 DAOFactory.GeneralLogDAO.Insert(seasonBp);
             }
-            else
+            else if (seasonBp.Timestamp.Date.AddDays(45) < DateTime.UtcNow)
             {
-                if (seasonBp.Timestamp.Date.AddDays(45) < DateTime.UtcNow)
+                seasonBp = new GeneralLogDTO
                 {
-                    seasonBp = new GeneralLogDTO
-                    {
-                        LogType = "SEASON_BP",
-                        LogData = "season bp start",
-                        Timestamp = DateTime.UtcNow
-                    };
+                    LogType = "SEASON_BP",
+                    LogData = "season bp start",
+                    Timestamp = DateTime.UtcNow
+                };
 
-                    DAOFactory.GeneralLogDAO.Insert(seasonBp);
-                }
+                DAOFactory.GeneralLogDAO.Insert(seasonBp);
             }
 
             ServerManager.DailyBpDate = dailyBp.Timestamp.Date;

@@ -8,17 +8,13 @@ namespace NosTale.ServiceManager.LogService
 {
     public static class LogService
     {
-        public async static Task Generate(long characterId, string characterName, string information, LogType logType)
+        private static readonly Lazy<MongoClient> Client =
+            new Lazy<MongoClient>(() => new MongoClient(LogConfiguration.ConnectionString));
+
+        private static IMongoDatabase Database => Client.Value.GetDatabase(LogConfiguration.DatabaseName);
+
+        public static async Task Generate(long characterId, string characterName, string information, LogType logType)
         {
-            var client = new MongoClient(LogConfiguration.ConnectionString);
-            var database = client.GetDatabase(LogConfiguration.DatabaseName);
-
-            #region Collections
-            var upgradeCollection = database.GetCollection<UppgradeLogServiceModel>(LogConfiguration.UpgradeEquipmentLogTable);
-            var exploitCollection = database.GetCollection<ExploitLogServiceModel>(LogConfiguration.ExploitLogTable);
-            var fairyCollection = database.GetCollection<UpgradeFairyLogServiceModel>(LogConfiguration.UpgradeFairyLogTable);
-            #endregion
-
             switch (logType)
             {
                 case LogType.UpgradeEquipment:
@@ -29,7 +25,10 @@ namespace NosTale.ServiceManager.LogService
                         Information = information,
                         DateTime = DateTime.Now
                     };
-                    upgradeCollection.InsertOne(upgrade);
+                    await Database
+                        .GetCollection<UppgradeLogServiceModel>(LogConfiguration.UpgradeEquipmentLogTable)
+                        .InsertOneAsync(upgrade)
+                        .ConfigureAwait(false);
                     break;
 
                 case LogType.Exploit:
@@ -40,7 +39,10 @@ namespace NosTale.ServiceManager.LogService
                         Information = information,
                         DateTime = DateTime.Now
                     };
-                    exploitCollection.InsertOne(exploit);
+                    await Database
+                        .GetCollection<ExploitLogServiceModel>(LogConfiguration.ExploitLogTable)
+                        .InsertOneAsync(exploit)
+                        .ConfigureAwait(false);
                     break;
 
                 case LogType.UpgradeFairy:
@@ -51,31 +53,31 @@ namespace NosTale.ServiceManager.LogService
                         Message = information,
                         DateTime = DateTime.Now
                     };
-                    fairyCollection.InsertOne(fairy);
+                    await Database
+                        .GetCollection<UpgradeFairyLogServiceModel>(LogConfiguration.UpgradeFairyLogTable)
+                        .InsertOneAsync(fairy)
+                        .ConfigureAwait(false);
                     break;
             }
         }
 
         public static async Task GenerateServerLog(string information, LogType logType)
         {
-            var client = new MongoClient(LogConfiguration.ConnectionString);
-            var database = client.GetDatabase(LogConfiguration.DatabaseName);
-
-            #region Collections
-            var serverErrorCollection = database.GetCollection<ServerErrorLogServiceModel>(LogConfiguration.ServerErrorLogTable);
-            #endregion
-
-            switch (logType)
+            if (logType != LogType.ServerError)
             {
-                case LogType.ServerError:
-                    var serverError = new ServerErrorLogServiceModel
-                    {
-                        Information = information,
-                        DateTime = DateTime.Now
-                    };
-                    serverErrorCollection.InsertOne(serverError);
-                    break;
+                return;
             }
+
+            var serverError = new ServerErrorLogServiceModel
+            {
+                Information = information,
+                DateTime = DateTime.Now
+            };
+
+            await Database
+                .GetCollection<ServerErrorLogServiceModel>(LogConfiguration.ServerErrorLogTable)
+                .InsertOneAsync(serverError)
+                .ConfigureAwait(false);
         }
     }
 }

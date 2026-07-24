@@ -1,74 +1,69 @@
 ﻿using NosGm.DAL;
 using NosGm.Data;
 using System;
-using System.Linq;
 
 namespace NosGm.GameObject.Service
 {
     public static class RefreshExtension
     {
+        private const string PrimalQuestRefreshKey = "PRIMALQUEST_REFRESH";
+        private const string DuelCountRefreshKey = "DUELCOUNT_REFRESH";
+        private const string IceFlowerRefreshKey = "ICEFLOWER_REFRESH";
+
         public static void RefreshPrimalQuest(ClientSession session)
         {
-            var count = DAOFactory.GeneralLogDAO.LoadByAccount(session.Account.AccountId).Count(s => s.LogData == ("PRIMALQUEST_REFRESH") && s.Timestamp.Day >= DateTime.Now.Day);
-
-            if (count != 0)
+            if (WasRunToday(session, PrimalQuestRefreshKey))
             {
                 return;
             }
 
             session.SendPacket(session.Character.GenerateSay("Your Primal Quests have been refreshed", 12));
             session.Character.PrimalQuestCount = 0;
-
-            DAOFactory.GeneralLogDAO.Insert(new GeneralLogDTO
-            {
-                AccountId = session.Account.AccountId,
-                CharacterId = session.Character.CharacterId,
-                Timestamp = DateTime.Now,
-                IpAddress = session.IpAddress,
-                LogData = "PRIMALQUEST_REFRESH",
-                LogType = "World"
-            });
+            WriteRefreshLog(session, PrimalQuestRefreshKey);
         }
 
         public static void DuelCountRefresh(ClientSession session)
         {
-            var count = DAOFactory.GeneralLogDAO.LoadByAccount(session.Account.AccountId).Count(s => s.LogData == ("DUELCOUNT_REFRESH") && s.Timestamp.Day >= DateTime.Now.Day);
-
-            if (count != 0)
+            if (WasRunToday(session, DuelCountRefreshKey))
             {
                 return;
             }
 
             session.SendPacket(session.Character.GenerateSay("Your Duel Count has been refreshed.", 12));
             session.Character.DuelCount = 0;
-            DAOFactory.GeneralLogDAO.Insert(new GeneralLogDTO
-            {
-                AccountId = session.Account.AccountId,
-                CharacterId = session.Character.CharacterId,
-                Timestamp = DateTime.Now,
-                IpAddress = session.IpAddress,
-                LogData = "DUELCOUNT_REFRESH",
-                LogType = "World"
-            });
+            WriteRefreshLog(session, DuelCountRefreshKey);
         }
 
         public static void IceFlowerRefresh(ClientSession session)
         {
-            var count = DAOFactory.GeneralLogDAO.LoadByAccount(session.Account.AccountId).Count(s => s.LogData == ("ICEFLOWER_REFRESH") && s.Timestamp.Day >= DateTime.Now.Day);
-
-            if (count != 0)
+            if (WasRunToday(session, IceFlowerRefreshKey))
             {
                 return;
             }
 
             session.Character.HasDoneIceFlowerQuest = false;
+            WriteRefreshLog(session, IceFlowerRefreshKey);
+        }
+
+        private static bool WasRunToday(ClientSession session, string actionKey)
+        {
+            DateTime today = DateTime.Now.Date;
+            return DAOFactory.GeneralLogDAO.ExistsForAccount(
+                session.Account.AccountId,
+                actionKey,
+                today,
+                today.AddDays(1));
+        }
+
+        private static void WriteRefreshLog(ClientSession session, string actionKey)
+        {
             DAOFactory.GeneralLogDAO.Insert(new GeneralLogDTO
             {
                 AccountId = session.Account.AccountId,
                 CharacterId = session.Character.CharacterId,
                 Timestamp = DateTime.Now,
                 IpAddress = session.IpAddress,
-                LogData = "ICEFLOWER_REFRESH",
+                LogData = actionKey,
                 LogType = "World"
             });
         }
