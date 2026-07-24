@@ -94,11 +94,11 @@ namespace NosGm.Handler.Packets.CharScreenPackets
 
                 #endregion
 
-                #region Load General Logs
+                #region General Logs
 
+                // GeneralLog is an append-only audit table. Loading the complete account
+                // history here caused large EF materialization and GC spikes during login.
                 character.GeneralLogs = new ThreadSafeGenericList<GeneralLogDTO>();
-                character.GeneralLogs.AddRange(DAOFactory.GeneralLogDAO.LoadByAccount(Session.Account.AccountId)
-                    .Where(s => s.LogType == "DailyReward" || s.CharacterId == character.CharacterId).ToList());
 
                 #endregion
 
@@ -246,7 +246,6 @@ namespace NosGm.Handler.Packets.CharScreenPackets
                 foreach (var e in DAOFactory.ItemInstanceDAO.LoadByCharacterId(Session.Character.CharacterId))
                 {
                     var count = DAOFactory.ShellEffectDAO.LoadByEquipmentSerialId(e.EquipmentSerialId).Where(s => !s.IsRune).Count();
-
                     if (count > 15)
                     {
                         e.ShellRarity = null;
