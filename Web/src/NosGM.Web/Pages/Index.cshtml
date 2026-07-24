@@ -1,0 +1,62 @@
+@page
+@model IndexModel
+@{
+    ViewData["Title"] = Model.T("nav.home");
+}
+<section class="hero">
+    <div class="shell hero-grid">
+        <div>
+            <p class="eyebrow">@Model.T("hero.eyebrow")</p>
+            <h1>@Model.T("hero.title")</h1>
+            <p class="hero-copy">@Model.T("hero.subtitle")</p>
+            <div class="button-row">
+                <a class="button button-primary" asp-page="/Status">@Model.T("hero.primary")</a>
+                <a class="button button-secondary" asp-page="/Download">@Model.T("hero.secondary")</a>
+            </div>
+        </div>
+        <aside class="signal-card" aria-label="Server status">
+            <span class="signal-orbit"></span>
+            <p class="eyebrow">@Model.T("server.status")</p>
+            <strong>@(Model.Status is null ? "—" : Model.Health(Model.Status.OverallHealth))</strong>
+            <span>@Model.T("online.players"): @(Model.Status?.OnlinePlayers ?? 0)</span>
+            <small>@Model.T("demo.notice")</small>
+        </aside>
+    </div>
+</section>
+<section class="section shell">
+    <div class="section-heading">
+        <div>
+            <p class="eyebrow">NosGM</p>
+            <h2>@Model.T("features.title")</h2>
+        </div>
+    </div>
+    <div class="feature-grid">
+        <article class="feature-card"><span>01</span><h3>@Model.T("feature.updates.title")</h3><p>@Model.T("feature.updates.body")</p></article>
+        <article class="feature-card"><span>02</span><h3>@Model.T("feature.languages.title")</h3><p>@Model.T("feature.languages.body")</p></article>
+        <article class="feature-card"><span>03</span><h3>@Model.T("feature.status.title")</h3><p>@Model.T("feature.status.body")</p></article>
+    </div>
+</section>
+<section class="section section-muted">
+    <div class="shell">
+        <div class="section-heading">
+            <h2>@Model.T("latest.news")</h2>
+            <a asp-page="/News">@Model.T("view.all")</a>
+        </div>
+        <div class="news-grid">
+            @foreach (var item in Model.News)
+            {
+                <article class="news-card">
+                    <time datetime="@(item.PublishedAt.ToString("O"))">@item.PublishedAt.ToString("yyyy-MM-dd")</time>
+                    <h3>@item.Title</h3>
+                    <p>@item.Summary</p>
+                </article>
+            }
+        </div>
+    </div>
+</section>
+<section class="section shell">
+    <div class="security-banner">
+        <div><p class="eyebrow">Shielded by design</p><h2>@Model.T("security.title")</h2></div>
+        <p>@Model.T("security.body")</p>
+    </div>
+</section>

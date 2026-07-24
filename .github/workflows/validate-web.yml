@@ -1,0 +1,53 @@
+name: Validate NosGM Web
+
+on:
+  pull_request:
+    paths:
+      - 'Web/**'
+      - '.github/workflows/validate-web.yml'
+      - 'AUTHORS.md'
+      - 'NOTICE.md'
+      - 'THIRD_PARTY_NOTICES.md'
+      - 'docs/PROVENANCE.md'
+      - 'docs/LICENSING.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up .NET 9
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 9.0.x
+
+      - name: Restore
+        run: dotnet restore Web/NosGM.Web.sln
+
+      - name: Build Release
+        run: dotnet build Web/NosGM.Web.sln -c Release --no-restore
+
+      - name: Run deterministic self-test
+        run: dotnet run --project Web/tests/NosGM.Web.SelfTest/NosGM.Web.SelfTest.csproj -c Release --no-build
+
+      - name: Publish portal
+        run: dotnet publish Web/src/NosGM.Web/NosGM.Web.csproj -c Release --no-build -o artifacts/web
+
+      - name: Run web safety and provenance checks
+        shell: pwsh
+        run: ./Web/scripts/verify-web.ps1
+
+      - name: Reject proprietary or secret-looking package material
+        shell: pwsh
+        run: |
+          $forbidden = Get-ChildItem artifacts/web -Recurse -File | Where-Object {
+            $_.Extension -in '.nos', '.pak', '.pfx', '.p12', '.key', '.pem'
+          }
+          if ($forbidden) { throw "Forbidden published files: $($forbidden.FullName -join ', ')" }

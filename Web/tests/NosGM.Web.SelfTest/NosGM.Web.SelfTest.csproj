@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\NosGM.Web\NosGM.Web.csproj" />
+    <ProjectReference Include="..\..\src\NosGM.Web.Contracts\NosGM.Web.Contracts.csproj" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,24 @@
+@page
+@model NewsModel
+@{
+    ViewData["Title"] = Model.T("news.title");
+}
+<section class="page-hero"><div class="shell"><p class="eyebrow">NosGM Dispatch</p><h1>@Model.T("news.title")</h1><p>@Model.T("news.body")</p></div></section>
+<section class="section shell">
+@if (Model.Items.Count == 0)
+{
+    <div class="empty-state">@Model.T("news.empty")</div>
+}
+else
+{
+    <div class="news-list">
+    @foreach (var item in Model.Items)
+    {
+        <article class="news-row">
+            <time datetime="@(item.PublishedAt.ToString("O"))">@item.PublishedAt.ToString("yyyy-MM-dd")</time>
+            <div><h2>@item.Title</h2><p>@item.Summary</p></div>
+        </article>
+    }
+    </div>
+}
+</section>

@@ -1,0 +1,49 @@
+@{
+    var language = PortalCulture.Current(Context);
+    var title = ViewData["Title"] as string ?? PortalText.Get(language, "site.title");
+}
+<!doctype html>
+<html lang="@language">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content="NosGM secure multilingual community portal" />
+    <title>@title · NosGM</title>
+    <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
+</head>
+<body>
+<header class="site-header">
+    <div class="shell nav-shell">
+        <a class="brand" asp-page="/Index" aria-label="NosGM home">
+            <span class="brand-mark">N</span>
+            <span>NosGM</span>
+        </a>
+        <nav class="main-nav" aria-label="Primary navigation">
+            <a asp-page="/Index">@PortalText.Get(language, "nav.home")</a>
+            <a asp-page="/News">@PortalText.Get(language, "nav.news")</a>
+            <a asp-page="/Status">@PortalText.Get(language, "nav.status")</a>
+            <a asp-page="/Rankings">@PortalText.Get(language, "nav.rankings")</a>
+            <a asp-page="/Download">@PortalText.Get(language, "nav.download")</a>
+        </nav>
+        <details class="language-menu">
+            <summary>@PortalText.Get(language, "language")</summary>
+            <div class="language-list">
+                @foreach (var item in PortalCulture.SupportedLanguages)
+                {
+                    <a lang="@item.Code" href="@PortalCulture.BuildLanguageUrl(Context, item.Code)">@item.DisplayName</a>
+                }
+            </div>
+        </details>
+    </div>
+</header>
+<main>
+    @RenderBody()
+</main>
+<footer class="site-footer">
+    <div class="shell footer-shell">
+        <span>© 2026 NosGM</span>
+        <span>@PortalText.Get(language, "footer")</span>
+    </div>
+</footer>
+</body>
+</html>

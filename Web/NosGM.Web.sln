@@ -1,0 +1,30 @@
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NosGM.Web.Contracts", "src\NosGM.Web.Contracts\NosGM.Web.Contracts.csproj", "{7A33B25D-2A87-42ED-A690-454A6B8D6B07}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NosGM.Web", "src\NosGM.Web\NosGM.Web.csproj", "{1D84CA10-E132-454C-8AC4-3BC6F29E2AF9}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NosGM.Web.SelfTest", "tests\NosGM.Web.SelfTest\NosGM.Web.SelfTest.csproj", "{3850197A-1183-49BA-BC3E-A9CB319F0456}"
+EndProject
+Global
+  GlobalSection(SolutionConfigurationPlatforms) = preSolution
+    Debug|Any CPU = Debug|Any CPU
+    Release|Any CPU = Release|Any CPU
+  EndGlobalSection
+  GlobalSection(ProjectConfigurationPlatforms) = postSolution
+    {7A33B25D-2A87-42ED-A690-454A6B8D6B07}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+    {7A33B25D-2A87-42ED-A690-454A6B8D6B07}.Debug|Any CPU.Build.0 = Debug|Any CPU
+    {7A33B25D-2A87-42ED-A690-454A6B8D6B07}.Release|Any CPU.ActiveCfg = Release|Any CPU
+    {7A33B25D-2A87-42ED-A690-454A6B8D6B07}.Release|Any CPU.Build.0 = Release|Any CPU
+    {1D84CA10-E132-454C-8AC4-3BC6F29E2AF9}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+    {1D84CA10-E132-454C-8AC4-3BC6F29E2AF9}.Debug|Any CPU.Build.0 = Debug|Any CPU
+    {1D84CA10-E132-454C-8AC4-3BC6F29E2AF9}.Release|Any CPU.ActiveCfg = Release|Any CPU
+    {1D84CA10-E132-454C-8AC4-3BC6F29E2AF9}.Release|Any CPU.Build.0 = Release|Any CPU
+    {3850197A-1183-49BA-BC3E-A9CB319F0456}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+    {3850197A-1183-49BA-BC3E-A9CB319F0456}.Debug|Any CPU.Build.0 = Debug|Any CPU
+    {3850197A-1183-49BA-BC3E-A9CB319F0456}.Release|Any CPU.ActiveCfg = Release|Any CPU
+    {3850197A-1183-49BA-BC3E-A9CB319F0456}.Release|Any CPU.Build.0 = Release|Any CPU
+  EndGlobalSection
+EndGlobal
