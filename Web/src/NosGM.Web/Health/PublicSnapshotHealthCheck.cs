@@ -5,22 +5,24 @@ using NosGM.Web.Services;
 
 namespace NosGM.Web.Health;
 
-public sealed class PublicSnapshotHealthCheck(IPublicDataHealth health) : IHealthCheck
+public sealed class PublicSnapshotHealthCheck(
+    IPortalDataSource dataSource,
+    IPublicDataHealth health) : IHealthCheck
 {
-    public Task<HealthCheckResult> CheckHealthAsync(
+    public async Task<HealthCheckResult> CheckHealthAsync(
         HealthCheckContext context,
         CancellationToken cancellationToken = default)
     {
-        cancellationToken.ThrowIfCancellationRequested();
+        await dataSource.GetStatusAsync(cancellationToken).ConfigureAwait(false);
         if (health.IsReady)
         {
-            return Task.FromResult(HealthCheckResult.Healthy(
+            return HealthCheckResult.Healthy(
                 health.ObservedAt is null
                     ? "Public snapshot is ready."
-                    : $"Public snapshot observed at {health.ObservedAt:O}."));
+                    : $"Public snapshot observed at {health.ObservedAt:O}.");
         }
 
-        return Task.FromResult(HealthCheckResult.Unhealthy(
-            health.LastError ?? "Public snapshot is missing or stale."));
+        return HealthCheckResult.Unhealthy(
+            health.LastError ?? "Public snapshot is missing or stale.");
     }
 }
