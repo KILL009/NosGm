@@ -1,14 +1,13 @@
 ﻿using System;
-using System.Collections.Generic;
+using System.Collections.Concurrent;
 using System.Diagnostics;
-using System.Linq;
-using System.Net.Sockets;
 using System.Net;
+using System.Net.Sockets;
 using System.Reflection;
-using System.Text;
-using System.Threading.Tasks;
 using System.Runtime.CompilerServices;
-using System.IO;
+using System.Text;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace NosTale.ServiceManager.LogServer
 {
@@ -16,13 +15,34 @@ namespace NosTale.ServiceManager.LogServer
     {
         public class Log
         {
-            private static string IPAdress { get; set; } = "134.255.235.74";
-            private static int Port { get; set; } = 1912;
-
-            public static async Task LogAsync(string Input, [CallerMemberName] string caller = "", [CallerFilePath] string file = "", [CallerLineNumber] int line = 0)
+            private const int QueueCapacity = 4096;
+            private static readonly string IPAdress = "134.255.235.74";
+            private static readonly int Port = 1912;
+            private static readonly BlockingCollection<string> SendQueue =
+                new BlockingCollection<string>(new ConcurrentQueue<string>(), QueueCapacity);
+            private static readonly UdpClient Client = new UdpClient();
+            private static readonly IPEndPoint EndPoint = new IPEndPoint(IPAddress.Parse(IPAdress), Port);
+            private static readonly Thread SenderThread = new Thread(ProcessQueue)
             {
-                string Time = DateTime.Now.ToString("[HH:mm:ss]");
-                await SendInfoAsync($"{Time} {Input}");
+                IsBackground = true,
+                Name = "NosGM-ServiceManager-UDP"
+            };
+
+            private static long _droppedMessages;
+
+            static Log()
+            {
+                SenderThread.Start();
+            }
+
+            public static long DroppedMessages => Interlocked.Read(ref _droppedMessages);
+
+            public static Task LogAsync(string input, [CallerMemberName] string caller = "",
+                [CallerFilePath] string file = "", [CallerLineNumber] int line = 0)
+            {
+                string time = DateTime.Now.ToString("[HH:mm:ss]");
+                Enqueue($"{time} {input}");
+                return Task.CompletedTask;
             }
 
             public static string NameOfCallingClass()
@@ -46,22 +66,28 @@ namespace NosTale.ServiceManager.LogServer
                 return fullName;
             }
 
-            private static void SendInfo(string message)
+            private static void Enqueue(string message)
             {
-                Socket s = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp);
-                IPAddress broadcast = IPAddress.Parse(IPAdress);
-                byte[] sendbuf = Encoding.ASCII.GetBytes(message);
-                IPEndPoint ep = new IPEndPoint(broadcast, Port);
-                s.SendTo(sendbuf, ep);
+                if (!SendQueue.TryAdd(message))
+                {
+                    Interlocked.Increment(ref _droppedMessages);
+                }
             }
 
-            private static async Task SendInfoAsync(string message)
+            private static void ProcessQueue()
             {
-                Socket s = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp);
-                IPAddress broadcast = IPAddress.Parse(IPAdress);
-                byte[] sendbuf = Encoding.ASCII.GetBytes(message);
-                IPEndPoint ep = new IPEndPoint(broadcast, Port);
-                s.SendTo(sendbuf, ep);
+                foreach (string message in SendQueue.GetConsumingEnumerable())
+                {
+                    try
+                    {
+                        byte[] buffer = Encoding.UTF8.GetBytes(message);
+                        Client.Send(buffer, buffer.Length, EndPoint);
+                    }
+                    catch
+                    {
+                        Interlocked.Increment(ref _droppedMessages);
+                    }
+                }
             }
         }
     }
