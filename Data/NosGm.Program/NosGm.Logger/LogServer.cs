@@ -18,11 +18,12 @@ namespace NosGm.LoggerService
     {
         public static class Logger
         {
-            private const int QueueCapacity = 4096;
+            private const int QueueCapacity = LogPipelineMonitor.DefaultUdpQueueCapacity;
             private static readonly string IPAdress = "127.0.0.1";
             private static readonly int Port = 1912;
-            private static readonly BlockingCollection<string> SendQueue =
-                new BlockingCollection<string>(new ConcurrentQueue<string>(), QueueCapacity);
+            private static readonly BlockingCollection<QueuedUdpMessage> SendQueue =
+                new BlockingCollection<QueuedUdpMessage>(
+                    new ConcurrentQueue<QueuedUdpMessage>(), QueueCapacity);
             private static readonly UdpClient Client = new UdpClient();
             private static readonly IPEndPoint EndPoint = new IPEndPoint(IPAddress.Parse(IPAdress), Port);
             private static readonly object LoadOutputSync = new object();
@@ -36,6 +37,7 @@ namespace NosGm.LoggerService
 
             static Logger()
             {
+                LogPipelineMonitor.UpdateUdpQueue(0, QueueCapacity);
                 SenderThread.Start();
             }
 
@@ -96,33 +98,57 @@ namespace NosGm.LoggerService
 
             private static void Enqueue(string message)
             {
-                if (SendQueue.TryAdd(message))
+                LogPipelineOperation operation = LogPipelineMonitor.CurrentOperation;
+                var queued = new QueuedUdpMessage(message, operation);
+                if (SendQueue.TryAdd(queued))
                 {
-                    LogPipelineMonitor.RecordUdpEnqueued(SendQueue.Count, QueueCapacity);
+                    LogPipelineMonitor.RecordUdpEnqueued(operation, SendQueue.Count, QueueCapacity);
                     return;
                 }
 
                 Interlocked.Increment(ref _droppedMessages);
-                LogPipelineMonitor.RecordUdpDropped(SendQueue.Count, QueueCapacity);
+                LogPipelineMonitor.RecordUdpDropped(operation, SendQueue.Count, QueueCapacity);
             }
 
             private static void ProcessQueue()
             {
-                foreach (string message in SendQueue.GetConsumingEnumerable())
+                foreach (QueuedUdpMessage queued in SendQueue.GetConsumingEnumerable())
                 {
                     try
                     {
-                        byte[] buffer = Encoding.UTF8.GetBytes(message);
+                        byte[] buffer = Encoding.UTF8.GetBytes(queued.Message);
                         Client.Send(buffer, buffer.Length, EndPoint);
-                        LogPipelineMonitor.RecordUdpSent(SendQueue.Count, QueueCapacity);
+                        LogPipelineMonitor.RecordUdpSent(
+                            queued.Operation,
+                            SendQueue.Count,
+                            QueueCapacity);
                     }
                     catch
                     {
                         Interlocked.Increment(ref _droppedMessages);
-                        LogPipelineMonitor.RecordUdpError(SendQueue.Count, QueueCapacity);
-                        LogPipelineMonitor.RecordUdpDropped(SendQueue.Count, QueueCapacity);
+                        LogPipelineMonitor.RecordUdpError(
+                            queued.Operation,
+                            SendQueue.Count,
+                            QueueCapacity);
+                        LogPipelineMonitor.RecordUdpDropped(
+                            queued.Operation,
+                            SendQueue.Count,
+                            QueueCapacity);
                     }
                 }
+            }
+
+            private sealed class QueuedUdpMessage
+            {
+                public QueuedUdpMessage(string message, LogPipelineOperation operation)
+                {
+                    Message = message;
+                    Operation = operation;
+                }
+
+                public string Message { get; }
+
+                public LogPipelineOperation Operation { get; }
             }
         }
     }

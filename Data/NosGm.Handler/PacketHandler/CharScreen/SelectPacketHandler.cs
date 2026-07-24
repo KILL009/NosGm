@@ -4,12 +4,15 @@ using NosGm.Data;
 using NosGm.Domain;
 using NosGm.GameObject;
 using NosGm.GameObject.Networking;
+using NosGm.Handler.Services;
 using NosGm.Master.Library.Client;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Reactive.Linq;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using NosGm.Packets.Packets.ClientPackets;
 
@@ -183,8 +186,10 @@ namespace NosGm.Handler.Packets.CharScreenPackets
 
                 #region CharacterLife
 
-                Session.Character.Life = Observable.Interval(TimeSpan.FromMilliseconds(300))
-                    .Subscribe(x => Session.Character.CharacterLife());
+                // One dedicated scheduler now services every connected character.
+                // This removes one Observable.Interval and one recurring callback per player.
+                Session.Character.Life = null;
+                CharacterLifeScheduler.EnsureStarted();
 
                 #endregion
 
@@ -267,5 +272,303 @@ namespace NosGm.Handler.Packets.CharScreenPackets
         }
 
         #endregion
+    }
+}
+
+namespace NosGm.Handler.Services
+{
+    public sealed class CharacterLifeSchedulerSnapshot
+    {
+        public bool IsRunning { get; internal set; }
+        public int IntervalMilliseconds { get; internal set; }
+        public int ActiveCharacters { get; internal set; }
+        public long Ticks { get; internal set; }
+        public long CharacterExecutions { get; internal set; }
+        public long SkippedSessions { get; internal set; }
+        public long Errors { get; internal set; }
+        public long Overruns { get; internal set; }
+        public long MissedTicks { get; internal set; }
+        public double AverageTickMilliseconds { get; internal set; }
+        public double MaximumTickMilliseconds { get; internal set; }
+        public double AverageCharacterMilliseconds { get; internal set; }
+        public double MaximumCharacterMilliseconds { get; internal set; }
+        public double AverageLagMilliseconds { get; internal set; }
+        public double MaximumLagMilliseconds { get; internal set; }
+        public DateTime? LastTickUtc { get; internal set; }
+    }
+
+    internal sealed class CharacterLifeSchedulerCounters
+    {
+        public long Ticks;
+        public long CharacterExecutions;
+        public long SkippedSessions;
+        public long Errors;
+        public long Overruns;
+        public long MissedTicks;
+        public long TotalTickTicks;
+        public long MaximumTickTicks;
+        public long TotalCharacterTicks;
+        public long MaximumCharacterTicks;
+        public long TotalLagTicks;
+        public long MaximumLagTicks;
+    }
+
+    public static class CharacterLifeScheduler
+    {
+        public const int IntervalMilliseconds = 300;
+
+        private static readonly object StartSync = new object();
+        private static readonly ManualResetEventSlim StopSignal = new ManualResetEventSlim(false);
+
+        private static CharacterLifeSchedulerCounters _counters = new CharacterLifeSchedulerCounters();
+        private static Thread _worker;
+        private static int _started;
+        private static int _activeCharacters;
+        private static long _lastTickUtcTicks;
+        private static long _lastErrorLogUtcTicks;
+
+        public static void EnsureStarted()
+        {
+            if (Volatile.Read(ref _started) != 0)
+            {
+                return;
+            }
+
+            lock (StartSync)
+            {
+                if (_started != 0)
+                {
+                    return;
+                }
+
+                _worker = new Thread(Run)
+                {
+                    IsBackground = true,
+                    Name = "NosGM-CharacterLife-Scheduler"
+                };
+
+                AppDomain.CurrentDomain.ProcessExit += (sender, args) => Stop();
+                Volatile.Write(ref _started, 1);
+                _worker.Start();
+            }
+        }
+
+        public static CharacterLifeSchedulerSnapshot Capture()
+        {
+            CharacterLifeSchedulerCounters counters = Volatile.Read(ref _counters);
+            long ticks = Interlocked.Read(ref counters.Ticks);
+            long characterExecutions = Interlocked.Read(ref counters.CharacterExecutions);
+            long lastTickTicks = Interlocked.Read(ref _lastTickUtcTicks);
+
+            return new CharacterLifeSchedulerSnapshot
+            {
+                IsRunning = _worker?.IsAlive == true && !StopSignal.IsSet,
+                IntervalMilliseconds = IntervalMilliseconds,
+                ActiveCharacters = Volatile.Read(ref _activeCharacters),
+                Ticks = ticks,
+                CharacterExecutions = characterExecutions,
+                SkippedSessions = Interlocked.Read(ref counters.SkippedSessions),
+                Errors = Interlocked.Read(ref counters.Errors),
+                Overruns = Interlocked.Read(ref counters.Overruns),
+                MissedTicks = Interlocked.Read(ref counters.MissedTicks),
+                AverageTickMilliseconds = StopwatchTicksToMilliseconds(
+                    ticks == 0 ? 0 : Interlocked.Read(ref counters.TotalTickTicks) / ticks),
+                MaximumTickMilliseconds = StopwatchTicksToMilliseconds(
+                    Interlocked.Read(ref counters.MaximumTickTicks)),
+                AverageCharacterMilliseconds = StopwatchTicksToMilliseconds(
+                    characterExecutions == 0
+                        ? 0
+                        : Interlocked.Read(ref counters.TotalCharacterTicks) / characterExecutions),
+                MaximumCharacterMilliseconds = StopwatchTicksToMilliseconds(
+                    Interlocked.Read(ref counters.MaximumCharacterTicks)),
+                AverageLagMilliseconds = StopwatchTicksToMilliseconds(
+                    ticks == 0 ? 0 : Interlocked.Read(ref counters.TotalLagTicks) / ticks),
+                MaximumLagMilliseconds = StopwatchTicksToMilliseconds(
+                    Interlocked.Read(ref counters.MaximumLagTicks)),
+                LastTickUtc = lastTickTicks > 0
+                    ? new DateTime(lastTickTicks, DateTimeKind.Utc)
+                    : (DateTime?)null
+            };
+        }
+
+        public static void ResetMetrics()
+        {
+            Interlocked.Exchange(ref _counters, new CharacterLifeSchedulerCounters());
+        }
+
+        private static void Run()
+        {
+            long intervalTicks = Math.Max(
+                1,
+                (long)(Stopwatch.Frequency * (IntervalMilliseconds / 1000d)));
+            long nextTick = Stopwatch.GetTimestamp() + intervalTicks;
+
+            while (!StopSignal.IsSet)
+            {
+                WaitUntil(nextTick);
+                if (StopSignal.IsSet)
+                {
+                    return;
+                }
+
+                long tickStarted = Stopwatch.GetTimestamp();
+                long lagTicks = Math.Max(0, tickStarted - nextTick);
+                CharacterLifeSchedulerCounters counters = Volatile.Read(ref _counters);
+
+                ExecuteTick(counters);
+
+                long tickFinished = Stopwatch.GetTimestamp();
+                long elapsedTicks = Math.Max(0, tickFinished - tickStarted);
+                Interlocked.Increment(ref counters.Ticks);
+                Interlocked.Add(ref counters.TotalTickTicks, elapsedTicks);
+                AtomicMaximum(ref counters.MaximumTickTicks, elapsedTicks);
+                Interlocked.Add(ref counters.TotalLagTicks, lagTicks);
+                AtomicMaximum(ref counters.MaximumLagTicks, lagTicks);
+                Interlocked.Exchange(ref _lastTickUtcTicks, DateTime.UtcNow.Ticks);
+
+                nextTick += intervalTicks;
+                if (tickFinished >= nextTick)
+                {
+                    long missed = ((tickFinished - nextTick) / intervalTicks) + 1;
+                    Interlocked.Increment(ref counters.Overruns);
+                    Interlocked.Add(ref counters.MissedTicks, missed);
+                    nextTick += missed * intervalTicks;
+                }
+            }
+        }
+
+        private static void ExecuteTick(CharacterLifeSchedulerCounters counters)
+        {
+            List<ClientSession> sessions;
+            try
+            {
+                sessions = ServerManager.Instance.Sessions?.ToList() ?? new List<ClientSession>();
+            }
+            catch (Exception exception)
+            {
+                Interlocked.Increment(ref counters.Errors);
+                LogSchedulerError("Unable to snapshot World sessions for CharacterLife.", exception);
+                return;
+            }
+
+            int activeCharacters = 0;
+            foreach (ClientSession session in sessions)
+            {
+                if (session == null || !session.HasSelectedCharacter ||
+                    !session.IsConnected || session.IsDisposing)
+                {
+                    Interlocked.Increment(ref counters.SkippedSessions);
+                    continue;
+                }
+
+                Character character;
+                try
+                {
+                    character = session.Character;
+                }
+                catch (Exception exception)
+                {
+                    Interlocked.Increment(ref counters.Errors);
+                    LogSchedulerError("Unable to resolve a session character for CharacterLife.", exception);
+                    continue;
+                }
+
+                if (character == null || character.IsDisposed)
+                {
+                    Interlocked.Increment(ref counters.SkippedSessions);
+                    continue;
+                }
+
+                activeCharacters++;
+                long characterStarted = Stopwatch.GetTimestamp();
+                try
+                {
+                    character.CharacterLife();
+                    Interlocked.Increment(ref counters.CharacterExecutions);
+                }
+                catch (Exception exception)
+                {
+                    Interlocked.Increment(ref counters.Errors);
+                    LogSchedulerError(
+                        $"CharacterLife failed for CharacterId {character.CharacterId} ({character.Name}).",
+                        exception);
+                }
+                finally
+                {
+                    long elapsedTicks = Math.Max(0, Stopwatch.GetTimestamp() - characterStarted);
+                    Interlocked.Add(ref counters.TotalCharacterTicks, elapsedTicks);
+                    AtomicMaximum(ref counters.MaximumCharacterTicks, elapsedTicks);
+                }
+            }
+
+            Volatile.Write(ref _activeCharacters, activeCharacters);
+        }
+
+        private static void WaitUntil(long targetTimestamp)
+        {
+            while (!StopSignal.IsSet)
+            {
+                long remainingTicks = targetTimestamp - Stopwatch.GetTimestamp();
+                if (remainingTicks <= 0)
+                {
+                    return;
+                }
+
+                int waitMilliseconds = (int)Math.Min(
+                    100,
+                    Math.Max(1, remainingTicks * 1000L / Stopwatch.Frequency));
+                StopSignal.Wait(waitMilliseconds);
+            }
+        }
+
+        private static void Stop()
+        {
+            if (Volatile.Read(ref _started) == 0)
+            {
+                return;
+            }
+
+            StopSignal.Set();
+            Thread worker = _worker;
+            if (worker != null && worker != Thread.CurrentThread)
+            {
+                worker.Join(TimeSpan.FromSeconds(3));
+            }
+        }
+
+        private static void LogSchedulerError(string message, Exception exception)
+        {
+            long nowTicks = DateTime.UtcNow.Ticks;
+            long previousTicks = Interlocked.Read(ref _lastErrorLogUtcTicks);
+            if (nowTicks - previousTicks < TimeSpan.FromSeconds(30).Ticks)
+            {
+                return;
+            }
+
+            if (Interlocked.CompareExchange(
+                    ref _lastErrorLogUtcTicks,
+                    nowTicks,
+                    previousTicks) == previousTicks)
+            {
+                Logger.Error(message, exception);
+            }
+        }
+
+        private static void AtomicMaximum(ref long target, long value)
+        {
+            long current = Interlocked.Read(ref target);
+            while (value > current)
+            {
+                long observed = Interlocked.CompareExchange(ref target, value, current);
+                if (observed == current)
+                {
+                    return;
+                }
+                current = observed;
+            }
+        }
+
+        private static double StopwatchTicksToMilliseconds(long ticks) =>
+            ticks <= 0 ? 0 : ticks * 1000d / Stopwatch.Frequency;
     }
 }

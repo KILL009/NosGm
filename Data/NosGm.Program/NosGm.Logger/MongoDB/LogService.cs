@@ -17,6 +17,7 @@ namespace NosGm.LogServer.MongoDB
 
         public static async Task Generate(string information, LogType logType)
         {
+            LogPipelineOperation operation = LogPipelineMonitor.CurrentOperation;
             var stopwatch = Stopwatch.StartNew();
             bool success = false;
             try
@@ -57,7 +58,7 @@ namespace NosGm.LogServer.MongoDB
             finally
             {
                 stopwatch.Stop();
-                LogPipelineMonitor.RecordMongoWrite(stopwatch.ElapsedTicks, success);
+                LogPipelineMonitor.RecordMongoWrite(operation, stopwatch.ElapsedTicks, success);
             }
         }
     }
