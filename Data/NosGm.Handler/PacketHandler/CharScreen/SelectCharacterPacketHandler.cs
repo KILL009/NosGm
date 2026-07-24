@@ -225,15 +225,11 @@ namespace NosGm.Handler.BasicPacket.CharScreen
 
                 #region RemoveAllDupedShell
 
-                foreach (var e in DAOFactory.ItemInstanceDAO.LoadByCharacterId(Session.Character.CharacterId))
+                int cleanedShells = DAOFactory.ShellEffectDAO.CleanupDuplicateNonRuneEffects(
+                    Session.Character.CharacterId);
+                if (cleanedShells > 0)
                 {
-                    var count = DAOFactory.ShellEffectDAO.LoadByEquipmentSerialId(e.EquipmentSerialId).Where(s => !s.IsRune).Count();
-
-                    if (count > 15)
-                    {
-                        e.ShellRarity = null;
-                        DAOFactory.ShellEffectDAO.DeleteByEquipmentSerialId(e.EquipmentSerialId);
-                    }
+                    Logger.Warn($"Removed duplicate shell effects from {cleanedShells} equipment serials for CharacterId {Session.Character.CharacterId}.");
                 }
 
                 #endregion
