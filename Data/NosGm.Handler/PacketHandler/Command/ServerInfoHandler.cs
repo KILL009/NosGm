@@ -7,6 +7,7 @@ using NosGm.Data;
 using NosGm.Domain;
 using NosGm.GameObject;
 using NosGm.GameObject.Networking;
+using NosGm.Handler.Services;
 using NosGm.Master.Library.Client;
 using System;
 using System.Collections.Generic;
@@ -91,13 +92,22 @@ namespace NosGm.Handler.PacketHandler.Command
                     ShowLogMetrics(arguments.Skip(1).FirstOrDefault());
                     break;
 
+                case "scheduler":
+                case "schedule":
+                case "life":
+                    ShowSchedulerMetrics();
+                    break;
+
                 case "reset":
                     ServerPerformanceMonitor.Instance.Reset();
                     PacketSecurityMonitor.Instance.Reset();
                     LogPipelineMonitor.Reset();
-                    SendPerformanceLine("NosGM performance, packet guard and log pipeline counters were reset.", 11);
+                    CharacterLifeScheduler.ResetMetrics();
+                    SendPerformanceLine(
+                        "NosGM performance, packet guard, log pipeline and scheduler counters were reset.",
+                        11);
                     Logger.LogUserEvent("PERF_RESET", Session.GenerateIdentity(),
-                        "Runtime, network, packet handler, packet guard and log pipeline counters reset.");
+                        "Runtime, network, packet handler, packet guard, log pipeline and scheduler counters reset.");
                     break;
 
                 case "help":
@@ -270,6 +280,7 @@ namespace NosGm.Handler.PacketHandler.Command
             PerformanceSnapshot metrics = ServerPerformanceMonitor.Instance.Capture();
             PacketSecuritySnapshot security = PacketSecurityMonitor.Instance.Capture();
             LogPipelineSnapshot logPipeline = LogPipelineMonitor.Capture();
+            CharacterLifeSchedulerSnapshot scheduler = CharacterLifeScheduler.Capture();
             List<ClientSession> sessions = manager.Sessions.ToList();
             MapInstance[] mapInstances = ServerManager._mapinstances.Values
                 .Where(map => map != null)
@@ -308,11 +319,21 @@ namespace NosGm.Handler.PacketHandler.Command
                 $"Threads {metrics.ProcessThreads} | Handles {metrics.HandleCount} | Pool worker {metrics.ThreadPoolBusyWorker}/{metrics.ThreadPoolMaximumWorker} | IO {metrics.ThreadPoolBusyIo}/{metrics.ThreadPoolMaximumIo}");
             SendPerformanceLine(
                 $"GC Gen0 {metrics.Gen0Collections} | Gen1 {metrics.Gen1Collections} | Gen2 {metrics.Gen2Collections}");
+            SendPerformanceLine(
+                $"Life scheduler {(scheduler.IsRunning ? "RUNNING" : "STOPPED")} | Active {scheduler.ActiveCharacters} | Tick avg {scheduler.AverageTickMilliseconds:N3} ms | Max {scheduler.MaximumTickMilliseconds:N3} ms");
 
             string health = BuildHealthSummary(
-                metrics, security, logPipeline, sessions.Count, mapInstances.Length);
+                metrics,
+                security,
+                logPipeline,
+                scheduler,
+                sessions.Count,
+                mapInstances.Length,
+                selectedCharacters);
             SendPerformanceLine($"Health: {health}", health == "OK" ? (byte)10 : (byte)12);
-            SendPerformanceLine("Use $Perf packets, $Perf maps, $Perf security, $Perf logs or $Perf help.", 11);
+            SendPerformanceLine(
+                "Use $Perf packets, $Perf maps, $Perf security, $Perf logs, $Perf scheduler or $Perf help.",
+                11);
         }
 
         private void ShowPacketMetrics(string sortArgument)
@@ -423,7 +444,7 @@ namespace NosGm.Handler.PacketHandler.Command
             SendPerformanceLine(
                 $"GeneralLog fallbacks {metrics.GeneralLogQueueFallbacks:N0} | Dropped {metrics.GeneralLogDropped:N0} | Errors {metrics.GeneralLogWriteErrors:N0}");
             SendPerformanceLine(
-                $"UDP queue {metrics.UdpQueueDepth:N0}/{metrics.UdpQueueCapacity:N0} | Enqueued {metrics.UdpEnqueued:N0} | Sent {metrics.UdpSent:N0}");
+                $"UDP queue {metrics.UdpQueueDepth:N0}/{metrics.UdpQueueCapacity:N0} | In flight {metrics.UdpInFlight:N0} | Enqueued {metrics.UdpEnqueued:N0} | Sent {metrics.UdpSent:N0}");
             SendPerformanceLine(
                 $"UDP dropped {metrics.UdpDropped:N0} | Errors {metrics.UdpErrors:N0}");
             SendPerformanceLine(
@@ -432,6 +453,32 @@ namespace NosGm.Handler.PacketHandler.Command
             string health = BuildLogHealth(metrics, dailyActionAvailable);
             SendPerformanceLine($"Log health: {health}", health == "OK" ? (byte)10 : (byte)12);
             SendPerformanceLine("Use $Perf logs flush to wait for pending GeneralLog batches.", 11);
+        }
+
+        private void ShowSchedulerMetrics()
+        {
+            CharacterLifeSchedulerSnapshot metrics = CharacterLifeScheduler.Capture();
+            string lastTick = metrics.LastTickUtc.HasValue
+                ? $"{Math.Max(0, (DateTime.UtcNow - metrics.LastTickUtc.Value).TotalMilliseconds):N0} ms ago"
+                : "never";
+
+            SendPerformanceLine("========== CharacterLife Scheduler ==========", 11);
+            SendPerformanceLine(
+                $"Status {(metrics.IsRunning ? "RUNNING" : "STOPPED")} | Interval {metrics.IntervalMilliseconds} ms | Active characters {metrics.ActiveCharacters}",
+                metrics.IsRunning ? (byte)10 : (byte)11);
+            SendPerformanceLine(
+                $"Ticks {metrics.Ticks:N0} | Character executions {metrics.CharacterExecutions:N0} | Skipped sessions {metrics.SkippedSessions:N0}");
+            SendPerformanceLine(
+                $"Tick Avg {metrics.AverageTickMilliseconds:N3} ms | Max {metrics.MaximumTickMilliseconds:N3} ms");
+            SendPerformanceLine(
+                $"Character Avg {metrics.AverageCharacterMilliseconds:N3} ms | Max {metrics.MaximumCharacterMilliseconds:N3} ms");
+            SendPerformanceLine(
+                $"Lag Avg {metrics.AverageLagMilliseconds:N3} ms | Max {metrics.MaximumLagMilliseconds:N3} ms | Last tick {lastTick}");
+            SendPerformanceLine(
+                $"Overruns {metrics.Overruns:N0} | Missed ticks {metrics.MissedTicks:N0} | Errors {metrics.Errors:N0}");
+
+            string health = BuildSchedulerHealth(metrics);
+            SendPerformanceLine($"Scheduler health: {health}", health == "OK" ? (byte)10 : (byte)12);
         }
 
         private void ShowPerformanceHelp()
@@ -447,7 +494,8 @@ namespace NosGm.Handler.PacketHandler.Command
             SendPerformanceLine("$Perf security: packet floods, blocked handlers and disconnects.");
             SendPerformanceLine("$Perf logs: GeneralLog, daily action, UDP and Mongo telemetry.");
             SendPerformanceLine("$Perf logs flush: wait up to five seconds for queued GeneralLogs.");
-            SendPerformanceLine("$Perf reset: clear performance, security, log and peak counters.");
+            SendPerformanceLine("$Perf scheduler: central CharacterLife scheduler timing and errors.");
+            SendPerformanceLine("$Perf reset: clear performance, security, log, scheduler and peak counters.");
         }
 
         private static HandlerSort ParseHandlerSort(string argument)
@@ -475,8 +523,10 @@ namespace NosGm.Handler.PacketHandler.Command
             PerformanceSnapshot metrics,
             PacketSecuritySnapshot security,
             LogPipelineSnapshot logPipeline,
+            CharacterLifeSchedulerSnapshot scheduler,
             int sessionCount,
-            int mapCount)
+            int mapCount,
+            int selectedCharacters)
         {
             var warnings = new List<string>();
             if (metrics.CpuPercent >= 85)
@@ -518,6 +568,19 @@ namespace NosGm.Handler.PacketHandler.Command
             {
                 warnings.Add("LOG QUEUE HIGH");
             }
+            if (selectedCharacters > 0 && !scheduler.IsRunning)
+            {
+                warnings.Add("SCHEDULER STOPPED");
+            }
+            if (scheduler.Errors > 0)
+            {
+                warnings.Add("SCHEDULER ERRORS");
+            }
+            if (scheduler.Overruns > 0 &&
+                scheduler.AverageTickMilliseconds >= scheduler.IntervalMilliseconds * 0.75)
+            {
+                warnings.Add("SCHEDULER PRESSURE");
+            }
 
             return warnings.Count == 0 ? "OK" : string.Join(" | ", warnings);
         }
@@ -546,6 +609,29 @@ namespace NosGm.Handler.PacketHandler.Command
             if (metrics.GeneralLogMaximumBatchMilliseconds >= 1000)
             {
                 warnings.Add("DB SLOW");
+            }
+
+            return warnings.Count == 0 ? "OK" : string.Join(" | ", warnings);
+        }
+
+        private static string BuildSchedulerHealth(CharacterLifeSchedulerSnapshot metrics)
+        {
+            var warnings = new List<string>();
+            if (!metrics.IsRunning && metrics.ActiveCharacters > 0)
+            {
+                warnings.Add("STOPPED");
+            }
+            if (metrics.Errors > 0)
+            {
+                warnings.Add("ERRORS");
+            }
+            if (metrics.MaximumTickMilliseconds >= metrics.IntervalMilliseconds)
+            {
+                warnings.Add("TICK SLOW");
+            }
+            if (metrics.MaximumLagMilliseconds >= metrics.IntervalMilliseconds)
+            {
+                warnings.Add("LATE");
             }
 
             return warnings.Count == 0 ? "OK" : string.Join(" | ", warnings);
