@@ -24,13 +24,8 @@ namespace NosGm.DAL.DAO
             {
                 using (var context = DataAccessHelper.CreateContext())
                 {
-                    if (context.Account.FirstOrDefault() != null)
-                    {
-                        return true;
-                    }
+                    return context.Account.AsNoTracking().Any();
                 }
-
-                return false;
             }
             catch (Exception e)
             {
@@ -181,12 +176,13 @@ namespace NosGm.DAL.DAO
                     };
 
                     context.GeneralLog.Add(log);
-                    context.SaveChanges();
+                    await context.SaveChangesAsync().ConfigureAwait(false);
                 }
             }
             catch (Exception e)
             {
-                await LoggerService.LogServer.Logger.LogAsync($"Message: {e.Message} | Source: {e.Source} | Data: {e.Data}", LogType.ERROR);
+                await LoggerService.LogServer.Logger.LogAsync($"Message: {e.Message} | Source: {e.Source} | Data: {e.Data}", LogType.ERROR)
+                    .ConfigureAwait(false);
             }
         }
 
@@ -216,7 +212,6 @@ namespace NosGm.DAL.DAO
 
             return null;
         }
-
 
         #endregion
     }
