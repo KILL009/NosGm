@@ -2,6 +2,7 @@
 
 using System.Windows;
 using System.Windows.Controls;
+using Microsoft.Win32;
 using NosGM.Updater.Core;
 
 namespace NosGM.Launcher;
@@ -10,12 +11,14 @@ public partial class MainWindow : Window
 {
     private readonly LauncherController _controller = new();
     private LauncherSettings _settings = new();
+    private InstallFolderInspection? _folderInspection;
     private CancellationTokenSource? _operationCancellation;
     private bool _languageSelectionReady;
 
     public MainWindow()
     {
         LauncherText.ValidateCatalogs();
+        InstallFolderText.ValidateCatalogs();
         InitializeComponent();
         Loaded += MainWindow_Loaded;
         Closed += MainWindow_Closed;
@@ -31,10 +34,14 @@ public partial class MainWindow : Window
             _languageSelectionReady = true;
             ApplyLanguage();
             InstallRootTextBox.Text = _settings.InstallRoot;
+
             var recovery = await _controller.RecoverAsync(
                 _settings,
                 progress: null,
                 CancellationToken.None);
+            _folderInspection = await InstallFolderInspector.InspectAsync(
+                _settings.InstallRoot,
+                _settings.GameExecutable);
 
             var recoveredCount = recovery.RecoveredTransactions +
                                  recovery.FinalizedTransactions +
@@ -46,7 +53,7 @@ public partial class MainWindow : Window
             }
             else
             {
-                SetIdleStatus();
+                ShowFolderStatus();
             }
 
             SetButtonsEnabled(true);
@@ -71,12 +78,71 @@ public partial class MainWindow : Window
             ApplyLanguage();
             if (_operationCancellation is null)
             {
-                SetIdleStatus();
+                if (_folderInspection is null)
+                {
+                    SetIdleStatus();
+                }
+                else
+                {
+                    ShowFolderStatus();
+                }
             }
         }
         catch (Exception exception)
         {
             ShowError(exception);
+        }
+    }
+
+    private async void BrowseFolder_Click(object sender, RoutedEventArgs e)
+    {
+        var dialog = new OpenFolderDialog
+        {
+            Title = FT(InstallFolderTextKeys.SelectTitle),
+            Multiselect = false,
+            InitialDirectory = Directory.Exists(_settings.InstallRoot)
+                ? _settings.InstallRoot
+                : Environment.GetFolderPath(Environment.SpecialFolder.UserProfile)
+        };
+        if (dialog.ShowDialog(this) != true)
+        {
+            return;
+        }
+
+        BeginOperation(T(LauncherTextKeys.Checking));
+        try
+        {
+            var candidate = _settings with { InstallRoot = Path.GetFullPath(dialog.FolderName) };
+            _ = await InstallFolderInspector.InspectAsync(
+                candidate.InstallRoot,
+                candidate.GameExecutable,
+                _operationCancellation!.Token);
+            _ = await _controller.RecoverAsync(
+                candidate,
+                progress: null,
+                _operationCancellation.Token);
+            var inspection = await InstallFolderInspector.InspectAsync(
+                candidate.InstallRoot,
+                candidate.GameExecutable,
+                _operationCancellation.Token);
+
+            await LauncherSettingsStore.SaveAsync(candidate);
+            _settings = candidate;
+            _folderInspection = inspection;
+            InstallRootTextBox.Text = candidate.InstallRoot;
+            ShowFolderStatus();
+        }
+        catch (OperationCanceledException)
+        {
+            StatusTextBlock.Text = T(LauncherTextKeys.Cancelled);
+        }
+        catch (Exception exception)
+        {
+            ShowError(exception);
+        }
+        finally
+        {
+            EndOperation();
         }
     }
 
@@ -140,6 +206,10 @@ public partial class MainWindow : Window
                 _settings,
                 progress,
                 _operationCancellation!.Token);
+            _folderInspection = await InstallFolderInspector.InspectAsync(
+                _settings.InstallRoot,
+                _settings.GameExecutable,
+                _operationCancellation.Token);
             StatusTextBlock.Text = T(LauncherTextKeys.Imported);
             DetailTextBlock.Text = F(
                 LauncherTextKeys.ImportDetail,
@@ -192,6 +262,10 @@ public partial class MainWindow : Window
             }
             else
             {
+                _folderInspection = await InstallFolderInspector.InspectAsync(
+                    _settings.InstallRoot,
+                    _settings.GameExecutable,
+                    _operationCancellation.Token);
                 StatusTextBlock.Text = T(LauncherTextKeys.UpdateCompleted);
                 DetailTextBlock.Text = F(
                     LauncherTextKeys.UpdateCompletedDetail,
@@ -252,6 +326,7 @@ public partial class MainWindow : Window
         SubtitleTextBlock.Text = T(LauncherTextKeys.Subtitle);
         LanguageLabelTextBlock.Text = T(LauncherTextKeys.Language);
         InstallationLabelTextBlock.Text = T(LauncherTextKeys.Installation);
+        BrowseFolderButton.Content = FT(InstallFolderTextKeys.Browse);
         OpenFolderButton.Content = T(LauncherTextKeys.OpenFolder);
         ChannelLabelRun.Text = T(LauncherTextKeys.ChannelStatus);
         ImportButton.Content = T(LauncherTextKeys.Import);
@@ -261,6 +336,36 @@ public partial class MainWindow : Window
         ChannelStatusRun.Text = TrustedChannel.IsConfigured
             ? F(LauncherTextKeys.ChannelConfigured, TrustedChannel.KeyId)
             : T(LauncherTextKeys.ChannelDisabled);
+    }
+
+    private void ShowFolderStatus()
+    {
+        if (_folderInspection is null)
+        {
+            SetIdleStatus();
+            return;
+        }
+
+        switch (_folderInspection.Kind)
+        {
+            case InstallFolderKind.Empty:
+                StatusTextBlock.Text = FT(InstallFolderTextKeys.EmptyStatus);
+                DetailTextBlock.Text = FT(InstallFolderTextKeys.EmptyDetail);
+                break;
+            case InstallFolderKind.ExistingClient:
+                StatusTextBlock.Text = FT(InstallFolderTextKeys.ExistingStatus);
+                DetailTextBlock.Text = FT(InstallFolderTextKeys.ExistingDetail);
+                break;
+            case InstallFolderKind.Managed:
+                StatusTextBlock.Text = FT(InstallFolderTextKeys.ManagedStatus);
+                DetailTextBlock.Text = FF(
+                    InstallFolderTextKeys.ManagedDetail,
+                    _folderInspection.ReleaseId ?? "-",
+                    _folderInspection.ManagedFiles);
+                break;
+            default:
+                throw new InvalidOperationException("Unsupported installation folder kind.");
+        }
     }
 
     private void SetIdleStatus()
@@ -278,13 +383,35 @@ public partial class MainWindow : Window
     private string F(string key, params object?[] arguments)
         => LauncherText.Format(_settings.Language, key, arguments);
 
+    private string FT(string key) => InstallFolderText.Get(_settings.Language, key);
+
+    private string FF(string key, params object?[] arguments)
+        => InstallFolderText.Format(_settings.Language, key, arguments);
+
     private void SetButtonsEnabled(bool enabled)
     {
-        ImportButton.IsEnabled = enabled && TrustedChannel.IsConfigured;
-        CheckButton.IsEnabled = enabled && TrustedChannel.IsConfigured;
-        RepairButton.IsEnabled = enabled && TrustedChannel.IsConfigured;
-        PlayButton.IsEnabled = enabled;
+        BrowseFolderButton.IsEnabled = enabled;
+        OpenFolderButton.IsEnabled = enabled;
+        ImportButton.IsEnabled = enabled &&
+                                 TrustedChannel.IsConfigured &&
+                                 _folderInspection?.Kind == InstallFolderKind.ExistingClient;
+        CheckButton.IsEnabled = enabled && TrustedChannel.IsConfigured && _folderInspection is not null;
+        RepairButton.IsEnabled = enabled && TrustedChannel.IsConfigured && _folderInspection is not null;
+        PlayButton.IsEnabled = enabled && CanLaunchGame();
         LanguageComboBox.IsEnabled = enabled;
+    }
+
+    private bool CanLaunchGame()
+    {
+        try
+        {
+            var gamePath = SafePaths.ResolveManagedPath(_settings.InstallRoot, _settings.GameExecutable);
+            return File.Exists(gamePath);
+        }
+        catch (Exception exception) when (exception is IOException or InvalidDataException or UnauthorizedAccessException)
+        {
+            return false;
+        }
     }
 
     private void ShowError(Exception exception)
