@@ -44,6 +44,8 @@ NosGM includes ChickenAPI-related source components traced to the NQ-Source snap
 
 `Tools/NosGM.ClientThemeEditor` adapts the MIT-licensed GM-tag and right-click color workflow from `Elendan/Notale-Text-Picker` commit `9eb44d2a0041b49375fabb730121a01acd7bae87`. Credit remains with Elendan; the upstream README also credits Cryless and Fizo55. `Pumba98/Nostale-ClientColorizer@9d1e61c717b6a49ca221a5f2d855dfa5fa11591c` is recorded only as prior art for independently implemented object-label and weapon-glow categories, with no copied code or signatures. Detailed attribution is preserved in `Tools/NosGM.ClientThemeEditor/NOTICE.md`.
 
+`Launcher/` is original NosGM work. Its differential-update and repair design was informed by a prior-art review of `Mati18505/HexTaleLauncher@50aa50580aa35a45b156a1899a340a25e50f7fb5`; credit for that earlier project remains with Mati18505 and its contributors. No HexTaleLauncher implementation, binary, artwork, endpoint or signing material is copied. Detailed boundaries are preserved in `Launcher/NOTICE.md`.
+
 The Git history and verified upstream repository history remain the authoritative attribution records. See `NOTICE.md` and `docs/PROVENANCE.md`.
 
 ## NosGM contributors

@@ -1,0 +1,11 @@
+**/bin/
+**/obj/
+.vs/
+artifacts/
+secrets/
+*.private.pem
+*.pfx
+*.snk
+*.tmp
+*.user
+*.nosgm-launcher.local.json
