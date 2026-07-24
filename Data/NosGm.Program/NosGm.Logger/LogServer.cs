@@ -36,6 +36,7 @@ namespace NosGm.LoggerService
 
             static Logger()
             {
+                LogPipelineMonitor.RecordUdpSent(0, QueueCapacity);
                 SenderThread.Start();
             }
 
@@ -96,10 +97,14 @@ namespace NosGm.LoggerService
 
             private static void Enqueue(string message)
             {
-                if (!SendQueue.TryAdd(message))
+                if (SendQueue.TryAdd(message))
                 {
-                    Interlocked.Increment(ref _droppedMessages);
+                    LogPipelineMonitor.RecordUdpEnqueued(SendQueue.Count, QueueCapacity);
+                    return;
                 }
+
+                Interlocked.Increment(ref _droppedMessages);
+                LogPipelineMonitor.RecordUdpDropped(SendQueue.Count, QueueCapacity);
             }
 
             private static void ProcessQueue()
@@ -110,10 +115,13 @@ namespace NosGm.LoggerService
                     {
                         byte[] buffer = Encoding.UTF8.GetBytes(message);
                         Client.Send(buffer, buffer.Length, EndPoint);
+                        LogPipelineMonitor.RecordUdpSent(SendQueue.Count, QueueCapacity);
                     }
                     catch
                     {
                         Interlocked.Increment(ref _droppedMessages);
+                        LogPipelineMonitor.RecordUdpError(SendQueue.Count, QueueCapacity);
+                        LogPipelineMonitor.RecordUdpDropped(SendQueue.Count, QueueCapacity);
                     }
                 }
             }
