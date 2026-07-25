@@ -13,61 +13,86 @@ namespace NosGm.Domain
         public long Processed { get; internal set; }
         public long Dropped { get; internal set; }
         public long Overflows { get; internal set; }
+        public long OverflowDisconnects { get; internal set; }
         public long Drains { get; internal set; }
         public long Reschedules { get; internal set; }
         public long Cleared { get; internal set; }
+        public long Errors { get; internal set; }
         public int ActiveWorkers { get; internal set; }
         public long MaximumActiveWorkers { get; internal set; }
         public double AverageDrainMilliseconds { get; internal set; }
         public double MaximumDrainMilliseconds { get; internal set; }
         public double AveragePacketsPerDrain { get; internal set; }
         public long MaximumPacketsPerDrain { get; internal set; }
+        public double AverageQueueWaitMilliseconds { get; internal set; }
+        public double MaximumQueueWaitMilliseconds { get; internal set; }
     }
 
     public static class PacketIngressMonitor
     {
         private sealed class CounterState
         {
-            internal long QueueDepth;
+            internal CounterState(long generation, long queueDepth, int activeWorkers)
+            {
+                Generation = generation;
+                QueueHighWatermark = queueDepth;
+                MaximumActiveWorkers = activeWorkers;
+            }
+
+            internal readonly long Generation;
             internal long MaximumSessionQueueDepth;
             internal long QueueHighWatermark;
             internal long Enqueued;
             internal long Processed;
             internal long Dropped;
             internal long Overflows;
+            internal long OverflowDisconnects;
             internal long Drains;
             internal long Reschedules;
             internal long Cleared;
-            internal int ActiveWorkers;
+            internal long Errors;
             internal long MaximumActiveWorkers;
             internal long DrainTicks;
             internal long MaximumDrainTicks;
             internal long PacketsInDrains;
             internal long MaximumPacketsPerDrain;
+            internal long QueueWaitTicks;
+            internal long MaximumQueueWaitTicks;
         }
 
         private const int QueueCapacity = 4096;
-        private static CounterState _state = new CounterState();
+        private static long _generation;
+        private static long _queueDepth;
+        private static int _activeWorkers;
+        private static CounterState _state = new CounterState(0, 0, 0);
 
         public static int QueueCapacityPerSession => QueueCapacity;
 
-        public static void RecordEnqueued(int sessionDepth)
+        public static long RecordEnqueued(int sessionDepth)
         {
             CounterState state = Volatile.Read(ref _state);
+            long totalDepth = Interlocked.Increment(ref _queueDepth);
             Interlocked.Increment(ref state.Enqueued);
-            Interlocked.Increment(ref state.QueueDepth);
             UpdateMaximum(ref state.MaximumSessionQueueDepth, sessionDepth);
-            UpdateMaximum(ref state.QueueHighWatermark, Interlocked.Read(ref state.QueueDepth));
+            UpdateMaximum(ref state.QueueHighWatermark, totalDepth);
+            return state.Generation;
         }
 
-        public static void RecordDequeued()
+        public static void RecordDequeued(long generation, long queueWaitTicks)
         {
+            DecrementNonNegative(ref _queueDepth);
             CounterState state = Volatile.Read(ref _state);
+            if (state.Generation != generation)
+            {
+                return;
+            }
+
             Interlocked.Increment(ref state.Processed);
-            DecrementNonNegative(ref state.QueueDepth);
+            Interlocked.Add(ref state.QueueWaitTicks, queueWaitTicks);
+            UpdateMaximum(ref state.MaximumQueueWaitTicks, queueWaitTicks);
         }
 
-        public static void RecordDropped(bool overflow)
+        public static void RecordDropped(bool overflow, bool disconnected)
         {
             CounterState state = Volatile.Read(ref _state);
             Interlocked.Increment(ref state.Dropped);
@@ -75,37 +100,48 @@ namespace NosGm.Domain
             {
                 Interlocked.Increment(ref state.Overflows);
             }
+            if (disconnected)
+            {
+                Interlocked.Increment(ref state.OverflowDisconnects);
+            }
         }
 
-        public static void RecordCleared(int count)
+        public static void RecordCleared(long generation)
         {
-            if (count <= 0)
+            DecrementNonNegative(ref _queueDepth);
+            CounterState state = Volatile.Read(ref _state);
+            if (state.Generation == generation)
+            {
+                Interlocked.Increment(ref state.Cleared);
+            }
+        }
+
+        public static void RecordRescheduled(long generation)
+        {
+            CounterState state = Volatile.Read(ref _state);
+            if (state.Generation == generation)
+            {
+                Interlocked.Increment(ref state.Reschedules);
+            }
+        }
+
+        public static long RecordWorkerStarted()
+        {
+            CounterState state = Volatile.Read(ref _state);
+            int active = Interlocked.Increment(ref _activeWorkers);
+            UpdateMaximum(ref state.MaximumActiveWorkers, active);
+            return state.Generation;
+        }
+
+        public static void RecordDrain(long generation, long elapsedTicks, int packetCount)
+        {
+            DecrementNonNegative(ref _activeWorkers);
+            CounterState state = Volatile.Read(ref _state);
+            if (state.Generation != generation)
             {
                 return;
             }
 
-            CounterState state = Volatile.Read(ref _state);
-            Interlocked.Add(ref state.Cleared, count);
-            for (int i = 0; i < count; i++)
-            {
-                DecrementNonNegative(ref state.QueueDepth);
-            }
-        }
-
-        public static void RecordRescheduled() =>
-            Interlocked.Increment(ref Volatile.Read(ref _state).Reschedules);
-
-        public static void RecordWorkerStarted()
-        {
-            CounterState state = Volatile.Read(ref _state);
-            int active = Interlocked.Increment(ref state.ActiveWorkers);
-            UpdateMaximum(ref state.MaximumActiveWorkers, active);
-        }
-
-        public static void RecordDrain(long elapsedTicks, int packetCount)
-        {
-            CounterState state = Volatile.Read(ref _state);
-            Interlocked.Decrement(ref state.ActiveWorkers);
             Interlocked.Increment(ref state.Drains);
             Interlocked.Add(ref state.DrainTicks, elapsedTicks);
             Interlocked.Add(ref state.PacketsInDrains, packetCount);
@@ -113,36 +149,57 @@ namespace NosGm.Domain
             UpdateMaximum(ref state.MaximumPacketsPerDrain, packetCount);
         }
 
+        public static void RecordError(long generation)
+        {
+            CounterState state = Volatile.Read(ref _state);
+            if (state.Generation == generation)
+            {
+                Interlocked.Increment(ref state.Errors);
+            }
+        }
+
         public static PacketIngressSnapshot Capture()
         {
             CounterState state = Volatile.Read(ref _state);
             long drains = Interlocked.Read(ref state.Drains);
+            long processed = Interlocked.Read(ref state.Processed);
             long drainTicks = Interlocked.Read(ref state.DrainTicks);
             long packetsInDrains = Interlocked.Read(ref state.PacketsInDrains);
+            long queueWaitTicks = Interlocked.Read(ref state.QueueWaitTicks);
 
             return new PacketIngressSnapshot
             {
                 QueueCapacityPerSession = QueueCapacity,
-                QueueDepth = Interlocked.Read(ref state.QueueDepth),
+                QueueDepth = Interlocked.Read(ref _queueDepth),
                 MaximumSessionQueueDepth = Interlocked.Read(ref state.MaximumSessionQueueDepth),
                 QueueHighWatermark = Interlocked.Read(ref state.QueueHighWatermark),
                 Enqueued = Interlocked.Read(ref state.Enqueued),
-                Processed = Interlocked.Read(ref state.Processed),
+                Processed = processed,
                 Dropped = Interlocked.Read(ref state.Dropped),
                 Overflows = Interlocked.Read(ref state.Overflows),
+                OverflowDisconnects = Interlocked.Read(ref state.OverflowDisconnects),
                 Drains = drains,
                 Reschedules = Interlocked.Read(ref state.Reschedules),
                 Cleared = Interlocked.Read(ref state.Cleared),
-                ActiveWorkers = Volatile.Read(ref state.ActiveWorkers),
+                Errors = Interlocked.Read(ref state.Errors),
+                ActiveWorkers = Volatile.Read(ref _activeWorkers),
                 MaximumActiveWorkers = Interlocked.Read(ref state.MaximumActiveWorkers),
                 AverageDrainMilliseconds = drains == 0 ? 0 : TicksToMilliseconds(drainTicks) / drains,
                 MaximumDrainMilliseconds = TicksToMilliseconds(Interlocked.Read(ref state.MaximumDrainTicks)),
                 AveragePacketsPerDrain = drains == 0 ? 0 : packetsInDrains / (double)drains,
-                MaximumPacketsPerDrain = Interlocked.Read(ref state.MaximumPacketsPerDrain)
+                MaximumPacketsPerDrain = Interlocked.Read(ref state.MaximumPacketsPerDrain),
+                AverageQueueWaitMilliseconds = processed == 0 ? 0 : TicksToMilliseconds(queueWaitTicks) / processed,
+                MaximumQueueWaitMilliseconds = TicksToMilliseconds(Interlocked.Read(ref state.MaximumQueueWaitTicks))
             };
         }
 
-        public static void Reset() => Interlocked.Exchange(ref _state, new CounterState());
+        public static void Reset()
+        {
+            long generation = Interlocked.Increment(ref _generation);
+            Interlocked.Exchange(
+                ref _state,
+                new CounterState(generation, Interlocked.Read(ref _queueDepth), Volatile.Read(ref _activeWorkers)));
+        }
 
         private static double TicksToMilliseconds(long ticks) =>
             ticks * 1000d / Stopwatch.Frequency;
@@ -152,6 +209,23 @@ namespace NosGm.Domain
             while (true)
             {
                 long current = Interlocked.Read(ref value);
+                if (current <= 0)
+                {
+                    return;
+                }
+
+                if (Interlocked.CompareExchange(ref value, current - 1, current) == current)
+                {
+                    return;
+                }
+            }
+        }
+
+        private static void DecrementNonNegative(ref int value)
+        {
+            while (true)
+            {
+                int current = Volatile.Read(ref value);
                 if (current <= 0)
                 {
                     return;
