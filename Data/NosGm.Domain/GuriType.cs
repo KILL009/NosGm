@@ -4,6 +4,7 @@
     {
         DanceAnimation = 2,
         Broadcast = 4,
+        SimpleDance = 5,
         Emoticon = 10,
         WingsFriendship = 199,
         PetBasket = 201,
