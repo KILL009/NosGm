@@ -318,8 +318,71 @@ namespace NosGm.Handler.PacketHandler.Basic
             string phaseName = Enum.IsDefined(typeof(BCardExecutionPhase), phase)
                 ? ((BCardExecutionPhase)phase).ToString()
                 : phase.ToString();
+            string meaning = ResolveBCardMeaning(type, subType);
 
-            return $"Type {type} ({typeName}) | SubType {subType} | Phase {phaseName}";
+            return $"Type {type} ({typeName}) | SubType {subType} ({meaning}) | Phase {phaseName}";
+        }
+
+        private static string ResolveBCardMeaning(byte type, byte subType)
+        {
+            switch (type)
+            {
+                case 29:
+                    switch (subType)
+                    {
+                        case 11:
+                            return "FlameExplosion";
+                        case 12:
+                            return "FlameExplosionNegated";
+                        case 21:
+                            return "SurroundingsExplosion";
+                        case 22:
+                            return "SurroundingsExplosionNegated";
+                        case 31:
+                            return "SurroundingsAttack";
+                        case 32:
+                            return "SurroundingsAttackNegated";
+                    }
+                    break;
+
+                case 36:
+                    if (subType == 41)
+                    {
+                        return "DisableHPConsumption";
+                    }
+                    break;
+
+                case 39:
+                    if (subType == 11)
+                    {
+                        return "DecreaseHPWithoutDeath";
+                    }
+                    if (subType == 12)
+                    {
+                        return "DecreaseHPWithoutKill";
+                    }
+                    break;
+
+                case 41:
+                    if (subType == 15)
+                    {
+                        return "UndocumentedMode15";
+                    }
+                    break;
+
+                case 104:
+                    if (subType == 31)
+                    {
+                        return "SummonOneWhenDefending";
+                    }
+                    if (subType == 32)
+                    {
+                        return "SummonTwoWhenDefending";
+                    }
+                    break;
+            }
+
+            return "Undocumented";
         }
 
         #endregion
