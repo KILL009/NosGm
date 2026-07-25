@@ -146,11 +146,10 @@ namespace NosGm.Domain
             Interlocked.Add(ref state.DrainTicks, elapsedTicks);
             Interlocked.Add(ref state.PacketsInDrains, packetCount);
 
-            // A single raw message can contain a slow game handler such as login,
-            // character selection or a guri action. That is handler latency, not an
-            // ingress backlog. Only expose a slow maximum when the drain processed
-            // multiple messages or more data was still queued behind it.
-            if (packetCount > 1 || Interlocked.Read(ref _queueDepth) > 0)
+            // Handler execution is included in drain duration. A single message with one
+            // follower is not meaningful ingress pressure. Record the slow maximum only
+            // when a drain handled multiple messages or at least two messages remain queued.
+            if (packetCount > 1 || Interlocked.Read(ref _queueDepth) > 1)
             {
                 UpdateMaximum(ref state.MaximumDrainTicks, elapsedTicks);
             }
