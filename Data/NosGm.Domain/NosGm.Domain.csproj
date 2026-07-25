@@ -128,6 +128,7 @@
     <Compile Include="MonsterType.cs" />
     <Compile Include="NpcMonsterRaceType.cs" />
     <Compile Include="NRunType.cs" />
+    <Compile Include="PacketIngressMonitor.cs" />
     <Compile Include="PartnerSkillLevelType.cs" />
     <Compile Include="PenaltyType.cs" />
     <Compile Include="PortalType.cs" />

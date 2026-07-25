@@ -13,8 +13,10 @@ using NosGm.Master.Library.Client;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Reactive.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 
 
@@ -38,17 +40,29 @@ namespace NosGm.GameObject
             // absolutely new instantiated Client has no SessionId
             SessionId = 0;
 
-            // register for NetworkClient events
+            // Packet ingress is activated only when data arrives. The previous
+            // 10 ms Observable.Interval woke every session 100 times per second,
+            // even while its queue was empty.
+            _receiveQueue = new ConcurrentQueue<ReceiveQueueItem>();
             _client.MessageReceived += OnNetworkClientMessageReceived;
-
-            // start observer for receiving packets
-            _receiveQueue = new ConcurrentQueue<byte[]>();
-            _receiveQueueObservable = Observable.Interval(new TimeSpan(0, 0, 0, 0, 10)).Subscribe(x => HandlePackets());
         }
 
         #endregion
 
         #region Members
+
+        private sealed class ReceiveQueueItem
+        {
+            public byte[] Data { get; set; }
+
+            public long EnqueuedTimestamp { get; set; }
+
+            public long MetricGeneration { get; set; }
+        }
+
+        private const int MaximumRawMessagesPerDrain = 128;
+
+        private const int MaximumReceiveDrainMilliseconds = 8;
 
         public bool HealthStop;
 
@@ -58,9 +72,9 @@ namespace NosGm.GameObject
 
         private readonly Random _random;
 
-        private readonly ConcurrentQueue<byte[]> _receiveQueue;
+        private readonly object _receiveIngressSync = new object();
 
-        private readonly object _receiveQueueObservable;
+        private readonly ConcurrentQueue<ReceiveQueueItem> _receiveQueue;
 
         private readonly IList<string> _waitForPacketList = new List<string>();
 
@@ -77,6 +91,12 @@ namespace NosGm.GameObject
         private long _lastPacketReceive;
 
         private int? _waitForPacketsAmount;
+
+        private int _receiveDrainScheduled;
+
+        private int _receiveIngressStopped;
+
+        private int _receiveQueueDepth;
 
         #endregion
 
@@ -176,6 +196,8 @@ namespace NosGm.GameObject
 
         public void Destroy()
         {
+            StopPacketIngress();
+
             // unregister from WCF events
             CommunicationServiceClient.Instance.CharacterConnectedEvent -= OnOtherCharacterConnected;
             CommunicationServiceClient.Instance.CharacterDisconnectedEvent -= OnOtherCharacterDisconnected;
@@ -247,8 +269,6 @@ namespace NosGm.GameObject
             {
                 CommunicationServiceClient.Instance.DisconnectAccount(Account.AccountId);
             }
-
-            ClearReceiveQueue();
         }
 
         public void PrepareDisconnection()
@@ -292,6 +312,7 @@ namespace NosGm.GameObject
 
         public void Disconnect()
         {
+            StopPacketIngress();
             Character?.SaveObs?.Dispose();
             _client.Disconnect();
         }
@@ -408,9 +429,10 @@ namespace NosGm.GameObject
 
         private void ClearReceiveQueue()
         {
-            while (_receiveQueue.TryDequeue(out _))
+            while (_receiveQueue.TryDequeue(out ReceiveQueueItem item))
             {
-                // do nothing
+                DecrementReceiveQueueDepth();
+                PacketIngressMonitor.RecordCleared(item.MetricGeneration);
             }
         }
 
@@ -459,149 +481,268 @@ namespace NosGm.GameObject
             }
         }
 
-        /// <summary>
-        ///     Handle the packet received by the Client.
-        /// </summary>
-        private void HandlePackets()
+        private void ScheduleReceiveDrain()
         {
+            if (Volatile.Read(ref _receiveIngressStopped) != 0 || IsDisposing)
+            {
+                return;
+            }
+
+            if (Interlocked.CompareExchange(ref _receiveDrainScheduled, 1, 0) != 0)
+            {
+                return;
+            }
+
+            ThreadPool.QueueUserWorkItem(DrainReceiveQueue);
+        }
+
+        private void DrainReceiveQueue(object state)
+        {
+            long metricGeneration = PacketIngressMonitor.RecordWorkerStarted();
+            var stopwatch = Stopwatch.StartNew();
+            int processed = 0;
+
             try
             {
-                while (_receiveQueue.TryDequeue(out var packetData))
+                while (processed < MaximumRawMessagesPerDrain &&
+                       stopwatch.ElapsedMilliseconds < MaximumReceiveDrainMilliseconds &&
+                       Volatile.Read(ref _receiveIngressStopped) == 0 &&
+                       !IsDisposing &&
+                       _receiveQueue.TryDequeue(out ReceiveQueueItem item))
                 {
-                    // determine first packet
-                    if (_encryptor.HasCustomParameter && SessionId == 0)
+                    DecrementReceiveQueueDepth();
+                    long waitTicks = Math.Max(0, Stopwatch.GetTimestamp() - item.EnqueuedTimestamp);
+                    PacketIngressMonitor.RecordDequeued(item.MetricGeneration, waitTicks);
+                    processed++;
+
+                    if (!ProcessReceivedMessage(item.Data))
                     {
-                        var sessionPacket = _encryptor.DecryptCustomParameter(packetData);
-
-                        var sessionParts = sessionPacket.Split(' ');
-
-                        if (sessionParts.Length == 0)
-                        {
-                            return;
-                        }
-                        if (!int.TryParse(sessionParts[0], out int packetId))
-                        {
-                            Disconnect();
-                        }
-                        _lastPacketId = packetId;
-
-                        // set the SessionId if Session Packet arrives
-                        if (sessionParts.Length < 2)
-                        {
-                            return;
-                        }
-                        if (int.TryParse(sessionParts[1].Split('\\').FirstOrDefault(), out var sessid))
-                        {
-                            SessionId = sessid;
-                            //Logger.Info($"{SessionId} entered the World Server");
-
-                            if (!_waitForPacketsAmount.HasValue)
-                            {
-                                TriggerHandler("NosGm.EntryPoint", string.Empty, false);
-                            }
-                        }
-                        return;
-                    }
-
-                    // Decrypts the packet at the beginning
-                    var packetConcatenated = _encryptor.Decrypt(packetData, SessionId);
-                    foreach (var packet in packetConcatenated.Split(new[] { (char)0xFF },StringSplitOptions.RemoveEmptyEntries))
-                    {
-                        // FIxes the packet string
-                        var packetstring = packet.Replace('^', ' ');
-                        var packetsplit = packetstring.Split(' ');
-
-                        if (_encryptor.HasCustomParameter)
-                        {
-                            var nextRawPacketId = packetsplit[0];
-                            if (!int.TryParse(nextRawPacketId, out var nextPacketId) && nextPacketId != _lastPacketId + 1)
-                            {
-                                //LOGGERServerLog($"KeepAlive was corrupt. Removed Session", LogType.ServerError);
-                                _client.Disconnect();
-                                return;
-                            }
-
-                            if (nextPacketId == 0)
-                            {
-                                if (_lastPacketId == ushort.MaxValue)
-                                {
-                                    _lastPacketId = nextPacketId;
-                                }
-                            }
-                            else
-                            {
-                                _lastPacketId = nextPacketId;
-                            }
-
-                            if (_waitForPacketsAmount.HasValue)
-                            {
-                                _waitForPacketList.Add(packetstring);
-
-                                var packetssplit = packetstring.Split(' ');
-
-                                if (packetssplit.Length > 3 && packetsplit[1] == "DAC")
-                                {
-                                    _waitForPacketList.Add("0 CrossServerAuthenticate");
-                                }
-                                if (_waitForPacketList.Count == _waitForPacketsAmount)
-                                {
-                                    _waitForPacketsAmount = null;
-                                    var queuedPackets = string.Join(" ", _waitForPacketList.ToArray());
-                                    var header = queuedPackets.Split(' ', '^')[1];
-                                    TriggerHandler(header, queuedPackets, true);
-                                    _waitForPacketList.Clear();
-                                    return;
-                                }
-                            }
-                            else if (packetsplit.Length > 1)
-                            {
-                                if (packetsplit[1].Length >= 1 && (packetsplit[1][0] == '/' || packetsplit[1][0] == ':' || packetsplit[1][0] == ';'))
-                                {
-                                    packetsplit[1] = packetsplit[1][0].ToString();
-                                    packetstring = packet.Insert(packet.IndexOf(' ') + 2, " ");
-                                }
-
-                                if (packetsplit[1] != "0")
-                                {
-                                    TriggerHandler(packetsplit[1].Replace("#", string.Empty), packetstring, false);
-                                }
-                            }
-                        }
-                        else
-                        {
-                            var packetHeader = packetstring.Split(' ')[0];
-
-                            // simple messaging
-                            if (packetHeader[0] == '/' || packetHeader[0] == ':' || packetHeader[0] == ';')
-                            {
-                                packetHeader = packetHeader[0].ToString();
-                                packetstring = packet.Insert(packet.IndexOf(' ') + 2, " ");
-                            }
-
-                            TriggerHandler(packetHeader.Replace("#", ""), packetstring, false);
-                        }
+                        break;
                     }
                 }
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                //LOGGERServerLog($"[Invalid Packet] {ex.ToString()}", LogType.ServerError);
+                PacketIngressMonitor.RecordError(metricGeneration);
                 Disconnect();
+            }
+            finally
+            {
+                stopwatch.Stop();
+                PacketIngressMonitor.RecordDrain(metricGeneration, stopwatch.ElapsedTicks, processed);
+                Interlocked.Exchange(ref _receiveDrainScheduled, 0);
+
+                if (Volatile.Read(ref _receiveIngressStopped) == 0 &&
+                    !IsDisposing &&
+                    !_receiveQueue.IsEmpty)
+                {
+                    PacketIngressMonitor.RecordRescheduled(metricGeneration);
+                    ScheduleReceiveDrain();
+                }
             }
         }
 
         /// <summary>
-        ///     This will be triggered when the underlying NetworkClient receives a packet.
+        /// Handles one raw network message while preserving the old packet-ordering
+        /// behavior. Returning false yields the current drain and lets pending data
+        /// continue in a fresh ThreadPool turn.
         /// </summary>
-        /// <param name="sender"></param>
-        /// <param name="e"></param>
+        private bool ProcessReceivedMessage(byte[] packetData)
+        {
+            // determine first packet
+            if (_encryptor.HasCustomParameter && SessionId == 0)
+            {
+                var sessionPacket = _encryptor.DecryptCustomParameter(packetData);
+                var sessionParts = sessionPacket.Split(' ');
+
+                if (sessionParts.Length == 0)
+                {
+                    return false;
+                }
+                if (!int.TryParse(sessionParts[0], out int packetId))
+                {
+                    Disconnect();
+                    return false;
+                }
+                _lastPacketId = packetId;
+
+                // set the SessionId if Session Packet arrives
+                if (sessionParts.Length < 2)
+                {
+                    return false;
+                }
+                if (int.TryParse(sessionParts[1].Split('\\').FirstOrDefault(), out var sessid))
+                {
+                    SessionId = sessid;
+                    //Logger.Info($"{SessionId} entered the World Server");
+
+                    if (!_waitForPacketsAmount.HasValue)
+                    {
+                        TriggerHandler("NosGm.EntryPoint", string.Empty, false);
+                    }
+                }
+                return false;
+            }
+
+            // Decrypts the packet at the beginning
+            var packetConcatenated = _encryptor.Decrypt(packetData, SessionId);
+            foreach (var packet in packetConcatenated.Split(new[] { (char)0xFF }, StringSplitOptions.RemoveEmptyEntries))
+            {
+                // Fixes the packet string
+                var packetstring = packet.Replace('^', ' ');
+                var packetsplit = packetstring.Split(' ');
+
+                if (_encryptor.HasCustomParameter)
+                {
+                    var nextRawPacketId = packetsplit[0];
+                    if (!int.TryParse(nextRawPacketId, out var nextPacketId) && nextPacketId != _lastPacketId + 1)
+                    {
+                        //LOGGERServerLog($"KeepAlive was corrupt. Removed Session", LogType.ServerError);
+                        _client.Disconnect();
+                        return false;
+                    }
+
+                    if (nextPacketId == 0)
+                    {
+                        if (_lastPacketId == ushort.MaxValue)
+                        {
+                            _lastPacketId = nextPacketId;
+                        }
+                    }
+                    else
+                    {
+                        _lastPacketId = nextPacketId;
+                    }
+
+                    if (_waitForPacketsAmount.HasValue)
+                    {
+                        _waitForPacketList.Add(packetstring);
+
+                        var packetssplit = packetstring.Split(' ');
+
+                        if (packetssplit.Length > 3 && packetsplit[1] == "DAC")
+                        {
+                            _waitForPacketList.Add("0 CrossServerAuthenticate");
+                        }
+                        if (_waitForPacketList.Count == _waitForPacketsAmount)
+                        {
+                            _waitForPacketsAmount = null;
+                            var queuedPackets = string.Join(" ", _waitForPacketList.ToArray());
+                            var header = queuedPackets.Split(' ', '^')[1];
+                            TriggerHandler(header, queuedPackets, true);
+                            _waitForPacketList.Clear();
+                            return false;
+                        }
+                    }
+                    else if (packetsplit.Length > 1)
+                    {
+                        if (packetsplit[1].Length >= 1 && (packetsplit[1][0] == '/' || packetsplit[1][0] == ':' || packetsplit[1][0] == ';'))
+                        {
+                            packetsplit[1] = packetsplit[1][0].ToString();
+                            packetstring = packet.Insert(packet.IndexOf(' ') + 2, " ");
+                        }
+
+                        if (packetsplit[1] != "0")
+                        {
+                            TriggerHandler(packetsplit[1].Replace("#", string.Empty), packetstring, false);
+                        }
+                    }
+                }
+                else
+                {
+                    var packetHeader = packetstring.Split(' ')[0];
+
+                    // simple messaging
+                    if (packetHeader[0] == '/' || packetHeader[0] == ':' || packetHeader[0] == ';')
+                    {
+                        packetHeader = packetHeader[0].ToString();
+                        packetstring = packet.Insert(packet.IndexOf(' ') + 2, " ");
+                    }
+
+                    TriggerHandler(packetHeader.Replace("#", ""), packetstring, false);
+                }
+            }
+
+            return true;
+        }
+
+        /// <summary>
+        /// This will be triggered when the underlying NetworkClient receives a packet.
+        /// </summary>
         private void OnNetworkClientMessageReceived(object sender, MessageEventArgs e)
         {
             var message = e.Message as ScsRawDataMessage;
-            if (message == null) return;
-            if (message.MessageData.Length > 0 && message.MessageData.Length > 2)
-                _receiveQueue.Enqueue(message.MessageData);
+            if (message?.MessageData == null || message.MessageData.Length <= 2)
+            {
+                return;
+            }
+
             _lastPacketReceive = e.ReceivedTimestamp.Ticks;
+            bool overflow = false;
+
+            lock (_receiveIngressSync)
+            {
+                if (Volatile.Read(ref _receiveIngressStopped) != 0 || IsDisposing)
+                {
+                    return;
+                }
+
+                int depth = Interlocked.Increment(ref _receiveQueueDepth);
+                if (depth > PacketIngressMonitor.QueueCapacityPerSession)
+                {
+                    DecrementReceiveQueueDepth();
+                    PacketIngressMonitor.RecordDropped(true, true);
+                    overflow = true;
+                }
+                else
+                {
+                    long generation = PacketIngressMonitor.RecordEnqueued(depth);
+                    _receiveQueue.Enqueue(new ReceiveQueueItem
+                    {
+                        Data = message.MessageData,
+                        EnqueuedTimestamp = Stopwatch.GetTimestamp(),
+                        MetricGeneration = generation
+                    });
+                }
+            }
+
+            if (overflow)
+            {
+                Disconnect();
+                return;
+            }
+
+            ScheduleReceiveDrain();
+        }
+
+        private void StopPacketIngress()
+        {
+            lock (_receiveIngressSync)
+            {
+                if (Interlocked.Exchange(ref _receiveIngressStopped, 1) == 0)
+                {
+                    _client.MessageReceived -= OnNetworkClientMessageReceived;
+                }
+
+                ClearReceiveQueue();
+            }
+        }
+
+        private void DecrementReceiveQueueDepth()
+        {
+            while (true)
+            {
+                int current = Volatile.Read(ref _receiveQueueDepth);
+                if (current <= 0)
+                {
+                    return;
+                }
+
+                if (Interlocked.CompareExchange(ref _receiveQueueDepth, current - 1, current) == current)
+                {
+                    return;
+                }
+            }
         }
 
         private void OnOtherCharacterConnected(object sender, EventArgs e)

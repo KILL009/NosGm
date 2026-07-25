@@ -98,16 +98,23 @@ namespace NosGm.Handler.PacketHandler.Command
                     ShowSchedulerMetrics();
                     break;
 
+                case "ingress":
+                case "receive":
+                case "network-in":
+                    ShowIngressMetrics();
+                    break;
+
                 case "reset":
                     ServerPerformanceMonitor.Instance.Reset();
                     PacketSecurityMonitor.Instance.Reset();
                     LogPipelineMonitor.Reset();
                     CharacterLifeScheduler.ResetMetrics();
+                    PacketIngressMonitor.Reset();
                     SendPerformanceLine(
-                        "NosGM performance, packet guard, log pipeline and scheduler counters were reset.",
+                        "NosGM performance, packet guard, log pipeline, scheduler and ingress counters were reset.",
                         11);
                     Logger.LogUserEvent("PERF_RESET", Session.GenerateIdentity(),
-                        "Runtime, network, packet handler, packet guard, log pipeline and scheduler counters reset.");
+                        "Runtime, network, packet handler, packet guard, log pipeline, scheduler and ingress counters reset.");
                     break;
 
                 case "help":
@@ -281,6 +288,7 @@ namespace NosGm.Handler.PacketHandler.Command
             PacketSecuritySnapshot security = PacketSecurityMonitor.Instance.Capture();
             LogPipelineSnapshot logPipeline = LogPipelineMonitor.Capture();
             CharacterLifeSchedulerSnapshot scheduler = CharacterLifeScheduler.Capture();
+            PacketIngressSnapshot ingress = PacketIngressMonitor.Capture();
             List<ClientSession> sessions = manager.Sessions.ToList();
             MapInstance[] mapInstances = ServerManager._mapinstances.Values
                 .Where(map => map != null)
@@ -321,18 +329,21 @@ namespace NosGm.Handler.PacketHandler.Command
                 $"GC Gen0 {metrics.Gen0Collections} | Gen1 {metrics.Gen1Collections} | Gen2 {metrics.Gen2Collections}");
             SendPerformanceLine(
                 $"Life scheduler {(scheduler.IsRunning ? "RUNNING" : "STOPPED")} | Active {scheduler.ActiveCharacters} | Tick avg {scheduler.AverageTickMilliseconds:N3} ms | Max {scheduler.MaximumTickMilliseconds:N3} ms");
+            SendPerformanceLine(
+                $"Ingress queued {ingress.QueueDepth:N0} | Session peak {ingress.MaximumSessionQueueDepth:N0}/{ingress.QueueCapacityPerSession:N0} | Workers {ingress.ActiveWorkers}/{ingress.MaximumActiveWorkers:N0} | Wait avg {ingress.AverageQueueWaitMilliseconds:N3} ms");
 
             string health = BuildHealthSummary(
                 metrics,
                 security,
                 logPipeline,
                 scheduler,
+                ingress,
                 sessions.Count,
                 mapInstances.Length,
                 selectedCharacters);
             SendPerformanceLine($"Health: {health}", health == "OK" ? (byte)10 : (byte)12);
             SendPerformanceLine(
-                "Use $Perf packets, $Perf maps, $Perf security, $Perf logs, $Perf scheduler or $Perf help.",
+                "Use $Perf packets, $Perf maps, $Perf security, $Perf logs, $Perf scheduler, $Perf ingress or $Perf help.",
                 11);
         }
 
@@ -481,6 +492,28 @@ namespace NosGm.Handler.PacketHandler.Command
             SendPerformanceLine($"Scheduler health: {health}", health == "OK" ? (byte)10 : (byte)12);
         }
 
+        private void ShowIngressMetrics()
+        {
+            PacketIngressSnapshot metrics = PacketIngressMonitor.Capture();
+
+            SendPerformanceLine("========== Packet Ingress ==========", 11);
+            SendPerformanceLine(
+                $"Queue total {metrics.QueueDepth:N0} | Per-session capacity {metrics.QueueCapacityPerSession:N0} | Session peak {metrics.MaximumSessionQueueDepth:N0} | Global peak {metrics.QueueHighWatermark:N0}");
+            SendPerformanceLine(
+                $"Raw messages enqueued {metrics.Enqueued:N0} | Processed {metrics.Processed:N0} | Dropped {metrics.Dropped:N0} | Cleared {metrics.Cleared:N0}");
+            SendPerformanceLine(
+                $"Drains {metrics.Drains:N0} | Reschedules {metrics.Reschedules:N0} | Packets/drain avg {metrics.AveragePacketsPerDrain:N2} | Max {metrics.MaximumPacketsPerDrain:N0}");
+            SendPerformanceLine(
+                $"Drain time avg {metrics.AverageDrainMilliseconds:N3} ms | Max {metrics.MaximumDrainMilliseconds:N3} ms");
+            SendPerformanceLine(
+                $"Queue wait avg {metrics.AverageQueueWaitMilliseconds:N3} ms | Max {metrics.MaximumQueueWaitMilliseconds:N3} ms");
+            SendPerformanceLine(
+                $"Workers active {metrics.ActiveWorkers} | Max {metrics.MaximumActiveWorkers:N0} | Overflows {metrics.Overflows:N0} | Overflow disconnects {metrics.OverflowDisconnects:N0} | Errors {metrics.Errors:N0}");
+
+            string health = BuildIngressHealth(metrics);
+            SendPerformanceLine($"Ingress health: {health}", health == "OK" ? (byte)10 : (byte)12);
+        }
+
         private void ShowPerformanceHelp()
         {
             SendPerformanceLine("========== $Perf help ==========", 11);
@@ -495,7 +528,8 @@ namespace NosGm.Handler.PacketHandler.Command
             SendPerformanceLine("$Perf logs: GeneralLog, daily action, UDP and Mongo telemetry.");
             SendPerformanceLine("$Perf logs flush: wait up to five seconds for queued GeneralLogs.");
             SendPerformanceLine("$Perf scheduler: central CharacterLife scheduler timing and errors.");
-            SendPerformanceLine("$Perf reset: clear performance, security, log, scheduler and peak counters.");
+            SendPerformanceLine("$Perf ingress: event-driven receive queues, workers, latency and overflow protection.");
+            SendPerformanceLine("$Perf reset: clear performance, security, log, scheduler, ingress and peak counters.");
         }
 
         private static HandlerSort ParseHandlerSort(string argument)
@@ -524,6 +558,7 @@ namespace NosGm.Handler.PacketHandler.Command
             PacketSecuritySnapshot security,
             LogPipelineSnapshot logPipeline,
             CharacterLifeSchedulerSnapshot scheduler,
+            PacketIngressSnapshot ingress,
             int sessionCount,
             int mapCount,
             int selectedCharacters)
@@ -581,6 +616,24 @@ namespace NosGm.Handler.PacketHandler.Command
             {
                 warnings.Add("SCHEDULER PRESSURE");
             }
+            if (ingress.Errors > 0)
+            {
+                warnings.Add("INGRESS ERRORS");
+            }
+            if (ingress.Overflows > 0)
+            {
+                warnings.Add("INGRESS OVERFLOW");
+            }
+            if (ingress.QueueCapacityPerSession > 0 &&
+                ingress.MaximumSessionQueueDepth >= ingress.QueueCapacityPerSession * 0.8)
+            {
+                warnings.Add("INGRESS QUEUE HIGH");
+            }
+            if (ingress.AverageQueueWaitMilliseconds >= 50 ||
+                ingress.MaximumQueueWaitMilliseconds >= 500)
+            {
+                warnings.Add("INGRESS LATENCY");
+            }
 
             return warnings.Count == 0 ? "OK" : string.Join(" | ", warnings);
         }
@@ -632,6 +685,42 @@ namespace NosGm.Handler.PacketHandler.Command
             if (metrics.MaximumLagMilliseconds >= metrics.IntervalMilliseconds)
             {
                 warnings.Add("LATE");
+            }
+
+            return warnings.Count == 0 ? "OK" : string.Join(" | ", warnings);
+        }
+
+        private static string BuildIngressHealth(PacketIngressSnapshot metrics)
+        {
+            var warnings = new List<string>();
+            if (metrics.Errors > 0)
+            {
+                warnings.Add("ERRORS");
+            }
+            if (metrics.Overflows > 0)
+            {
+                warnings.Add("OVERFLOW");
+            }
+            if (metrics.Dropped > 0)
+            {
+                warnings.Add("DROPPED");
+            }
+            if (metrics.QueueCapacityPerSession > 0 &&
+                metrics.MaximumSessionQueueDepth >= metrics.QueueCapacityPerSession * 0.8)
+            {
+                warnings.Add("QUEUE HIGH");
+            }
+            if (metrics.AverageQueueWaitMilliseconds >= 50)
+            {
+                warnings.Add("WAIT HIGH");
+            }
+            if (metrics.MaximumQueueWaitMilliseconds >= 500)
+            {
+                warnings.Add("WAIT SPIKE");
+            }
+            if (metrics.MaximumDrainMilliseconds >= 100)
+            {
+                warnings.Add("DRAIN SLOW");
             }
 
             return warnings.Count == 0 ? "OK" : string.Join(" | ", warnings);
