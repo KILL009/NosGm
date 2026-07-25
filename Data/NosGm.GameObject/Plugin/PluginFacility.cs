@@ -23,8 +23,9 @@ namespace Game.Configuration
         private static IDictionary<CardType, string> _bcardHandlerNames;
         private static readonly HashSet<string> MissingBCardWarnings = new HashSet<string>();
         private static readonly object MissingBCardWarningsLock = new object();
+        private static readonly object InitializationLock = new object();
 
-        public static bool IsInitialized { get; set; }
+        public static bool IsInitialized { get; private set; }
 
         public static bool HasBCardHandler(CardType type) =>
             _bcardHandler != null && _bcardHandler.ContainsKey(type);
@@ -39,23 +40,38 @@ namespace Game.Configuration
 
         public static void InitializeAll()
         {
-            if (!IsInitialized)
+            lock (InitializationLock)
             {
+                if (IsInitialized)
+                {
+                    return;
+                }
+
                 _nrunHandler = new Dictionary<NRunType[], Action<ClientSession, NRunPacket>>();
                 _guriHandler = new Dictionary<GuriType[], Action<ClientSession, GuriPacket>>();
                 _bcardHandler = new Dictionary<CardType, Action<BCardEvent>>();
                 _bcardHandlerNames = new Dictionary<CardType, string>();
-                IsInitialized = true;
-            }
 
-            lock (MissingBCardWarningsLock)
-            {
-                MissingBCardWarnings.Clear();
-            }
+                lock (MissingBCardWarningsLock)
+                {
+                    MissingBCardWarnings.Clear();
+                }
 
-            //NrunPlugin.Enable();
-            //GuriPlugin.Enable();
-            BCardPlugin.Enable();
+                try
+                {
+                    BCardPlugin.Enable();
+                    IsInitialized = true;
+                }
+                catch
+                {
+                    _nrunHandler = null;
+                    _guriHandler = null;
+                    _bcardHandler = null;
+                    _bcardHandlerNames = null;
+                    IsInitialized = false;
+                    throw;
+                }
+            }
         }
 
         public static void AddBCardHandler(IBCardHandler handler, Action<BCardEvent> action)
@@ -98,6 +114,7 @@ namespace Game.Configuration
 
         public static void AddNrunHandler(INrunHandler type, Action<ClientSession, NRunPacket> action)
         {
+            EnsureInitialized();
             if (_nrunHandler.ContainsKey(type.ActionType)) return;
 
             _nrunHandler.Add(type.ActionType, action);
@@ -105,6 +122,7 @@ namespace Game.Configuration
 
         public static void AddGuriHandler(IGuriHandler type, Action<ClientSession, GuriPacket> action)
         {
+            EnsureInitialized();
             if (_guriHandler.ContainsKey(type.ActionType)) return;
 
             _guriHandler.Add(type.ActionType, action);
@@ -117,40 +135,50 @@ namespace Game.Configuration
                 return;
             }
 
+            if (!IsInitialized)
+            {
+                BCardPipelineMonitor.RecordPreInitializationAttempt();
+                EnsureInitialized();
+            }
+
             var cardType = (CardType)evnt.BCard.Type;
-            if (_bcardHandler == null || !_bcardHandler.TryGetValue(cardType, out Action<BCardEvent> action))
+            if (!_bcardHandler.TryGetValue(cardType, out Action<BCardEvent> action))
             {
                 // Calculation-only BCards are data consumed by DamageHelper/stat loaders. They are not
                 // missing executable handlers and must not flood the logs as false positives.
                 if (BCardExecutionClassifier.IsPassiveCalculationOnly(cardType, evnt.BCard.SubType))
                 {
+                    BCardPipelineMonitor.RecordPassiveSkipped();
                     return;
                 }
 
+                // Group warnings by executable shape rather than by BCard row. Thousands of rows can
+                // legitimately share one unsupported type/subtype/phase combination.
                 string warningKey = string.Join(":",
                     (byte)cardType,
                     evnt.BCard.SubType,
-                    evnt.BCard.SkillVNum?.ToString() ?? "-",
-                    evnt.BCard.CardId?.ToString() ?? "-",
-                    evnt.BCard.BCardId,
                     (byte)evnt.ExecutionPhase);
 
+                bool unique;
                 lock (MissingBCardWarningsLock)
                 {
-                    if (MissingBCardWarnings.Add(warningKey))
-                    {
-                        Logger.Warn(
-                            $"[BCARD_HANDLER_MISSING] Type={(byte)cardType} Name={cardType} " +
-                            $"SubType={evnt.BCard.SubType} Phase={evnt.ExecutionPhase} " +
-                            $"SkillVNum={FormatNullable(evnt.BCard.SkillVNum)} " +
-                            $"CardId={FormatNullable(evnt.BCard.CardId)} BCardId={evnt.BCard.BCardId} " +
-                            $"FirstData={evnt.FirstData} RawFirstData={evnt.BCard.FirstData} " +
-                            $"SecondData={evnt.BCard.SecondData} ThirdData={evnt.BCard.ThirdData} " +
-                            $"CastType={evnt.BCard.CastType} IsLevelDivided={evnt.BCard.IsLevelDivided} " +
-                            $"LevelUpgraded={evnt.LevelUpgraded} CasterLevel={evnt.CasterLevel} " +
-                            $"CastId={FormatCastId(evnt.CastContext)} " +
-                            $"Caster={DescribeEntity(evnt.Caster)} Target={DescribeEntity(evnt.Target)}");
-                    }
+                    unique = MissingBCardWarnings.Add(warningKey);
+                }
+
+                BCardPipelineMonitor.RecordMissing(unique);
+                if (unique)
+                {
+                    Logger.Warn(
+                        $"[BCARD_HANDLER_MISSING] Type={(byte)cardType} Name={cardType} " +
+                        $"SubType={evnt.BCard.SubType} Phase={evnt.ExecutionPhase} " +
+                        $"SampleSkillVNum={FormatNullable(evnt.BCard.SkillVNum)} " +
+                        $"SampleCardId={FormatNullable(evnt.BCard.CardId)} SampleBCardId={evnt.BCard.BCardId} " +
+                        $"FirstData={evnt.FirstData} RawFirstData={evnt.BCard.FirstData} " +
+                        $"SecondData={evnt.BCard.SecondData} ThirdData={evnt.BCard.ThirdData} " +
+                        $"CastType={evnt.BCard.CastType} IsLevelDivided={evnt.BCard.IsLevelDivided} " +
+                        $"LevelUpgraded={evnt.LevelUpgraded} CasterLevel={evnt.CasterLevel} " +
+                        $"CastId={FormatCastId(evnt.CastContext)} " +
+                        $"Caster={DescribeEntity(evnt.Caster)} Target={DescribeEntity(evnt.Target)}");
                 }
 
                 return;
@@ -159,9 +187,11 @@ namespace Game.Configuration
             try
             {
                 action(evnt);
+                BCardPipelineMonitor.RecordExecuted();
             }
             catch (Exception exception)
             {
+                BCardPipelineMonitor.RecordHandlerFailure();
                 Logger.Error(
                     $"[BCARD_HANDLER_FAILED] Type={(byte)cardType} Name={cardType} " +
                     $"SubType={evnt.BCard.SubType} Phase={evnt.ExecutionPhase} " +
@@ -176,6 +206,7 @@ namespace Game.Configuration
 
         public static void HandleNrun(ClientSession player, NRunPacket packet)
         {
+            EnsureInitialized();
             if (!_nrunHandler.Any(h => h.Key.Contains((NRunType)packet.Runner)))
             {
                 return;
@@ -187,6 +218,7 @@ namespace Game.Configuration
 
         public static void HandleGuri(ClientSession player, GuriPacket packet)
         {
+            EnsureInitialized();
             if (!_guriHandler.Any(h => h.Key.Contains((GuriType)packet.Type)))
             {
                 return;
@@ -194,6 +226,16 @@ namespace Game.Configuration
 
             var action = _guriHandler.FirstOrDefault(h => h.Key.Contains((GuriType)packet.Type));
             action.Value(player, packet);
+        }
+
+        private static void EnsureInitialized()
+        {
+            if (IsInitialized)
+            {
+                return;
+            }
+
+            InitializeAll();
         }
 
         private static string DescribeEntity(BattleEntity entity)
