@@ -1,11 +1,11 @@
-﻿using NosGm.Packets.Packets.ClientPackets;
-using NosGm.Core;
+﻿using NosGm.Core;
+using NosGm.Core.Diagnostics;
 using NosGm.Domain;
 using NosGm.GameObject;
 using NosGm.GameObject._Guri.Event;
 using NosGm.GameObject.Networking;
-using System.Threading.Tasks;
-using NosGm.GameObject.Plugin.Event;
+using NosGm.Packets.Packets.ClientPackets;
+using System.Diagnostics;
 
 namespace NosGm.Handler.PacketHandler.Basic
 {
@@ -31,52 +31,77 @@ namespace NosGm.Handler.PacketHandler.Basic
             {
                 return;
             }
-            else if (guriPacket.Type == 720)
+
+            long started = Stopwatch.GetTimestamp();
+            bool succeeded = false;
+            try
             {
+                HandleGuri(guriPacket);
+                succeeded = true;
+            }
+            finally
+            {
+                GuriPerformanceMonitor.Record(
+                    guriPacket.Type,
+                    Stopwatch.GetTimestamp() - started,
+                    succeeded);
+            }
+        }
+
+        private void HandleGuri(GuriPacket guriPacket)
+        {
+            Character character = Session?.Character;
+            if (character?.MapInstance == null || Session.CurrentMapInstance == null)
+            {
+                return;
+            }
+
+            if (guriPacket.Type == (long)GuriType.RainbowBattleFlag)
+            {
+                if (character.isFreezed)
+                {
+                    return;
+                }
+
                 MapNpc npc = Session.CurrentMapInstance.Npcs.Find(s => s.MapNpcId == guriPacket.User);
-
-                if (Session == null || Session?.Character?.MapInstance == null)
-                {
-                    return;
-                }
-
-                if (Session.Character.isFreezed == true)
-                {
-                    return;
-                }
-
-                //Packet Hacking
                 if (npc == null)
                 {
                     return;
                 }
 
-
-                int dist = Map.GetDistance(
-                    new MapCell { X = Session.Character.PositionX, Y = Session.Character.PositionY },
+                int distance = Map.GetDistance(
+                    new MapCell { X = character.PositionX, Y = character.PositionY },
                     new MapCell { X = npc.MapX, Y = npc.MapY });
-                if (dist > 5)
+                if (distance > 5)
                 {
                     return;
                 }
 
-                var RainbowTeam = ServerManager.Instance.RainbowBattleMembers.Find(s => s.Session.Contains(Session));
+                var rainbowTeam = ServerManager.Instance.RainbowBattleMembers
+                    .Find(team => team.Session.Contains(Session));
 
-                if (RainbowTeam == null || RainbowBattleManager.AlreadyHaveFlag(RainbowTeam, (RainbowNpcType)guriPacket.Argument, (int)guriPacket.User))
+                if (rainbowTeam == null ||
+                    RainbowBattleManager.AlreadyHaveFlag(
+                        rainbowTeam,
+                        (RainbowNpcType)guriPacket.Argument,
+                        (int)guriPacket.User))
                 {
                     return;
                 }
 
-                RainbowBattleManager.AddFlag(Session, RainbowTeam, (RainbowNpcType)guriPacket.Argument, (int)guriPacket.User);
+                RainbowBattleManager.AddFlag(
+                    Session,
+                    rainbowTeam,
+                    (RainbowNpcType)guriPacket.Argument,
+                    (int)guriPacket.User);
             }
 
-            if (!guriPacket.Data.HasValue && guriPacket.Type == 10)
+            if (!guriPacket.Data.HasValue && guriPacket.Type == (long)GuriType.Emoticon)
             {
                 return;
             }
-            var packetsplit = guriPacket.OriginalContent.Split(' ', '^');
 
-            Session.Character.Event.EmitEvent(new GuriEvent
+            character.Event.EmitEvent(new GuriEvent
             {
                 Type = guriPacket.Type,
                 Argument = guriPacket.Argument,
