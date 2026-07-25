@@ -27,7 +27,15 @@ namespace Game.Configuration
 
         public static bool IsInitialized { get; private set; }
 
+        /// <summary>
+        /// Returns true when a BCard is handled either by an executable plugin or by
+        /// the passive combat/stat calculation pipeline. This keeps startup audits
+        /// from reporting calculation-only BCards as missing handlers.
+        /// </summary>
         public static bool HasBCardHandler(CardType type) =>
+            HasExecutableBCardHandler(type) || BCardExecutionClassifier.IsPassiveCalculationOnly(type);
+
+        public static bool HasExecutableBCardHandler(CardType type) =>
             _bcardHandler != null && _bcardHandler.ContainsKey(type);
 
         public static IReadOnlyCollection<CardType> RegisteredBCardTypes =>
@@ -37,6 +45,23 @@ namespace Game.Configuration
             _bcardHandlerNames == null
                 ? new Dictionary<CardType, string>()
                 : new Dictionary<CardType, string>(_bcardHandlerNames);
+
+        /// <summary>
+        /// Unique executable shapes observed without a handler. Each entry is encoded
+        /// as Type:SubType:ExecutionPhase and remains available for runtime diagnostics.
+        /// </summary>
+        public static IReadOnlyCollection<string> MissingBCardSignatures
+        {
+            get
+            {
+                lock (MissingBCardWarningsLock)
+                {
+                    return MissingBCardWarnings
+                        .OrderBy(signature => signature, StringComparer.Ordinal)
+                        .ToList();
+                }
+            }
+        }
 
         public static void InitializeAll()
         {
