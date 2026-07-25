@@ -101,6 +101,7 @@ namespace Game.Configuration.BCards
     public static class BCardExecutionClassifier
     {
         private const byte DistanceDamagePerCellSubtype = 21;
+        private const byte DisableHpConsumptionSubtype = 41;
 
         public static BCardExecutionKind GetKind(BCardType.CardType type, byte subtype)
         {
@@ -124,6 +125,13 @@ namespace Game.Configuration.BCards
             // Festering Curse distance-based damage modifier. It is consumed by the
             // structured damage adapter and has no executable lifecycle of its own.
             if (type == BCardType.CardType.HideBarrelSkill && subtype == DistanceDamagePerCellSubtype)
+            {
+                return BCardExecutionKind.PassiveCalculation;
+            }
+
+            // DisableHPConsumption is read directly by DamageHelper before damage is returned.
+            // Sending it through executable dispatch produces a false missing-handler warning.
+            if (type == BCardType.CardType.TimeCircleSkills && subtype == DisableHpConsumptionSubtype)
             {
                 return BCardExecutionKind.PassiveCalculation;
             }
