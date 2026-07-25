@@ -111,6 +111,7 @@ namespace NosGm.Handler.PacketHandler.Basic
             BCardPipelineSnapshot metrics = BCardPipelineMonitor.Capture();
             IReadOnlyDictionary<BCardType.CardType, string> registered = PluginFacility.RegisteredBCardHandlers;
             IReadOnlyCollection<string> missing = PluginFacility.MissingBCardSignatures;
+            IReadOnlyDictionary<string, string> samples = PluginFacility.MissingBCardSampleDetails;
 
             SendDiagnostic("========== BCard Pipeline ==========", 11);
             SendDiagnostic(
@@ -123,7 +124,7 @@ namespace NosGm.Handler.PacketHandler.Basic
 
             if (mode == "missing")
             {
-                ShowMissingBCardSignatures(missing);
+                ShowMissingBCardSignatures(missing, samples);
             }
             else if (mode == "handlers" || mode == "registered")
             {
@@ -152,7 +153,9 @@ namespace NosGm.Handler.PacketHandler.Basic
             SendDiagnostic(BCardPerformancePacket.ReturnHelp(), 11);
         }
 
-        private void ShowMissingBCardSignatures(IReadOnlyCollection<string> signatures)
+        private void ShowMissingBCardSignatures(
+            IReadOnlyCollection<string> signatures,
+            IReadOnlyDictionary<string, string> samples)
         {
             SendDiagnostic("===== Missing executable BCard shapes =====", 11);
             if (signatures == null || signatures.Count == 0)
@@ -165,6 +168,11 @@ namespace NosGm.Handler.PacketHandler.Basic
             foreach (string signature in signatures.Take(20))
             {
                 SendDiagnostic($"{position++}. {DescribeBCardSignature(signature)}", 12);
+                if (samples != null && samples.TryGetValue(signature, out string sample) &&
+                    !string.IsNullOrWhiteSpace(sample))
+                {
+                    SendDiagnostic($"   Sample: {sample}", 11);
+                }
             }
 
             if (signatures.Count > 20)
@@ -191,7 +199,7 @@ namespace NosGm.Handler.PacketHandler.Basic
                     ? "unknown"
                     : handler.Value.Split('.').Last();
                 SendDiagnostic(
-                    $"{position++}. Type {(byte)handler.Key} ({handler.Key}) | {handlerName}");
+                    $"{position++}. Type {(byte)handler.Key} ({ResolveBCardTypeName((byte)handler.Key)}) | {handlerName}");
             }
 
             if (handlers.Count > 20)
@@ -312,15 +320,25 @@ namespace NosGm.Handler.PacketHandler.Basic
                 return signature ?? "invalid";
             }
 
-            string typeName = Enum.IsDefined(typeof(BCardType.CardType), type)
-                ? ((BCardType.CardType)type).ToString()
-                : "Unknown";
+            string typeName = ResolveBCardTypeName(type);
             string phaseName = Enum.IsDefined(typeof(BCardExecutionPhase), phase)
                 ? ((BCardExecutionPhase)phase).ToString()
                 : phase.ToString();
             string meaning = ResolveBCardMeaning(type, subType);
 
             return $"Type {type} ({typeName}) | SubType {subType} ({meaning}) | Phase {phaseName}";
+        }
+
+        private static string ResolveBCardTypeName(byte type)
+        {
+            if (type == 104)
+            {
+                return "DealDamageAround";
+            }
+
+            return Enum.IsDefined(typeof(BCardType.CardType), type)
+                ? ((BCardType.CardType)type).ToString()
+                : "Unknown";
         }
 
         private static string ResolveBCardMeaning(byte type, byte subType)
@@ -370,14 +388,41 @@ namespace NosGm.Handler.PacketHandler.Basic
                     }
                     break;
 
-                case 104:
-                    if (subType == 31)
+                case 57:
+                    switch (subType)
                     {
-                        return "SummonOneWhenDefending";
+                        case 11:
+                            return "AllInFieldReceiveDamage";
+                        case 12:
+                            return "AllInFieldsReceiveDamage";
+                        case 41:
+                            return "UndocumentedRaidEffect41";
                     }
-                    if (subType == 32)
+                    break;
+
+                case 104:
+                    switch (subType)
                     {
-                        return "SummonTwoWhenDefending";
+                        case 11:
+                            return "DamageDeflect";
+                        case 12:
+                            return "DamageDeflectNegated";
+                        case 21:
+                            return "DealAreaDamagePerSecond";
+                        case 22:
+                            return "DealAreaDamagePerSecondNegated";
+                        case 31:
+                            return "SummonOnDefend";
+                        case 32:
+                            return "SummonOnDefendDouble";
+                        case 41:
+                            return "NosmateAttackIncrease";
+                        case 42:
+                            return "NosmateAttackIncreaseNegated";
+                        case 51:
+                            return "EffectiveOnEnemyInAreaPerSecond";
+                        case 52:
+                            return "EffectiveOnEnemyInAreaPerSecondNegated";
                     }
                     break;
             }
