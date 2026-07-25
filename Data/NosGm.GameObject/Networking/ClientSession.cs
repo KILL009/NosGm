@@ -72,6 +72,8 @@ namespace NosGm.GameObject
 
         private readonly Random _random;
 
+        private readonly object _receiveIngressSync = new object();
+
         private readonly ConcurrentQueue<ReceiveQueueItem> _receiveQueue;
 
         private readonly IList<string> _waitForPacketList = new List<string>();
@@ -569,7 +571,7 @@ namespace NosGm.GameObject
                 {
                     return false;
                 }
-                if (int.TryParse(sessionParts[1].Split('\').FirstOrDefault(), out var sessid))
+                if (int.TryParse(sessionParts[1].Split('\\').FirstOrDefault(), out var sessid))
                 {
                     SessionId = sessid;
                     //Logger.Info($"{SessionId} entered the World Server");
@@ -676,40 +678,54 @@ namespace NosGm.GameObject
             }
 
             _lastPacketReceive = e.ReceivedTimestamp.Ticks;
+            bool overflow = false;
 
-            if (Volatile.Read(ref _receiveIngressStopped) != 0 || IsDisposing)
+            lock (_receiveIngressSync)
             {
-                PacketIngressMonitor.RecordDropped(false, false);
-                return;
+                if (Volatile.Read(ref _receiveIngressStopped) != 0 || IsDisposing)
+                {
+                    return;
+                }
+
+                int depth = Interlocked.Increment(ref _receiveQueueDepth);
+                if (depth > PacketIngressMonitor.QueueCapacityPerSession)
+                {
+                    DecrementReceiveQueueDepth();
+                    PacketIngressMonitor.RecordDropped(true, true);
+                    overflow = true;
+                }
+                else
+                {
+                    long generation = PacketIngressMonitor.RecordEnqueued(depth);
+                    _receiveQueue.Enqueue(new ReceiveQueueItem
+                    {
+                        Data = message.MessageData,
+                        EnqueuedTimestamp = Stopwatch.GetTimestamp(),
+                        MetricGeneration = generation
+                    });
+                }
             }
 
-            int depth = Interlocked.Increment(ref _receiveQueueDepth);
-            if (depth > PacketIngressMonitor.QueueCapacityPerSession)
+            if (overflow)
             {
-                DecrementReceiveQueueDepth();
-                PacketIngressMonitor.RecordDropped(true, true);
                 Disconnect();
                 return;
             }
 
-            long generation = PacketIngressMonitor.RecordEnqueued(depth);
-            _receiveQueue.Enqueue(new ReceiveQueueItem
-            {
-                Data = message.MessageData,
-                EnqueuedTimestamp = Stopwatch.GetTimestamp(),
-                MetricGeneration = generation
-            });
             ScheduleReceiveDrain();
         }
 
         private void StopPacketIngress()
         {
-            if (Interlocked.Exchange(ref _receiveIngressStopped, 1) == 0)
+            lock (_receiveIngressSync)
             {
-                _client.MessageReceived -= OnNetworkClientMessageReceived;
-            }
+                if (Interlocked.Exchange(ref _receiveIngressStopped, 1) == 0)
+                {
+                    _client.MessageReceived -= OnNetworkClientMessageReceived;
+                }
 
-            ClearReceiveQueue();
+                ClearReceiveQueue();
+            }
         }
 
         private void DecrementReceiveQueueDepth()
