@@ -31,4 +31,13 @@ namespace NosGm.Packets.Packets.ClientPackets
 
         public static string ReturnHelp() => "$GuriPerf <?total|count|avg|max|errors|reset>";
     }
+
+    [PacketHeader("$BCardPerf", PassNonParseablePacket = true, Authority = AuthorityType.ADMIN)]
+    public class BCardPerformancePacket : PacketDefinition
+    {
+        [PacketIndex(0, SerializeToEnd = true)]
+        public string Mode { get; set; }
+
+        public static string ReturnHelp() => "$BCardPerf <?summary|missing|handlers|reset>";
+    }
 }
