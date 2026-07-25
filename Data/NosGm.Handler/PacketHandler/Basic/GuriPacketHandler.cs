@@ -4,6 +4,7 @@ using NosGm.Domain;
 using NosGm.GameObject;
 using NosGm.GameObject._Guri.Event;
 using NosGm.GameObject.Networking;
+using NosGm.GameObject.Plugin.Event;
 using NosGm.Packets.Packets.ClientPackets;
 using System;
 using System.Diagnostics;
