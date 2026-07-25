@@ -136,6 +136,17 @@ namespace Game.Configuration.BCards
                 return BCardExecutionKind.PassiveCalculation;
             }
 
+            // These two shapes are consumed directly by the legacy combat routes:
+            // - DecreaseHPNoDeath protects the defending monster/mate and leaves it at 1 HP.
+            // - DecreaseHPNoKill prevents a monster attacker from reducing its target below 1 HP.
+            // They describe damage constraints, not actions with an independent lifecycle.
+            if (type == BCardType.CardType.NoDefeatAndNoDamage &&
+                (subtype == (byte)AdditionalTypes.NoDefeatAndNoDamage.DecreaseHPNoDeath ||
+                 subtype == (byte)AdditionalTypes.NoDefeatAndNoDamage.DecreaseHPNoKill))
+            {
+                return BCardExecutionKind.PassiveCalculation;
+            }
+
             return GetKind(type);
         }
 
