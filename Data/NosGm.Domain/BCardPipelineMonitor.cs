@@ -26,11 +26,17 @@ namespace NosGm.Domain
 
         private static CounterState _state = new CounterState();
 
-        public static void RecordExecuted() =>
-            Interlocked.Increment(ref Volatile.Read(ref _state).Executed);
+        public static void RecordExecuted()
+        {
+            CounterState state = Volatile.Read(ref _state);
+            Interlocked.Increment(ref state.Executed);
+        }
 
-        public static void RecordPassiveSkipped() =>
-            Interlocked.Increment(ref Volatile.Read(ref _state).PassiveSkipped);
+        public static void RecordPassiveSkipped()
+        {
+            CounterState state = Volatile.Read(ref _state);
+            Interlocked.Increment(ref state.PassiveSkipped);
+        }
 
         public static void RecordMissing(bool unique)
         {
@@ -42,11 +48,17 @@ namespace NosGm.Domain
             }
         }
 
-        public static void RecordPreInitializationAttempt() =>
-            Interlocked.Increment(ref Volatile.Read(ref _state).PreInitializationAttempts);
+        public static void RecordPreInitializationAttempt()
+        {
+            CounterState state = Volatile.Read(ref _state);
+            Interlocked.Increment(ref state.PreInitializationAttempts);
+        }
 
-        public static void RecordHandlerFailure() =>
-            Interlocked.Increment(ref Volatile.Read(ref _state).HandlerFailures);
+        public static void RecordHandlerFailure()
+        {
+            CounterState state = Volatile.Read(ref _state);
+            Interlocked.Increment(ref state.HandlerFailures);
+        }
 
         public static BCardPipelineSnapshot Capture()
         {
