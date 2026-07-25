@@ -1,11 +1,13 @@
-﻿using NosGm.Packets.Packets.ClientPackets;
-using NosGm.Core;
+﻿using NosGm.Core;
+using NosGm.Core.Diagnostics;
 using NosGm.Domain;
 using NosGm.GameObject;
 using NosGm.GameObject._Guri.Event;
 using NosGm.GameObject.Networking;
-using System.Threading.Tasks;
 using NosGm.GameObject.Plugin.Event;
+using NosGm.Packets.Packets.ClientPackets;
+using System;
+using System.Diagnostics;
 
 namespace NosGm.Handler.PacketHandler.Basic
 {
@@ -31,52 +33,116 @@ namespace NosGm.Handler.PacketHandler.Basic
             {
                 return;
             }
-            else if (guriPacket.Type == 720)
+
+            long started = Stopwatch.GetTimestamp();
+            bool succeeded = false;
+            try
             {
+                HandleGuri(guriPacket);
+                succeeded = true;
+            }
+            finally
+            {
+                GuriPerformanceMonitor.Record(
+                    guriPacket.Type,
+                    Stopwatch.GetTimestamp() - started,
+                    succeeded);
+            }
+        }
+
+        public void GuriPerformance(GuriPerformancePacket packet)
+        {
+            if (Session?.Character == null)
+            {
+                return;
+            }
+
+            string mode = packet?.Mode?.Trim().ToLowerInvariant() ?? "total";
+            if (mode == "reset")
+            {
+                GuriPerformanceMonitor.Reset();
+                SendDiagnostic("Guri performance counters were reset.", 11);
+                return;
+            }
+
+            HandlerSort sort = ParseSort(mode);
+            var metrics = GuriPerformanceMonitor.GetTop(12, sort);
+
+            SendDiagnostic($"========== Guri types by {sort} ==========", 11);
+            if (metrics.Count == 0)
+            {
+                SendDiagnostic("No guri samples have been collected yet.");
+                SendDiagnostic(GuriPerformancePacket.ReturnHelp(), 11);
+                return;
+            }
+
+            int position = 1;
+            foreach (GuriPerformanceSnapshot metric in metrics)
+            {
+                string typeName = ResolveTypeName(metric.Type);
+                SendDiagnostic(
+                    $"{position++}. Type {metric.Type} ({typeName}) | Calls {metric.Count:N0} | " +
+                    $"Avg {metric.AverageMilliseconds:N3} ms | Max {metric.MaximumMilliseconds:N3} ms | " +
+                    $"Total {metric.TotalMilliseconds:N1} ms | Missing {metric.MissingHandlers:N0} | Err {metric.Errors:N0}");
+            }
+
+            SendDiagnostic(GuriPerformancePacket.ReturnHelp(), 11);
+        }
+
+        private void HandleGuri(GuriPacket guriPacket)
+        {
+            Character character = Session?.Character;
+            if (character?.MapInstance == null || Session.CurrentMapInstance == null)
+            {
+                return;
+            }
+
+            if (guriPacket.Type == (long)GuriType.RainbowBattleFlag)
+            {
+                if (character.isFreezed)
+                {
+                    return;
+                }
+
                 MapNpc npc = Session.CurrentMapInstance.Npcs.Find(s => s.MapNpcId == guriPacket.User);
-
-                if (Session == null || Session?.Character?.MapInstance == null)
-                {
-                    return;
-                }
-
-                if (Session.Character.isFreezed == true)
-                {
-                    return;
-                }
-
-                //Packet Hacking
                 if (npc == null)
                 {
                     return;
                 }
 
-
-                int dist = Map.GetDistance(
-                    new MapCell { X = Session.Character.PositionX, Y = Session.Character.PositionY },
+                int distance = Map.GetDistance(
+                    new MapCell { X = character.PositionX, Y = character.PositionY },
                     new MapCell { X = npc.MapX, Y = npc.MapY });
-                if (dist > 5)
+                if (distance > 5)
                 {
                     return;
                 }
 
-                var RainbowTeam = ServerManager.Instance.RainbowBattleMembers.Find(s => s.Session.Contains(Session));
+                var rainbowTeam = ServerManager.Instance.RainbowBattleMembers
+                    .Find(team => team.Session.Contains(Session));
 
-                if (RainbowTeam == null || RainbowBattleManager.AlreadyHaveFlag(RainbowTeam, (RainbowNpcType)guriPacket.Argument, (int)guriPacket.User))
+                if (rainbowTeam == null ||
+                    RainbowBattleManager.AlreadyHaveFlag(
+                        rainbowTeam,
+                        (RainbowNpcType)guriPacket.Argument,
+                        (int)guriPacket.User))
                 {
                     return;
                 }
 
-                RainbowBattleManager.AddFlag(Session, RainbowTeam, (RainbowNpcType)guriPacket.Argument, (int)guriPacket.User);
+                RainbowBattleManager.AddFlag(
+                    Session,
+                    rainbowTeam,
+                    (RainbowNpcType)guriPacket.Argument,
+                    (int)guriPacket.User);
             }
 
-            if (!guriPacket.Data.HasValue && guriPacket.Type == 10)
+            if (!guriPacket.Data.HasValue && guriPacket.Type == (long)GuriType.Emoticon)
             {
                 return;
             }
-            var packetsplit = guriPacket.OriginalContent.Split(' ', '^');
 
-            Session.Character.Event.EmitEvent(new GuriEvent
+            character.Event.EmitEvent(new GuriEvent
             {
                 Type = guriPacket.Type,
                 Argument = guriPacket.Argument,
@@ -84,6 +150,44 @@ namespace NosGm.Handler.PacketHandler.Basic
                 User = guriPacket.User,
                 Value = guriPacket.Value
             });
+        }
+
+        private void SendDiagnostic(string message, byte type = 10) =>
+            Session.SendPacket(Session.Character.GenerateSay(message, type));
+
+        private static HandlerSort ParseSort(string mode)
+        {
+            switch (mode)
+            {
+                case "count":
+                case "calls":
+                    return HandlerSort.Count;
+                case "avg":
+                case "average":
+                    return HandlerSort.AverageTime;
+                case "max":
+                case "slow":
+                    return HandlerSort.MaximumTime;
+                case "error":
+                case "errors":
+                case "missing":
+                    return HandlerSort.Errors;
+                default:
+                    return HandlerSort.TotalTime;
+            }
+        }
+
+        private static string ResolveTypeName(long type)
+        {
+            if (type < int.MinValue || type > int.MaxValue)
+            {
+                return "Unknown";
+            }
+
+            int numericType = (int)type;
+            return Enum.IsDefined(typeof(GuriType), numericType)
+                ? ((GuriType)numericType).ToString()
+                : "Unknown";
         }
 
         #endregion
