@@ -20,7 +20,8 @@ namespace NosGm.Packets.Packets.CommandPackets
         [PacketIndex(0, SerializeToEnd = true)]
         public string Mode { get; set; }
 
-        public static string ReturnHelp() => "$Perf <?runtime|packets|maps|security|reset|help>";
+        public static string ReturnHelp() =>
+            "$Perf <?runtime|packets|maps|security|logs|scheduler|ingress|reset|help>";
     }
 
     [PacketHeader("$GmAudit", PassNonParseablePacket = true, Authority = AuthorityType.ADMIN)]
