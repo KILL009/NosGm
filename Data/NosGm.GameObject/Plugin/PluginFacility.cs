@@ -22,6 +22,7 @@ namespace Game.Configuration
         private static IDictionary<CardType, Action<BCardEvent>> _bcardHandler;
         private static IDictionary<CardType, string> _bcardHandlerNames;
         private static readonly HashSet<string> MissingBCardWarnings = new HashSet<string>();
+        private static readonly Dictionary<string, string> MissingBCardSamples = new Dictionary<string, string>();
         private static readonly object MissingBCardWarningsLock = new object();
         private static readonly object InitializationLock = new object();
 
@@ -63,6 +64,21 @@ namespace Game.Configuration
             }
         }
 
+        /// <summary>
+        /// Keeps the first compact runtime sample observed for every missing executable
+        /// shape. The sample is intentionally bounded by the unique-signature set.
+        /// </summary>
+        public static IReadOnlyDictionary<string, string> MissingBCardSampleDetails
+        {
+            get
+            {
+                lock (MissingBCardWarningsLock)
+                {
+                    return new Dictionary<string, string>(MissingBCardSamples);
+                }
+            }
+        }
+
         public static void InitializeAll()
         {
             lock (InitializationLock)
@@ -80,6 +96,7 @@ namespace Game.Configuration
                 lock (MissingBCardWarningsLock)
                 {
                     MissingBCardWarnings.Clear();
+                    MissingBCardSamples.Clear();
                 }
 
                 try
@@ -188,6 +205,10 @@ namespace Game.Configuration
                 lock (MissingBCardWarningsLock)
                 {
                     unique = MissingBCardWarnings.Add(warningKey);
+                    if (unique)
+                    {
+                        MissingBCardSamples[warningKey] = BuildMissingBCardSample(evnt);
+                    }
                 }
 
                 BCardPipelineMonitor.RecordMissing(unique);
@@ -262,6 +283,11 @@ namespace Game.Configuration
 
             InitializeAll();
         }
+
+        private static string BuildMissingBCardSample(BCardEvent evnt) =>
+            $"BCard {evnt.BCard.BCardId} | Skill {FormatNullable(evnt.BCard.SkillVNum)} | " +
+            $"Card {FormatNullable(evnt.BCard.CardId)} | Data {evnt.BCard.FirstData}/{evnt.BCard.SecondData}/{evnt.BCard.ThirdData} | " +
+            $"EffectiveFirst {evnt.FirstData} | Cast {evnt.BCard.CastType} | LevelDiv {(evnt.BCard.IsLevelDivided ? 1 : 0)}";
 
         private static string DescribeEntity(BattleEntity entity)
         {
