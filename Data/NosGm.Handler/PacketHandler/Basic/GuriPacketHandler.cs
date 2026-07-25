@@ -5,6 +5,7 @@ using NosGm.GameObject;
 using NosGm.GameObject._Guri.Event;
 using NosGm.GameObject.Networking;
 using NosGm.Packets.Packets.ClientPackets;
+using System;
 using System.Diagnostics;
 
 namespace NosGm.Handler.PacketHandler.Basic
@@ -46,6 +47,45 @@ namespace NosGm.Handler.PacketHandler.Basic
                     Stopwatch.GetTimestamp() - started,
                     succeeded);
             }
+        }
+
+        public void GuriPerformance(GuriPerformancePacket packet)
+        {
+            if (Session?.Character == null)
+            {
+                return;
+            }
+
+            string mode = packet?.Mode?.Trim().ToLowerInvariant() ?? "total";
+            if (mode == "reset")
+            {
+                GuriPerformanceMonitor.Reset();
+                SendDiagnostic("Guri performance counters were reset.", 11);
+                return;
+            }
+
+            HandlerSort sort = ParseSort(mode);
+            var metrics = GuriPerformanceMonitor.GetTop(12, sort);
+
+            SendDiagnostic($"========== Guri types by {sort} ==========", 11);
+            if (metrics.Count == 0)
+            {
+                SendDiagnostic("No guri samples have been collected yet.");
+                SendDiagnostic(GuriPerformancePacket.ReturnHelp(), 11);
+                return;
+            }
+
+            int position = 1;
+            foreach (GuriPerformanceSnapshot metric in metrics)
+            {
+                string typeName = ResolveTypeName(metric.Type);
+                SendDiagnostic(
+                    $"{position++}. Type {metric.Type} ({typeName}) | Calls {metric.Count:N0} | " +
+                    $"Avg {metric.AverageMilliseconds:N3} ms | Max {metric.MaximumMilliseconds:N3} ms | " +
+                    $"Total {metric.TotalMilliseconds:N1} ms | Missing {metric.MissingHandlers:N0} | Err {metric.Errors:N0}");
+            }
+
+            SendDiagnostic(GuriPerformancePacket.ReturnHelp(), 11);
         }
 
         private void HandleGuri(GuriPacket guriPacket)
@@ -109,6 +149,44 @@ namespace NosGm.Handler.PacketHandler.Basic
                 User = guriPacket.User,
                 Value = guriPacket.Value
             });
+        }
+
+        private void SendDiagnostic(string message, byte type = 10) =>
+            Session.SendPacket(Session.Character.GenerateSay(message, type));
+
+        private static HandlerSort ParseSort(string mode)
+        {
+            switch (mode)
+            {
+                case "count":
+                case "calls":
+                    return HandlerSort.Count;
+                case "avg":
+                case "average":
+                    return HandlerSort.AverageTime;
+                case "max":
+                case "slow":
+                    return HandlerSort.MaximumTime;
+                case "error":
+                case "errors":
+                case "missing":
+                    return HandlerSort.Errors;
+                default:
+                    return HandlerSort.TotalTime;
+            }
+        }
+
+        private static string ResolveTypeName(long type)
+        {
+            if (type < int.MinValue || type > int.MaxValue)
+            {
+                return "Unknown";
+            }
+
+            int numericType = (int)type;
+            return Enum.IsDefined(typeof(GuriType), numericType)
+                ? ((GuriType)numericType).ToString()
+                : "Unknown";
         }
 
         #endregion
