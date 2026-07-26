@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: windows-build-${{ github.workflow }}-${{ github.ref }}
@@ -31,43 +31,6 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v6
-        with:
-          ref: ${{ github.event_name == 'pull_request' && github.head_ref || github.ref }}
-          fetch-depth: 1
-          show-progress: false
-
-      - name: Apply guarded world and channel hardening
-        if: github.event_name == 'pull_request' && github.head_ref == 'agent/nosgm-world-channel-fixtures'
-        shell: pwsh
-        run: |
-          try {
-            Remove-Item -LiteralPath ".github/world-channel-codemod-error.txt" -ErrorAction SilentlyContinue
-            ./scripts/apply-world-channel-hardening.ps1
-          }
-          catch {
-            $message = $_.Exception.Message
-            Set-Content -LiteralPath ".github/world-channel-codemod-error.txt" -Value $message -Encoding UTF8
-            Write-Host "::error::$message"
-          }
-
-      - name: Commit generated world and channel changes
-        if: github.event_name == 'pull_request' && github.head_ref == 'agent/nosgm-world-channel-fixtures'
-        shell: pwsh
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add Data/NosGm.Program/NosGm.Master.Server/CommunicationService.cs
-          git add scripts/verify-world-channel-lists.ps1
-          if (Test-Path -LiteralPath ".github/world-channel-codemod-error.txt") {
-            git add .github/world-channel-codemod-error.txt
-          }
-          if (git diff --cached --quiet) {
-            Write-Host "No generated world/channel changes to commit."
-          }
-          else {
-            git commit -m "fix: harden world and channel list generation"
-            git push origin HEAD:${{ github.head_ref }}
-          }
 
       - name: Set up Visual Studio MSBuild
         uses: microsoft/setup-msbuild@v3
