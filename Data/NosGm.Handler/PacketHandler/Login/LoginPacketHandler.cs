@@ -83,7 +83,6 @@ namespace NosGm.Handler.BasicPacket.Login
                 return;
             }
 
-
             string username = loginPacket.Name;
             AccountDTO loadedAccount = DAOFactory.AccountDAO.LoadByName(username);
             if (loadedAccount == null)
@@ -120,6 +119,7 @@ namespace NosGm.Handler.BasicPacket.Login
                     loadedAccount.Password,
                     loginPacket.Password,
                     ServerConfiguration.UseOldCrypto,
+                    ServerConfiguration.LoginUsesPrehashedSha512,
                     out string clearPassword,
                     out bool passwordNeedsUpgrade))
             {
@@ -282,7 +282,6 @@ namespace NosGm.Handler.BasicPacket.Login
 
             return value;
         }
-
 
         private static void UpgradePasswordHash(AccountDTO account, string clearPassword)
         {
