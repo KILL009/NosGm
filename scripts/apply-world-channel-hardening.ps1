@@ -93,7 +93,8 @@ if (-not $sourceApplied) {
             foreach (var world in visibleWorlds)
 '@ "iterate the deterministic visible-world snapshot" $sourceNewLine
 
-    $sourceContent = Replace-RegexCount $sourceContent '(?m)^[ \t]*Logger\.Info\("===== NsTeST ====="\);\r?\n' '' 1 "remove the NsTeST banner log" ([Text.RegularExpressions.RegexOptions]::Multiline)
+    $sourceContent = Replace-RegexCount $sourceContent '(?m)^[ \t]*Logger\.Info\("===== NsTeST ====="\);\r?\n' '' 2 "remove legacy NsTeST banner logs" ([Text.RegularExpressions.RegexOptions]::Multiline)
+    $sourceContent = Replace-RegexCount $sourceContent '(?m)^[ \t]*Logger\.Info\(\$"IP registrada = \{worldServer\.EndPointIP\}"\);\r?\n' '' 1 "remove registered endpoint logging" ([Text.RegularExpressions.RegexOptions]::Multiline)
     $sourceContent = Replace-RegexCount $sourceContent '(?m)^[ \t]*Logger\.Info\(channelPacket\);\r?\n' '' 2 "remove raw NsTeST packet logs" ([Text.RegularExpressions.RegexOptions]::Multiline)
     $sourceContent = Replace-RegexCount $sourceContent '(?m)^[ \t]*Logger\.Info\(\$"WorldServers Count = \{MSManager\.Instance\.WorldServers\.Count\}"\);\r?\n' '' 1 "remove unbounded world-count logging" ([Text.RegularExpressions.RegexOptions]::Multiline)
     $sourceContent = Replace-RegexCount $sourceContent '(?ms)^[ \t]*Logger\.Info\(\s*\$"Group=\{world\.WorldGroup\} " \+\s*\$"Channel=\{world\.ChannelId\} " \+\s*\$"IP=\{world\.Endpoint\.IpAddress\} " \+\s*\$"Port=\{world\.Endpoint\.TcpPort\}"\);\s*' '' 1 "remove per-endpoint world logging" ([Text.RegularExpressions.RegexOptions]::Multiline -bor [Text.RegularExpressions.RegexOptions]::Singleline)
