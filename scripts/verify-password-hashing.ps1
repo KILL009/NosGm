@@ -1,17 +1,14 @@
 param(
-    [string]$CryptographyBasePath = "Data/NosGm.Core/Cryptography/CryptographyBase.cs",
     [string]$PasswordHashServicePath = "Data/NosGm.Core/Security/PasswordHashService.cs"
 )
 
 $ErrorActionPreference = "Stop"
 
-foreach ($path in @($CryptographyBasePath, $PasswordHashServicePath)) {
-    if (-not (Test-Path -LiteralPath $path)) {
-        throw "Password hashing source not found: $path"
-    }
+if (-not (Test-Path -LiteralPath $PasswordHashServicePath)) {
+    throw "Password hashing source not found: $PasswordHashServicePath"
 }
 
-Add-Type -Path @($CryptographyBasePath, $PasswordHashServicePath)
+Add-Type -Path $PasswordHashServicePath
 
 $password = "NosGM-Passw0rd-ñ-测试"
 $firstHash = $null
@@ -52,7 +49,15 @@ if ([NosGm.Core.PasswordHashService]::VerifyPassword("nosgm`$broken", $password,
     throw "A malformed versioned hash verified successfully."
 }
 
-$legacySha512 = [NosGm.Core.CryptographyBase]::Sha512($password).ToUpperInvariant()
+$sha512 = [System.Security.Cryptography.SHA512]::Create()
+try {
+    $legacyBytes = $sha512.ComputeHash([Text.Encoding]::UTF8.GetBytes($password))
+}
+finally {
+    $sha512.Dispose()
+}
+$legacySha512 = -join ($legacyBytes | ForEach-Object { $_.ToString("x2") })
+
 $needsUpgrade = $false
 if (-not [NosGm.Core.PasswordHashService]::VerifyPassword($legacySha512, $password, $true, [ref]$needsUpgrade) -or -not $needsUpgrade) {
     throw "A valid legacy SHA-512 password was not accepted for migration."
