@@ -77,6 +77,7 @@ if (-not [NosGm.Core.PasswordHashService]::VerifyLoginPayload(
         $legacySha512,
         $upperLegacySha512,
         $false,
+        $true,
         [ref]$resolvedPassword,
         [ref]$needsUpgrade) -or
     $null -ne $resolvedPassword -or
@@ -91,6 +92,7 @@ if ([NosGm.Core.PasswordHashService]::VerifyLoginPayload(
         $legacySha512,
         $wrongPrehash,
         $false,
+        $true,
         [ref]$resolvedPassword,
         [ref]$needsUpgrade)) {
     throw "An incorrect prehashed SHA-512 login payload verified successfully."
@@ -145,9 +147,37 @@ if ([NosGm.Core.PasswordHashService]::VerifyLoginPayload(
         $firstHash,
         $legacySha512,
         $false,
+        $true,
         [ref]$resolvedPassword,
         [ref]$needsUpgrade)) {
     throw "A versioned hash incorrectly accepted a legacy prehashed SHA-512 payload."
+}
+
+$resolvedPassword = $null
+$needsUpgrade = $false
+if ([NosGm.Core.PasswordHashService]::VerifyLoginPayload(
+        $legacySha512,
+        $upperLegacySha512,
+        $true,
+        $true,
+        [ref]$resolvedPassword,
+        [ref]$needsUpgrade)) {
+    throw "The legacy crypto mode accepted a replayed stored SHA-512 credential."
+}
+
+$longHexPassword = "a" * 128
+$resolvedPassword = $null
+$needsUpgrade = $false
+if (-not [NosGm.Core.PasswordHashService]::VerifyLoginPayload(
+        $longHexPassword,
+        $longHexPassword,
+        $false,
+        $false,
+        [ref]$resolvedPassword,
+        [ref]$needsUpgrade) -or
+    $resolvedPassword -ne $longHexPassword -or
+    -not $needsUpgrade) {
+    throw "The explicit clear-password mode did not preserve migration for a 128-character hexadecimal password."
 }
 
 $legacyIterations = 10000
