@@ -13,7 +13,7 @@ using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
-using System.Reactive.Linq;
+using System.Reactive.Linq;
 using System.Runtime.CompilerServices;
 
 
@@ -130,11 +130,11 @@ namespace NosGm.GameObject
         private readonly ThreadSafeSortedList<long, MapMonster> _monsters;
         private readonly ThreadSafeSortedList<long, MapNpc> _npcs;
 
-        private readonly Random _random;
-
-        private static readonly long MapDiagnosticIntervalTicks = TimeSpan.FromSeconds(30).Ticks;
-
-        private readonly ConcurrentDictionary<string, long> _lastDiagnosticLogTicks =
+        private readonly Random _random;
+
+        private static readonly long MapDiagnosticIntervalTicks = TimeSpan.FromSeconds(30).Ticks;
+
+        private readonly ConcurrentDictionary<string, long> _lastDiagnosticLogTicks =
             new ConcurrentDictionary<string, long>(StringComparer.Ordinal);
 
         private IDisposable _mapLifeDisposable;
@@ -287,33 +287,33 @@ namespace NosGm.GameObject
             _mapLifeDisposable?.Dispose();
         }
 
-        private void LogMapException(Exception exception, [CallerMemberName] string operation = null)
-        {
-            if (exception == null || string.IsNullOrWhiteSpace(operation))
-            {
-                return;
-            }
-
-            long now = DateTime.UtcNow.Ticks;
-            while (true)
-            {
-                long previous = _lastDiagnosticLogTicks.GetOrAdd(operation, 0);
-                if (previous != 0 && now - previous < MapDiagnosticIntervalTicks)
-                {
-                    return;
-                }
-
-                if (_lastDiagnosticLogTicks.TryUpdate(operation, now, previous))
-                {
-                    break;
-                }
-            }
-
-            Logger.Error(
-                $"[MAP_OPERATION_FAILED] Operation={operation} MapId={Map?.MapId} Instance={MapInstanceId}",
-                exception);
-        }
-
+        private void LogMapException(Exception exception, [CallerMemberName] string operation = null)
+        {
+            if (exception == null || string.IsNullOrWhiteSpace(operation))
+            {
+                return;
+            }
+
+            long now = DateTime.UtcNow.Ticks;
+            while (true)
+            {
+                long previous = _lastDiagnosticLogTicks.GetOrAdd(operation, 0);
+                if (previous != 0 && now - previous < MapDiagnosticIntervalTicks)
+                {
+                    return;
+                }
+
+                if (_lastDiagnosticLogTicks.TryUpdate(operation, now, previous))
+                {
+                    break;
+                }
+            }
+
+            Logger.Error(
+                $"[MAP_OPERATION_FAILED] Operation={operation} MapId={Map?.MapId} Instance={MapInstanceId}",
+                exception);
+        }
+
         public void AddDelayedMonster(MapMonster monster)
         {
             _delayedMonsters[monster.MapMonsterId] = monster;
