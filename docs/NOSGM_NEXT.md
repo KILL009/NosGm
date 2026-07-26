@@ -1,4 +1,4 @@
-# NosGM Next
+﻿# NosGM Next
 
 NosGM Next is the incremental modernization path for the existing NosGM emulator. It keeps the current gameplay coverage and client compatibility while replacing legacy OpenNos infrastructure behind stable boundaries.
 
@@ -30,7 +30,7 @@ Required work:
 - [x] Preserve password case for non-legacy authentication.
 - [x] Reject oversized raw network messages before integer narrowing or unbounded buffering.
 - [x] Dispose replaced wire-protocol buffers and validate unsupported outbound message types.
-- [ ] Add a versioned password-hash migration using a per-account salt and a supported adaptive KDF.
+- [x] Add a versioned password-hash migration using a per-account salt and a supported adaptive KDF.
 - [x] Correct packet sequence validation and add diagnostic context.
 - [x] Remove duplicate monster initialization.
 - [x] Replace swallowed map and drop exceptions with bounded diagnostics.

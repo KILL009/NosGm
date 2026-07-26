@@ -61,7 +61,11 @@ namespace NosGm.Handler.BasicPacket.CharScreen
                 return;
             }
 
-            if (account.Password.ToLower() == CryptographyBase.Sha512(characterDeletePacket.Password))
+            if (PasswordHashService.VerifyPassword(
+                    account.Password,
+                    characterDeletePacket.Password,
+                    true,
+                    out _))
             {
                 var character = DAOFactory.CharacterDAO.LoadBySlot(account.AccountId, characterDeletePacket.Slot);
                 if (character == null)
