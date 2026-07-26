@@ -26,6 +26,7 @@
 
         public static bool AutoReboot = true;
         public static bool UseOldCrypto = false;
+        public static bool LoginUsesPrehashedSha512 = true;
         public static bool StartGlacernonAutomaticly = false;
         public static bool StartAllChannelsAutomaticly = true;
         public static bool AllChannelsStarted = false;
