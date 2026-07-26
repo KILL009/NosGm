@@ -97,6 +97,7 @@
     <Compile Include="Threading\ThreadSafeSortedList.cs" />
     <Compile Include="DelegateBuilder.cs" />
     <Compile Include="Cryptography\LoginCryptography.cs" />
+    <Compile Include="Security\PasswordHashService.cs" />
     <Compile Include="Networking\Communication\ScsServices\Client\IScsServiceClient.cs" />
     <Compile Include="Networking\Communication\ScsServices\Client\ScsServiceClient.cs" />
     <Compile Include="Networking\Communication\ScsServices\Client\ScsServiceClientBuilder.cs" />

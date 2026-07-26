@@ -89,6 +89,10 @@ jobs:
           $output | ForEach-Object { Write-Host $_ }
           if ($exitCode -ne 0) { exit $exitCode }
 
+      - name: Verify password hashing behavior
+        shell: powershell
+        run: ./scripts/verify-password-hashing.ps1
+
       - name: Upload build diagnostics
         if: always()
         uses: actions/upload-artifact@v7

@@ -1,0 +1,97 @@
+param(
+    [string]$AssemblyPath = "Data/NosGm.Core/bin/Release/NosGm.Core.dll"
+)
+
+$ErrorActionPreference = "Stop"
+Set-StrictMode -Version Latest
+
+if (-not (Test-Path -LiteralPath $AssemblyPath)) {
+    throw "Built NosGm.Core assembly not found: $AssemblyPath"
+}
+
+[Reflection.Assembly]::LoadFrom((Resolve-Path -LiteralPath $AssemblyPath).Path) | Out-Null
+
+$password = "NosGM-Passw0rd-2026"
+$firstHash = $null
+$secondHash = $null
+
+if (-not [NosGm.Core.PasswordHashService]::TryHashPassword($password, [ref]$firstHash)) {
+    throw "Unable to create the first password hash."
+}
+
+if (-not [NosGm.Core.PasswordHashService]::TryHashPassword($password, [ref]$secondHash)) {
+    throw "Unable to create the second password hash."
+}
+
+if ($firstHash -eq $secondHash) {
+    throw "Unique password salts were not applied."
+}
+
+if ($firstHash.Length -gt 255 -or $secondHash.Length -gt 255) {
+    throw "The encoded password hash does not fit the Account.Password column."
+}
+
+$needsUpgrade = $false
+if (-not [NosGm.Core.PasswordHashService]::VerifyPassword($firstHash, $password, $false, [ref]$needsUpgrade)) {
+    throw "The correct password did not verify."
+}
+
+if ($needsUpgrade) {
+    throw "A current password hash was incorrectly marked for upgrade."
+}
+
+$needsUpgrade = $false
+if ([NosGm.Core.PasswordHashService]::VerifyPassword($firstHash, "wrong-password", $false, [ref]$needsUpgrade)) {
+    throw "An incorrect password verified successfully."
+}
+
+$needsUpgrade = $false
+if ([NosGm.Core.PasswordHashService]::VerifyPassword("nosgm`$broken", $password, $false, [ref]$needsUpgrade)) {
+    throw "A malformed versioned hash verified successfully."
+}
+
+$sha512 = [System.Security.Cryptography.SHA512]::Create()
+try {
+    $legacyBytes = $sha512.ComputeHash([Text.Encoding]::UTF8.GetBytes($password))
+}
+finally {
+    $sha512.Dispose()
+}
+$legacySha512 = -join ($legacyBytes | ForEach-Object { $_.ToString("x2") })
+
+$needsUpgrade = $false
+if (-not [NosGm.Core.PasswordHashService]::VerifyPassword($legacySha512, $password, $true, [ref]$needsUpgrade) -or -not $needsUpgrade) {
+    throw "A valid legacy SHA-512 password was not accepted for migration."
+}
+
+$legacyIterations = 10000
+$salt = [byte[]](0..15)
+$derive = [System.Security.Cryptography.Rfc2898DeriveBytes]::new(
+    $password,
+    $salt,
+    $legacyIterations,
+    [System.Security.Cryptography.HashAlgorithmName]::SHA256)
+try {
+    $legacyHashBytes = $derive.GetBytes(32)
+}
+finally {
+    $derive.Dispose()
+}
+
+$legacyVersionedHash = [string]::Join(
+    '$',
+    @(
+        'nosgm',
+        'pbkdf2-sha256',
+        'v1',
+        $legacyIterations.ToString([System.Globalization.CultureInfo]::InvariantCulture),
+        [Convert]::ToBase64String($salt),
+        [Convert]::ToBase64String($legacyHashBytes)
+    ))
+
+$needsUpgrade = $false
+if (-not [NosGm.Core.PasswordHashService]::VerifyPassword($legacyVersionedHash, $password, $false, [ref]$needsUpgrade) -or -not $needsUpgrade) {
+    throw "A valid lower-cost hash was not marked for upgrade."
+}
+
+Write-Host "Password hashing verified against the built NosGm.Core assembly."

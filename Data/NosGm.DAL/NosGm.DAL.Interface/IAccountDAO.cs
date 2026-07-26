@@ -14,6 +14,8 @@ namespace NosGm.DAL.Interface
 
         SaveResult InsertOrUpdate(ref AccountDTO account);
 
+        bool TryUpgradePassword(long accountId, string expectedPassword, string upgradedPassword);
+
         bool ContainsAccounts();
 
         void Insert(List<AccountDTO> account);

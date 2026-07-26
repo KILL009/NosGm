@@ -159,6 +159,38 @@ namespace NosGm.DAL.DAO
             return null;
         }
 
+        public bool TryUpgradePassword(long accountId, string expectedPassword, string upgradedPassword)
+        {
+            if (accountId <= 0 || expectedPassword == null || string.IsNullOrWhiteSpace(upgradedPassword) ||
+                upgradedPassword.Length > 255)
+            {
+                return false;
+            }
+
+            try
+            {
+                using (var context = DataAccessHelper.CreateContext())
+                {
+                    Account entity = context.Account.FirstOrDefault(a => a.AccountId.Equals(accountId));
+                    if (entity == null ||
+                        !string.Equals(entity.Password, expectedPassword, StringComparison.Ordinal))
+                    {
+                        return false;
+                    }
+
+                    entity.Password = upgradedPassword;
+                    return context.SaveChanges() == 1;
+                }
+            }
+            catch (Exception e)
+            {
+                LoggerService.LogServer.Logger.LogAsync(
+                    $"Unable to upgrade password hash for AccountId={accountId}. Message: {e.Message} | Source: {e.Source}",
+                    LogType.ERROR);
+                return false;
+            }
+        }
+
         public async Task WriteGeneralLog(long accountId, string ipAddress, long? characterId, GeneralLogType logType,
             string logData)
         {

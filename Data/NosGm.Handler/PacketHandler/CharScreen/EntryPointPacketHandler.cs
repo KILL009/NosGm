@@ -122,7 +122,14 @@ namespace NosGm.Handler.BasicPacket.CharScreen
                     return;
                 }
 
-                if (!account.Password.ToLower().Equals(CryptographyBase.Sha512(loginPacketParts[7])) && !isCrossServerLogin)
+                bool passwordValid = isCrossServerLogin ||
+                                     loginPacketParts.Length > 7 &&
+                                     PasswordHashService.VerifyPassword(
+                                         account.Password,
+                                         loginPacketParts[7],
+                                         true,
+                                         out _);
+                if (!passwordValid)
                 {
                     Logger.Debug($"Client {Session.ClientId} forced Disconnection, invalid Password.");
                     Session.Disconnect();

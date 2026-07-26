@@ -60,22 +60,21 @@ namespace NosGm.Handler.BasicPacket.Login
                 return;
             }
 
-            UserDTO user = new UserDTO
+            if (!TryGetClearPassword(loginPacket.Password, out string clearPassword))
             {
-                Name = loginPacket.Name,
-                Password = ServerConfiguration.UseOldCrypto
-                    ? CryptographyBase.Sha512(LoginCryptography.GetPassword(loginPacket.Password)).ToUpperInvariant()
-                    : loginPacket.Password
-            };
+                Reject(LoginFailType.AccountOrPasswordWrong, "Session removed. Reason: Invalid password payload");
+                return;
+            }
 
-            AccountDTO loadedAccount = DAOFactory.AccountDAO.LoadByName(user.Name);
+            string username = loginPacket.Name;
+            AccountDTO loadedAccount = DAOFactory.AccountDAO.LoadByName(username);
             if (loadedAccount == null)
             {
                 Reject(LoginFailType.AccountOrPasswordWrong, "Session removed. Reason: Unknown account");
                 return;
             }
 
-            if (!string.Equals(loadedAccount.Name, user.Name, StringComparison.Ordinal))
+            if (!string.Equals(loadedAccount.Name, username, StringComparison.Ordinal))
             {
                 Reject(LoginFailType.WrongCaps, "Session removed. Reason: Wrong account casing");
                 return;
@@ -87,10 +86,19 @@ namespace NosGm.Handler.BasicPacket.Login
                 return;
             }
 
-            if (!PasswordMatches(loadedAccount.Password, user.Password))
+            if (!PasswordHashService.VerifyPassword(
+                    loadedAccount.Password,
+                    clearPassword,
+                    ServerConfiguration.UseOldCrypto,
+                    out bool passwordNeedsUpgrade))
             {
                 Reject(LoginFailType.AccountOrPasswordWrong, "Session removed. Reason: Wrong credentials");
                 return;
+            }
+
+            if (passwordNeedsUpgrade)
+            {
+                UpgradePasswordHash(loadedAccount, clearPassword);
             }
 
             Version clientVersion = null;
@@ -152,7 +160,7 @@ namespace NosGm.Handler.BasicPacket.Login
             Logger.Info($"RegionType: {loginPacket.RegionType}");
 
             int newSessionId = SessionFactory.Instance.GenerateSessionId();
-            Logger.Info($"{user.Name} connected | SessionID: {newSessionId}");
+            Logger.Info($"{username} connected | SessionID: {newSessionId}");
 
             try
             {
@@ -172,7 +180,7 @@ namespace NosGm.Handler.BasicPacket.Login
                                   hasClientVersion && clientVersion.Build >= 0 && clientVersion.Build < 3075;
 
             string serversPacket = BuildServersPacket(
-                user.Name,
+                username,
                 loginPacket.RegionType,
                 newSessionId,
                 ignoreUserName,
@@ -244,16 +252,49 @@ namespace NosGm.Handler.BasicPacket.Login
             return value;
         }
 
-        private static bool PasswordMatches(string storedPassword, string suppliedPassword)
+        private static bool TryGetClearPassword(string packetPassword, out string clearPassword)
         {
-            if (storedPassword == null || suppliedPassword == null)
+            clearPassword = null;
+            if (string.IsNullOrWhiteSpace(packetPassword))
             {
                 return false;
             }
 
-            return ServerConfiguration.UseOldCrypto
-                ? string.Equals(storedPassword, suppliedPassword, StringComparison.OrdinalIgnoreCase)
-                : string.Equals(storedPassword, suppliedPassword, StringComparison.Ordinal);
+            try
+            {
+                clearPassword = ServerConfiguration.UseOldCrypto
+                    ? LoginCryptography.GetPassword(packetPassword)
+                    : packetPassword;
+            }
+            catch (Exception)
+            {
+                return false;
+            }
+
+            return clearPassword != null &&
+                   clearPassword.Length <= PasswordHashService.MaximumCredentialLength;
+        }
+
+        private static void UpgradePasswordHash(AccountDTO account, string clearPassword)
+        {
+            if (account == null ||
+                !PasswordHashService.TryHashPassword(clearPassword, out string upgradedPassword))
+            {
+                return;
+            }
+
+            string expectedPassword = account.Password;
+            if (DAOFactory.AccountDAO.TryUpgradePassword(
+                    account.AccountId,
+                    expectedPassword,
+                    upgradedPassword))
+            {
+                account.Password = upgradedPassword;
+                Logger.Info($"Password hash upgraded | AccountId={account.AccountId}");
+                return;
+            }
+
+            Logger.Debug($"Password hash upgrade skipped | AccountId={account.AccountId}");
         }
 
         private void Reject(LoginFailType failType, string logMessage)
