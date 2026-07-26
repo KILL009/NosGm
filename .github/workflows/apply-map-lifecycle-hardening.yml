@@ -10,7 +10,9 @@ permissions:
 
 jobs:
   apply:
-    if: github.actor != 'github-actions[bot]'
+    if: >-
+      !startsWith(github.event.head_commit.message, 'fix: harden map lifecycle diagnostics') &&
+      !startsWith(github.event.head_commit.message, 'diagnostic: capture map codemod failure')
     runs-on: windows-2022
     timeout-minutes: 10
 
