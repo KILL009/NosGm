@@ -110,15 +110,25 @@ if (-not $sourceApplied) {
                 $"World list generated | RegionType={regionType} Groups={worldCount} Channels={visibleWorlds.Count}");
             return channelPacket;
 '@ "add bounded world-list diagnostics" $sourceNewLine
-
-    [IO.File]::WriteAllText(
-        (Resolve-Path -LiteralPath $sourcePath),
-        $sourceContent,
-        (New-Object Text.UTF8Encoding($true)))
 }
 else {
     Write-Host "World/channel source hardening is already applied."
 }
+
+$unindentedGroupCheck = $sourceNewLine + "if (lastGroup != world.WorldGroup)"
+if ($sourceContent.Contains($unindentedGroupCheck)) {
+    $sourceContent = Replace-ExactOnce $sourceContent $unindentedGroupCheck ($sourceNewLine + "                if (lastGroup != world.WorldGroup)") "indent the generated group check" $sourceNewLine
+}
+
+$unindentedPacketAppend = $sourceNewLine + "channelPacket +="
+if ($sourceContent.Contains($unindentedPacketAppend)) {
+    $sourceContent = Replace-ExactOnce $sourceContent $unindentedPacketAppend ($sourceNewLine + "                channelPacket +=") "indent the generated channel append" $sourceNewLine
+}
+
+[IO.File]::WriteAllText(
+    (Resolve-Path -LiteralPath $sourcePath),
+    $sourceContent,
+    (New-Object Text.UTF8Encoding($true)))
 
 if (-not $verifierContent.Contains('$cultureTableToken = "| ``$culture`` |"')) {
     $verifierContent = Replace-ExactOnce $verifierContent @'
