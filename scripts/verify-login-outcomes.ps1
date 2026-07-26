@@ -94,6 +94,12 @@ function Read-RequiredFile {
     return Get-Content -LiteralPath $Path -Raw
 }
 
+function Get-PropertyNames {
+    param([object]$Value)
+
+    return @($Value.PSObject.Properties | ForEach-Object { $_.Name })
+}
+
 function Assert-ExactProperties {
     param(
         [object]$Value,
@@ -105,7 +111,7 @@ function Assert-ExactProperties {
         throw "$Description must not be null."
     }
 
-    $actualNames = @($Value.PSObject.Properties.Name)
+    $actualNames = Get-PropertyNames $Value
     $unexpected = @($actualNames | Where-Object { $_ -notin $ExpectedNames })
     $missing = @($ExpectedNames | Where-Object { $_ -notin $actualNames })
 
@@ -129,7 +135,8 @@ function Assert-AllowedProperties {
         throw "$Description must not be null."
     }
 
-    $unexpected = @($Value.PSObject.Properties.Name | Where-Object { $_ -notin $AllowedNames })
+    $actualNames = Get-PropertyNames $Value
+    $unexpected = @($actualNames | Where-Object { $_ -notin $AllowedNames })
     if ($unexpected.Count -gt 0) {
         throw "$Description contains forbidden properties: $($unexpected -join ', ')."
     }
