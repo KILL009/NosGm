@@ -1,4 +1,4 @@
-name: Apply map lifecycle hardening
+name: Normalize map lifecycle source
 
 on:
   push:
@@ -9,10 +9,9 @@ permissions:
   contents: write
 
 jobs:
-  apply:
+  normalize:
     if: >-
-      !startsWith(github.event.head_commit.message, 'fix: harden map lifecycle diagnostics') &&
-      !startsWith(github.event.head_commit.message, 'diagnostic: capture map codemod failure')
+      !startsWith(github.event.head_commit.message, 'style: normalize map lifecycle line endings')
     runs-on: windows-2022
     timeout-minutes: 10
 
@@ -22,37 +21,30 @@ jobs:
         with:
           ref: agent/nosgm-next-map-lifecycle
 
-      - name: Apply source transformation
+      - name: Normalize accidental CRCRLF sequences
         shell: pwsh
         run: |
-          $ErrorActionPreference = "Stop"
-          Remove-Item -LiteralPath map-codemod-error.txt -ErrorAction SilentlyContinue
-          try {
-            ./scripts/apply-map-lifecycle-hardening-v2.ps1
+          $path = "Data/NosGm.GameObject/Map/MapInstance.cs"
+          $content = [System.IO.File]::ReadAllText($path)
+          while ($content.Contains("`r`r`n")) {
+            $content = $content.Replace("`r`r`n", "`r`n")
           }
-          catch {
-            $_ | Out-String | Set-Content -LiteralPath map-codemod-error.txt -Encoding UTF8
-            git config user.name "NosGM Automation"
-            git config user.email "actions@users.noreply.github.com"
-            git add -- map-codemod-error.txt
-            git commit -m "diagnostic: capture map codemod failure"
-            git push origin HEAD:agent/nosgm-next-map-lifecycle
-            throw
+          [System.IO.File]::WriteAllText($path, $content, [System.Text.UTF8Encoding]::new($true))
+
+          if ([System.IO.File]::ReadAllText($path).Contains("`r`r`n")) {
+            throw "MapInstance.cs still contains CRCRLF sequences."
           }
 
-      - name: Validate patch
-        shell: pwsh
-        run: |
           git diff --check
-          if (-not (git status --short -- "Data/NosGm.GameObject/Map/MapInstance.cs")) {
-            throw "MapInstance.cs was not changed by the transformation."
+          if (-not (git status --short -- $path)) {
+            throw "No line-ending cleanup was produced."
           }
 
-      - name: Commit source change
+      - name: Commit normalized source
         shell: pwsh
         run: |
           git config user.name "NosGM Automation"
           git config user.email "actions@users.noreply.github.com"
           git add -- "Data/NosGm.GameObject/Map/MapInstance.cs"
-          git commit -m "fix: harden map lifecycle diagnostics"
+          git commit -m "style: normalize map lifecycle line endings"
           git push origin HEAD:agent/nosgm-next-map-lifecycle
