@@ -38,7 +38,7 @@ namespace NosGm.Handler.BasicPacket.CharScreen
         {
             string[] loginPacketParts = string.IsNullOrWhiteSpace(packet?.PacketData)
                 ? Array.Empty<string>()
-                : packet.PacketData.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+                : packet.PacketData.Split(' ');
             bool isCrossServerLogin = false;
 
             // Load account by given SessionId
