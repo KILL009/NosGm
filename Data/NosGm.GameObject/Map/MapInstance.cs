@@ -13,7 +13,8 @@ using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
-using System.Reactive.Linq;
+using System.Reactive.Linq;
+using System.Runtime.CompilerServices;
 
 
 namespace NosGm.GameObject
@@ -129,7 +130,12 @@ namespace NosGm.GameObject
         private readonly ThreadSafeSortedList<long, MapMonster> _monsters;
         private readonly ThreadSafeSortedList<long, MapNpc> _npcs;
 
-        private readonly Random _random;
+        private readonly Random _random;
+
+        private static readonly long MapDiagnosticIntervalTicks = TimeSpan.FromSeconds(30).Ticks;
+
+        private readonly ConcurrentDictionary<string, long> _lastDiagnosticLogTicks =
+            new ConcurrentDictionary<string, long>(StringComparer.Ordinal);
 
         private IDisposable _mapLifeDisposable;
 
@@ -281,6 +287,33 @@ namespace NosGm.GameObject
             _mapLifeDisposable?.Dispose();
         }
 
+        private void LogMapException(Exception exception, [CallerMemberName] string operation = null)
+        {
+            if (exception == null || string.IsNullOrWhiteSpace(operation))
+            {
+                return;
+            }
+
+            long now = DateTime.UtcNow.Ticks;
+            while (true)
+            {
+                long previous = _lastDiagnosticLogTicks.GetOrAdd(operation, 0);
+                if (previous != 0 && now - previous < MapDiagnosticIntervalTicks)
+                {
+                    return;
+                }
+
+                if (_lastDiagnosticLogTicks.TryUpdate(operation, now, previous))
+                {
+                    break;
+                }
+            }
+
+            Logger.Error(
+                $"[MAP_OPERATION_FAILED] Operation={operation} MapId={Map?.MapId} Instance={MapInstanceId}",
+                exception);
+        }
+
         public void AddDelayedMonster(MapMonster monster)
         {
             _delayedMonsters[monster.MapMonsterId] = monster;
@@ -342,7 +375,7 @@ namespace NosGm.GameObject
             }
             catch (Exception e)
             {
-                //LOGGERServerLog($"{e.ToString()}", LogType.ServerError);
+                LogMapException(e);
             }
         }
 
@@ -521,7 +554,6 @@ namespace NosGm.GameObject
                 }
 
                 mapMonster.Initialize(this);
-                mapMonster.Initialize(this);
                 var mapMonsterId = mapMonster.MapMonsterId;
                 _monsters[mapMonsterId] = mapMonster;
                 _mapMonsterIds[mapMonsterId] = mapMonsterId;
@@ -642,7 +674,7 @@ namespace NosGm.GameObject
             }
             catch (Exception e)
             {
-                //LOGGERServerLog($"{e.ToString()}", LogType.ServerError);
+                LogMapException(e);
             }
         }
 
@@ -806,7 +838,7 @@ namespace NosGm.GameObject
                     }
                     catch (Exception e)
                     {
-                        //LOGGERServerLog($"{e.ToString()}", LogType.ServerError);
+                        LogMapException(e);
                     }
                 }
             });
@@ -989,7 +1021,7 @@ namespace NosGm.GameObject
                                     || (x.Character != null && x.Character.CharacterId == mapMonster.Owner?.MapEntityId)
                                     || (x.MapMonster != null && monsterToSummon.Owner == null))
                                 {
-                                    return;
+                                    continue;
                                 }
 
                                 var damage = 0;
