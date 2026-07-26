@@ -12,6 +12,7 @@ namespace NosGm.Core
         private const string Version = "v1";
         private const int SaltSize = 16;
         private const int HashSize = 32;
+        private const int Sha512HexLength = 128;
         private const int MinimumAcceptedIterations = 10000;
         private const int MaximumAcceptedIterations = 2000000;
 
@@ -92,6 +93,13 @@ namespace NosGm.Core
                 return false;
             }
 
+            // Current clients can send the SHA-512 credential directly. In that path the
+            // server does not know the original password, so it must not attempt PBKDF2 migration.
+            if (TryVerifyPrehashedSha512(storedPassword, packetPassword))
+            {
+                return true;
+            }
+
             if (!useOldCrypto)
             {
                 return TryVerifyCandidate(
@@ -168,6 +176,45 @@ namespace NosGm.Core
             return difference == 0;
         }
 
+        private static bool FixedTimeHexEquals(string left, string right)
+        {
+            if (left == null || right == null)
+            {
+                return false;
+            }
+
+            int difference = left.Length ^ right.Length;
+            int maximumLength = Math.Max(left.Length, right.Length);
+            for (int i = 0; i < maximumLength; i++)
+            {
+                int leftValue = i < left.Length ? GetHexValue(left[i]) : 0;
+                int rightValue = i < right.Length ? GetHexValue(right[i]) : 0;
+                difference |= leftValue ^ rightValue;
+            }
+
+            return difference == 0;
+        }
+
+        private static int GetHexValue(char value)
+        {
+            if (value >= '0' && value <= '9')
+            {
+                return value - '0';
+            }
+
+            if (value >= 'a' && value <= 'f')
+            {
+                return value - 'a' + 10;
+            }
+
+            if (value >= 'A' && value <= 'F')
+            {
+                return value - 'A' + 10;
+            }
+
+            return -1;
+        }
+
         private static bool IsCredentialValid(string clearPassword)
         {
             return clearPassword != null && clearPassword.Length <= MaximumCredentialLength;
@@ -178,6 +225,24 @@ namespace NosGm.Core
             return value >= '0' && value <= '9' ||
                    value >= 'a' && value <= 'f' ||
                    value >= 'A' && value <= 'F';
+        }
+
+        private static bool IsSha512Hex(string value)
+        {
+            if (value == null || value.Length != Sha512HexLength)
+            {
+                return false;
+            }
+
+            for (int i = 0; i < value.Length; i++)
+            {
+                if (!IsHexDigit(value[i]))
+                {
+                    return false;
+                }
+            }
+
+            return true;
         }
 
         private static bool LooksLikeLegacyPasswordPayload(string packetPassword)
@@ -249,6 +314,13 @@ namespace NosGm.Core
             clearPassword = candidate;
             needsUpgrade = candidateNeedsUpgrade;
             return true;
+        }
+
+        private static bool TryVerifyPrehashedSha512(string storedPassword, string packetPassword)
+        {
+            return IsSha512Hex(storedPassword) &&
+                   IsSha512Hex(packetPassword) &&
+                   FixedTimeHexEquals(storedPassword, packetPassword);
         }
 
         private static bool VerifyVersionedHash(

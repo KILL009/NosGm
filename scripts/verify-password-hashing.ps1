@@ -71,6 +71,32 @@ if (-not [NosGm.Core.PasswordHashService]::VerifyPassword($legacySha512, $passwo
 }
 
 $resolvedPassword = $null
+$needsUpgrade = $true
+$upperLegacySha512 = $legacySha512.ToUpperInvariant()
+if (-not [NosGm.Core.PasswordHashService]::VerifyLoginPayload(
+        $legacySha512,
+        $upperLegacySha512,
+        $false,
+        [ref]$resolvedPassword,
+        [ref]$needsUpgrade) -or
+    $null -ne $resolvedPassword -or
+    $needsUpgrade) {
+    throw "A prehashed SHA-512 login payload was not accepted case-insensitively without migration."
+}
+
+$resolvedPassword = $null
+$needsUpgrade = $false
+$wrongPrehash = Get-Sha512Hex "wrong-password"
+if ([NosGm.Core.PasswordHashService]::VerifyLoginPayload(
+        $legacySha512,
+        $wrongPrehash,
+        $false,
+        [ref]$resolvedPassword,
+        [ref]$needsUpgrade)) {
+    throw "An incorrect prehashed SHA-512 login payload verified successfully."
+}
+
+$resolvedPassword = $null
 $needsUpgrade = $false
 if (-not [NosGm.Core.PasswordHashService]::VerifyLoginPayload(
         $legacySha512,
@@ -108,6 +134,17 @@ if (-not [NosGm.Core.PasswordHashService]::VerifyLoginPayload(
     $resolvedPassword -ne $password -or
     $needsUpgrade) {
     throw "A versioned hash did not accept a plain payload with UseOldCrypto enabled."
+}
+
+$resolvedPassword = $null
+$needsUpgrade = $false
+if ([NosGm.Core.PasswordHashService]::VerifyLoginPayload(
+        $firstHash,
+        $legacySha512,
+        $false,
+        [ref]$resolvedPassword,
+        [ref]$needsUpgrade)) {
+    throw "A versioned hash incorrectly accepted a legacy prehashed SHA-512 payload."
 }
 
 $legacyIterations = 10000
