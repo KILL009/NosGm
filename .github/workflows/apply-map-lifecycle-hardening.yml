@@ -1,4 +1,4 @@
-name: Normalize map lifecycle source
+name: Align map lifecycle source
 
 on:
   push:
@@ -9,9 +9,9 @@ permissions:
   contents: write
 
 jobs:
-  normalize:
+  align:
     if: >-
-      !startsWith(github.event.head_commit.message, 'style: normalize map lifecycle line endings')
+      !startsWith(github.event.head_commit.message, 'style: align map lifecycle line endings')
     runs-on: windows-2022
     timeout-minutes: 10
 
@@ -20,31 +20,40 @@ jobs:
         uses: actions/checkout@v6
         with:
           ref: agent/nosgm-next-map-lifecycle
+          fetch-depth: 0
 
-      - name: Normalize accidental CRCRLF sequences
+      - name: Match the original file newline convention
         shell: pwsh
         run: |
           $path = "Data/NosGm.GameObject/Map/MapInstance.cs"
+          $temporaryOriginal = Join-Path $env:RUNNER_TEMP "MapInstance.main.cs"
+
+          cmd /c "git show origin/main:$path > `"$temporaryOriginal`""
+          if ($LASTEXITCODE -ne 0) {
+            throw "Unable to read the original MapInstance.cs from origin/main."
+          }
+
+          $original = [System.IO.File]::ReadAllText($temporaryOriginal)
+          $newline = if ($original.Contains("`r`n")) { "`r`n" } else { "`n" }
+
           $content = [System.IO.File]::ReadAllText($path)
-          while ($content.Contains("`r`r`n")) {
-            $content = $content.Replace("`r`r`n", "`r`n")
+          $content = [System.Text.RegularExpressions.Regex]::Replace($content, "\r\n|\r|\n", "`n")
+          if ($newline -eq "`r`n") {
+            $content = $content.Replace("`n", "`r`n")
           }
+
           [System.IO.File]::WriteAllText($path, $content, [System.Text.UTF8Encoding]::new($true))
-
-          if ([System.IO.File]::ReadAllText($path).Contains("`r`r`n")) {
-            throw "MapInstance.cs still contains CRCRLF sequences."
-          }
-
           git diff --check
+
           if (-not (git status --short -- $path)) {
-            throw "No line-ending cleanup was produced."
+            throw "No newline alignment change was produced."
           }
 
-      - name: Commit normalized source
+      - name: Commit aligned source
         shell: pwsh
         run: |
           git config user.name "NosGM Automation"
           git config user.email "actions@users.noreply.github.com"
           git add -- "Data/NosGm.GameObject/Map/MapInstance.cs"
-          git commit -m "style: normalize map lifecycle line endings"
+          git commit -m "style: align map lifecycle line endings"
           git push origin HEAD:agent/nosgm-next-map-lifecycle
