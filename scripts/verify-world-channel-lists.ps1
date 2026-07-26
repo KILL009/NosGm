@@ -1,4 +1,4 @@
-param(
+﻿param(
     [string]$FixturePath = "tests/fixtures/world-channel-lists.json",
     [string]$MasterServicePath = "Data/NosGm.Program/NosGm.Master.Server/CommunicationService.cs",
     [string]$LoginHandlerPath = "Data/NosGm.Handler/PacketHandler/Login/LoginPacketHandler.cs",
@@ -448,7 +448,8 @@ foreach ($culture in $expectedCultures | Where-Object { $_ -ne "en" }) {
         throw "Missing World satellite resource for culture '$culture': $satelliteResource"
     }
 
-    if ($localizationDoc -notmatch "\| `$culture` \|") {
+    $cultureTableToken = "| ``$culture`` |"
+    if ($localizationDoc.IndexOf($cultureTableToken, [StringComparison]::Ordinal) -lt 0) {
         throw "Localization documentation is missing canonical culture '$culture'."
     }
 }
