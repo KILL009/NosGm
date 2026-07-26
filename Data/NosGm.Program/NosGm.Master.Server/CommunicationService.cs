@@ -415,7 +415,6 @@ namespace NosGm.Master.Server
 
         public int? RegisterWorldServer(SerializableWorldServer worldServer)
         {
-            Logger.Info("===== NsTeST =====");
 
             if (!MSManager.Instance.AuthentificatedClients.Any(s => s.Equals(CurrentClient.ClientId))) return null;
             var ws = new WorldServer(worldServer.Id,
@@ -428,7 +427,6 @@ namespace NosGm.Master.Server
                     .Where(w => w.WorldGroup.Equals(worldServer.WorldGroup)).OrderBy(w => w.ChannelId)
                     .Select(w => w.ChannelId)).First()
             };
-            Logger.Info($"IP registrada = {worldServer.EndPointIP}");
             if (worldServer.EndPointPort == Convert.ToInt32(ServerConfiguration.GlacernonServerPort)) ws.ChannelId = 51;
             MSManager.Instance.WorldServers.Add(ws);
             return ws.ChannelId;
@@ -487,7 +485,17 @@ namespace NosGm.Master.Server
             {
                 return null;
             }
-           
+
+            var visibleWorlds = MSManager.Instance.WorldServers
+                .Where(w => w.ChannelId != 51)
+                .OrderBy(w => w.WorldGroup)
+                .ThenBy(w => w.ChannelId)
+                .ToList();
+            if (visibleWorlds.Count == 0)
+            {
+                return null;
+            }
+
             var characters = DAOFactory.CharacterDAO.LoadByAccount(AccountId);
 
             var lastGroup = "";
@@ -527,20 +535,10 @@ namespace NosGm.Master.Server
         //var channelPacket = $"NsTeST {regionType} {username} {International}{OtherSv}{sessionId} ";
         var channelPacket =
     $"NsTeST {regionType} {username} {International}{OtherSv}{sessionId} ";
-            Logger.Info("===== NsTeST =====");
-            Logger.Info(channelPacket);
 
-            Logger.Info($"WorldServers Count = {MSManager.Instance.WorldServers.Count}");
 
-            foreach (var world in MSManager.Instance.WorldServers.OrderBy(w => w.WorldGroup))
+            foreach (var world in visibleWorlds)
             {
-                Logger.Info(
-       $"Group={world.WorldGroup} " +
-       $"Channel={world.ChannelId} " +
-       $"IP={world.Endpoint.IpAddress} " +
-       $"Port={world.Endpoint.TcpPort}");
-              
-
                 if (lastGroup != world.WorldGroup)
                 {
                     worldCount++;
@@ -549,25 +547,16 @@ namespace NosGm.Master.Server
                 lastGroup = world.WorldGroup;
 
                 var currentlyConnectedAccounts =
-                    MSManager.Instance.ConnectedAccounts.CountLinq(a => a.ConnectedWorld?.ChannelId == world.ChannelId);
+                    MSManager.Instance.ConnectedAccounts.CountLinq(a => a.ConnectedWorld?.Id == world.Id);
                 var channelcolor = (int)Math.Round((double)currentlyConnectedAccounts / world.AccountLimit * 20) + 1;
-
-                if (world.ChannelId == 51)
-                {
-                    continue;
-                }
-
-                if (MSManager.Instance.WorldServers.Count < 1)
-                {
-                    return null;
-                }
 
                 channelPacket +=
                     $"{world.Endpoint.IpAddress}:{world.Endpoint.TcpPort}:{channelcolor}:{worldCount}.{world.ChannelId}.{world.WorldGroup} ";
             }
 
             channelPacket += "-1:-1:-1:10000.10000.1";
-            Logger.Info(channelPacket);
+            Logger.Info(
+                $"World list generated | RegionType={regionType} Groups={worldCount} Channels={visibleWorlds.Count}");
             return channelPacket;
         }
 

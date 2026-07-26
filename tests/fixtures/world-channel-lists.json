@@ -1,0 +1,204 @@
+{
+  "schemaVersion": 1,
+  "protocol": {
+    "header": "NsTeST",
+    "paddingPairs": 56,
+    "sentinel": "-1:-1:-1:10000.10000.1"
+  },
+  "supportedCultures": [
+    "en",
+    "es",
+    "de",
+    "fr",
+    "it",
+    "pl",
+    "cs",
+    "ru",
+    "ja",
+    "zh"
+  ],
+  "regionTypes": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9
+  ],
+  "characterPrefixes": [
+    {
+      "characterCount": 0,
+      "value": "-99 0 -99 0 -99 0 -99 0"
+    },
+    {
+      "characterCount": 1,
+      "value": "1 1 -99 0 -99 0 -99 0"
+    },
+    {
+      "characterCount": 2,
+      "value": "1 1 -99 1 -99 0 -99 0"
+    },
+    {
+      "characterCount": 3,
+      "value": "1 1 -99 1 -99 1 -99 0"
+    },
+    {
+      "characterCount": 4,
+      "value": "1 1 -99 1 -99 1 -99 1"
+    }
+  ],
+  "cases": [
+    {
+      "id": "single_channel_region_0",
+      "regionType": 0,
+      "characterCount": 0,
+      "worlds": [
+        {
+          "group": "Sumeria",
+          "channelId": 1,
+          "host": "HOST_A",
+          "port": 1337,
+          "accountLimit": 100,
+          "connectedAccounts": 0
+        }
+      ],
+      "expected": {
+        "packetAvailable": true,
+        "worldEntries": [
+          "HOST_A:1337:1:1.1.Sumeria"
+        ]
+      }
+    },
+    {
+      "id": "four_characters_region_5",
+      "regionType": 5,
+      "characterCount": 4,
+      "worlds": [
+        {
+          "group": "Sumeria",
+          "channelId": 1,
+          "host": "HOST_A",
+          "port": 1337,
+          "accountLimit": 100,
+          "connectedAccounts": 0
+        }
+      ],
+      "expected": {
+        "packetAvailable": true,
+        "worldEntries": [
+          "HOST_A:1337:1:1.1.Sumeria"
+        ]
+      }
+    },
+    {
+      "id": "sorted_groups_and_channels",
+      "regionType": 9,
+      "characterCount": 2,
+      "worlds": [
+        {
+          "group": "Beta",
+          "channelId": 2,
+          "host": "HOST_D",
+          "port": 2338,
+          "accountLimit": 100,
+          "connectedAccounts": 50
+        },
+        {
+          "group": "Alpha",
+          "channelId": 2,
+          "host": "HOST_B",
+          "port": 1338,
+          "accountLimit": 100,
+          "connectedAccounts": 25
+        },
+        {
+          "group": "Beta",
+          "channelId": 1,
+          "host": "HOST_C",
+          "port": 2337,
+          "accountLimit": 100,
+          "connectedAccounts": 100
+        },
+        {
+          "group": "Alpha",
+          "channelId": 1,
+          "host": "HOST_A",
+          "port": 1337,
+          "accountLimit": 100,
+          "connectedAccounts": 0
+        }
+      ],
+      "expected": {
+        "packetAvailable": true,
+        "worldEntries": [
+          "HOST_A:1337:1:1.1.Alpha",
+          "HOST_B:1338:6:1.2.Alpha",
+          "HOST_C:2337:21:2.1.Beta",
+          "HOST_D:2338:11:2.2.Beta"
+        ]
+      }
+    },
+    {
+      "id": "hidden_act4_does_not_shift_groups",
+      "regionType": 5,
+      "characterCount": 1,
+      "worlds": [
+        {
+          "group": "Act4",
+          "channelId": 51,
+          "host": "HOST_ACT4",
+          "port": 5100,
+          "accountLimit": 100,
+          "connectedAccounts": 0
+        },
+        {
+          "group": "Sumeria",
+          "channelId": 1,
+          "host": "HOST_A",
+          "port": 1337,
+          "accountLimit": 100,
+          "connectedAccounts": 0
+        }
+      ],
+      "expected": {
+        "packetAvailable": true,
+        "worldEntries": [
+          "HOST_A:1337:1:1.1.Sumeria"
+        ]
+      }
+    },
+    {
+      "id": "only_hidden_act4",
+      "regionType": 0,
+      "characterCount": 0,
+      "worlds": [
+        {
+          "group": "Act4",
+          "channelId": 51,
+          "host": "HOST_ACT4",
+          "port": 5100,
+          "accountLimit": 100,
+          "connectedAccounts": 0
+        }
+      ],
+      "expected": {
+        "packetAvailable": false,
+        "worldEntries": []
+      }
+    },
+    {
+      "id": "no_registered_worlds",
+      "regionType": 0,
+      "characterCount": 0,
+      "worlds": [],
+      "expected": {
+        "packetAvailable": false,
+        "worldEntries": []
+      }
+    }
+  ]
+}
