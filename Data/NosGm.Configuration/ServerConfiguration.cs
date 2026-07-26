@@ -10,7 +10,7 @@
 
         public static string DatabaseConnection = "Data Source=localhost;Initial Catalog=NosGm;Integrated Security=true";
 
-        public static bool GameVersionRequired = true;
+        public static bool GameVersionRequired = false;
         public static string GameVersion = "0.9.3.3255";
 
         public static string Language = "uk";
@@ -25,7 +25,7 @@
         public static string MallAPIKey = "";
 
         public static bool AutoReboot = true;
-        public static bool UseOldCrypto = true;
+        public static bool UseOldCrypto = false;
         public static bool StartGlacernonAutomaticly = false;
         public static bool StartAllChannelsAutomaticly = true;
         public static bool AllChannelsStarted = false;
