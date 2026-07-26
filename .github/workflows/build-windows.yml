@@ -99,7 +99,18 @@ jobs:
 
       - name: Verify sanitized login outcome fixtures
         shell: powershell
-        run: ./scripts/verify-login-outcomes.ps1
+        run: |
+          New-Item -ItemType Directory -Force -Path "$env:ARTIFACTS" | Out-Null
+          $logPath = Join-Path "$env:ARTIFACTS" "login-outcomes.log"
+          try {
+            & ./scripts/verify-login-outcomes.ps1 *>&1 | Tee-Object -FilePath $logPath
+          }
+          catch {
+            $message = $_.Exception.Message
+            Add-Content -LiteralPath $logPath -Value $message
+            Write-Host "::error::$message"
+            throw
+          }
 
       - name: Upload build diagnostics
         if: always()
