@@ -97,6 +97,10 @@ jobs:
         shell: powershell
         run: ./scripts/verify-login-session-flow.ps1
 
+      - name: Verify sanitized login outcome fixtures
+        shell: powershell
+        run: ./scripts/verify-login-outcomes.ps1
+
       - name: Upload build diagnostics
         if: always()
         uses: actions/upload-artifact@v7
