@@ -539,7 +539,7 @@ namespace NosGm.Master.Server
 
             foreach (var world in visibleWorlds)
             {
-if (lastGroup != world.WorldGroup)
+                if (lastGroup != world.WorldGroup)
                 {
                     worldCount++;
                 }
@@ -550,7 +550,7 @@ if (lastGroup != world.WorldGroup)
                     MSManager.Instance.ConnectedAccounts.CountLinq(a => a.ConnectedWorld?.ChannelId == world.ChannelId);
                 var channelcolor = (int)Math.Round((double)currentlyConnectedAccounts / world.AccountLimit * 20) + 1;
 
-channelPacket +=
+                channelPacket +=
                     $"{world.Endpoint.IpAddress}:{world.Endpoint.TcpPort}:{channelcolor}:{worldCount}.{world.ChannelId}.{world.WorldGroup} ";
             }
 
