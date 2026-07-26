@@ -1,7 +1,7 @@
-Exception: D:\a\NosGm\NosGm\scripts\apply-map-lifecycle-hardening.ps1:16
+Exception: D:\a\NosGm\NosGm\scripts\apply-map-lifecycle-hardening-v2.ps1:21
 Line |
-  16 |          throw "Required source block was not found: $Description"
-     |          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-     | Required source block was not found: map diagnostic state
+  21 |          throw "Unexpected match count for ${Description}: expected $E …
+     |          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Unexpected match count for duplicate monster initialization: expected 1, found 0
 
 
