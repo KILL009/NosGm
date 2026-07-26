@@ -23,7 +23,20 @@ jobs:
 
       - name: Apply source transformation
         shell: pwsh
-        run: ./scripts/apply-map-lifecycle-hardening.ps1
+        run: |
+          $ErrorActionPreference = "Stop"
+          try {
+            ./scripts/apply-map-lifecycle-hardening.ps1
+          }
+          catch {
+            $_ | Out-String | Set-Content -LiteralPath map-codemod-error.txt -Encoding UTF8
+            git config user.name "NosGM Automation"
+            git config user.email "actions@users.noreply.github.com"
+            git add -- map-codemod-error.txt
+            git commit -m "diagnostic: capture map codemod failure"
+            git push origin HEAD:agent/nosgm-next-map-lifecycle
+            throw
+          }
 
       - name: Validate patch
         shell: pwsh
