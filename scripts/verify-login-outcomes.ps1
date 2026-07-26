@@ -356,10 +356,9 @@ foreach ($case in @($fixture.cases)) {
 
     $actual = Get-LoginOutcome $state
     foreach ($propertyName in $expectedProperties) {
-        Assert-EqualValue \
-            (Get-PropertyValue $actual $propertyName) \
-            (Get-PropertyValue $case.expected $propertyName) \
-            "Fixture '$($case.id)' failed for '$propertyName'"
+        $actualValue = Get-PropertyValue $actual $propertyName
+        $expectedValue = Get-PropertyValue $case.expected $propertyName
+        Assert-EqualValue $actualValue $expectedValue "Fixture '$($case.id)' failed for '$propertyName'"
     }
 }
 
