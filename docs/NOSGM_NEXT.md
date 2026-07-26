@@ -28,6 +28,8 @@ Required work:
 - [x] Stop logging the full world-list packet.
 - [x] Normalize IPv4 and IPv6 endpoints before IP checks and registration.
 - [x] Preserve password case for non-legacy authentication.
+- [x] Reject oversized raw network messages before integer narrowing or unbounded buffering.
+- [x] Dispose replaced wire-protocol buffers and validate unsupported outbound message types.
 - [ ] Add a versioned password-hash migration using a per-account salt and a supported adaptive KDF.
 - [ ] Correct packet sequence validation and add diagnostic context.
 - [ ] Remove duplicate monster initialization.
