@@ -66,14 +66,7 @@ $sourceApplied = $sourceContent.Contains("var visibleWorlds = MSManager.Instance
     -not $sourceContent.Contains("Logger.Info(channelPacket);")
 
 if (-not $sourceApplied) {
-    $sourceContent = Replace-ExactOnce $sourceContent @'
-            if (!MSManager.Instance.AuthentificatedClients.Any(s => s.Equals(CurrentClient.ClientId)))
-            {
-                return null;
-            }
-           
-            var characters = DAOFactory.CharacterDAO.LoadByAccount(AccountId);
-'@ @'
+    $visibleWorldReplacement = Normalize-NewLines @'
             if (!MSManager.Instance.AuthentificatedClients.Any(s => s.Equals(CurrentClient.ClientId)))
             {
                 return null;
@@ -90,7 +83,9 @@ if (-not $sourceApplied) {
             }
 
             var characters = DAOFactory.CharacterDAO.LoadByAccount(AccountId);
-'@ "create a deterministic visible-world snapshot" $sourceNewLine
+'@ $sourceNewLine
+
+    $sourceContent = Replace-RegexCount $sourceContent '(?ms)^[ \t]*if \(!MSManager\.Instance\.AuthentificatedClients\.Any\(s => s\.Equals\(CurrentClient\.ClientId\)\)\)\s*\{\s*return null;\s*\}\s*var characters = DAOFactory\.CharacterDAO\.LoadByAccount\(AccountId\);' $visibleWorldReplacement 1 "create a deterministic visible-world snapshot" ([Text.RegularExpressions.RegexOptions]::Multiline -bor [Text.RegularExpressions.RegexOptions]::Singleline)
 
     $sourceContent = Replace-ExactOnce $sourceContent @'
             foreach (var world in MSManager.Instance.WorldServers.OrderBy(w => w.WorldGroup))
