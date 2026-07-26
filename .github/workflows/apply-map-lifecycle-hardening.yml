@@ -4,14 +4,13 @@ on:
   push:
     branches:
       - agent/nosgm-next-map-lifecycle
-    paths:
-      - .github/workflows/apply-map-lifecycle-hardening.yml
 
 permissions:
   contents: write
 
 jobs:
   apply:
+    if: github.actor != 'github-actions[bot]'
     runs-on: windows-2022
     timeout-minutes: 10
 
@@ -55,5 +54,3 @@ jobs:
           git add -- "Data/NosGm.GameObject/Map/MapInstance.cs"
           git commit -m "fix: harden map lifecycle diagnostics"
           git push origin HEAD:agent/nosgm-next-map-lifecycle
-
-# Trigger revision 3
