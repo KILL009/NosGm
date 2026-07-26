@@ -24,6 +24,31 @@ function Replace-Exact {
     return $InputText.Replace($OldText, $NewText)
 }
 
+function Replace-Regex {
+    param(
+        [string]$InputText,
+        [string]$Pattern,
+        [string]$Replacement,
+        [string]$Description,
+        [int]$ExpectedCount = 1
+    )
+
+    $matches = [System.Text.RegularExpressions.Regex]::Matches(
+        $InputText,
+        $Pattern,
+        [System.Text.RegularExpressions.RegexOptions]::Multiline)
+
+    if ($matches.Count -ne $ExpectedCount) {
+        throw "Unexpected match count for ${Description}: expected $ExpectedCount, found $($matches.Count)"
+    }
+
+    return [System.Text.RegularExpressions.Regex]::Replace(
+        $InputText,
+        $Pattern,
+        $Replacement,
+        [System.Text.RegularExpressions.RegexOptions]::Multiline)
+}
+
 if (-not (Test-Path -LiteralPath $Path)) {
     throw "MapInstance source not found: $Path"
 }
@@ -88,12 +113,10 @@ $content = Replace-Exact $content @'
 LogMapException(e);
 '@ "swallowed map exceptions" 3
 
-$content = Replace-Exact $content @'
-                mapMonster.Initialize(this);
-                mapMonster.Initialize(this);
-'@ @'
-                mapMonster.Initialize(this);
-'@ "duplicate monster initialization"
+$content = Replace-Regex $content `
+    '^(\s*)mapMonster\.Initialize\(this\);\n\1mapMonster\.Initialize\(this\);' `
+    '$1mapMonster.Initialize(this);' `
+    "duplicate monster initialization"
 
 $content = Replace-Exact $content @'
                                 if (monsterToSummon == null || x.Mate != null || x.MapNpc != null || x.MapMonster?.IsBoss == true
