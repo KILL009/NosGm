@@ -547,7 +547,7 @@ namespace NosGm.Master.Server
                 lastGroup = world.WorldGroup;
 
                 var currentlyConnectedAccounts =
-                    MSManager.Instance.ConnectedAccounts.CountLinq(a => a.ConnectedWorld?.ChannelId == world.ChannelId);
+                    MSManager.Instance.ConnectedAccounts.CountLinq(a => a.ConnectedWorld?.Id == world.Id);
                 var channelcolor = (int)Math.Round((double)currentlyConnectedAccounts / world.AccountLimit * 20) + 1;
 
                 channelPacket +=

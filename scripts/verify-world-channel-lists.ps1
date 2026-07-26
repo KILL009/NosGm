@@ -419,6 +419,7 @@ Assert-Contains $masterSource '$"NsTeST {regionType} {username}' "Master must em
 Assert-Regex $masterSource 'visibleWorlds\s*=.*?Where\(w => w\.ChannelId != 51\).*?OrderBy\(w => w\.WorldGroup\).*?ThenBy\(w => w\.ChannelId\).*?ToList\(\);' "visible worlds must exclude channel 51 and sort by group then channel"
 Assert-Regex $masterSource 'if \(visibleWorlds\.Count == 0\)\s*\{\s*return null;\s*\}' "Master must reject an empty visible world list"
 Assert-Contains $masterSource 'foreach (var world in visibleWorlds)' "Master must build the packet from the deterministic visible-world snapshot"
+Assert-Contains $masterSource 'a.ConnectedWorld?.Id == world.Id' "Channel load must count sessions for the exact World instead of every group sharing the same ChannelId"
 Assert-Contains $masterSource 'channelPacket += "-1:-1:-1:10000.10000.1";' "Master must retain the terminal world-list sentinel"
 Assert-NotContains $masterSource 'Logger.Info(channelPacket);' "Master must not log username and SessionId through the raw NsTeST packet"
 Assert-Contains $masterSource 'World list generated | RegionType=' "Master must emit only bounded world-list diagnostics"
