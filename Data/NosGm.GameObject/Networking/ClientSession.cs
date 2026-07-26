@@ -327,7 +327,7 @@ namespace NosGm.GameObject
             {
                 return $"Account: {Account.Name}";
             }
-            return $"Account: {Account.Name}";
+            return $"Session: {SessionId} ClientId: {ClientId}";
         }
 
         public void Initialize(CryptographyBase encryptor, Type packetHandler, bool isWorldServer)
@@ -358,7 +358,7 @@ namespace NosGm.GameObject
         {
             var header = packet.Split(' ')[0];
             TriggerHandler(header, $"{_lastPacketId} {packet}", false, ignoreAuthority);
-            _lastPacketId++;
+            _lastPacketId = _lastPacketId >= ushort.MaxValue ? 0 : _lastPacketId + 1;
         }
 
         public void SendPacket(string packet, byte priority = 10)
@@ -521,9 +521,12 @@ namespace NosGm.GameObject
                     }
                 }
             }
-            catch (Exception)
+            catch (Exception ex)
             {
                 PacketIngressMonitor.RecordError(metricGeneration);
+                Logger.Error(
+                    $"[PACKET_INGRESS_DRAIN_FAILED] SessionId={SessionId} ClientId={ClientId} Processed={processed}",
+                    ex);
                 Disconnect();
             }
             finally
@@ -540,6 +543,39 @@ namespace NosGm.GameObject
                     ScheduleReceiveDrain();
                 }
             }
+        }
+
+        private static string FormatPacketIdForLog(string rawPacketId)
+        {
+            if (string.IsNullOrEmpty(rawPacketId))
+            {
+                return "<empty>";
+            }
+
+            const int maximumLogLength = 16;
+            return rawPacketId.Length <= maximumLogLength
+                ? rawPacketId
+                : rawPacketId.Substring(0, maximumLogLength) + "...";
+        }
+
+        private bool TryAdvancePacketSequence(string rawPacketId, out int packetId, out int expectedPacketId)
+        {
+            packetId = 0;
+            expectedPacketId = _lastPacketId >= ushort.MaxValue ? 0 : _lastPacketId + 1;
+
+            if (!ushort.TryParse(rawPacketId, out ushort parsedPacketId))
+            {
+                return false;
+            }
+
+            packetId = parsedPacketId;
+            if (packetId != expectedPacketId)
+            {
+                return false;
+            }
+
+            _lastPacketId = packetId;
+            return true;
         }
 
         /// <summary>
@@ -559,8 +595,11 @@ namespace NosGm.GameObject
                 {
                     return false;
                 }
-                if (!int.TryParse(sessionParts[0], out int packetId))
+                if (!ushort.TryParse(sessionParts[0], out ushort packetId))
                 {
+                    Logger.Warn(
+                        $"[SESSION_PACKET_ID_REJECTED] SessionId={SessionId} ClientId={ClientId} " +
+                        $"Received={FormatPacketIdForLog(sessionParts[0])}");
                     Disconnect();
                     return false;
                 }
@@ -594,24 +633,23 @@ namespace NosGm.GameObject
 
                 if (_encryptor.HasCustomParameter)
                 {
-                    var nextRawPacketId = packetsplit[0];
-                    if (!int.TryParse(nextRawPacketId, out var nextPacketId) && nextPacketId != _lastPacketId + 1)
+                    if (packetsplit.Length < 2 || string.IsNullOrWhiteSpace(packetsplit[0]))
                     {
-                        //LOGGERServerLog($"KeepAlive was corrupt. Removed Session", LogType.ServerError);
-                        _client.Disconnect();
+                        Logger.Warn(
+                            $"[PACKET_SEQUENCE_REJECTED] SessionId={SessionId} ClientId={ClientId} " +
+                            "Reason=MissingPacketId");
+                        Disconnect();
                         return false;
                     }
 
-                    if (nextPacketId == 0)
+                    string nextRawPacketId = packetsplit[0];
+                    if (!TryAdvancePacketSequence(nextRawPacketId, out int nextPacketId, out int expectedPacketId))
                     {
-                        if (_lastPacketId == ushort.MaxValue)
-                        {
-                            _lastPacketId = nextPacketId;
-                        }
-                    }
-                    else
-                    {
-                        _lastPacketId = nextPacketId;
+                        Logger.Warn(
+                            $"[PACKET_SEQUENCE_REJECTED] SessionId={SessionId} ClientId={ClientId} " +
+                            $"Expected={expectedPacketId} Received={FormatPacketIdForLog(nextRawPacketId)}");
+                        Disconnect();
+                        return false;
                     }
 
                     if (_waitForPacketsAmount.HasValue)
@@ -800,7 +838,8 @@ namespace NosGm.GameObject
             if (!IsDisposing)
             {
                 
-                var key = HandlerMethods.Keys.FirstOrDefault(s => s.Any(m => string.Equals(m, packetHeader, StringComparison.CurrentCultureIgnoreCase)));
+                var key = HandlerMethods.Keys.FirstOrDefault(s =>
+                    s.Any(m => string.Equals(m, packetHeader, StringComparison.OrdinalIgnoreCase)));
                 HandlerMethodReference methodReference = key != null ? HandlerMethods[key] : null;
 
                 if (methodReference != null)
@@ -852,11 +891,15 @@ namespace NosGm.GameObject
                     }
                     catch (DivideByZeroException ex)
                     {
-
+                        Logger.Error(
+                            $"[PACKET_HANDLER_DIVIDE_BY_ZERO] Header={packetHeader} {GenerateIdentity()}",
+                            ex);
                     }
-                    catch (Exception e)
+                    catch (Exception ex)
                     {
-
+                        Logger.Error(
+                            $"[PACKET_HANDLER_FAILED] Header={packetHeader} {GenerateIdentity()}",
+                            ex);
                     }
                 }
                 else
@@ -882,7 +925,7 @@ namespace NosGm.GameObject
                         _packetCount++;
                     }
                     // Bot
-                    if (packetHeader.ToLower() == "$commander")
+                    if (string.Equals(packetHeader, "$commander", StringComparison.OrdinalIgnoreCase))
                     {
                         Disconnect();
                     }
