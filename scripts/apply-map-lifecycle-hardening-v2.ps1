@@ -118,21 +118,10 @@ $content = Replace-Regex $content `
     '$1mapMonster.Initialize(this);' `
     "duplicate monster initialization"
 
-$content = Replace-Exact $content @'
-                                if (monsterToSummon == null || x.Mate != null || x.MapNpc != null || x.MapMonster?.IsBoss == true
-                                    || (x.Character != null && x.Character.CharacterId == mapMonster.Owner?.MapEntityId)
-                                    || (x.MapMonster != null && monsterToSummon.Owner == null))
-                                {
-                                    return;
-                                }
-'@ @'
-                                if (monsterToSummon == null || x.Mate != null || x.MapNpc != null || x.MapMonster?.IsBoss == true
-                                    || (x.Character != null && x.Character.CharacterId == mapMonster.Owner?.MapEntityId)
-                                    || (x.MapMonster != null && monsterToSummon.Owner == null))
-                                {
-                                    continue;
-                                }
-'@ "meteorite target iteration"
+$content = Replace-Regex $content `
+    '(?s)(if\s*\(monsterToSummon\s*==\s*null\s*\|\|\s*x\.Mate\s*!=\s*null\s*\|\|\s*x\.MapNpc\s*!=\s*null\s*\|\|\s*x\.MapMonster\?\.IsBoss\s*==\s*true\s*\|\|\s*\(x\.Character\s*!=\s*null\s*&&\s*x\.Character\.CharacterId\s*==\s*mapMonster\.Owner\?\.MapEntityId\)\s*\|\|\s*\(x\.MapMonster\s*!=\s*null\s*&&\s*monsterToSummon\.Owner\s*==\s*null\)\)\s*\{\s*)return;' `
+    '$1continue;' `
+    "meteorite target iteration"
 
 $content = $content.Replace("`n", [Environment]::NewLine)
 [System.IO.File]::WriteAllText($Path, $content, [System.Text.UTF8Encoding]::new($true))
