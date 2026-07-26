@@ -1,0 +1,246 @@
+{
+  "schemaVersion": 1,
+  "defaults": {
+    "packetValid": true,
+    "accountFound": true,
+    "exactAccountCase": true,
+    "maintenanceMode": false,
+    "authority": "user",
+    "passwordAccepted": true,
+    "versionRequired": true,
+    "serverVersionConfigured": true,
+    "clientVersionAccepted": true,
+    "ipPenalized": false,
+    "staleSessionPersists": false,
+    "accountConnectedRace": false,
+    "hasSelectedCharacter": false,
+    "activeBan": false,
+    "registrationSucceeds": true,
+    "worldListAvailable": true
+  },
+  "cases": [
+    {
+      "id": "success_current_client",
+      "override": {},
+      "expected": {
+        "result": "server_list",
+        "failType": null,
+        "registersMaster": true,
+        "disconnectsMaster": false,
+        "sendsWorldList": true,
+        "disposesPolling": true
+      }
+    },
+    {
+      "id": "maintenance_gm_bypass",
+      "override": {
+        "maintenanceMode": true,
+        "authority": "gm"
+      },
+      "expected": {
+        "result": "server_list",
+        "failType": null,
+        "registersMaster": true,
+        "disconnectsMaster": false,
+        "sendsWorldList": true,
+        "disposesPolling": true
+      }
+    },
+    {
+      "id": "malformed_packet",
+      "override": {
+        "packetValid": false
+      },
+      "expected": {
+        "result": "silent_drop",
+        "failType": null,
+        "registersMaster": false,
+        "disconnectsMaster": false,
+        "sendsWorldList": false,
+        "disposesPolling": true
+      }
+    },
+    {
+      "id": "unknown_account",
+      "override": {
+        "accountFound": false
+      },
+      "expected": {
+        "result": "reject",
+        "failType": "AccountOrPasswordWrong",
+        "registersMaster": false,
+        "disconnectsMaster": false,
+        "sendsWorldList": false,
+        "disposesPolling": true
+      }
+    },
+    {
+      "id": "wrong_account_casing",
+      "override": {
+        "exactAccountCase": false
+      },
+      "expected": {
+        "result": "reject",
+        "failType": "WrongCaps",
+        "registersMaster": false,
+        "disconnectsMaster": false,
+        "sendsWorldList": false,
+        "disposesPolling": true
+      }
+    },
+    {
+      "id": "maintenance_user",
+      "override": {
+        "maintenanceMode": true
+      },
+      "expected": {
+        "result": "reject",
+        "failType": "Maintenance",
+        "registersMaster": false,
+        "disconnectsMaster": false,
+        "sendsWorldList": false,
+        "disposesPolling": true
+      }
+    },
+    {
+      "id": "wrong_credentials",
+      "override": {
+        "passwordAccepted": false
+      },
+      "expected": {
+        "result": "reject",
+        "failType": "AccountOrPasswordWrong",
+        "registersMaster": false,
+        "disconnectsMaster": false,
+        "sendsWorldList": false,
+        "disposesPolling": true
+      }
+    },
+    {
+      "id": "invalid_server_version_configuration",
+      "override": {
+        "serverVersionConfigured": false
+      },
+      "expected": {
+        "result": "reject",
+        "failType": "CantConnect",
+        "registersMaster": false,
+        "disconnectsMaster": false,
+        "sendsWorldList": false,
+        "disposesPolling": true
+      }
+    },
+    {
+      "id": "unsupported_client_version",
+      "override": {
+        "clientVersionAccepted": false
+      },
+      "expected": {
+        "result": "reject",
+        "failType": "OldClient",
+        "registersMaster": false,
+        "disconnectsMaster": false,
+        "sendsWorldList": false,
+        "disposesPolling": true
+      }
+    },
+    {
+      "id": "ip_penalty",
+      "override": {
+        "ipPenalized": true
+      },
+      "expected": {
+        "result": "reject",
+        "failType": "CantConnect",
+        "registersMaster": false,
+        "disconnectsMaster": false,
+        "sendsWorldList": false,
+        "disposesPolling": true
+      }
+    },
+    {
+      "id": "stale_session_timeout",
+      "override": {
+        "staleSessionPersists": true
+      },
+      "expected": {
+        "result": "reject",
+        "failType": "AlreadyConnected",
+        "registersMaster": false,
+        "disconnectsMaster": false,
+        "sendsWorldList": false,
+        "disposesPolling": true
+      }
+    },
+    {
+      "id": "connected_session_race",
+      "override": {
+        "accountConnectedRace": true
+      },
+      "expected": {
+        "result": "reject",
+        "failType": "AlreadyConnected",
+        "registersMaster": false,
+        "disconnectsMaster": true,
+        "sendsWorldList": false,
+        "disposesPolling": true
+      }
+    },
+    {
+      "id": "active_account_ban",
+      "override": {
+        "activeBan": true
+      },
+      "expected": {
+        "result": "reject",
+        "failType": "Banned",
+        "registersMaster": false,
+        "disconnectsMaster": false,
+        "sendsWorldList": false,
+        "disposesPolling": true
+      }
+    },
+    {
+      "id": "banned_authority",
+      "override": {
+        "authority": "banned"
+      },
+      "expected": {
+        "result": "reject",
+        "failType": "Banned",
+        "registersMaster": false,
+        "disconnectsMaster": false,
+        "sendsWorldList": false,
+        "disposesPolling": true
+      }
+    },
+    {
+      "id": "master_registration_failure",
+      "override": {
+        "registrationSucceeds": false
+      },
+      "expected": {
+        "result": "reject",
+        "failType": "CantConnect",
+        "registersMaster": false,
+        "disconnectsMaster": false,
+        "sendsWorldList": false,
+        "disposesPolling": true
+      }
+    },
+    {
+      "id": "world_list_unavailable",
+      "override": {
+        "worldListAvailable": false
+      },
+      "expected": {
+        "result": "reject",
+        "failType": "CantConnect",
+        "registersMaster": true,
+        "disconnectsMaster": true,
+        "sendsWorldList": false,
+        "disposesPolling": true
+      }
+    }
+  ]
+}
