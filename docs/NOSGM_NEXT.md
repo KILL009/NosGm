@@ -31,10 +31,11 @@ Required work:
 - [x] Reject oversized raw network messages before integer narrowing or unbounded buffering.
 - [x] Dispose replaced wire-protocol buffers and validate unsupported outbound message types.
 - [ ] Add a versioned password-hash migration using a per-account salt and a supported adaptive KDF.
-- [ ] Correct packet sequence validation and add diagnostic context.
-- [ ] Remove duplicate monster initialization.
-- [ ] Replace swallowed map and drop exceptions with bounded diagnostics.
-- [ ] Verify that World Release runs as a 64-bit process.
+- [x] Correct packet sequence validation and add diagnostic context.
+- [x] Remove duplicate monster initialization.
+- [x] Replace swallowed map and drop exceptions with bounded diagnostics.
+- [x] Verify that World Release runs as a 64-bit process.
+- [x] Own and dispose the `MapInstance` life subscription deterministically.
 
 ## Phase 1: regression harness
 
