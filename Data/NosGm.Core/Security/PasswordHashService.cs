@@ -77,6 +77,51 @@ namespace NosGm.Core
             return matches;
         }
 
+        public static bool VerifyLoginPayload(
+            string storedPassword,
+            string packetPassword,
+            bool useOldCrypto,
+            out string clearPassword,
+            out bool needsUpgrade)
+        {
+            clearPassword = null;
+            needsUpgrade = false;
+            if (storedPassword == null || string.IsNullOrWhiteSpace(packetPassword) ||
+                packetPassword.Length > MaximumCredentialLength)
+            {
+                return false;
+            }
+
+            if (!useOldCrypto)
+            {
+                return TryVerifyCandidate(
+                    storedPassword,
+                    packetPassword,
+                    false,
+                    out clearPassword,
+                    out needsUpgrade);
+            }
+
+            if (LooksLikeLegacyPasswordPayload(packetPassword) &&
+                TryDecodeLegacyPassword(packetPassword, out string decodedPassword) &&
+                TryVerifyCandidate(
+                    storedPassword,
+                    decodedPassword,
+                    true,
+                    out clearPassword,
+                    out needsUpgrade))
+            {
+                return true;
+            }
+
+            return TryVerifyCandidate(
+                storedPassword,
+                packetPassword,
+                true,
+                out clearPassword,
+                out needsUpgrade);
+        }
+
         private static string ComputeSha512Hex(string clearPassword)
         {
             using (SHA512 hash = SHA512.Create())
@@ -126,6 +171,84 @@ namespace NosGm.Core
         private static bool IsCredentialValid(string clearPassword)
         {
             return clearPassword != null && clearPassword.Length <= MaximumCredentialLength;
+        }
+
+        private static bool IsHexDigit(char value)
+        {
+            return value >= '0' && value <= '9' ||
+                   value >= 'a' && value <= 'f' ||
+                   value >= 'A' && value <= 'F';
+        }
+
+        private static bool LooksLikeLegacyPasswordPayload(string packetPassword)
+        {
+            if (string.IsNullOrEmpty(packetPassword))
+            {
+                return false;
+            }
+
+            int startIndex = packetPassword.Length % 2 == 0 ? 3 : 4;
+            int selectedCount = CountSelectedCharacters(packetPassword.Length, startIndex);
+            if (selectedCount % 2 != 0)
+            {
+                startIndex = 2;
+                selectedCount = CountSelectedCharacters(packetPassword.Length, startIndex);
+            }
+
+            if (selectedCount == 0 || selectedCount % 2 != 0)
+            {
+                return false;
+            }
+
+            for (int i = startIndex; i < packetPassword.Length; i += 2)
+            {
+                if (!IsHexDigit(packetPassword[i]))
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        private static int CountSelectedCharacters(int length, int startIndex)
+        {
+            return startIndex >= length ? 0 : (length - startIndex + 1) / 2;
+        }
+
+        private static bool TryDecodeLegacyPassword(string packetPassword, out string clearPassword)
+        {
+            clearPassword = null;
+            try
+            {
+                clearPassword = LoginCryptography.GetPassword(packetPassword);
+                return !string.IsNullOrEmpty(clearPassword) &&
+                       clearPassword.Length <= MaximumCredentialLength;
+            }
+            catch (Exception)
+            {
+                return false;
+            }
+        }
+
+        private static bool TryVerifyCandidate(
+            string storedPassword,
+            string candidate,
+            bool legacyUsesSha512,
+            out string clearPassword,
+            out bool needsUpgrade)
+        {
+            clearPassword = null;
+            needsUpgrade = false;
+            if (string.IsNullOrEmpty(candidate) || candidate.Length > MaximumCredentialLength ||
+                !VerifyPassword(storedPassword, candidate, legacyUsesSha512, out bool candidateNeedsUpgrade))
+            {
+                return false;
+            }
+
+            clearPassword = candidate;
+            needsUpgrade = candidateNeedsUpgrade;
+            return true;
         }
 
         private static bool VerifyVersionedHash(

@@ -11,6 +11,20 @@ if (-not (Test-Path -LiteralPath $AssemblyPath)) {
 
 [Reflection.Assembly]::LoadFrom((Resolve-Path -LiteralPath $AssemblyPath).Path) | Out-Null
 
+function Get-Sha512Hex {
+    param([string]$Value)
+
+    $sha512 = [System.Security.Cryptography.SHA512]::Create()
+    try {
+        $bytes = $sha512.ComputeHash([Text.Encoding]::UTF8.GetBytes($Value))
+    }
+    finally {
+        $sha512.Dispose()
+    }
+
+    return -join ($bytes | ForEach-Object { $_.ToString("x2") })
+}
+
 $password = "NosGM-Passw0rd-2026"
 $firstHash = $null
 $secondHash = $null
@@ -50,18 +64,50 @@ if ([NosGm.Core.PasswordHashService]::VerifyPassword("nosgm`$broken", $password,
     throw "A malformed versioned hash verified successfully."
 }
 
-$sha512 = [System.Security.Cryptography.SHA512]::Create()
-try {
-    $legacyBytes = $sha512.ComputeHash([Text.Encoding]::UTF8.GetBytes($password))
-}
-finally {
-    $sha512.Dispose()
-}
-$legacySha512 = -join ($legacyBytes | ForEach-Object { $_.ToString("x2") })
-
+$legacySha512 = Get-Sha512Hex $password
 $needsUpgrade = $false
 if (-not [NosGm.Core.PasswordHashService]::VerifyPassword($legacySha512, $password, $true, [ref]$needsUpgrade) -or -not $needsUpgrade) {
     throw "A valid legacy SHA-512 password was not accepted for migration."
+}
+
+$resolvedPassword = $null
+$needsUpgrade = $false
+if (-not [NosGm.Core.PasswordHashService]::VerifyLoginPayload(
+        $legacySha512,
+        $password,
+        $true,
+        [ref]$resolvedPassword,
+        [ref]$needsUpgrade) -or
+    $resolvedPassword -ne $password -or
+    -not $needsUpgrade) {
+    throw "A plain current-client password payload was not accepted with UseOldCrypto enabled."
+}
+
+$hexPassword = "abcdef"
+$hexLegacySha512 = Get-Sha512Hex $hexPassword
+$resolvedPassword = $null
+$needsUpgrade = $false
+if (-not [NosGm.Core.PasswordHashService]::VerifyLoginPayload(
+        $hexLegacySha512,
+        $hexPassword,
+        $true,
+        [ref]$resolvedPassword,
+        [ref]$needsUpgrade) -or
+    $resolvedPassword -ne $hexPassword) {
+    throw "A plain hexadecimal password was mistaken for a legacy encoded payload."
+}
+
+$resolvedPassword = $null
+$needsUpgrade = $false
+if (-not [NosGm.Core.PasswordHashService]::VerifyLoginPayload(
+        $firstHash,
+        $password,
+        $true,
+        [ref]$resolvedPassword,
+        [ref]$needsUpgrade) -or
+    $resolvedPassword -ne $password -or
+    $needsUpgrade) {
+    throw "A versioned hash did not accept a plain payload with UseOldCrypto enabled."
 }
 
 $legacyIterations = 10000
@@ -94,4 +140,4 @@ if (-not [NosGm.Core.PasswordHashService]::VerifyPassword($legacyVersionedHash, 
     throw "A valid lower-cost hash was not marked for upgrade."
 }
 
-Write-Host "Password hashing verified against the built NosGm.Core assembly."
+Write-Host "Password hashing and login payload compatibility verified against the built NosGm.Core assembly."
