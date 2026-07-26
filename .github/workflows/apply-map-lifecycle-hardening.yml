@@ -25,8 +25,9 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
+          Remove-Item -LiteralPath map-codemod-error.txt -ErrorAction SilentlyContinue
           try {
-            ./scripts/apply-map-lifecycle-hardening.ps1
+            ./scripts/apply-map-lifecycle-hardening-v2.ps1
           }
           catch {
             $_ | Out-String | Set-Content -LiteralPath map-codemod-error.txt -Encoding UTF8
