@@ -52,6 +52,29 @@ namespace NosGm.Handler.BasicPacket.Login
             return null;
         }
 
+        private static bool IsHexCredential(string value)
+        {
+            if (string.IsNullOrEmpty(value))
+            {
+                return false;
+            }
+
+            foreach (char character in value)
+            {
+                bool isHex =
+                    character >= '0' && character <= '9' ||
+                    character >= 'a' && character <= 'f' ||
+                    character >= 'A' && character <= 'F';
+
+                if (!isHex)
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
         public async Task VerifyLoginAsync(LoginPacket loginPacket)
         {
             if (loginPacket == null || string.IsNullOrWhiteSpace(loginPacket.Name) || string.IsNullOrWhiteSpace(loginPacket.Password))
@@ -59,7 +82,6 @@ namespace NosGm.Handler.BasicPacket.Login
                 DisposeLoginPolling();
                 return;
             }
-
 
             string username = loginPacket.Name;
             AccountDTO loadedAccount = DAOFactory.AccountDAO.LoadByName(username);
@@ -81,10 +103,23 @@ namespace NosGm.Handler.BasicPacket.Login
                 return;
             }
 
+            string packetCredential = loginPacket.Password ?? string.Empty;
+            string storedCredential = loadedAccount.Password ?? string.Empty;
+
+            Logger.Info(
+                $"Login credential shape | AccountId={loadedAccount.AccountId} " +
+                $"UseOldCrypto={ServerConfiguration.UseOldCrypto} " +
+                $"PacketLength={packetCredential.Length} " +
+                $"PacketIsHex={IsHexCredential(packetCredential)} " +
+                $"StoredLength={storedCredential.Length} " +
+                $"StoredIsHex={IsHexCredential(storedCredential)} " +
+                $"StoredIsVersioned={PasswordHashService.IsVersionedHash(storedCredential)}");
+
             if (!PasswordHashService.VerifyLoginPayload(
                     loadedAccount.Password,
                     loginPacket.Password,
                     ServerConfiguration.UseOldCrypto,
+                    ServerConfiguration.LoginUsesPrehashedSha512,
                     out string clearPassword,
                     out bool passwordNeedsUpgrade))
             {
@@ -247,7 +282,6 @@ namespace NosGm.Handler.BasicPacket.Login
 
             return value;
         }
-
 
         private static void UpgradePasswordHash(AccountDTO account, string clearPassword)
         {

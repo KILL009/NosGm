@@ -82,6 +82,7 @@ namespace NosGm.Core
             string storedPassword,
             string packetPassword,
             bool useOldCrypto,
+            bool loginUsesPrehashedSha512,
             out string clearPassword,
             out bool needsUpgrade)
         {
@@ -93,39 +94,40 @@ namespace NosGm.Core
                 return false;
             }
 
-            // Current clients can send the SHA-512 credential directly. In that path the
-            // server does not know the original password, so it must not attempt PBKDF2 migration.
-            if (TryVerifyPrehashedSha512(storedPassword, packetPassword))
+            if (useOldCrypto)
             {
-                return true;
-            }
+                if (LooksLikeLegacyPasswordPayload(packetPassword) &&
+                    TryDecodeLegacyPassword(packetPassword, out string decodedPassword) &&
+                    TryVerifyCandidate(
+                        storedPassword,
+                        decodedPassword,
+                        true,
+                        out clearPassword,
+                        out needsUpgrade))
+                {
+                    return true;
+                }
 
-            if (!useOldCrypto)
-            {
                 return TryVerifyCandidate(
                     storedPassword,
                     packetPassword,
-                    false,
+                    true,
                     out clearPassword,
                     out needsUpgrade);
             }
 
-            if (LooksLikeLegacyPasswordPayload(packetPassword) &&
-                TryDecodeLegacyPassword(packetPassword, out string decodedPassword) &&
-                TryVerifyCandidate(
-                    storedPassword,
-                    decodedPassword,
-                    true,
-                    out clearPassword,
-                    out needsUpgrade))
+            // The prehashed route is enabled only by explicit deployment configuration.
+            // It is never available to the legacy decoder path, where a stored digest must
+            // not become a reusable login credential.
+            if (loginUsesPrehashedSha512)
             {
-                return true;
+                return TryVerifyPrehashedSha512(storedPassword, packetPassword);
             }
 
             return TryVerifyCandidate(
                 storedPassword,
                 packetPassword,
-                true,
+                false,
                 out clearPassword,
                 out needsUpgrade);
         }

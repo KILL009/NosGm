@@ -102,6 +102,7 @@ if (-not [NosGm.Core.PasswordHashService]::VerifyLoginPayload(
         $legacySha512,
         $password,
         $true,
+        $false,
         [ref]$resolvedPassword,
         [ref]$needsUpgrade) -or
     $resolvedPassword -ne $password -or
@@ -117,6 +118,7 @@ if (-not [NosGm.Core.PasswordHashService]::VerifyLoginPayload(
         $hexLegacySha512,
         $hexPassword,
         $true,
+        $false,
         [ref]$resolvedPassword,
         [ref]$needsUpgrade) -or
     $resolvedPassword -ne $hexPassword) {
@@ -129,6 +131,7 @@ if (-not [NosGm.Core.PasswordHashService]::VerifyLoginPayload(
         $firstHash,
         $password,
         $true,
+        $false,
         [ref]$resolvedPassword,
         [ref]$needsUpgrade) -or
     $resolvedPassword -ne $password -or
@@ -177,4 +180,4 @@ if (-not [NosGm.Core.PasswordHashService]::VerifyPassword($legacyVersionedHash, 
     throw "A valid lower-cost hash was not marked for upgrade."
 }
 
-Write-Host "Password hashing and login payload compatibility verified against the built NosGm.Core assembly."
+Write-Host "Password hashing and explicit login credential modes verified against the built NosGm.Core assembly."
