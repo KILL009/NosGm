@@ -66,7 +66,7 @@ if (-not [NosGm.Core.PasswordHashService]::VerifyPassword($legacySha512, $passwo
 
 $legacyIterations = 10000
 $salt = [byte[]](0..15)
-$derive = New-Object System.Security.Cryptography.Rfc2898DeriveBytes(
+$derive = [System.Security.Cryptography.Rfc2898DeriveBytes]::new(
     $password,
     $salt,
     $legacyIterations,
