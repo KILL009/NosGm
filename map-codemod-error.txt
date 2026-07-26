@@ -1,7 +1,0 @@
-Exception: D:\a\NosGm\NosGm\scripts\apply-map-lifecycle-hardening-v2.ps1:21
-Line |
-  21 |          throw "Unexpected match count for ${Description}: expected $E …
-     |          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-     | Unexpected match count for swallowed map exceptions: expected 3, found 0
-
-
