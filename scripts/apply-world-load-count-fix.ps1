@@ -37,29 +37,25 @@ function Replace-ExactOnce {
     Write-Host "Applied: $Description"
 }
 
-Replace-ExactOnce \
-    "Data/NosGm.Program/NosGm.Master.Server/CommunicationService.cs" \
-    @'
+$sourceOld = @'
                 var currentlyConnectedAccounts =
                     MSManager.Instance.ConnectedAccounts.CountLinq(a => a.ConnectedWorld?.ChannelId == world.ChannelId);
-'@ \
-    @'
+'@
+$sourceNew = @'
                 var currentlyConnectedAccounts =
                     MSManager.Instance.ConnectedAccounts.CountLinq(a => a.ConnectedWorld?.Id == world.Id);
-'@ \
-    "count channel load by exact World ID"
+'@
+Replace-ExactOnce "Data/NosGm.Program/NosGm.Master.Server/CommunicationService.cs" $sourceOld $sourceNew "count channel load by exact World ID"
 
-Replace-ExactOnce \
-    "scripts/verify-world-channel-lists.ps1" \
-    @'
+$verifierOld = @'
 Assert-Contains $masterSource 'foreach (var world in visibleWorlds)' "Master must build the packet from the deterministic visible-world snapshot"
 Assert-Contains $masterSource 'channelPacket += "-1:-1:-1:10000.10000.1";' "Master must retain the terminal world-list sentinel"
-'@ \
-    @'
+'@
+$verifierNew = @'
 Assert-Contains $masterSource 'foreach (var world in visibleWorlds)' "Master must build the packet from the deterministic visible-world snapshot"
 Assert-Contains $masterSource 'a.ConnectedWorld?.Id == world.Id' "Channel load must count sessions for the exact World instead of every group sharing the same ChannelId"
 Assert-Contains $masterSource 'channelPacket += "-1:-1:-1:10000.10000.1";' "Master must retain the terminal world-list sentinel"
-'@ \
-    "guard exact World load accounting"
+'@
+Replace-ExactOnce "scripts/verify-world-channel-lists.ps1" $verifierOld $verifierNew "guard exact World load accounting"
 
 Write-Host "World load accounting fix applied successfully."
