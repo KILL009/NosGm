@@ -168,14 +168,6 @@ $testPath = "scripts/verify-password-hashing.ps1"
 $testContent = Get-Content -LiteralPath $testPath -Raw
 $testNewLine = if ($testContent.Contains("`r`n")) { "`r`n" } else { "`n" }
 
-$modernOld = "        `$false,$testNewLine        [ref]`$resolvedPassword,"
-$modernNew = "        `$false,$testNewLine        `$true,$testNewLine        [ref]`$resolvedPassword,"
-$modernCount = ([regex]::Matches($testContent, [regex]::Escape($modernOld))).Count
-if ($modernCount -ne 3) {
-    throw "Expected three modern credential test invocations, found $modernCount."
-}
-$testContent = $testContent.Replace($modernOld, $modernNew)
-
 $legacyOld = "        `$true,$testNewLine        [ref]`$resolvedPassword,"
 $legacyNew = "        `$true,$testNewLine        `$false,$testNewLine        [ref]`$resolvedPassword,"
 $legacyCount = ([regex]::Matches($testContent, [regex]::Escape($legacyOld))).Count
@@ -183,6 +175,14 @@ if ($legacyCount -ne 3) {
     throw "Expected three legacy credential test invocations, found $legacyCount."
 }
 $testContent = $testContent.Replace($legacyOld, $legacyNew)
+
+$modernOld = "        `$false,$testNewLine        [ref]`$resolvedPassword,"
+$modernNew = "        `$false,$testNewLine        `$true,$testNewLine        [ref]`$resolvedPassword,"
+$modernCount = ([regex]::Matches($testContent, [regex]::Escape($modernOld))).Count
+if ($modernCount -ne 3) {
+    throw "Expected three modern credential test invocations, found $modernCount."
+}
+$testContent = $testContent.Replace($modernOld, $modernNew)
 
 $testContent = Replace-ExactOnce $testContent @'
 $resolvedPassword = $null
