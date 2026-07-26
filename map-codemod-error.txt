@@ -1,0 +1,7 @@
+Exception: D:\a\NosGm\NosGm\scripts\apply-map-lifecycle-hardening.ps1:16
+Line |
+  16 |          throw "Required source block was not found: $Description"
+     |          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Required source block was not found: map diagnostic state
+
+
