@@ -10,6 +10,7 @@ if (-not (Test-Path -LiteralPath $MapInstancePath)) {
 
 $content = Get-Content -LiteralPath $MapInstancePath -Raw
 $original = $content
+$newLine = if ($content.Contains("`r`n")) { "`r`n" } else { "`n" }
 
 function Replace-LiteralOnce {
     param(
@@ -37,6 +38,45 @@ function Replace-LiteralOnce {
     return $Text.Substring(0, $first) + $NewValue + $Text.Substring($first + $OldValue.Length)
 }
 
+function Replace-SectionLiteralOnce {
+    param(
+        [string]$Text,
+        [string]$SectionStart,
+        [string]$SectionEnd,
+        [string]$OldValue,
+        [string]$NewValue,
+        [string]$Description,
+        [string]$AppliedMarker
+    )
+
+    if ($Text.Contains($AppliedMarker)) {
+        return $Text
+    }
+
+    $start = $Text.IndexOf($SectionStart, [StringComparison]::Ordinal)
+    if ($start -lt 0) {
+        throw "Unable to find section start for: $Description"
+    }
+
+    $end = $Text.IndexOf($SectionEnd, $start + $SectionStart.Length, [StringComparison]::Ordinal)
+    if ($end -lt 0) {
+        throw "Unable to find section end for: $Description"
+    }
+
+    $section = $Text.Substring($start, $end - $start)
+    $match = $section.IndexOf($OldValue, [StringComparison]::Ordinal)
+    if ($match -lt 0) {
+        throw "Unable to find expected source inside section for: $Description"
+    }
+
+    if ($section.IndexOf($OldValue, $match + $OldValue.Length, [StringComparison]::Ordinal) -ge 0) {
+        throw "Expected exactly one source match inside section for: $Description"
+    }
+
+    $updatedSection = $section.Substring(0, $match) + $NewValue + $section.Substring($match + $OldValue.Length)
+    return $Text.Substring(0, $start) + $updatedSection + $Text.Substring($end)
+}
+
 function Replace-RegexOnce {
     param(
         [string]$Text,
@@ -61,8 +101,6 @@ function Replace-RegexOnce {
         [Text.RegularExpressions.MatchEvaluator]{ param($match) $Replacement },
         [Text.RegularExpressions.RegexOptions]::Singleline)
 }
-
-$newLine = if ($content.Contains("`r`n")) { "`r`n" } else { "`n" }
 
 $memberMarker = "        public ConcurrentBag<MapDesignObject> MapDesignObjects = new ConcurrentBag<MapDesignObject>();"
 $memberReplacement = @(
@@ -93,7 +131,7 @@ $newStopLife = @(
 $content = Replace-LiteralOnce $content $oldStopLife $newStopLife `
     "disposable map life shutdown" "IDisposable mapLifeDisposable = _mapLifeDisposable;"
 
-$oldDropCatch = @(
+$oldCatch = @(
     "            catch (Exception e)",
     "            {",
     "                //LOGGERServerLog($\"{e.ToString()}\", LogType.ServerError);",
@@ -108,7 +146,10 @@ $newDropCatch = @(
     "                    $\"ItemVNum={drop?.ItemVNum ?? 0} Owner={owner ?? -1} X={mapX} Y={mapY}\");",
     "            }"
 ) -join $newLine
-$content = Replace-LiteralOnce $content $oldDropCatch $newDropCatch `
+$content = Replace-SectionLiteralOnce $content `
+    "        public void DropItemByMonster" `
+    "        public void DropItems" `
+    $oldCatch $newDropCatch `
     "monster drop diagnostics" "\"DropItemByMonster\","
 
 $oldMonsterLoad = @(
@@ -134,19 +175,16 @@ $newMonsterLoad = @(
 $content = Replace-LiteralOnce $content $oldMonsterLoad $newMonsterLoad `
     "single monster initialization" "var mapMonster = new MapMonster(monster);"
 
-$oldRemoveCatch = @(
-    "            catch (Exception e)",
-    "            {",
-    "                //LOGGERServerLog($\"{e.ToString()}\", LogType.ServerError);",
-    "            }"
-) -join $newLine
 $newRemoveCatch = @(
     "            catch (Exception e)",
     "            {",
     "                LogMapOperationFailure(\"RemoveMapItem\", e, $\"DropCount={DroppedList.Count}\");",
     "            }"
 ) -join $newLine
-$content = Replace-LiteralOnce $content $oldRemoveCatch $newRemoveCatch `
+$content = Replace-SectionLiteralOnce $content `
+    "        public void RemoveMapItem" `
+    "        public void RemoveMonster" `
+    $oldCatch $newRemoveCatch `
     "expired drop cleanup diagnostics" "LogMapOperationFailure(\"RemoveMapItem\""
 
 $helperMarker = "        internal void CreatePortal(Portal portal)"
@@ -253,6 +291,20 @@ $newStartLife = @(
 $content = Replace-RegexOnce $content $startLifePattern $newStartLife `
     "owned and observable map life subscription" "_mapLifeDisposable = Observable.Interval"
 
+$oldDisposeStart = @(
+    "            if (disposing)",
+    "            {",
+    "                _npcs.Dispose();"
+) -join $newLine
+$newDisposeStart = @(
+    "            if (disposing)",
+    "            {",
+    "                StopLife();",
+    "                _npcs.Dispose();"
+) -join $newLine
+$content = Replace-LiteralOnce $content $oldDisposeStart $newDisposeStart `
+    "map life disposal" "                StopLife();$newLine                _npcs.Dispose();"
+
 $oldMeteoriteGuard = @(
     "                                if (monsterToSummon == null || x.Mate != null || x.MapNpc != null || x.MapMonster?.IsBoss == true",
     "                                    || (x.Character != null && x.Character.CharacterId == mapMonster.Owner?.MapEntityId)",
@@ -266,11 +318,12 @@ $newMeteoriteGuard = @(
     "                                    || (x.Character != null && x.Character.CharacterId == mapMonster.Owner?.MapEntityId)",
     "                                    || (x.MapMonster != null && monsterToSummon.Owner == null))",
     "                                {",
+    "                                    // Skip only this target; keep processing the rest of the area.",
     "                                    continue;",
     "                                }"
 ) -join $newLine
 $content = Replace-LiteralOnce $content $oldMeteoriteGuard $newMeteoriteGuard `
-    "meteorite target continuation" "                                    continue;"
+    "meteorite target continuation" "Skip only this target; keep processing the rest of the area."
 
 if ($content -eq $original) {
     Write-Host "Map stability codemod is already applied."
