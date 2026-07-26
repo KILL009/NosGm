@@ -4,12 +4,15 @@ on:
   push:
     branches:
       - agent/nosgm-next-map-stability
+  pull_request:
+    branches:
+      - main
 
 permissions:
   contents: write
 
 concurrency:
-  group: one-time-map-stability-${{ github.ref }}
+  group: one-time-map-stability-${{ github.event.pull_request.head.ref || github.ref }}
   cancel-in-progress: false
 
 jobs:
@@ -18,10 +21,10 @@ jobs:
     timeout-minutes: 10
 
     steps:
-      - name: Check out branch
+      - name: Check out source branch
         uses: actions/checkout@v6
         with:
-          ref: ${{ github.ref_name }}
+          ref: ${{ github.head_ref || github.ref_name }}
           fetch-depth: 0
 
       - name: Apply verified map transformation
@@ -31,6 +34,7 @@ jobs:
       - name: Commit transformed source when needed
         shell: pwsh
         run: |
+          $branch = if ($env:GITHUB_HEAD_REF) { $env:GITHUB_HEAD_REF } else { $env:GITHUB_REF_NAME }
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add Data/NosGm.GameObject/Map/MapInstance.cs
@@ -39,4 +43,4 @@ jobs:
             exit 0
           }
           git commit -m "fix: stabilize map lifecycle and diagnostics"
-          git push origin HEAD:${{ github.ref_name }}
+          git push origin HEAD:$branch
