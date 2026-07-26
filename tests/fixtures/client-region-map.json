@@ -1,0 +1,45 @@
+{
+  "schemaVersion": 1,
+  "clientRegions": [
+    {
+      "code": "en",
+      "regionType": 0
+    },
+    {
+      "code": "de",
+      "regionType": 1
+    },
+    {
+      "code": "fr",
+      "regionType": 2
+    },
+    {
+      "code": "it",
+      "regionType": 3
+    },
+    {
+      "code": "pl",
+      "regionType": 4
+    },
+    {
+      "code": "es",
+      "regionType": 5
+    },
+    {
+      "code": "cs",
+      "regionType": 6
+    },
+    {
+      "code": "ru",
+      "regionType": 7
+    },
+    {
+      "code": "ja",
+      "regionType": 8
+    },
+    {
+      "code": "zh",
+      "regionType": 9
+    }
+  ]
+}
