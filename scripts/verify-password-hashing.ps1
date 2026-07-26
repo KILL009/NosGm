@@ -1,16 +1,17 @@
 param(
-    [string]$PasswordHashServicePath = "Data/NosGm.Core/Security/PasswordHashService.cs"
+    [string]$AssemblyPath = "Data/NosGm.Core/bin/Release/NosGm.Core.dll"
 )
 
 $ErrorActionPreference = "Stop"
+Set-StrictMode -Version Latest
 
-if (-not (Test-Path -LiteralPath $PasswordHashServicePath)) {
-    throw "Password hashing source not found: $PasswordHashServicePath"
+if (-not (Test-Path -LiteralPath $AssemblyPath)) {
+    throw "Built NosGm.Core assembly not found: $AssemblyPath"
 }
 
-Add-Type -Path $PasswordHashServicePath
+[Reflection.Assembly]::LoadFrom((Resolve-Path -LiteralPath $AssemblyPath).Path) | Out-Null
 
-$password = "NosGM-Passw0rd-ñ-测试"
+$password = "NosGM-Passw0rd-2026"
 $firstHash = $null
 $secondHash = $null
 
@@ -65,7 +66,7 @@ if (-not [NosGm.Core.PasswordHashService]::VerifyPassword($legacySha512, $passwo
 
 $legacyIterations = 10000
 $salt = [byte[]](0..15)
-$derive = [System.Security.Cryptography.Rfc2898DeriveBytes]::new(
+$derive = New-Object System.Security.Cryptography.Rfc2898DeriveBytes(
     $password,
     $salt,
     $legacyIterations,
@@ -93,4 +94,4 @@ if (-not [NosGm.Core.PasswordHashService]::VerifyPassword($legacyVersionedHash, 
     throw "A valid lower-cost hash was not marked for upgrade."
 }
 
-Write-Host "Password hashing verified: salted PBKDF2-SHA256, legacy compatibility and rehash detection."
+Write-Host "Password hashing verified against the built NosGm.Core assembly."
