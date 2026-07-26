@@ -59,6 +59,21 @@ function Assert-Regex {
     }
 }
 
+function Assert-NotRegex {
+    param(
+        [string]$Content,
+        [string]$Pattern,
+        [string]$Description
+    )
+
+    if ([regex]::IsMatch(
+            $Content,
+            $Pattern,
+            [Text.RegularExpressions.RegexOptions]::Singleline)) {
+        throw "Session-flow contract failed: $Description"
+    }
+}
+
 function Assert-Ordered {
     param(
         [string]$Content,
@@ -105,11 +120,7 @@ $entry = Read-Source $EntryHandlerPath
 $entryPacket = Read-Source $EntryPacketPath
 $select = Read-Source $SelectHandlerPath
 
-$loginFlow = Get-Section \
-    $login \
-    "public async Task VerifyLoginAsync(LoginPacket loginPacket)" \
-    "private async Task<bool> CheckIsConnectedAsync" \
-    "Login handler"
+$loginFlow = Get-Section -Content $login -StartMarker "public async Task VerifyLoginAsync(LoginPacket loginPacket)" -EndMarker "private async Task<bool> CheckIsConnectedAsync" -Description "Login handler"
 
 Assert-Ordered $loginFlow @(
     "int newSessionId = SessionFactory.Instance.GenerateSessionId();",
@@ -119,67 +130,33 @@ Assert-Ordered $loginFlow @(
     "DisposeLoginPolling();"
 ) "Login must register the generated session before retrieving and sending the world list"
 
-Assert-Regex $loginFlow \
-    'RegisterAccountLogin\s*\(\s*loadedAccount\.AccountId\s*,\s*newSessionId\s*,\s*ipAddress\s*\)' \
-    "Login must register the account with the generated session ID and normalized IP"
-Assert-Regex $loginFlow \
-    'BuildServersPacket\s*\(\s*username\s*,\s*loginPacket\.RegionType\s*,\s*newSessionId\s*,\s*ignoreUserName\s*,\s*loadedAccount\.AccountId\s*\)' \
-    "World-list generation must use the same generated session ID"
-Assert-Contains $loginFlow \
-    "CommunicationServiceClient.Instance.DisconnectAccount(loadedAccount.AccountId);" \
-    "Failed world-list generation must roll back the Master account registration"
+Assert-Regex $loginFlow 'RegisterAccountLogin\s*\(\s*loadedAccount\.AccountId\s*,\s*newSessionId\s*,\s*ipAddress\s*\)' "Login must register the account with the generated session ID and normalized IP"
+Assert-Regex $loginFlow 'BuildServersPacket\s*\(\s*username\s*,\s*loginPacket\.RegionType\s*,\s*newSessionId\s*,\s*ignoreUserName\s*,\s*loadedAccount\.AccountId\s*\)' "World-list generation must use the same generated session ID"
+Assert-Contains $loginFlow "CommunicationServiceClient.Instance.DisconnectAccount(loadedAccount.AccountId);" "Failed world-list generation must roll back the Master account registration"
 
-Assert-Regex $master \
-    'public void RegisterAccountLogin\s*\(long accountId, int sessionId, string ipAddress\).*?ConnectedAccounts\.RemoveAll\(a => a\.AccountId\.Equals\(accountId\)\).*?ConnectedAccounts\.Add\(new AccountConnection\(accountId, sessionId, ipAddress\)\);' \
-    "Master must replace stale account registrations with the new account/session/IP tuple"
-Assert-Regex $master \
-    'public bool IsLoginPermitted\s*\(long accountId, int sessionId\).*?AccountId\.Equals\(accountId\).*?SessionId\.Equals\(sessionId\).*?ConnectedWorld == null' \
-    "Master permission checks must bind both account ID and session ID before World attachment"
-Assert-Regex $master \
-    'public bool ConnectAccount\s*\(Guid worldId, long accountId, int sessionId\).*?AccountId\.Equals\(accountId\) && a\.SessionId\.Equals\(sessionId\).*?account\.ConnectedWorld =' \
-    "World attachment must resolve the same account/session pair"
+Assert-Regex $master 'public void RegisterAccountLogin\s*\(long accountId, int sessionId, string ipAddress\).*?ConnectedAccounts\.RemoveAll\(a => a\.AccountId\.Equals\(accountId\)\).*?ConnectedAccounts\.Add\(new AccountConnection\(accountId, sessionId, ipAddress\)\);' "Master must replace stale account registrations with the new account/session/IP tuple"
+Assert-Regex $master 'public bool IsLoginPermitted\s*\(long accountId, int sessionId\).*?AccountId\.Equals\(accountId\).*?SessionId\.Equals\(sessionId\).*?ConnectedWorld == null' "Master permission checks must bind both account ID and session ID before World attachment"
+Assert-Regex $master 'public bool ConnectAccount\s*\(Guid worldId, long accountId, int sessionId\).*?AccountId\.Equals\(accountId\) && a\.SessionId\.Equals\(sessionId\).*?account\.ConnectedWorld =' "World attachment must resolve the same account/session pair"
 
-$receiveFlow = Get-Section \
-    $clientSession \
-    "private bool ProcessReceivedMessage(byte[] packetData)" \
-    "private void OnNetworkClientMessageReceived" \
-    "World session bootstrap"
+$receiveFlow = Get-Section -Content $clientSession -StartMarker "private bool ProcessReceivedMessage(byte[] packetData)" -EndMarker "private void OnNetworkClientMessageReceived" -Description "World session bootstrap"
 Assert-Ordered $receiveFlow @(
     "SessionId = sessid;",
     "TriggerHandler(\"NosGm.EntryPoint\", string.Empty, false);"
 ) "World must assign the decrypted session ID before starting the entry-point packet bundle"
 
-$initializeAccount = Get-Section \
-    $clientSession \
-    "public void InitializeAccount(Account account, bool crossServer = false)" \
-    "public void ReceivePacket" \
-    "Account initialization"
+$initializeAccount = Get-Section -Content $clientSession -StartMarker "public void InitializeAccount(Account account, bool crossServer = false)" -EndMarker "public void ReceivePacket" -Description "Account initialization"
 Assert-Ordered $initializeAccount @(
     "CommunicationServiceClient.Instance.ConnectAccount(ServerManager.Instance.WorldId, account.AccountId, SessionId);",
     "IsAuthenticated = true;"
 ) "Normal account initialization must attach the same World session before authentication is exposed"
 
-Assert-Contains $entryPacket \
-    '[PacketHeader("NosGm.EntryPoint", IsCharScreen = true, Amount = 3)]' \
-    "The entry-point bundle must continue waiting for exactly three client packets"
-Assert-Contains $entry \
-    "? Array.Empty<string>()" \
-    "Missing entry packet data must use a safe empty-array fallback"
-Assert-Contains $entry \
-    ": packet.PacketData.Split(' ');" \
-    "Entry parsing must preserve historical empty-token field positions"
-Assert-Regex $entry \
-    'IsLoginPermitted\s*\(\s*account\.AccountId\s*,\s*Session\.SessionId\s*\)' \
-    "World entry authorization must use the decrypted session ID owned by ClientSession"
-Assert-NotContains $entry \
-    "IsLoginPermitted(account.AccountId, loginPacketParts" \
-    "World entry must never trust a session ID supplied inside the packet payload"
-Assert-Regex $entry \
-    'loginPacketParts\.Length <= 8.*?loginPacketParts\[8\].*?CrossServerAuthenticate' \
-    "Cross-server authentication must validate index 8 before reading the marker"
-Assert-Regex $entry \
-    'PasswordHashService\.VerifyPassword\s*\(\s*account\.Password\s*,\s*loginPacketParts\[7\]\s*,\s*true' \
-    "Normal World entry must verify the expected SHA-512 credential field"
+Assert-Contains $entryPacket '[PacketHeader("NosGm.EntryPoint", IsCharScreen = true, Amount = 3)]' "The entry-point bundle must continue waiting for exactly three client packets"
+Assert-Contains $entry "? Array.Empty<string>()" "Missing entry packet data must use a safe empty-array fallback"
+Assert-Contains $entry ": packet.PacketData.Split(' ');" "Entry parsing must preserve historical empty-token field positions"
+Assert-Regex $entry 'IsLoginPermitted\s*\(\s*account\.AccountId\s*,\s*Session\.SessionId\s*\)' "World entry authorization must use the decrypted session ID owned by ClientSession"
+Assert-NotRegex $entry 'IsLoginPermitted\s*\(\s*account\.AccountId\s*,\s*loginPacketParts' "World entry must never trust a session ID supplied inside the packet payload"
+Assert-Regex $entry 'loginPacketParts\.Length <= 8.*?loginPacketParts\[8\].*?CrossServerAuthenticate' "Cross-server authentication must validate index 8 before reading the marker"
+Assert-Regex $entry 'PasswordHashService\.VerifyPassword\s*\(\s*account\.Password\s*,\s*loginPacketParts\[7\]\s*,\s*true' "Normal World entry must verify the expected SHA-512 credential field"
 Assert-Ordered $entry @(
     "Session.InitializeAccount(new Account(account), isCrossServerLogin);",
     "ServerManager.Instance.CharacterScreenSessions[Session.Account.AccountId] = Session;"
@@ -189,19 +166,10 @@ Assert-Ordered $entry @(
     'Session.SendPacket($"clist ',
     "Session.SendPacket(\"clist_end\");"
 ) "Character-list packets must retain their start, item and end ordering"
-Assert-NotContains $entry \
-    "Logger.Info(packet.PacketData);" \
-    "Character entry must not log the credential-bearing raw packet"
+Assert-NotContains $entry "Logger.Info(packet.PacketData);" "Character entry must not log the credential-bearing raw packet"
 
-$selectFlow = Get-Section \
-    $select \
-    "public void SelectCharacter(SelectPacket selectPacket)" \
-    "#endregion`r`n    }" \
-    "Character selection"
-Assert-Contains $selectFlow \
-    "if (Session?.Account == null || Session.HasSelectedCharacter)" \
-    "Character selection must reject missing accounts and duplicate selection"
-Assert-Ordered $selectFlow @(
+Assert-Contains $select "if (Session?.Account == null || Session.HasSelectedCharacter)" "Character selection must reject missing accounts and duplicate selection"
+Assert-Ordered $select @(
     "DAOFactory.CharacterDAO.LoadBySlot(Session.Account.AccountId, selectPacket.Slot);",
     "character.Initialize();",
     "Session.SetCharacter(character);",
