@@ -60,11 +60,6 @@ namespace NosGm.Handler.BasicPacket.Login
                 return;
             }
 
-            if (!TryGetClearPassword(loginPacket.Password, out string clearPassword))
-            {
-                Reject(LoginFailType.AccountOrPasswordWrong, "Session removed. Reason: Invalid password payload");
-                return;
-            }
 
             string username = loginPacket.Name;
             AccountDTO loadedAccount = DAOFactory.AccountDAO.LoadByName(username);
@@ -86,10 +81,11 @@ namespace NosGm.Handler.BasicPacket.Login
                 return;
             }
 
-            if (!PasswordHashService.VerifyPassword(
+            if (!PasswordHashService.VerifyLoginPayload(
                     loadedAccount.Password,
-                    clearPassword,
+                    loginPacket.Password,
                     ServerConfiguration.UseOldCrypto,
+                    out string clearPassword,
                     out bool passwordNeedsUpgrade))
             {
                 Reject(LoginFailType.AccountOrPasswordWrong, "Session removed. Reason: Wrong credentials");
@@ -252,28 +248,6 @@ namespace NosGm.Handler.BasicPacket.Login
             return value;
         }
 
-        private static bool TryGetClearPassword(string packetPassword, out string clearPassword)
-        {
-            clearPassword = null;
-            if (string.IsNullOrWhiteSpace(packetPassword))
-            {
-                return false;
-            }
-
-            try
-            {
-                clearPassword = ServerConfiguration.UseOldCrypto
-                    ? LoginCryptography.GetPassword(packetPassword)
-                    : packetPassword;
-            }
-            catch (Exception)
-            {
-                return false;
-            }
-
-            return clearPassword != null &&
-                   clearPassword.Length <= PasswordHashService.MaximumCredentialLength;
-        }
 
         private static void UpgradePasswordHash(AccountDTO account, string clearPassword)
         {
