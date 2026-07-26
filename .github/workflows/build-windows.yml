@@ -48,6 +48,10 @@ jobs:
         shell: pwsh
         run: nuget restore "$env:SOLUTION" -NonInteractive -Verbosity normal
 
+      - name: Validate World x64 runtime settings
+        shell: pwsh
+        run: ./scripts/verify-world-runtime.ps1
+
       - name: Validate World RESX resources with MSBuild
         shell: pwsh
         run: |
