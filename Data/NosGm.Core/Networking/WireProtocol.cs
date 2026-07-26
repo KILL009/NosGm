@@ -15,7 +15,6 @@ namespace NosGm.Core
         public WireProtocol()
         {
             _receiveMemoryStream = new MemoryStream();
-            _connectionHistory = new Dictionary<string, DateTime>();
         }
 
         #endregion
@@ -23,16 +22,14 @@ namespace NosGm.Core
         #region Members
 
         /// <summary>
-        ///     Maximum length of a message.
+        ///     Maximum length of one raw message accepted from the network layer.
         /// </summary>
-        private const short MAX_MESSAGE_LENGTH = 4096;
-
-        private readonly IDictionary<string, DateTime> _connectionHistory;
+        private const int MaximumMessageLength = 4096;
 
         private bool _disposed;
 
         /// <summary>
-        ///     This MemoryStream object is used to collect receiving bytes to build messages.
+        ///     Collects bytes supplied by the network layer for the current raw message.
         /// </summary>
         private MemoryStream _receiveMemoryStream;
 
@@ -42,115 +39,147 @@ namespace NosGm.Core
 
         public IEnumerable<IScsMessage> CreateMessages(byte[] receivedBytes)
         {
-            // Write all received bytes to the _receiveMemoryStream
+            ThrowIfDisposed();
+
+            if (receivedBytes == null)
+            {
+                throw new ArgumentNullException(nameof(receivedBytes));
+            }
+
+            if (receivedBytes.Length == 0)
+            {
+                return Array.Empty<IScsMessage>();
+            }
+
+            long pendingLength = _receiveMemoryStream.Length + receivedBytes.Length;
+            if (pendingLength > MaximumMessageLength)
+            {
+                ResetReceiveBuffer();
+                throw new CommunicationException(
+                    $"Message is too big ({pendingLength} bytes). Max allowed length is {MaximumMessageLength} bytes.");
+            }
+
             _receiveMemoryStream.Write(receivedBytes, 0, receivedBytes.Length);
 
-            // Create a list to collect messages
             var messages = new List<IScsMessage>();
-
-            // Read all available messages and add to messages collection
-            while (readSingleMessage(messages))
+            while (ReadSingleMessage(messages))
             {
             }
 
-            // Return message list
             return messages;
         }
 
         public void Dispose()
         {
-            if (!_disposed)
+            if (_disposed)
             {
-                Dispose(true);
-                GC.SuppressFinalize(this);
-                _disposed = true;
+                return;
             }
+
+            Dispose(true);
+            GC.SuppressFinalize(this);
+            _disposed = true;
         }
 
         public byte[] GetBytes(IScsMessage message)
         {
-            // Serialize the message to a byte array
-            var textMessage = message as ScsTextMessage;
-            return textMessage != null
-                ? Encoding.Default.GetBytes(textMessage.Text)
-                : ((ScsRawDataMessage)message).MessageData;
+            ThrowIfDisposed();
+
+            if (message == null)
+            {
+                throw new ArgumentNullException(nameof(message));
+            }
+
+            if (message is ScsTextMessage textMessage)
+            {
+                return Encoding.Default.GetBytes(textMessage.Text);
+            }
+
+            if (message is ScsRawDataMessage rawDataMessage)
+            {
+                return rawDataMessage.MessageData;
+            }
+
+            throw new ArgumentException($"Unsupported message type: {message.GetType().FullName}", nameof(message));
         }
 
         public void Reset()
         {
-            if (_receiveMemoryStream.Length > 0) _receiveMemoryStream = new MemoryStream();
+            ThrowIfDisposed();
+            ResetReceiveBuffer();
         }
 
         protected virtual void Dispose(bool disposing)
         {
-            if (disposing) _receiveMemoryStream.Dispose();
+            if (disposing)
+            {
+                _receiveMemoryStream?.Dispose();
+                _receiveMemoryStream = null;
+            }
         }
 
-        /// <summary>
-        ///     Reads a byte array with specified length.
-        /// </summary>
-        /// <param name="stream">Stream to read from</param>
-        /// <param name="length">Length of the byte array to read</param>
-        /// <returns>Read byte array</returns>
-        /// <exception cref="EndOfStreamException">
-        ///     Throws EndOfStreamException if can not read from stream.
-        /// </exception>
-        private static byte[] ReadByteArray(Stream stream, short length)
+        private static byte[] ReadByteArray(Stream stream, int length)
         {
+            if (length < 0)
+            {
+                throw new ArgumentOutOfRangeException(nameof(length));
+            }
+
             var buffer = new byte[length];
-            var read = stream.Read(buffer, 0, length);
-            if (read <= 0) throw new EndOfStreamException("Can not read from stream! Input stream is closed.");
+            int offset = 0;
+
+            while (offset < length)
+            {
+                int read = stream.Read(buffer, offset, length - offset);
+                if (read <= 0)
+                {
+                    throw new EndOfStreamException("Can not read from stream! Input stream is closed.");
+                }
+
+                offset += read;
+            }
+
             return buffer;
         }
 
-        /// <summary>
-        ///     This method tries to read a single message and add to the messages collection.
-        /// </summary>
-        /// <param name="messages">Messages collection to collect messages</param>
-        /// <returns>
-        ///     Returns a boolean value indicates that if there is a need to re-call this method.
-        /// </returns>
-        /// <exception cref="CommunicationException">
-        ///     Throws CommunicationException if message is bigger than maximum allowed message length.
-        /// </exception>
-        private bool readSingleMessage(ICollection<IScsMessage> messages)
+        private bool ReadSingleMessage(ICollection<IScsMessage> messages)
         {
-            // Go to the beginning of the stream
             _receiveMemoryStream.Position = 0;
 
-            // check if message length is 0
-            if (_receiveMemoryStream.Length == 0) return false;
+            long pendingLength = _receiveMemoryStream.Length;
+            if (pendingLength == 0)
+            {
+                return false;
+            }
 
-            // get length of frame
-            var frameLength = (short)_receiveMemoryStream.Length;
+            if (pendingLength > MaximumMessageLength)
+            {
+                ResetReceiveBuffer();
+                throw new CommunicationException(
+                    $"Message is too big ({pendingLength} bytes). Max allowed length is {MaximumMessageLength} bytes.");
+            }
 
-            // Read length of the message
-            if (frameLength > MAX_MESSAGE_LENGTH)
-                throw new CommunicationException("Message is too big (" + frameLength +
-                                                 " bytes). Max allowed length is " + MAX_MESSAGE_LENGTH + " bytes.");
-
-            // Read bytes of serialized message and deserialize it
-            var serializedMessageBytes = ReadByteArray(_receiveMemoryStream, frameLength);
+            int frameLength = checked((int)pendingLength);
+            byte[] serializedMessageBytes = ReadByteArray(_receiveMemoryStream, frameLength);
             messages.Add(new ScsRawDataMessage(serializedMessageBytes));
 
-            // Read remaining bytes to an array
-            if (_receiveMemoryStream.Length > frameLength)
-            {
-                var remainingBytes = ReadByteArray(_receiveMemoryStream,
-                    (short)(_receiveMemoryStream.Length - frameLength));
+            ResetReceiveBuffer();
+            return false;
+        }
 
-                // Re-create the receive memory stream and write remaining bytes
-                _receiveMemoryStream = new MemoryStream();
-                _receiveMemoryStream.Write(remainingBytes, 0, remainingBytes.Length);
-            }
-            else
-            {
-                // nothing left, just recreate
-                _receiveMemoryStream = new MemoryStream();
-            }
+        private void ResetReceiveBuffer()
+        {
+            MemoryStream previous = _receiveMemoryStream;
+            _receiveMemoryStream = new MemoryStream();
+            previous?.Dispose();
+        }
 
-            // Return true to re-call this method to try to read next message
-            return _receiveMemoryStream.Length > 0;
+        private void ThrowIfDisposed()
+        {
+            if (_disposed)
+            {
+                throw new ObjectDisposedException(nameof(WireProtocol));
+            }
         }
 
         #endregion
