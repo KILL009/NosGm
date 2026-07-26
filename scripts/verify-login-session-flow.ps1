@@ -141,7 +141,7 @@ Assert-Regex $master 'public bool ConnectAccount\s*\(Guid worldId, long accountI
 $receiveFlow = Get-Section -Content $clientSession -StartMarker "private bool ProcessReceivedMessage(byte[] packetData)" -EndMarker "private void OnNetworkClientMessageReceived" -Description "World session bootstrap"
 Assert-Ordered $receiveFlow @(
     "SessionId = sessid;",
-    "TriggerHandler(\"NosGm.EntryPoint\", string.Empty, false);"
+    'TriggerHandler("NosGm.EntryPoint", string.Empty, false);'
 ) "World must assign the decrypted session ID before starting the entry-point packet bundle"
 
 $initializeAccount = Get-Section -Content $clientSession -StartMarker "public void InitializeAccount(Account account, bool crossServer = false)" -EndMarker "public void ReceivePacket" -Description "Account initialization"
@@ -162,9 +162,9 @@ Assert-Ordered $entry @(
     "ServerManager.Instance.CharacterScreenSessions[Session.Account.AccountId] = Session;"
 ) "The account must be initialized before registering the character-screen session"
 Assert-Ordered $entry @(
-    "Session.SendPacket(\"clist_start 0\");",
+    'Session.SendPacket("clist_start 0");',
     'Session.SendPacket($"clist ',
-    "Session.SendPacket(\"clist_end\");"
+    'Session.SendPacket("clist_end");'
 ) "Character-list packets must retain their start, item and end ordering"
 Assert-NotContains $entry "Logger.Info(packet.PacketData);" "Character entry must not log the credential-bearing raw packet"
 
@@ -173,7 +173,7 @@ Assert-Ordered $select @(
     "DAOFactory.CharacterDAO.LoadBySlot(Session.Account.AccountId, selectPacket.Slot);",
     "character.Initialize();",
     "Session.SetCharacter(character);",
-    "Session.SendPacket(\"OK\");",
+    'Session.SendPacket("OK");',
     "CommunicationServiceClient.Instance.ConnectCharacter(ServerManager.Instance.WorldId, character.CharacterId);"
 ) "Character selection must initialize state, acknowledge the client and then register the character"
 
