@@ -102,6 +102,8 @@ namespace Game.Configuration.BCards
     {
         private const byte DistanceDamagePerCellSubtype = 21;
         private const byte DisableHpConsumptionSubtype = 41;
+        private const byte SurroundingsExplosionSubtype = 21;
+        private const byte SurroundingsAttackSubtype = 31;
 
         public static BCardExecutionKind GetKind(BCardType.CardType type, byte subtype)
         {
@@ -132,6 +134,15 @@ namespace Game.Configuration.BCards
             // DisableHPConsumption is read directly by DamageHelper before damage is returned.
             // Sending it through executable dispatch produces a false missing-handler warning.
             if (type == BCardType.CardType.TimeCircleSkills && subtype == DisableHpConsumptionSubtype)
+            {
+                return BCardExecutionKind.PassiveCalculation;
+            }
+
+            // Type 29 subtypes 21 and 31 are persistent offensive rules consumed by the
+            // structured hit pipeline. Subtype 12 remains executable/pending because its
+            // negated semantics are not implemented by the modern reference handler.
+            if (type == BCardType.CardType.SpecialDamageAndExplosions &&
+                (subtype == SurroundingsExplosionSubtype || subtype == SurroundingsAttackSubtype))
             {
                 return BCardExecutionKind.PassiveCalculation;
             }
