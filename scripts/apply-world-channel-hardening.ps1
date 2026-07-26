@@ -1,21 +1,20 @@
 $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
 
-$path = "Data/NosGm.Program/NosGm.Master.Server/CommunicationService.cs"
-$content = Get-Content -LiteralPath $path -Raw
-$newLine = if ($content.Contains("`r`n")) { "`r`n" } else { "`n" }
-
-if ($content.Contains("var visibleWorlds = MSManager.Instance.WorldServers") -and
-    $content.Contains("World list generated | RegionType=") -and
-    -not $content.Contains("Logger.Info(channelPacket);")) {
-    Write-Host "World/channel hardening is already applied."
-    exit 0
-}
+$sourcePath = "Data/NosGm.Program/NosGm.Master.Server/CommunicationService.cs"
+$verifierPath = "scripts/verify-world-channel-lists.ps1"
+$sourceContent = Get-Content -LiteralPath $sourcePath -Raw
+$verifierContent = Get-Content -LiteralPath $verifierPath -Raw
+$sourceNewLine = if ($sourceContent.Contains("`r`n")) { "`r`n" } else { "`n" }
+$verifierNewLine = if ($verifierContent.Contains("`r`n")) { "`r`n" } else { "`n" }
 
 function Normalize-NewLines {
-    param([string]$Value)
+    param(
+        [string]$Value,
+        [string]$NewLine
+    )
 
-    return [regex]::Replace($Value, "`r`n|`n|`r", $newLine)
+    return [regex]::Replace($Value, "`r`n|`n|`r", $NewLine)
 }
 
 function Replace-ExactOnce {
@@ -23,11 +22,12 @@ function Replace-ExactOnce {
         [string]$Source,
         [string]$Old,
         [string]$New,
-        [string]$Description
+        [string]$Description,
+        [string]$NewLine
     )
 
-    $oldValue = Normalize-NewLines $Old
-    $newValue = Normalize-NewLines $New
+    $oldValue = Normalize-NewLines $Old $NewLine
+    $newValue = Normalize-NewLines $New $NewLine
     $first = $Source.IndexOf($oldValue, [StringComparison]::Ordinal)
     if ($first -lt 0) {
         throw "Expected source was not found: $Description"
@@ -61,7 +61,12 @@ function Replace-RegexCount {
     return [regex]::Replace($Source, $Pattern, $Replacement, $Options)
 }
 
-$content = Replace-ExactOnce $content @'
+$sourceApplied = $sourceContent.Contains("var visibleWorlds = MSManager.Instance.WorldServers") -and
+    $sourceContent.Contains("World list generated | RegionType=") -and
+    -not $sourceContent.Contains("Logger.Info(channelPacket);")
+
+if (-not $sourceApplied) {
+    $sourceContent = Replace-ExactOnce $sourceContent @'
             if (!MSManager.Instance.AuthentificatedClients.Any(s => s.Equals(CurrentClient.ClientId)))
             {
                 return null;
@@ -85,22 +90,22 @@ $content = Replace-ExactOnce $content @'
             }
 
             var characters = DAOFactory.CharacterDAO.LoadByAccount(AccountId);
-'@ "create a deterministic visible-world snapshot"
+'@ "create a deterministic visible-world snapshot" $sourceNewLine
 
-$content = Replace-ExactOnce $content @'
+    $sourceContent = Replace-ExactOnce $sourceContent @'
             foreach (var world in MSManager.Instance.WorldServers.OrderBy(w => w.WorldGroup))
 '@ @'
             foreach (var world in visibleWorlds)
-'@ "iterate the deterministic visible-world snapshot"
+'@ "iterate the deterministic visible-world snapshot" $sourceNewLine
 
-$content = Replace-RegexCount $content '(?m)^[ \t]*Logger\.Info\("===== NsTeST ====="\);\r?\n' '' 1 "remove the NsTeST banner log" ([Text.RegularExpressions.RegexOptions]::Multiline)
-$content = Replace-RegexCount $content '(?m)^[ \t]*Logger\.Info\(channelPacket\);\r?\n' '' 2 "remove raw NsTeST packet logs" ([Text.RegularExpressions.RegexOptions]::Multiline)
-$content = Replace-RegexCount $content '(?m)^[ \t]*Logger\.Info\(\$"WorldServers Count = \{MSManager\.Instance\.WorldServers\.Count\}"\);\r?\n' '' 1 "remove unbounded world-count logging" ([Text.RegularExpressions.RegexOptions]::Multiline)
-$content = Replace-RegexCount $content '(?ms)^[ \t]*Logger\.Info\(\s*\$"Group=\{world\.WorldGroup\} " \+\s*\$"Channel=\{world\.ChannelId\} " \+\s*\$"IP=\{world\.Endpoint\.IpAddress\} " \+\s*\$"Port=\{world\.Endpoint\.TcpPort\}"\);\s*' '' 1 "remove per-endpoint world logging" ([Text.RegularExpressions.RegexOptions]::Multiline -bor [Text.RegularExpressions.RegexOptions]::Singleline)
+    $sourceContent = Replace-RegexCount $sourceContent '(?m)^[ \t]*Logger\.Info\("===== NsTeST ====="\);\r?\n' '' 1 "remove the NsTeST banner log" ([Text.RegularExpressions.RegexOptions]::Multiline)
+    $sourceContent = Replace-RegexCount $sourceContent '(?m)^[ \t]*Logger\.Info\(channelPacket\);\r?\n' '' 2 "remove raw NsTeST packet logs" ([Text.RegularExpressions.RegexOptions]::Multiline)
+    $sourceContent = Replace-RegexCount $sourceContent '(?m)^[ \t]*Logger\.Info\(\$"WorldServers Count = \{MSManager\.Instance\.WorldServers\.Count\}"\);\r?\n' '' 1 "remove unbounded world-count logging" ([Text.RegularExpressions.RegexOptions]::Multiline)
+    $sourceContent = Replace-RegexCount $sourceContent '(?ms)^[ \t]*Logger\.Info\(\s*\$"Group=\{world\.WorldGroup\} " \+\s*\$"Channel=\{world\.ChannelId\} " \+\s*\$"IP=\{world\.Endpoint\.IpAddress\} " \+\s*\$"Port=\{world\.Endpoint\.TcpPort\}"\);\s*' '' 1 "remove per-endpoint world logging" ([Text.RegularExpressions.RegexOptions]::Multiline -bor [Text.RegularExpressions.RegexOptions]::Singleline)
 
-$content = Replace-RegexCount $content '(?ms)^[ \t]*if \(world\.ChannelId == 51\)\s*\{\s*continue;\s*\}\s*if \(MSManager\.Instance\.WorldServers\.Count < 1\)\s*\{\s*return null;\s*\}\s*' '' 1 "remove obsolete in-loop visibility checks" ([Text.RegularExpressions.RegexOptions]::Multiline -bor [Text.RegularExpressions.RegexOptions]::Singleline)
+    $sourceContent = Replace-RegexCount $sourceContent '(?ms)^[ \t]*if \(world\.ChannelId == 51\)\s*\{\s*continue;\s*\}\s*if \(MSManager\.Instance\.WorldServers\.Count < 1\)\s*\{\s*return null;\s*\}\s*' '' 1 "remove obsolete in-loop visibility checks" ([Text.RegularExpressions.RegexOptions]::Multiline -bor [Text.RegularExpressions.RegexOptions]::Singleline)
 
-$content = Replace-ExactOnce $content @'
+    $sourceContent = Replace-ExactOnce $sourceContent @'
             channelPacket += "-1:-1:-1:10000.10000.1";
             return channelPacket;
 '@ @'
@@ -108,11 +113,36 @@ $content = Replace-ExactOnce $content @'
             Logger.Info(
                 $"World list generated | RegionType={regionType} Groups={worldCount} Channels={visibleWorlds.Count}");
             return channelPacket;
-'@ "add bounded world-list diagnostics"
+'@ "add bounded world-list diagnostics" $sourceNewLine
 
-[IO.File]::WriteAllText(
-    (Resolve-Path -LiteralPath $path),
-    $content,
-    (New-Object Text.UTF8Encoding($true)))
+    [IO.File]::WriteAllText(
+        (Resolve-Path -LiteralPath $sourcePath),
+        $sourceContent,
+        (New-Object Text.UTF8Encoding($true)))
+}
+else {
+    Write-Host "World/channel source hardening is already applied."
+}
+
+if (-not $verifierContent.Contains('$cultureTableToken = "| ``$culture`` |"')) {
+    $verifierContent = Replace-ExactOnce $verifierContent @'
+    if ($localizationDoc -notmatch "\| `$culture` \|") {
+        throw "Localization documentation is missing canonical culture '$culture'."
+    }
+'@ @'
+    $cultureTableToken = "| ``$culture`` |"
+    if ($localizationDoc.IndexOf($cultureTableToken, [StringComparison]::Ordinal) -lt 0) {
+        throw "Localization documentation is missing canonical culture '$culture'."
+    }
+'@ "make localization-table verification PowerShell-safe" $verifierNewLine
+
+    [IO.File]::WriteAllText(
+        (Resolve-Path -LiteralPath $verifierPath),
+        $verifierContent,
+        (New-Object Text.UTF8Encoding($true)))
+}
+else {
+    Write-Host "World/channel verifier hardening is already applied."
+}
 
 Write-Host "World/channel hardening applied successfully."
