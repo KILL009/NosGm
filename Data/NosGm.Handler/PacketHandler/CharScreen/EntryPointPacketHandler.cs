@@ -11,9 +11,7 @@ using NosGm.GameObject.Service;
 using NosGm.Handler.Packets.CharScreenPackets;
 using NosGm.Master.Library.Client;
 using System;
-using System.Collections.Generic;
 using System.Linq;
-using System.Threading.Tasks;
 
 namespace NosGm.Handler.BasicPacket.CharScreen
 {
@@ -38,81 +36,53 @@ namespace NosGm.Handler.BasicPacket.CharScreen
 
         public void LoadCharacters(NosGmEntryPointPacket packet)
         {
-
-            string[] loginPacketParts = null;
-           
-
-            if (loginPacketParts != null)
-            {
-                Logger.Info("========== ENTRY ==========");
-                Logger.Info(packet.PacketData);
-
-                for (int i = 0; i < loginPacketParts.Length; i++)
-                {
-                    Logger.Info($"{i} -> {loginPacketParts[i]}");
-                }
-            }
-            if (!string.IsNullOrEmpty(packet.PacketData))
-            {
-                loginPacketParts = packet.PacketData.Split(' ');
-            }
+            string[] loginPacketParts = string.IsNullOrWhiteSpace(packet?.PacketData)
+                ? Array.Empty<string>()
+                : packet.PacketData.Split(' ');
             bool isCrossServerLogin = false;
-
 
             // Load account by given SessionId
             if (Session.Account == null)
             {
-                bool hasRegisteredAccountLogin = true;
-                AccountDTO account = null;
-                if (loginPacketParts.Length > 4)
+                if (loginPacketParts.Length <= 3)
                 {
-                    if (loginPacketParts.Length > 6 &&
-                        loginPacketParts[3] == "DAC" &&
-                        loginPacketParts[8] == "CrossServerAuthenticate")
-                    {
-                        isCrossServerLogin = true;
-                        account = DAOFactory.AccountDAO.LoadByName(loginPacketParts[4]);
-                    }
-                    else
-                    {
-                        account = DAOFactory.AccountDAO.LoadByName(loginPacketParts[3]);
-                    }
-                }
-
-                try
-                {
-                    if (account != null)
-                    {
-                        if (isCrossServerLogin)
-                        {
-                            hasRegisteredAccountLogin = CommunicationServiceClient.Instance.IsCrossServerLoginPermitted(account.AccountId, Session.SessionId);
-                        }
-                        else
-
-                        {
-                          
-                            hasRegisteredAccountLogin = CommunicationServiceClient.Instance.IsLoginPermitted(account.AccountId, Session.SessionId);
-                        }
-
-                        Logger.Info("========== LOGIN CHECK ==========");
-                        Logger.Info($"Session.SessionId = {Session.SessionId}");
-                        Logger.Info($"Packet Session   = {loginPacketParts[1]}");
-                        Logger.Info($"Username         = {loginPacketParts[2]}");
-                        Logger.Info($"IsLoginPermitted = {hasRegisteredAccountLogin}");
-                    }
-                }
-                catch (Exception ex)
-                {
-                    //LOGGERServerLog($"{ex.ToString()}", LogType.ServerError);
+                    Logger.Debug($"Client {Session.ClientId} forced Disconnection, malformed character entry packet.");
                     Session.Disconnect();
                     return;
                 }
 
-                if (loginPacketParts.Length <= 3 || !hasRegisteredAccountLogin)
+                AccountDTO account;
+                bool hasCrossServerMarker = string.Equals(
+                    loginPacketParts[3],
+                    "DAC",
+                    StringComparison.Ordinal);
+
+                if (hasCrossServerMarker)
                 {
-                    Logger.Debug($"Client {Session.ClientId} forced Disconnection, login has not been registered or Account is already logged in.");
-                    Session.Disconnect();
-                    return;
+                    if (loginPacketParts.Length <= 8 ||
+                        !string.Equals(
+                            loginPacketParts[8],
+                            "CrossServerAuthenticate",
+                            StringComparison.Ordinal))
+                    {
+                        Logger.Debug($"Client {Session.ClientId} forced Disconnection, malformed cross-server entry packet.");
+                        Session.Disconnect();
+                        return;
+                    }
+
+                    isCrossServerLogin = true;
+                    account = DAOFactory.AccountDAO.LoadByName(loginPacketParts[4]);
+                }
+                else
+                {
+                    if (loginPacketParts.Length <= 7)
+                    {
+                        Logger.Debug($"Client {Session.ClientId} forced Disconnection, incomplete character entry packet.");
+                        Session.Disconnect();
+                        return;
+                    }
+
+                    account = DAOFactory.AccountDAO.LoadByName(loginPacketParts[3]);
                 }
 
                 if (account == null)
@@ -122,8 +92,39 @@ namespace NosGm.Handler.BasicPacket.CharScreen
                     return;
                 }
 
+                bool hasRegisteredAccountLogin;
+                try
+                {
+                    hasRegisteredAccountLogin = isCrossServerLogin
+                        ? CommunicationServiceClient.Instance.IsCrossServerLoginPermitted(
+                            account.AccountId,
+                            Session.SessionId)
+                        : CommunicationServiceClient.Instance.IsLoginPermitted(
+                            account.AccountId,
+                            Session.SessionId);
+                }
+                catch (Exception ex)
+                {
+                    Logger.Error(
+                        $"Character entry validation failed | ClientId={Session.ClientId} AccountId={account.AccountId}",
+                        ex);
+                    Session.Disconnect();
+                    return;
+                }
+
+                Logger.Debug(
+                    $"Character entry login check | ClientId={Session.ClientId} " +
+                    $"AccountId={account.AccountId} CrossServer={isCrossServerLogin} " +
+                    $"Permitted={hasRegisteredAccountLogin}");
+
+                if (!hasRegisteredAccountLogin)
+                {
+                    Logger.Debug($"Client {Session.ClientId} forced Disconnection, login has not been registered or Account is already logged in.");
+                    Session.Disconnect();
+                    return;
+                }
+
                 bool passwordValid = isCrossServerLogin ||
-                                     loginPacketParts.Length > 7 &&
                                      PasswordHashService.VerifyPassword(
                                          account.Password,
                                          loginPacketParts[7],
@@ -142,10 +143,14 @@ namespace NosGm.Handler.BasicPacket.CharScreen
 
             if (isCrossServerLogin)
             {
-                if (byte.TryParse(loginPacketParts[6], out var slot))
+                if (!byte.TryParse(loginPacketParts[6], out byte slot))
                 {
-                    new SelectCharacterPacketHandler(Session).SelectCharacter(new SelectPacket { Slot = slot });
+                    Logger.Debug($"Client {Session.ClientId} forced Disconnection, invalid cross-server character slot.");
+                    Session.Disconnect();
+                    return;
                 }
+
+                new SelectCharacterPacketHandler(Session).SelectCharacter(new SelectPacket { Slot = slot });
             }
             else
             {
