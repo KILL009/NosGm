@@ -25,7 +25,8 @@ jobs:
         uses: actions/checkout@v6
         with:
           ref: ${{ github.head_ref || github.ref_name }}
-          fetch-depth: 0
+          fetch-depth: 1
+          show-progress: false
 
       - name: Apply verified map transformation
         shell: pwsh
