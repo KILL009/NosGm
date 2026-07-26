@@ -1,6 +1,7 @@
 using System;
 using System.Globalization;
 using System.Security.Cryptography;
+using System.Text;
 
 namespace NosGm.Core
 {
@@ -66,7 +67,7 @@ namespace NosGm.Core
             }
 
             string legacyCandidate = legacyUsesSha512
-                ? CryptographyBase.Sha512(clearPassword)
+                ? ComputeSha512Hex(clearPassword)
                 : clearPassword;
             bool matches = string.Equals(
                 storedPassword,
@@ -74,6 +75,21 @@ namespace NosGm.Core
                 legacyUsesSha512 ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
             needsUpgrade = matches;
             return matches;
+        }
+
+        private static string ComputeSha512Hex(string clearPassword)
+        {
+            using (SHA512 hash = SHA512.Create())
+            {
+                byte[] bytes = hash.ComputeHash(Encoding.UTF8.GetBytes(clearPassword));
+                var builder = new StringBuilder(bytes.Length * 2);
+                foreach (byte value in bytes)
+                {
+                    builder.Append(value.ToString("x2", CultureInfo.InvariantCulture));
+                }
+
+                return builder.ToString();
+            }
         }
 
         private static byte[] Derive(string clearPassword, byte[] salt, int iterations)
