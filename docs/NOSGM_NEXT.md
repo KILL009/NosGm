@@ -49,7 +49,7 @@ Initial guards:
 - [x] Protect character-list packet ordering and character-selection acknowledgement ordering.
 - [x] Reject raw credential-bearing entry-packet logging in CI.
 - [x] Add sanitized login success and failure fixtures.
-- [ ] Add region-specific world and channel-list fixtures.
+- [x] Add region-specific world and channel-list fixtures.
 - [ ] Add clean disconnect and interrupted-session reconnection fixtures.
 - [ ] Add movement, map-change and portal fixtures.
 - [ ] Add combat, buff, inventory and persistence fixtures.
