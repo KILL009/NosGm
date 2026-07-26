@@ -306,10 +306,9 @@ foreach ($fixtureCase in @($fixture.cases)) {
 
     $actual = Get-LoginOutcome $state
     foreach ($field in $expectedFields) {
-        Assert-SameValue \
-            -Actual (Get-PropertyValue $actual $field) \
-            -Expected (Get-PropertyValue $fixtureCase.expected $field) \
-            -Description "Fixture '$($fixtureCase.id)' failed for '$field'"
+        $actualValue = Get-PropertyValue $actual $field
+        $expectedValue = Get-PropertyValue $fixtureCase.expected $field
+        Assert-SameValue -Actual $actualValue -Expected $expectedValue -Description "Fixture '$($fixtureCase.id)' failed for '$field'"
     }
 }
 
