@@ -16,7 +16,7 @@ This is not a full rewrite and it is not a migration to Vanosilla. Vanosilla and
 
 ## Phase 0: safety baseline
 
-Status: in progress.
+Status: complete.
 
 Required work:
 
@@ -39,7 +39,20 @@ Required work:
 
 ## Phase 1: regression harness
 
+Status: in progress.
+
 Build a deterministic compatibility harness before major refactors.
+
+Initial guards:
+
+- [x] Protect the Login → Master → World session-ID contract.
+- [x] Protect character-list packet ordering and character-selection acknowledgement ordering.
+- [x] Reject raw credential-bearing entry-packet logging in CI.
+- [ ] Add sanitized login success and failure fixtures.
+- [ ] Add region-specific world and channel-list fixtures.
+- [ ] Add clean disconnect and interrupted-session reconnection fixtures.
+- [ ] Add movement, map-change and portal fixtures.
+- [ ] Add combat, buff, inventory and persistence fixtures.
 
 The harness must cover:
 

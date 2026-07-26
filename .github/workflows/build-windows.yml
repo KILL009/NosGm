@@ -93,6 +93,10 @@ jobs:
         shell: powershell
         run: ./scripts/verify-password-hashing.ps1
 
+      - name: Verify login session flow contracts
+        shell: powershell
+        run: ./scripts/verify-login-session-flow.ps1
+
       - name: Upload build diagnostics
         if: always()
         uses: actions/upload-artifact@v7
