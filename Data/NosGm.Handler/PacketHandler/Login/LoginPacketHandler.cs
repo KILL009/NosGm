@@ -8,12 +8,9 @@ using NosGm.GameObject;
 using NosGm.Master.Library.Client;
 using NosGm.Master.Library.Data;
 using NosGm.Packets.Packets.ClientPackets;
-using NosGm.Packets.Packets.CommandPackets;
 using System;
-using System.Configuration;
 using System.Linq;
 using System.Threading.Tasks;
-using static System.Collections.Specialized.BitVector32;
 
 namespace NosGm.Handler.BasicPacket.Login
 {
@@ -36,212 +33,291 @@ namespace NosGm.Handler.BasicPacket.Login
 
         #region Methods
 
-        private async Task<string> BuildServersPacketAsync(string username, byte regionType, int sessionId, bool ignoreUserName, long AccountID)
+        private string BuildServersPacket(string username, byte regionType, int sessionId, bool ignoreUserName, long accountId)
         {
-            var channelpacket =
-                CommunicationServiceClient.Instance.RetrieveRegisteredWorldServers(username, regionType, sessionId,
-                    ignoreUserName, AccountID);
-            
+            string channelPacket = CommunicationServiceClient.Instance.RetrieveRegisteredWorldServers(
+                username,
+                regionType,
+                sessionId,
+                ignoreUserName,
+                accountId);
 
-            if (channelpacket == null || !channelpacket.Contains(':'))
+            if (!string.IsNullOrWhiteSpace(channelPacket) && channelPacket.Contains(":"))
             {
-                await Task.Run(() => Logger.Debug("Client has been removed. Reason: World Server not found"));
-                _session.SendPacket($"failc {(byte)LoginFailType.CantConnect}");
+                return channelPacket;
             }
 
-            return channelpacket;
+            Logger.Debug("Client has been removed. Reason: World Server not found");
+            _session.SendPacket($"failc {(byte)LoginFailType.CantConnect}");
+            return null;
         }
 
         public async Task VerifyLoginAsync(LoginPacket loginPacket)
         {
-            if (loginPacket == null || loginPacket.Name == null || loginPacket.Password == null)
+            if (loginPacket == null || string.IsNullOrWhiteSpace(loginPacket.Name) || string.IsNullOrWhiteSpace(loginPacket.Password))
             {
-                _session.PacketHandlerInterval?.Dispose();
+                DisposeLoginPolling();
                 return;
             }
-
 
             UserDTO user = new UserDTO
             {
                 Name = loginPacket.Name,
                 Password = ServerConfiguration.UseOldCrypto
-                    ? CryptographyBase.Sha512(LoginCryptography.GetPassword(loginPacket.Password)).ToUpper()
+                    ? CryptographyBase.Sha512(LoginCryptography.GetPassword(loginPacket.Password)).ToUpperInvariant()
                     : loginPacket.Password
             };
 
-
-
-            if (user == null || user.Name == null || user.Password == null)
-            {
-                _session.PacketHandlerInterval?.Dispose();
-                return;
-            }
             AccountDTO loadedAccount = DAOFactory.AccountDAO.LoadByName(user.Name);
-            CharacterDTO characterDTO = new CharacterDTO();
-            if (loadedAccount != null && loadedAccount.Name != user.Name)
+            if (loadedAccount == null)
             {
-                _session.SendPacket($"failc {(byte)LoginFailType.WrongCaps}");
-                Logger.Info("Session removed. Reason: Wrong Data");
-                _session.PacketHandlerInterval?.Dispose();
+                Reject(LoginFailType.AccountOrPasswordWrong, "Session removed. Reason: Unknown account");
                 return;
             }
 
-            if(ServerConfiguration.MaintenanceMode &&  (AuthorityType.GM > loadedAccount.Authority))
+            if (!string.Equals(loadedAccount.Name, user.Name, StringComparison.Ordinal))
             {
-                _session.SendPacket($"failc {(byte)LoginFailType.Maintenance}");
-                _session.PacketHandlerInterval?.Dispose();
+                Reject(LoginFailType.WrongCaps, "Session removed. Reason: Wrong account casing");
                 return;
             }
 
-
-            if (loadedAccount?.Password.ToUpper().Equals(user.Password) == true)
+            if (ServerConfiguration.MaintenanceMode && loadedAccount.Authority < AuthorityType.GM)
             {
-                string ipAddress = _session.IpAddress;
+                Reject(LoginFailType.Maintenance, "Session removed. Reason: Maintenance mode");
+                return;
+            }
 
-                var version = ServerConfiguration.GameVersion;
+            if (!PasswordMatches(loadedAccount.Password, user.Password))
+            {
+                Reject(LoginFailType.AccountOrPasswordWrong, "Session removed. Reason: Wrong credentials");
+                return;
+            }
 
-                if (ServerConfiguration.GameVersionRequired)
+            Version clientVersion = null;
+            bool hasClientVersion = TryGetClientVersion(loginPacket, out clientVersion);
+            if (ServerConfiguration.GameVersionRequired)
+            {
+                if (!TryParseVersion(ServerConfiguration.GameVersion, out Version requiredVersion))
                 {
-                    if (version != ServerConfiguration.GameVersion)
-                    {
-                        Logger.Log.Warn($"Client version: {loginPacket.ClientData}");
-                        Logger.Log.Warn($"Required version: {version}");
-                        _session.SendPacket($"failc {(byte)LoginFailType.OldClient}");
-                        _session.PacketHandlerInterval?.Dispose();
-                        return;
-                    }
-                }
-
-                if (DAOFactory.PenaltyLogDAO.LoadByIp(ipAddress).Count() > 0)
-                {
-                    _session.SendPacket($"failc {(byte)LoginFailType.CantConnect}");
-                    Logger.Info("Session removed. Reason: Cant connect");
-                    _session.PacketHandlerInterval?.Dispose();
+                    Logger.Error($"Invalid configured game version: '{ServerConfiguration.GameVersion}'");
+                    Reject(LoginFailType.CantConnect, "Session removed. Reason: Invalid server version configuration");
                     return;
                 }
 
-                if (CheckIsConnected(loadedAccount.AccountId))
+                if (!hasClientVersion || !requiredVersion.Equals(clientVersion))
                 {
-                    _session.SendPacket($"failc {(byte)LoginFailType.AlreadyConnected}");
+                    Logger.Log.Warn($"Client version: {(hasClientVersion ? clientVersion.ToString() : "unparseable")}");
+                    Logger.Log.Warn($"Required version: {requiredVersion}");
+                    Reject(LoginFailType.OldClient, "Session removed. Reason: Unsupported client version");
+                    return;
+                }
+            }
+
+            string ipAddress = NormalizeRemoteIp(_session.IpAddress);
+            if (DAOFactory.PenaltyLogDAO.LoadByIp(ipAddress).Any())
+            {
+                Reject(LoginFailType.CantConnect, "Session removed. Reason: IP penalty");
+                return;
+            }
+
+            if (await CheckIsConnectedAsync(loadedAccount.AccountId).ConfigureAwait(false))
+            {
+                Reject(LoginFailType.AlreadyConnected, "Session removed. Reason: Already connected");
+                return;
+            }
+
+            // Keep the second check to close the race between the bounded retry and session registration.
+            if (CommunicationServiceClient.Instance.IsAccountConnected(loadedAccount.AccountId))
+            {
+                _session.SendPacket($"failc {(byte)LoginFailType.AlreadyConnected}");
+                if (!_session.HasSelectedCharacter)
+                {
+                    _session.Disconnect();
+                    CommunicationServiceClient.Instance.DisconnectAccount(loadedAccount.AccountId);
                     Logger.Info("Session removed. Reason: Already connected");
-                    _session.PacketHandlerInterval?.Dispose();
-                    return;
+                    DisposeLoginPolling();
                 }
-
-                //check if the account is connected
-                if (!CommunicationServiceClient.Instance.IsAccountConnected(loadedAccount.AccountId))
-                {
-                    AuthorityType type = loadedAccount.Authority;
-                    PenaltyLogDTO penalty = DAOFactory.PenaltyLogDAO.LoadByAccount(loadedAccount.AccountId)
-                        .FirstOrDefault(s => s.DateEnd > DateTime.Now && s.Penalty == PenaltyType.Banned);
-                    if (penalty != null)
-                    {
-                        _session.SendPacket($"failc {(byte)LoginFailType.Banned}");
-                        Logger.Info("Session removed. Reason: Banned");
-                        _session.PacketHandlerInterval?.Dispose();
-                    }
-                    else
-                    {
-                        switch (type)
-                        {
-
-                            case AuthorityType.Banned:
-                                {
-                                    _session.SendPacket($"failc {(byte)LoginFailType.Banned}");
-                                    Logger.Info("Session removed. Reason: Banned");
-                                    _session.PacketHandlerInterval?.Dispose();
-                                }
-                                break;
-
-                            default:
-                                {
-                                    Logger.Info($"ClientData: {loginPacket.ClientData}");
-                                    Logger.Info($"RegionType: {loginPacket.RegionType}");
-                                  ;
-
-                                    int newSessionId = SessionFactory.Instance.GenerateSessionId();
-                                    Logger.Info($"{user.Name} connected | SessionID: {newSessionId}");
-                                    try
-                                    {
-                                        Logger.Info($"REGISTER LOGIN");
-                                        Logger.Info($"Account={loadedAccount.Name}");
-                                        Logger.Info($"Session={newSessionId}");
-                                        ipAddress = ipAddress.Substring(6, ipAddress.LastIndexOf(':') - 6);
-                                        CommunicationServiceClient.Instance.RegisterAccountLogin(loadedAccount.AccountId, newSessionId, ipAddress);
-                                    }
-                                    catch (Exception ex)
-                                    {
-                                        Logger.Error("General Error SessionId: " + newSessionId, ex);
-                                    }
-
-                                    // That's wrong anymore
-                                    var clientData = loginPacket.ClientData.Split('.');
-
-
-                                    // crypto check
-                                    //byte regionType = 0;
-                                    //if (clientData.Length < 2)
-                                    //{
-                                    //    clientData = loginPacket.ClientDataOld.Split('.');
-                                    //}
-                                    //else
-                                    //{
-                                    //    regionType = byte.Parse(clientData[0].Split('\v')[0]);
-                                    //}
-
-                                    var ignoreUserName = short.TryParse(clientData[3], out var clientVersion)
-                                                         && (clientVersion < 3075
-                                                             || ConfigurationManager.AppSettings["UseOldCrypto"] == "true");
-                                    _session.SendPacket(await BuildServersPacketAsync(user.Name, loginPacket.RegionType, newSessionId, ignoreUserName,
-                                        loadedAccount.AccountId));
-                                    Logger.Info(await BuildServersPacketAsync(
-    user.Name,
-    loginPacket.RegionType,
-    newSessionId,
-    ignoreUserName,
-    loadedAccount.AccountId));
-                                    Logger.Info($"RegionType = {loginPacket.RegionType}");
-                                    _session.PacketHandlerInterval?.Dispose();
-                                }
-                                break;
-                        }
-                    }
-                }
-                else
-                {
-                    _session.SendPacket($"failc {(byte)LoginFailType.AlreadyConnected}");
-                    if (!_session.HasSelectedCharacter)
-                    {
-                        _session.Disconnect();
-                        CommunicationServiceClient.Instance.DisconnectAccount(loadedAccount.AccountId);
-                        Logger.Info("Session removed. Reason: Already connected");
-                        _session.PacketHandlerInterval?.Dispose();
-                    }
-                }
+                return;
             }
-            else
+
+            PenaltyLogDTO penalty = DAOFactory.PenaltyLogDAO.LoadByAccount(loadedAccount.AccountId)
+                .FirstOrDefault(s => s.DateEnd > DateTime.Now && s.Penalty == PenaltyType.Banned);
+            if (penalty != null || loadedAccount.Authority == AuthorityType.Banned)
             {
-                _session.SendPacket($"failc {(byte)LoginFailType.AccountOrPasswordWrong}");
-                Logger.Info("Session removed. Reason: Wrong Data");
-                _session.PacketHandlerInterval?.Dispose();
+                Reject(LoginFailType.Banned, "Session removed. Reason: Banned");
+                return;
             }
+
+            Logger.Info($"ClientData: {loginPacket.ClientData}");
+            Logger.Info($"RegionType: {loginPacket.RegionType}");
+
+            int newSessionId = SessionFactory.Instance.GenerateSessionId();
+            Logger.Info($"{user.Name} connected | SessionID: {newSessionId}");
+
+            try
+            {
+                CommunicationServiceClient.Instance.RegisterAccountLogin(
+                    loadedAccount.AccountId,
+                    newSessionId,
+                    ipAddress);
+            }
+            catch (Exception ex)
+            {
+                Logger.Error("General Error SessionId: " + newSessionId, ex);
+                Reject(LoginFailType.CantConnect, "Session removed. Reason: Login registration failed");
+                return;
+            }
+
+            bool ignoreUserName = ServerConfiguration.UseOldCrypto ||
+                                  hasClientVersion && clientVersion.Build >= 0 && clientVersion.Build < 3075;
+
+            string serversPacket = BuildServersPacket(
+                user.Name,
+                loginPacket.RegionType,
+                newSessionId,
+                ignoreUserName,
+                loadedAccount.AccountId);
+
+            if (string.IsNullOrWhiteSpace(serversPacket))
+            {
+                CommunicationServiceClient.Instance.DisconnectAccount(loadedAccount.AccountId);
+                DisposeLoginPolling();
+                return;
+            }
+
+            _session.SendPacket(serversPacket);
+            Logger.Info($"Server list sent | Account={loadedAccount.Name} RegionType={loginPacket.RegionType}");
+            DisposeLoginPolling();
         }
 
-        private bool CheckIsConnected(long accId)
+        private async Task<bool> CheckIsConnectedAsync(long accountId)
         {
-            for (int i = 0; i < 20; i++)
+            const int retryCount = 20;
+            const int retryDelayMilliseconds = 200;
+
+            for (int i = 0; i < retryCount; i++)
             {
-                if (CommunicationServiceClient.Instance.IsAccountConnected(accId))
-                {
-                    Task.Delay(200);
-                }
-                else
+                if (!CommunicationServiceClient.Instance.IsAccountConnected(accountId))
                 {
                     return false;
                 }
+
+                await Task.Delay(retryDelayMilliseconds).ConfigureAwait(false);
             }
 
             return true;
+        }
+
+        private void DisposeLoginPolling()
+        {
+            _session.PacketHandlerInterval?.Dispose();
+        }
+
+        private static string NormalizeRemoteIp(string endpoint)
+        {
+            if (string.IsNullOrWhiteSpace(endpoint))
+            {
+                return string.Empty;
+            }
+
+            if (Uri.TryCreate(endpoint, UriKind.Absolute, out Uri uri) && !string.IsNullOrWhiteSpace(uri.Host))
+            {
+                return uri.Host;
+            }
+
+            string value = endpoint.Trim();
+            if (value.StartsWith("[", StringComparison.Ordinal))
+            {
+                int closingBracket = value.IndexOf(']');
+                if (closingBracket > 1)
+                {
+                    return value.Substring(1, closingBracket - 1);
+                }
+            }
+
+            int lastColon = value.LastIndexOf(':');
+            if (lastColon > 0 && value.IndexOf(':') == lastColon)
+            {
+                return value.Substring(0, lastColon);
+            }
+
+            return value;
+        }
+
+        private static bool PasswordMatches(string storedPassword, string suppliedPassword)
+        {
+            if (storedPassword == null || suppliedPassword == null)
+            {
+                return false;
+            }
+
+            return ServerConfiguration.UseOldCrypto
+                ? string.Equals(storedPassword, suppliedPassword, StringComparison.OrdinalIgnoreCase)
+                : string.Equals(storedPassword, suppliedPassword, StringComparison.Ordinal);
+        }
+
+        private void Reject(LoginFailType failType, string logMessage)
+        {
+            _session.SendPacket($"failc {(byte)failType}");
+            Logger.Info(logMessage);
+            DisposeLoginPolling();
+        }
+
+        private static bool TryGetClientVersion(LoginPacket loginPacket, out Version version)
+        {
+            return TryParseVersion(loginPacket?.ClientData, out version) ||
+                   TryParseVersion(loginPacket?.ClientDataOld, out version);
+        }
+
+        private static bool TryParseVersion(string rawValue, out Version version)
+        {
+            version = null;
+            if (string.IsNullOrWhiteSpace(rawValue))
+            {
+                return false;
+            }
+
+            string[] tokens = rawValue.Split(
+                new[] { ' ', '\t', '\v', '\r', '\n', '\\', ';' },
+                StringSplitOptions.RemoveEmptyEntries);
+
+            foreach (string token in tokens)
+            {
+                string candidate = token.Trim();
+                if (Version.TryParse(candidate, out version))
+                {
+                    return true;
+                }
+
+                int start = -1;
+                for (int i = 0; i < candidate.Length; i++)
+                {
+                    if (char.IsDigit(candidate[i]))
+                    {
+                        start = i;
+                        break;
+                    }
+                }
+
+                if (start < 0)
+                {
+                    continue;
+                }
+
+                int end = start;
+                while (end < candidate.Length && (char.IsDigit(candidate[end]) || candidate[end] == '.'))
+                {
+                    end++;
+                }
+
+                if (end > start && Version.TryParse(candidate.Substring(start, end - start), out version))
+                {
+                    return true;
+                }
+            }
+
+            version = null;
+            return false;
         }
 
         #endregion
