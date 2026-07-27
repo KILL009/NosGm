@@ -51,6 +51,7 @@
     <Reference Include="System.Configuration" />
     <Reference Include="System.Data" />
     <Reference Include="System.Drawing" />
+    <Reference Include="System.Runtime.Serialization" />
     <Reference Include="System.Windows" />
     <Reference Include="System.Windows.Forms" />
     <Reference Include="System.Xml" />
@@ -59,6 +60,7 @@
   <ItemGroup>
     <Compile Include="CommunicationService.cs" />
     <Compile Include="AuthentificationService.cs" />
+    <Compile Include="LauncherAuthBridge.cs" />
     <Compile Include="MailService.cs" />
     <Compile Include="ConfigurationService.cs" />
     <Compile Include="MallService.cs" />
