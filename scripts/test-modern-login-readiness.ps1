@@ -119,6 +119,12 @@ else {
 
 if ($null -ne $state) {
     $records = @($state.Processes)
+    foreach ($requiredName in @("Master", "World", "Login")) {
+        if (@($records | Where-Object { $_.Name -eq $requiredName }).Count -ne 1) {
+            Add-Check -Name "Process.$requiredName" -Status "failed" -Detail "Exactly one $requiredName process must be recorded."
+        }
+    }
+
     foreach ($record in $records) {
         Test-RecordedProcess -Record $record
     }
@@ -148,12 +154,18 @@ if ($null -ne $state) {
     }
 
     try {
-        $ticketUri = New-Object Uri([string]$state.AuthenticationEndpoint)
-        $healthBuilder = New-Object UriBuilder($ticketUri)
-        $healthBuilder.Path = "/api/v1/launcher/health"
-        $healthBuilder.Query = ""
-        $healthBuilder.Fragment = ""
-        $healthUri = $healthBuilder.Uri
+        if ($null -ne $state.PSObject.Properties["HealthEndpoint"] -and
+            -not [string]::IsNullOrWhiteSpace([string]$state.HealthEndpoint)) {
+            $healthUri = [Uri]([string]$state.HealthEndpoint)
+        }
+        else {
+            $ticketUri = [Uri]([string]$state.AuthenticationEndpoint)
+            $healthBuilder = New-Object UriBuilder($ticketUri)
+            $healthBuilder.Path = "/api/v1/launcher/health"
+            $healthBuilder.Query = ""
+            $healthBuilder.Fragment = ""
+            $healthUri = $healthBuilder.Uri
+        }
 
         if (-not $healthUri.IsLoopback) {
             throw "The local health endpoint is not loopback."
@@ -184,7 +196,10 @@ if ($null -ne $state) {
 
 $settingsPath = Join-Path ([Environment]::GetFolderPath([Environment+SpecialFolder]::LocalApplicationData)) "NosGM\Launcher\settings.json"
 if (-not (Test-Path -LiteralPath $settingsPath -PathType Leaf)) {
-    $settingsStatus = $RequireLauncher ? "failed" : "warning"
+    $settingsStatus = "warning"
+    if ($RequireLauncher) {
+        $settingsStatus = "failed"
+    }
     Add-Check -Name "Launcher.Settings" -Status $settingsStatus -Detail "Launcher settings have not been created yet."
 }
 else {
@@ -254,6 +269,10 @@ $report = [pscustomobject]@{
 }
 
 $outputDirectory = Split-Path -Parent $OutputPath
+if ([string]::IsNullOrWhiteSpace($outputDirectory)) {
+    $outputDirectory = (Get-Location).Path
+    $OutputPath = Join-Path $outputDirectory $OutputPath
+}
 New-Item -ItemType Directory -Path $outputDirectory -Force | Out-Null
 $report | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $OutputPath -Encoding UTF8
 
