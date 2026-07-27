@@ -1,6 +1,6 @@
 using System;
 
-namespace NosGm.Master.Library.Security
+namespace NosGm.Master.Library.Interface
 {
     /// <summary>
     /// Parsed, non-secret metadata from a NoS0576 or NoS0577 login packet.
