@@ -1,5 +1,6 @@
 using System;
 using System.Globalization;
+using System.Text;
 
 namespace NosGm.Master.Library.Interface
 {
@@ -145,18 +146,52 @@ namespace NosGm.Master.Library.Interface
 
         public static bool IsSupportedAuthToken(string authToken)
         {
+            return TryNormalizeAuthToken(authToken, out _);
+        }
+
+        /// <summary>
+        /// Produces the stable lookup representation used by Master. A raw GUID and the
+        /// ASCII-hex form used by older clients normalize to the same value. New opaque
+        /// hexadecimal tokens remain supported as uppercase hexadecimal.
+        /// </summary>
+        public static bool TryNormalizeAuthToken(string authToken, out string normalizedToken)
+        {
+            normalizedToken = null;
             if (string.IsNullOrWhiteSpace(authToken) || authToken.Length > MaximumTokenLength)
             {
                 return false;
             }
 
-            if (Guid.TryParse(authToken, out _))
+            if (Guid.TryParse(authToken, out Guid rawGuid))
             {
+                normalizedToken = rawGuid.ToString("D");
                 return true;
             }
 
-            return authToken.Length >= 32 && authToken.Length % 2 == 0 &&
-                   IsHex(authToken, authToken.Length, authToken.Length);
+            if (authToken.Length < 32 || authToken.Length % 2 != 0 ||
+                !IsHex(authToken, authToken.Length, authToken.Length))
+            {
+                return false;
+            }
+
+            byte[] decodedBytes = new byte[authToken.Length / 2];
+            for (int i = 0; i < decodedBytes.Length; i++)
+            {
+                decodedBytes[i] = byte.Parse(
+                    authToken.Substring(i * 2, 2),
+                    NumberStyles.HexNumber,
+                    CultureInfo.InvariantCulture);
+            }
+
+            string decodedText = Encoding.ASCII.GetString(decodedBytes);
+            if (Guid.TryParse(decodedText, out Guid decodedGuid))
+            {
+                normalizedToken = decodedGuid.ToString("D");
+                return true;
+            }
+
+            normalizedToken = authToken.ToUpperInvariant();
+            return true;
         }
 
         public static bool TryGetCulture(byte countryId, out string culture)
