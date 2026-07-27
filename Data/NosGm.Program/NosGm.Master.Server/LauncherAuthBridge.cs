@@ -26,6 +26,7 @@ namespace NosGm.Master.Server
     internal sealed class LauncherAuthBridge : IDisposable
     {
         private const string TicketPath = "/api/v1/launcher/ticket";
+        private const string HealthPath = "/api/v1/launcher/health";
         private const int MaximumRequestBytes = 8192;
         private const int MaximumTrackedWindows = 10000;
         private static readonly string DummyPasswordHash = CreateDummyPasswordHash();
@@ -64,6 +65,34 @@ namespace NosGm.Master.Server
 
             [DataMember(Name = "expiresInSeconds")]
             public int ExpiresInSeconds { get; set; }
+        }
+
+        [DataContract]
+        private sealed class HealthResponse
+        {
+            [DataMember(Name = "service")]
+            public string Service { get; set; }
+
+            [DataMember(Name = "status")]
+            public string Status { get; set; }
+
+            [DataMember(Name = "serverTimeUtc")]
+            public string ServerTimeUtc { get; set; }
+
+            [DataMember(Name = "modernLoginEnabled")]
+            public bool ModernLoginEnabled { get; set; }
+
+            [DataMember(Name = "bridgeEnabled")]
+            public bool BridgeEnabled { get; set; }
+
+            [DataMember(Name = "regionalLoginCount")]
+            public int RegionalLoginCount { get; set; }
+
+            [DataMember(Name = "ticketTtlSeconds")]
+            public int TicketTtlSeconds { get; set; }
+
+            [DataMember(Name = "worldPermitTtlSeconds")]
+            public int WorldPermitTtlSeconds { get; set; }
         }
 
         [DataContract]
@@ -120,6 +149,32 @@ namespace NosGm.Master.Server
             try
             {
                 AddSecurityHeaders(context.Response);
+                if (IsHealthRequest(context.Request))
+                {
+                    if (!IsLoopbackRequest(context.Request))
+                    {
+                        await WriteErrorAsync(context.Response, 404, "not_found").ConfigureAwait(false);
+                        return;
+                    }
+
+                    await WriteJsonAsync(
+                            context.Response,
+                            200,
+                            new HealthResponse
+                            {
+                                Service = "NosGM.LauncherAuthBridge",
+                                Status = ServerConfiguration.MaintenanceMode ? "maintenance" : "ready",
+                                ServerTimeUtc = DateTime.UtcNow.ToString("O"),
+                                ModernLoginEnabled = ServerConfiguration.EnableGameforgeTokenLogin,
+                                BridgeEnabled = ServerConfiguration.EnableLauncherAuthBridge,
+                                RegionalLoginCount = ClientRegionMap.RegionCount,
+                                TicketTtlSeconds = GetTicketTtlSeconds(),
+                                WorldPermitTtlSeconds = GetWorldPermitTtlSeconds()
+                            })
+                        .ConfigureAwait(false);
+                    return;
+                }
+
                 if (!string.Equals(context.Request.HttpMethod, "POST", StringComparison.Ordinal) ||
                     !string.Equals(context.Request.Url?.AbsolutePath, TicketPath, StringComparison.Ordinal))
                 {
@@ -201,7 +256,7 @@ namespace NosGm.Master.Server
                     DAOFactory.AccountDAO.TryUpgradePassword(account.AccountId, account.Password, upgradedPassword);
                 }
 
-                int ttlSeconds = Math.Max(15, Math.Min(600, ServerConfiguration.GameforgeAuthTicketTtlSeconds));
+                int ttlSeconds = GetTicketTtlSeconds();
                 string authorizationCode = Guid.NewGuid().ToString("D");
                 if (!GameforgeAuthTicketStore.Instance.TryIssue(
                         account.Name,
@@ -301,6 +356,28 @@ namespace NosGm.Master.Server
             }
 
             return encodedHash;
+        }
+
+        private static bool IsHealthRequest(HttpListenerRequest request)
+        {
+            return string.Equals(request.HttpMethod, "GET", StringComparison.Ordinal) &&
+                   string.Equals(request.Url?.AbsolutePath, HealthPath, StringComparison.Ordinal);
+        }
+
+        private static bool IsLoopbackRequest(HttpListenerRequest request)
+        {
+            System.Net.IPAddress address = request.RemoteEndPoint?.Address;
+            return address != null && System.Net.IPAddress.IsLoopback(address);
+        }
+
+        private static int GetTicketTtlSeconds()
+        {
+            return Math.Max(15, Math.Min(600, ServerConfiguration.GameforgeAuthTicketTtlSeconds));
+        }
+
+        private static int GetWorldPermitTtlSeconds()
+        {
+            return Math.Max(15, Math.Min(600, ServerConfiguration.GameforgeWorldPermitTtlSeconds));
         }
 
         private static bool TryValidateRequest(TicketRequest request, out Guid installationId)
