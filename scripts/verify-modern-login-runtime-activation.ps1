@@ -2,7 +2,7 @@ param(
     [string]$ConfigurationPath = "Data/NosGm.Configuration/ServerConfiguration.cs",
     [string]$StartScriptPath = "scripts/start-modern-login-local.ps1",
     [string]$StopScriptPath = "scripts/stop-modern-login-local.ps1",
-    [string]$DocumentationPath = "docs/launcher-authentication.md"
+    [string]$DocumentationPath = "docs/modern-login-local-runbook.md"
 )
 
 $ErrorActionPreference = "Stop"
@@ -30,11 +30,11 @@ function Forbid([string]$Content, [string]$Needle, [string]$Description) {
 function Assert-PowerShellParses([string]$Path) {
     $tokens = $null
     $parseErrors = $null
-    [void][Management.Automation.Language.Parser]::ParseFile(
+    [void][System.Management.Automation.Language.Parser]::ParseFile(
         (Resolve-Path -LiteralPath $Path),
         [ref]$tokens,
         [ref]$parseErrors)
-    if ($parseErrors.Count -gt 0) {
+    if (@($parseErrors).Count -gt 0) {
         $messages = $parseErrors | ForEach-Object { "$($_.Extent.StartLineNumber): $($_.Message)" }
         throw "PowerShell parse errors in ${Path}:`n$($messages -join "`n")"
     }
