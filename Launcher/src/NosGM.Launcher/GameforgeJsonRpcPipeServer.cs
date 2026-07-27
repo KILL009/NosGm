@@ -31,7 +31,8 @@ internal sealed class GameforgeJsonRpcPipeServer
     public async Task RunAsync(CancellationToken cancellationToken)
     {
         for (var requestIndex = 0;
-             requestIndex < MaximumRequests && !_accountNameDelivered;
+             requestIndex < MaximumRequests &&
+             !(_authorizationCodeDelivered && _accountNameDelivered);
              requestIndex++)
         {
             await using var pipe = new NamedPipeServerStream(
