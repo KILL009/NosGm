@@ -1,36 +1,18 @@
 ﻿using log4net;
 using NosGm.Configuration;
 using NosGm.Core;
-using NosGm.DAL;
 using NosGm.DAL.EF.Helpers;
 using NosGm.Master.Library.Interface;
 using NosGm.SCS.Communication.Scs.Communication.EndPoints.Tcp;
 using NosGm.SCS.Communication.ScsServices.Service;
 using System;
-using System.Collections.Generic;
-using System.Configuration;
-using System.Diagnostics;
-using System.IO;
 using System.Linq;
-using System.Runtime.Remoting.Channels;
-using System.Text;
-using System.Threading;
-using System.Windows.Forms;
-
 
 namespace NosGm.Master.Server
 {
     internal static class Program
     {
-        #region Members
-
-        private static readonly ManualResetEvent _run = new ManualResetEvent(true);
-
-        private static bool _isDebug;
-
-        #endregion
-
-        #region Methods
+        private static LauncherAuthBridge _launcherAuthBridge;
 
         private static void PrintHeader()
         {
@@ -43,13 +25,14 @@ namespace NosGm.Master.Server
 |  __| |  _  /| |  | |\___ \   | |    \ \/ / |  __|   | | | . ` |
 | |    | | \ \| |__| |____) |  | |     \  /  | |____ _| |_| |\  |
 |_|    |_|  \_\\____/|_____/   |_|      \/   |______|_____|_| \_|
-                                                                                           
+                                                                                            
 ";
-            string separator = new string('=', Console.WindowWidth);
-            string logo = text.Split('\n').Select(s => string.Format("{0," + (Console.WindowWidth / 2 + s.Length / 2) + "}\n", s)).Aggregate("", (current, i) => current + i);
+            string separator = new string('=', Math.Max(1, Console.WindowWidth));
+            string logo = text.Split('\n')
+                .Select(line => string.Format("{0," + (Console.WindowWidth / 2 + line.Length / 2) + "}\n", line))
+                .Aggregate("", (current, line) => current + line);
             Console.ForegroundColor = ConsoleColor.White;
             Console.WriteLine(separator + logo + separator);
-            Console.ForegroundColor = ConsoleColor.White;
         }
 
         public static void Main(string[] args)
@@ -57,12 +40,9 @@ namespace NosGm.Master.Server
             try
             {
                 PrintHeader();
-                // initialize Logger
                 Logger.InitializeLogger(LogManager.GetLogger(typeof(Program)));
 
                 int port = Convert.ToInt32(ServerConfiguration.MasterServerPort);
-
-                // initialize DB
                 if (!DataAccessHelper.Initialize())
                 {
                     Console.ReadLine();
@@ -70,56 +50,61 @@ namespace NosGm.Master.Server
                 }
 
                 Logger.Info("Master Server Config has been loaded");
-               
-                try
+
+                string ipAddress = ServerConfiguration.IPAddress;
+                var server = ScsServiceBuilder.CreateService(new ScsTcpEndPoint(ipAddress, port));
+                server.AddService<ICommunicationService, CommunicationService>(new CommunicationService());
+                server.AddService<IConfigurationService, ConfigurationService>(new ConfigurationService());
+                server.AddService<IMailService, MailService>(new MailService());
+                server.AddService<IMallService, MallService>(new MallService());
+                server.AddService<IAuthentificationService, AuthentificationService>(new AuthentificationService());
+                server.ClientConnected += OnClientConnected;
+                server.ClientDisconnected += OnClientDisconnected;
+                server.Start();
+
+                StartLauncherAuthBridge();
+                AppDomain.CurrentDomain.ProcessExit += (_, __) => StopLauncherAuthBridge();
+                Console.CancelKeyPress += (_, eventArgs) =>
                 {
-                    // configure Services and Service Host
-                    string ipAddress = ServerConfiguration.IPAddress;
-                    var _server = ScsServiceBuilder.CreateService(new ScsTcpEndPoint(ipAddress, port));
+                    eventArgs.Cancel = true;
+                    StopLauncherAuthBridge();
+                    Environment.Exit(0);
+                };
 
-                    _server.AddService<ICommunicationService, CommunicationService>(new CommunicationService());
-                    _server.AddService<IConfigurationService, ConfigurationService>(new ConfigurationService());
-                    _server.AddService<IMailService, MailService>(new MailService());
-                    _server.AddService<IMallService, MallService>(new MallService());
-                    _server.AddService<IAuthentificationService, AuthentificationService>(
-                        new AuthentificationService());
-                    _server.ClientConnected += OnClientConnected;
-                    _server.ClientDisconnected += OnClientDisconnected;
-
-                    _server.Start();
-                    static void PrintHeader()
-                    {
-                        const string text = @"
-
- ______ _____   ____   _____ _________      ________ _____ _   _ 
-|  ____|  __ \ / __ \ / ____|__   __\ \    / /  ____|_   _| \ | |
-| |__  | |__) | |  | | (___    | |   \ \  / /| |__    | | |  \| |
-|  __| |  _  /| |  | |\___ \   | |    \ \/ / |  __|   | | | . ` |
-| |    | | \ \| |__| |____) |  | |     \  /  | |____ _| |_| |\  |
-|_|    |_|  \_\\____/|_____/   |_|      \/   |______|_____|_| \_|
-                                                                                           
-";
-                        string separator = new string('=', Console.WindowWidth);
-                        string logo = text.Split('\n').Select(s => string.Format("{0," + (Console.WindowWidth / 2 + s.Length / 2) + "}\n", s)).Aggregate("", (current, i) => current + i);
-                        Console.ForegroundColor = ConsoleColor.White;
-                        Console.WriteLine(separator + logo + separator);
-                        Console.ForegroundColor = ConsoleColor.White;
-                    }
-                    Console.Clear();
-                    PrintHeader();
-                    Console.ForegroundColor = ConsoleColor.Blue;
-                    Console.WriteLine($"[{DateTime.Now}][INFO] Master Server started successfully");
-                }
-                catch (Exception ex)
-                {
-                    Logger.Error("General Error Server", ex);
-                }
+                Console.Clear();
+                PrintHeader();
+                Console.ForegroundColor = ConsoleColor.Blue;
+                Console.WriteLine($"[{DateTime.Now}][INFO] Master Server started successfully");
             }
             catch (Exception ex)
             {
                 Logger.Error("General Error", ex);
+                StopLauncherAuthBridge();
                 Console.ReadKey();
             }
+        }
+
+        private static void StartLauncherAuthBridge()
+        {
+            if (!ServerConfiguration.EnableLauncherAuthBridge)
+            {
+                return;
+            }
+
+            if (!ServerConfiguration.EnableGameforgeTokenLogin)
+            {
+                throw new InvalidOperationException(
+                    "EnableGameforgeTokenLogin must be true before the launcher authentication bridge can start.");
+            }
+
+            _launcherAuthBridge = new LauncherAuthBridge();
+            _launcherAuthBridge.Start();
+        }
+
+        private static void StopLauncherAuthBridge()
+        {
+            _launcherAuthBridge?.Dispose();
+            _launcherAuthBridge = null;
         }
 
         private static void OnClientConnected(object sender, ServiceClientEventArgs e)
@@ -135,7 +120,9 @@ namespace NosGm.Master.Server
             }
         }
 
-        private static void OnClientDisconnected(object sender, ServiceClientEventArgs e) => Logger.Info($"ClientID: {e.Client.ClientId} disconnected");
-        #endregion
+        private static void OnClientDisconnected(object sender, ServiceClientEventArgs e)
+        {
+            Logger.Info($"ClientID: {e.Client.ClientId} disconnected");
+        }
     }
 }

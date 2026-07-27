@@ -23,9 +23,39 @@ A release is accepted only when:
 
 The private release-signing key is never part of the launcher, repository or web server. Only the public key is pinned in the launcher build.
 
+## Modern account login
+
+When an authentication endpoint is configured, **Play** uses the modern `NoS0576` / `NoS0577` flow:
+
+- the account password is sent only to the configured NosGM HTTPS ticket endpoint;
+- the password is never saved in launcher settings or passed to Login or World;
+- Master returns a short-lived, one-use authorization code;
+- the launcher starts a current-user-only `GameforgeClientJSONRPC` named pipe;
+- the client receives the code and account name through the four expected JSON-RPC methods;
+- the client starts with `gf <countryId>`, `_TNT_CLIENT_APPLICATION_ID` and `_TNT_SESSION_ID`;
+- a failed or incomplete handshake terminates the spawned client.
+
+The launcher reads the same Gameforge `InstallationId` that the client uses from:
+
+```text
+HKCU\Software\Gameforge4d\TNTClient\MainApp\InstallationId
+```
+
+If it does not exist, the launcher creates it before starting the client. It is not duplicated into `settings.json`.
+
+For local development:
+
+```powershell
+$env:NOSGM_AUTH_ENDPOINT = "http://127.0.0.1:8081/api/v1/launcher/ticket"
+```
+
+Remote endpoints must use HTTPS and the exact path `/api/v1/launcher/ticket`. When no authentication endpoint is configured, the previous launch action remains available for compatibility.
+
+See [`docs/launcher-authentication.md`](../docs/launcher-authentication.md) for server flags, TLS reverse-proxy deployment, regional mapping and real-client verification.
+
 ## Launcher languages
 
-The WPF interface includes complete built-in navigation, state, confirmation and progress catalogs for:
+The WPF interface includes complete built-in navigation, state, confirmation, progress and account-login catalogs for:
 
 - Spanish (`es`)
 - English (`en`)
@@ -39,6 +69,8 @@ The WPF interface includes complete built-in navigation, state, confirmation and
 - Simplified Chinese (`cn`)
 
 The selected language is saved in the per-user launcher settings and can be changed without restarting. Catalog validation runs before the main window is initialized and refuses incomplete languages. Low-level exception details remain unchanged so diagnostics preserve their original technical meaning.
+
+The same selection controls the modern region argument: English `0`, German `1`, French `2`, Italian `3`, Polish `4`, Spanish `5`, Czech `6`, Russian `7`, Japanese `8` and Chinese `9`.
 
 ## Existing installation import
 
@@ -65,7 +97,7 @@ The local `.nosgm/update.lock` file is opened with exclusive sharing during impo
 
 - `src/NosGM.Updater.Core`: manifest validation, signature verification, path sandboxing, planning, streaming downloads, staging, rollback, installation locking, import and crash recovery.
 - `src/NosGM.ManifestBuilder`: package-free CLI for generating signing keys, building and verifying manifests, calculating public-key fingerprints and generating trusted public channel source.
-- `src/NosGM.Launcher`: multilingual WPF shell for importing, checking, repairing and launching the client.
+- `src/NosGM.Launcher`: multilingual WPF shell for importing, checking, repairing and launching the client through legacy or modern authentication.
 - `tests/NosGM.Updater.SelfTest`: package-free synthetic regression suite, including interrupted-commit recovery.
 
 ## Build
@@ -74,6 +106,8 @@ The local `.nosgm/update.lock` file is opened with exclusive sharing during impo
 dotnet restore Launcher/NosGM.Launcher.sln
 dotnet build Launcher/NosGM.Launcher.sln --configuration Release --no-restore
 dotnet run --project Launcher/tests/NosGM.Updater.SelfTest --configuration Release --no-build
+./scripts/verify-launcher.ps1
+./scripts/verify-launcher-auth-bridge.ps1
 ```
 
 ## Generate release keys

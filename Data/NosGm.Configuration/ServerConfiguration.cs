@@ -33,6 +33,10 @@
         public static bool EnableGameforgeTokenLogin = false;
         public static int GameforgeAuthTicketTtlSeconds = 120;
         public static int GameforgeWorldPermitTtlSeconds = 120;
+        public static bool EnableLauncherAuthBridge = false;
+        public static string LauncherAuthBridgePrefix = "http://127.0.0.1:8081/";
+        public static int LauncherAuthBridgeAttemptWindowSeconds = 60;
+        public static int LauncherAuthBridgeMaxAttemptsPerWindow = 10;
         public static bool StartAllRegionalLoginPorts = true;
         public static bool StartGlacernonAutomaticly = false;
         public static bool StartAllChannelsAutomaticly = true;

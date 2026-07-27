@@ -97,6 +97,10 @@ jobs:
         shell: powershell
         run: ./scripts/verify-repaired-login.ps1
 
+      - name: Verify launcher authentication bridge contracts
+        shell: powershell
+        run: ./scripts/verify-launcher-auth-bridge.ps1
+
       - name: Upload build diagnostics
         if: always()
         uses: actions/upload-artifact@v7
