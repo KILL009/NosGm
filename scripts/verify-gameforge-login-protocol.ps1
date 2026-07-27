@@ -14,8 +14,8 @@ $assemblyDirectory = Split-Path -Parent $resolvedAssembly
 $resolver = [ResolveEventHandler]{
     param($sender, $eventArgs)
 
-    $name = ([Reflection.AssemblyName]::new($eventArgs.Name)).Name + ".dll"
-    $candidate = Join-Path $assemblyDirectory $name
+    $assemblyName = New-Object Reflection.AssemblyName($eventArgs.Name)
+    $candidate = Join-Path $assemblyDirectory ($assemblyName.Name + ".dll")
     if (Test-Path -LiteralPath $candidate) {
         return [Reflection.Assembly]::LoadFrom($candidate)
     }
@@ -27,7 +27,6 @@ $resolver = [ResolveEventHandler]{
 try {
     [Reflection.Assembly]::LoadFrom($resolvedAssembly) | Out-Null
 
-    $parser = [NosGm.Master.Library.Interface.GameforgeLoginPacketParser]
     $store = [NosGm.Master.Library.Interface.GameforgeAuthTicketStore]::Instance
     $verticalTab = [char]0x0B
     $token = "37633936363633662D633332352D346461612D383933612D373031346639653063646463"
@@ -42,7 +41,10 @@ try {
         $raw = "$Header $token  $($installationId.ToString('D')) 0023A85D 5${verticalTab}0.9.3.3256 0 $md5"
         $payload = $null
         $errorCode = $null
-        if (-not $parser::TryParse($raw, [ref]$payload, [ref]$errorCode)) {
+        if (-not [NosGm.Master.Library.Interface.GameforgeLoginPacketParser]::TryParse(
+                $raw,
+                [ref]$payload,
+                [ref]$errorCode)) {
             throw "$Header fixture was rejected: $errorCode"
         }
 
@@ -66,7 +68,10 @@ try {
 
         $payload = $null
         $errorCode = $null
-        if ($parser::TryParse($RawPacket, [ref]$payload, [ref]$errorCode)) {
+        if ([NosGm.Master.Library.Interface.GameforgeLoginPacketParser]::TryParse(
+                $RawPacket,
+                [ref]$payload,
+                [ref]$errorCode)) {
             throw "Invalid fixture was accepted: $Description"
         }
 
@@ -100,13 +105,18 @@ try {
 
     foreach ($entry in $expectedCultures.GetEnumerator()) {
         $culture = $null
-        if (-not $parser::TryGetCulture([byte]$entry.Key, [ref]$culture) -or $culture -ne $entry.Value) {
+        if (-not [NosGm.Master.Library.Interface.GameforgeLoginPacketParser]::TryGetCulture(
+                [byte]$entry.Key,
+                [ref]$culture) -or
+            $culture -ne $entry.Value) {
             throw "CountryId $($entry.Key) did not map to $($entry.Value)."
         }
     }
 
     $unsupportedCulture = $null
-    if ($parser::TryGetCulture([byte]9, [ref]$unsupportedCulture)) {
+    if ([NosGm.Master.Library.Interface.GameforgeLoginPacketParser]::TryGetCulture(
+            [byte]9,
+            [ref]$unsupportedCulture)) {
         throw "CountryId 9 was incorrectly accepted."
     }
 
@@ -171,17 +181,18 @@ try {
 
     if ($handlerSource -notmatch '\[Packet\("NoS0576",\s*"NoS0577"\)\]' -or
         $handlerSource -notmatch 'ConsumeGameforgeAuthTicket' -or
-        $handlerSource -notmatch 'GameforgeLoginPacketParser\.TryParse') {
-        throw "The Login handler is not wired to both modern headers and the one-time ticket service."
+        $handlerSource -notmatch 'GameforgeLoginPacketParser\.TryParse' -or
+        $handlerSource -notmatch 'public void VerifyGameforgeLogin\(string rawPacket\)') {
+        throw "The Login handler is not wired safely to both modern headers and the one-time ticket service."
     }
 
-    if ($handlerSource -match 'Logger\.[A-Za-z]+\([^\)]*AuthToken' -or
-        $handlerSource -match 'Logger\.[A-Za-z]+\([^\)]*payload\.AuthToken') {
-        throw "The Login handler appears to log a Gameforge authentication token."
+    if ($handlerSource -match '\{payload\.AuthToken\}' -or
+        $handlerSource -match '\{rawPacket\}') {
+        throw "The Login handler appears to interpolate sensitive Gameforge packet data into a log."
     }
 
     if ($authContractSource -notmatch 'SHA256\.Create\(\)' -or
-        $authContractSource -match 'class Ticket[\s\S]*AuthToken') {
+        $authContractSource -match 'private sealed class Ticket\s*\{[^\}]*AuthToken') {
         throw "The ticket store no longer guarantees hashed token lookup keys."
     }
 
