@@ -96,6 +96,8 @@ Require $readiness 'HKCU:\Software\Gameforge4d\TNTClient\MainApp' 'Readiness mus
 Require $readiness 'OverallStatus = $overallStatus' 'Readiness must write a machine-readable overall result.'
 Require $readiness 'if ($PassThru)' 'Readiness must support non-terminating composition by the startup and collector scripts.'
 
+Require $collector '[switch]$SelfTest' 'The collector must expose a behavioral redaction self-test.'
+Require $collector 'Invoke-RedactionSelfTest' 'The behavioral redaction test must run through the production sanitizer.'
 Require $collector 'Protect-DiagnosticLine' 'Diagnostics must sanitize every collected log line.'
 Require $collector '<redacted-modern-login-packet>' 'Raw NoS0576 and NoS0577 payloads must be removed.'
 Require $collector '<redacted-entry-packet>' 'Raw NsTeST entry payloads must be removed.'
@@ -110,6 +112,8 @@ Require $collector '[IO.SeekOrigin]::End' 'The collector must seek from the end 
 Require $collector 'Select-Object -Last $MaxLogLines' 'The collector must cap the number of emitted log lines.'
 Require $collector '[Array]::Clear($buffer, 0, $buffer.Length)' 'Temporary log byte buffers must be cleared.'
 Require $collector '[long]$MaxLogMegabytes * 1MB' 'Each log read must have a byte ceiling.'
+Require $collector 'Diagnostic redaction self-test leaked a synthetic private value.' 'The self-test must fail on any synthetic private-value leak.'
+Require $collector 'Diagnostic redaction self-test exceeded the configured output ceiling.' 'The self-test must enforce the byte ceiling.'
 Require $collector 'ExecutableFile = Split-Path -Leaf' 'Runtime state must omit complete executable paths.'
 Require $collector 'CredentialScanPassed' 'The bundle must report whether launcher settings passed the credential scan.'
 Require $collector 'Compress-Archive' 'Diagnostics must produce a portable ZIP bundle.'
