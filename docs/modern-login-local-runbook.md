@@ -13,7 +13,8 @@ This runbook starts the complete NosGM modern authentication path on one Windows
 5. starts Master, World, all ten regional Login listeners and the launcher;
 6. waits until Master, AuthBridge, World and Spanish Login are accepting connections;
 7. removes the temporary secrets from the calling PowerShell process;
-8. records only process IDs, process names, start times, ports and the public loopback endpoint under the ignored `artifacts` directory.
+8. records only process IDs, process names, start times, ports and public loopback endpoints under the ignored `artifacts` directory;
+9. runs a non-destructive readiness inspection and writes a machine-readable report.
 
 The account password is not accepted by this script. It is entered only in the launcher dialog and remains in memory for the HTTPS request.
 
@@ -66,7 +67,64 @@ The script should report:
 [READY] Spanish Login on 127.0.0.1:4005
 ```
 
+The loopback-only health endpoint is:
+
+```text
+http://127.0.0.1:8081/api/v1/launcher/health
+```
+
+It reports only service readiness, maintenance state, feature flags, TTL values and the canonical region count. It does not expose accounts, database information, keys, IP configuration or secrets.
+
 Select **Español** in the launcher. The launcher then starts the client with region `5`, which must connect to Login port `4005`.
+
+## Readiness inspector
+
+The startup command runs the readiness inspector automatically without stopping the stack when a launcher or client blocker is found.
+
+Run it again at any time:
+
+```powershell
+./scripts/test-modern-login-readiness.ps1 -RequireLauncher
+```
+
+The machine-readable report is written to:
+
+```text
+artifacts/modern-login-local/readiness.json
+```
+
+The inspector validates:
+
+- exactly one recorded Master, World and Login process;
+- PID, process name and original start time;
+- Master, World and Spanish Login TCP connectivity;
+- the loopback AuthBridge health response and all ten regions;
+- launcher settings without credential-shaped properties;
+- the configured authorized client executable and file version;
+- Spanish region `5` for the first acceptance test;
+- the shared current-user Gameforge `InstallationId`.
+
+A missing `InstallationId` before the first **Play** action is a warning, because the launcher creates it before starting the client.
+
+## Sanitized diagnostic bundle
+
+When a real-client test fails, keep the stack running and execute:
+
+```powershell
+./scripts/collect-modern-login-diagnostics.ps1
+```
+
+The ZIP is created under:
+
+```text
+artifacts/modern-login-diagnostics/
+```
+
+The bundle contains readiness results, sanitized process metadata, component versions and bounded log tails. It redacts raw `NoS0576`, `NoS0577` and `NsTeST` packets, passwords, codes, keys, account identifiers, email addresses, GUID values, external IP addresses, Windows profile names and long secret-shaped values.
+
+The collector never reads the environment blocks of running processes and never copies the complete launcher settings or Gameforge registry key.
+
+See the complete symptom map and validation sequence in [`modern-login-acceptance-test.md`](modern-login-acceptance-test.md).
 
 ## Stop the local stack
 
@@ -126,20 +184,22 @@ $env:NOSGM_LAUNCHER_AUTH_BRIDGE_PREFIX = "http://127.0.0.1:8081/"
 $env:NOSGM_AUTH_ENDPOINT = "http://127.0.0.1:8081/api/v1/launcher/ticket"
 ```
 
-For production, expose only the exact ticket path through a maintained TLS reverse proxy. The Master listener should remain bound to loopback.
+For production, expose only the exact ticket path through a maintained TLS reverse proxy. The Master listener and health endpoint should remain reachable only through loopback.
 
 ## First real-client test
 
 1. Start the stack with the startup script.
-2. Select Spanish in NosGM Launcher.
-3. Enter a valid NosGM account and password.
-4. Confirm Master logs one successful ticket issue without printing the token.
-5. Confirm Login accepts `NoS0576` or `NoS0577` on port `4005`.
-6. Confirm the server list appears.
-7. Enter a character and confirm World consumes the one-use permit.
-8. Disconnect and repeat with an invalid password to confirm the generic rejection.
-9. Attempt more than ten invalid passwords in sixty seconds to confirm HTTP `429`.
-10. Stop the stack with the shutdown script.
+2. Run `./scripts/test-modern-login-readiness.ps1 -RequireLauncher`.
+3. Select Spanish in NosGM Launcher.
+4. Enter a valid NosGM account and password.
+5. Confirm Master logs one successful ticket issue without printing the token.
+6. Confirm Login accepts `NoS0576` or `NoS0577` on port `4005`.
+7. Confirm the server list appears.
+8. Enter a character and confirm World consumes the one-use permit.
+9. Disconnect and repeat with an invalid password to confirm the generic rejection.
+10. Attempt more than ten invalid passwords in sixty seconds to confirm HTTP `429`.
+11. Collect a sanitized bundle if any stage fails.
+12. Stop the stack with the shutdown script.
 
 ## Automated contracts
 
@@ -147,6 +207,7 @@ Run:
 
 ```powershell
 ./scripts/verify-modern-login-runtime-activation.ps1
+./scripts/verify-modern-login-observability.ps1
 ./scripts/verify-launcher-auth-bridge.ps1
 ./scripts/verify-repaired-login.ps1
 ```

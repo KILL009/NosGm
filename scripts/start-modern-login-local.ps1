@@ -179,6 +179,7 @@ if (Test-Path -LiteralPath $statePath) {
 
 $bridgePrefix = "http://127.0.0.1:$BridgePort/"
 $launcherEndpoint = $bridgePrefix + "api/v1/launcher/ticket"
+$healthEndpoint = $bridgePrefix + "api/v1/launcher/health"
 
 if ($ConfigureUrlAcl) {
     if (-not (Test-IsAdministrator)) {
@@ -261,6 +262,7 @@ try {
         SchemaVersion = 1
         CreatedAtUtc = [DateTime]::UtcNow.ToString("O")
         AuthenticationEndpoint = $launcherEndpoint
+        HealthEndpoint = $healthEndpoint
         SpanishLoginPort = $spanishLoginPort
         WorldPort = $WorldPort
         Processes = @($startedProcesses)
@@ -268,11 +270,41 @@ try {
     $state | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $statePath -Encoding UTF8
     Restore-ProcessEnvironment
 
+    if (-not $SkipLauncher) {
+        Start-Sleep -Seconds 2
+    }
+
+    $readiness = [pscustomobject]@{ OverallStatus = "failed" }
+    try {
+        $readinessParameters = @{
+            OutputPath = (Join-Path $stateDirectory "readiness.json")
+            PassThru = $true
+        }
+        if (-not $SkipLauncher) {
+            $readinessParameters["RequireLauncher"] = $true
+        }
+        $readiness = & (Join-Path $PSScriptRoot "test-modern-login-readiness.ps1") @readinessParameters
+    }
+    catch {
+        Write-Warning "The stack is running, but the readiness inspector could not complete: $($_.Exception.Message)"
+    }
+
     Write-Host ""
     Write-Host "NosGM modern Login local stack is ready." -ForegroundColor Green
     Write-Host "Authentication endpoint: $launcherEndpoint"
+    Write-Host "Health endpoint: $healthEndpoint"
     Write-Host "Launcher language: Español (region 5 / Login $spanishLoginPort)"
     Write-Host "Secrets were inherited by the child processes, removed from this shell and never written to disk."
+    if ($readiness.OverallStatus -eq "failed") {
+        Write-Warning "The stack is running, but readiness found blockers. Fix them and rerun ./scripts/test-modern-login-readiness.ps1"
+    }
+    elseif ($readiness.OverallStatus -eq "warning") {
+        Write-Warning "The stack is running with readiness warnings. Review readiness.json before the client test."
+    }
+    else {
+        Write-Host "Readiness checks passed. You can begin the real-client acceptance test." -ForegroundColor Green
+    }
+    Write-Host "Collect sanitized evidence with: ./scripts/collect-modern-login-diagnostics.ps1"
     Write-Host "Stop the stack with: ./scripts/stop-modern-login-local.ps1"
 }
 catch {
