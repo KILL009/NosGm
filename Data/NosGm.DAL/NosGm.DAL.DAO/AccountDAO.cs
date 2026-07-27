@@ -191,6 +191,41 @@ namespace NosGm.DAL.DAO
             }
         }
 
+        public bool TryUpdateLanguage(long accountId, string language)
+        {
+            if (accountId <= 0 || string.IsNullOrWhiteSpace(language) || language.Length > 8)
+            {
+                return false;
+            }
+
+            try
+            {
+                using (var context = DataAccessHelper.CreateContext())
+                {
+                    Account entity = context.Account.FirstOrDefault(a => a.AccountId.Equals(accountId));
+                    if (entity == null)
+                    {
+                        return false;
+                    }
+
+                    if (string.Equals(entity.Language, language, StringComparison.OrdinalIgnoreCase))
+                    {
+                        return true;
+                    }
+
+                    entity.Language = language;
+                    return context.SaveChanges() == 1;
+                }
+            }
+            catch (Exception e)
+            {
+                LoggerService.LogServer.Logger.LogAsync(
+                    $"Unable to update account language for AccountId={accountId}. Message: {e.Message} | Source: {e.Source}",
+                    LogType.ERROR);
+                return false;
+            }
+        }
+
         public async Task WriteGeneralLog(long accountId, string ipAddress, long? characterId, GeneralLogType logType,
             string logData)
         {
