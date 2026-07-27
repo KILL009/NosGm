@@ -12,14 +12,13 @@ namespace NosGm.Core
 {
     /// <summary>
     /// Resolves server messages for a specific player culture.
-    /// The neutral resource file is English and satellite resources (for example fr)
-    /// override only the keys they translate.
+    /// The neutral resource file is English and satellite resources override translated keys.
     /// </summary>
     public sealed class Language
     {
         private static readonly string[] SupportedCultures =
         {
-            "en", "es", "de", "fr", "it", "pl", "cs", "ru", "tr", "ja", "zh"
+            "en", "es", "de", "fr", "it", "pl", "cs", "ru", "ja", "zh"
         };
 
         private static readonly Lazy<Language> LazyInstance =
@@ -142,8 +141,6 @@ namespace NosGm.Core
 
             var candidate = cultureName.Trim().Replace('_', '-').ToLowerInvariant();
 
-            // Accept culture tags, English display names, native names and
-            // aliases commonly used by launchers and older NosTale tools.
             if (candidate == "uk" || candidate == "gb" || candidate == "english" ||
                 candidate.StartsWith("en-"))
             {
@@ -185,11 +182,6 @@ namespace NosGm.Core
             {
                 candidate = "ru";
             }
-            else if (candidate == "turkish" || candidate == "türkçe" ||
-                     candidate == "turkce" || candidate.StartsWith("tr-"))
-            {
-                candidate = "tr";
-            }
             else if (candidate == "jp" || candidate == "japanese" ||
                      candidate == "日本語" || candidate.StartsWith("ja-") ||
                      candidate.StartsWith("jp-"))
@@ -200,8 +192,6 @@ namespace NosGm.Core
                      candidate == "中文" || candidate.StartsWith("zh-") ||
                      candidate.StartsWith("cn-"))
             {
-                // The first Chinese catalog is Simplified Chinese. Region-specific
-                // aliases deliberately share it until a Traditional catalog exists.
                 candidate = "zh";
             }
 
@@ -283,10 +273,9 @@ namespace NosGm.Core
     }
 
     /// <summary>
-    /// Maps the verified European NosTale client region to its Login port,
-    /// protocol account prefix, NSlangData suffix and server culture.
-    /// The accepted local Login port is authoritative. World endpoint ports
-    /// listed later in NsTeST are independent channel ports.
+    /// Maps each supported client language to its Login port, protocol account prefix,
+    /// NSlangData suffix and server culture. The accepted local Login port is authoritative.
+    /// World endpoint ports listed later in NsTeST are independent channel ports.
     /// </summary>
     public static class ClientRegionMap
     {
@@ -300,7 +289,8 @@ namespace NosGm.Core
             new ClientLanguageProfile(5, 4005, "ES", "ES", "es"),
             new ClientLanguageProfile(6, 4006, "CZ", "CZ", "cs"),
             new ClientLanguageProfile(7, 4007, "RU", "RU", "ru"),
-            new ClientLanguageProfile(8, 4008, "TR", "TR", "tr")
+            new ClientLanguageProfile(8, 4008, "JP", "JP", "ja"),
+            new ClientLanguageProfile(9, 4009, "CN", "CN", "zh")
         };
 
         public const int BaseLoginPort = 4000;
