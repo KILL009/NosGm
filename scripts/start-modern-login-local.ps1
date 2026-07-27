@@ -288,7 +288,7 @@ try {
         HealthEndpoint = $healthEndpoint
         SpanishLoginPort = $spanishLoginPort
         WorldPort = $WorldPort
-        Processes = @($startedProcesses)
+        Processes = $startedProcesses.ToArray()
     }
     $state | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $statePath -Encoding UTF8
     Restore-ProcessEnvironment
