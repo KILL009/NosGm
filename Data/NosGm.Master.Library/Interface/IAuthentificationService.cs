@@ -3,34 +3,27 @@ using NosGm.SCS.Communication.ScsServices.Service;
 
 namespace NosGm.Master.Library.Interface
 {
-    [ScsService(Version = "1.1.0.0")]
+    [ScsService(Version = "1.2.0.0")]
     public interface IAuthentificationService
     {
-        #region Methods
-
         /// <summary>
-        ///     Authenticates a Client to the Service
+        /// Authenticates a trusted NosGM service client.
         /// </summary>
-        /// <param name="authKey">The private Authentication key</param>
-        /// <returns>true if successful, else false</returns>
         bool Authenticate(string authKey);
 
-        /// <summary>
-        ///     Checks if the given Credentials are Valid
-        /// </summary>
-        /// <param name="userName"></param>
-        /// <param name="passHash"></param>
-        /// <returns></returns>
         AccountDTO ValidateAccount(string userName, string passHash);
 
-        /// <summary>
-        ///     Checks if the given Credentials are Valid and return the CharacterDTO
-        /// </summary>
-        /// <param name="userName"></param>
-        /// <param name="characterName"></param>
-        /// <param name="passHash"></param>
-        /// <returns></returns>
         CharacterDTO ValidateAccountAndCharacter(string userName, string characterName, string passHash);
+
+        /// <summary>
+        /// Registers a short-lived, one-use ticket obtained by an external authentication bridge.
+        /// The raw token is hashed immediately and is never stored by Master.
+        /// </summary>
+        bool RegisterGameforgeAuthTicket(
+            string accountName,
+            string authToken,
+            string installationId,
+            byte countryId);
 
         /// <summary>
         ///     Stores a short-lived one-time code issued by the trusted AuthServer.
@@ -58,5 +51,12 @@ namespace NosGm.Master.Library.Interface
         void RevokeModernLoginSession(long accountId, int sessionId);
 
         #endregion
+        /// Atomically consumes a previously registered ticket. Returns the local account name
+        /// only when token, installation and country all match.
+        /// </summary>
+        string ConsumeGameforgeAuthTicket(
+            string authToken,
+            string installationId,
+            byte countryId);
     }
 }

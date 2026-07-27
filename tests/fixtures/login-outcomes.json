@@ -2,6 +2,7 @@
   "schemaVersion": 1,
   "defaults": {
     "packetValid": true,
+    "regionalPortValid": true,
     "accountFound": true,
     "exactAccountCase": true,
     "maintenanceMode": false,
@@ -15,6 +16,7 @@
     "accountConnectedRace": false,
     "hasSelectedCharacter": false,
     "activeBan": false,
+    "languageSyncSucceeds": true,
     "registrationSucceeds": true,
     "worldListAvailable": true
   },
@@ -54,6 +56,20 @@
       "expected": {
         "result": "silent_drop",
         "failType": null,
+        "registersMaster": false,
+        "disconnectsMaster": false,
+        "sendsWorldList": false,
+        "disposesPolling": true
+      }
+    },
+    {
+      "id": "unsupported_login_port",
+      "override": {
+        "regionalPortValid": false
+      },
+      "expected": {
+        "result": "reject",
+        "failType": "CantConnect",
         "registersMaster": false,
         "disconnectsMaster": false,
         "sendsWorldList": false,
@@ -208,6 +224,20 @@
       "expected": {
         "result": "reject",
         "failType": "Banned",
+        "registersMaster": false,
+        "disconnectsMaster": false,
+        "sendsWorldList": false,
+        "disposesPolling": true
+      }
+    },
+    {
+      "id": "language_sync_failure",
+      "override": {
+        "languageSyncSucceeds": false
+      },
+      "expected": {
+        "result": "reject",
+        "failType": "CantConnect",
         "registersMaster": false,
         "disconnectsMaster": false,
         "sendsWorldList": false,

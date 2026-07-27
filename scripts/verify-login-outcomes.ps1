@@ -1,4 +1,4 @@
-param(
+﻿param(
     [string]$FixturePath = "tests/fixtures/login-outcomes.json",
     [string]$LoginHandlerPath = "Data/NosGm.Handler/PacketHandler/Login/LoginPacketHandler.cs",
     [string]$LoginFailTypePath = "Data/NosGm.Domain/LoginFailType.cs"
@@ -8,19 +8,19 @@ $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
 
 $stateFields = @(
-    "packetValid", "accountFound", "exactAccountCase", "maintenanceMode",
+    "packetValid", "regionalPortValid", "accountFound", "exactAccountCase", "maintenanceMode",
     "authority", "passwordAccepted", "versionRequired", "serverVersionConfigured",
     "clientVersionAccepted", "ipPenalized", "staleSessionPersists",
     "accountConnectedRace", "hasSelectedCharacter", "activeBan",
-    "registrationSucceeds", "worldListAvailable"
+    "languageSyncSucceeds", "registrationSucceeds", "worldListAvailable"
 )
 
 $booleanStateFields = @(
-    "packetValid", "accountFound", "exactAccountCase", "maintenanceMode",
+    "packetValid", "regionalPortValid", "accountFound", "exactAccountCase", "maintenanceMode",
     "passwordAccepted", "versionRequired", "serverVersionConfigured",
     "clientVersionAccepted", "ipPenalized", "staleSessionPersists",
     "accountConnectedRace", "hasSelectedCharacter", "activeBan",
-    "registrationSucceeds", "worldListAvailable"
+    "languageSyncSucceeds", "registrationSucceeds", "worldListAvailable"
 )
 
 $expectedFields = @(
@@ -37,11 +37,11 @@ $allowedFailTypes = @(
 
 $requiredCaseIds = @(
     "success_current_client", "maintenance_gm_bypass", "malformed_packet",
-    "unknown_account", "wrong_account_casing", "maintenance_user",
-    "wrong_credentials", "invalid_server_version_configuration",
+    "unsupported_login_port", "unknown_account", "wrong_account_casing",
+    "maintenance_user", "wrong_credentials", "invalid_server_version_configuration",
     "unsupported_client_version", "ip_penalty", "stale_session_timeout",
     "connected_session_race", "active_account_ban", "banned_authority",
-    "master_registration_failure", "world_list_unavailable"
+    "language_sync_failure", "master_registration_failure", "world_list_unavailable"
 )
 
 function Read-RequiredText {
@@ -56,25 +56,16 @@ function Read-RequiredText {
 
 function Get-PropertyNames {
     param([object]$Value)
-
     return @($Value.PSObject.Properties | ForEach-Object { $_.Name })
 }
 
 function Get-PropertyValue {
-    param(
-        [object]$Value,
-        [string]$Name
-    )
-
+    param([object]$Value, [string]$Name)
     return $Value.PSObject.Properties[$Name].Value
 }
 
 function Assert-ExactProperties {
-    param(
-        [object]$Value,
-        [string[]]$ExpectedNames,
-        [string]$Description
-    )
+    param([object]$Value, [string[]]$ExpectedNames, [string]$Description)
 
     if ($null -eq $Value) {
         throw "$Description must not be null."
@@ -83,22 +74,16 @@ function Assert-ExactProperties {
     $actualNames = Get-PropertyNames $Value
     $unexpected = @($actualNames | Where-Object { $_ -notin $ExpectedNames })
     $missing = @($ExpectedNames | Where-Object { $_ -notin $actualNames })
-
     if ($unexpected.Count -gt 0) {
         throw "$Description contains forbidden properties: $($unexpected -join ', ')."
     }
-
     if ($missing.Count -gt 0) {
         throw "$Description is missing properties: $($missing -join ', ')."
     }
 }
 
 function Assert-AllowedProperties {
-    param(
-        [object]$Value,
-        [string[]]$AllowedNames,
-        [string]$Description
-    )
+    param([object]$Value, [string[]]$AllowedNames, [string]$Description)
 
     if ($null -eq $Value) {
         throw "$Description must not be null."
@@ -111,10 +96,7 @@ function Assert-AllowedProperties {
 }
 
 function Assert-StateTypes {
-    param(
-        [object]$State,
-        [string]$Description
-    )
+    param([object]$State, [string]$Description)
 
     foreach ($field in $booleanStateFields) {
         if ((Get-PropertyValue $State $field) -isnot [bool]) {
@@ -128,20 +110,15 @@ function Assert-StateTypes {
 }
 
 function Merge-State {
-    param(
-        [object]$Defaults,
-        [object]$Override
-    )
+    param([object]$Defaults, [object]$Override)
 
     $merged = [ordered]@{}
     foreach ($field in $stateFields) {
         $merged[$field] = Get-PropertyValue $Defaults $field
     }
-
     foreach ($property in $Override.PSObject.Properties) {
         $merged[$property.Name] = $property.Value
     }
-
     return [pscustomobject]$merged
 }
 
@@ -170,6 +147,9 @@ function Get-LoginOutcome {
 
     if (-not $State.packetValid) {
         return (New-Outcome "silent_drop" $null $false $false $false $true)
+    }
+    if (-not $State.regionalPortValid) {
+        return (New-Outcome "reject" "CantConnect" $false $false $false $true)
     }
     if (-not $State.accountFound) {
         return (New-Outcome "reject" "AccountOrPasswordWrong" $false $false $false $true)
@@ -202,6 +182,9 @@ function Get-LoginOutcome {
     if ($State.activeBan -or $State.authority -eq "banned") {
         return (New-Outcome "reject" "Banned" $false $false $false $true)
     }
+    if (-not $State.languageSyncSucceeds) {
+        return (New-Outcome "reject" "CantConnect" $false $false $false $true)
+    }
     if (-not $State.registrationSucceeds) {
         return (New-Outcome "reject" "CantConnect" $false $false $false $true)
     }
@@ -227,11 +210,7 @@ function Assert-SameValue {
 }
 
 function Assert-Regex {
-    param(
-        [string]$Content,
-        [string]$Pattern,
-        [string]$Description
-    )
+    param([string]$Content, [string]$Pattern, [string]$Description)
 
     if (-not [regex]::IsMatch(
             $Content,
@@ -242,11 +221,7 @@ function Assert-Regex {
 }
 
 function Assert-Ordered {
-    param(
-        [string]$Content,
-        [string[]]$Needles,
-        [string]$Description
-    )
+    param([string]$Content, [string[]]$Needles, [string]$Description)
 
     $position = 0
     foreach ($needle in $Needles) {
@@ -256,6 +231,22 @@ function Assert-Ordered {
         }
         $position = $next + $needle.Length
     }
+}
+
+function Get-Section {
+    param([string]$Content, [string]$StartMarker, [string]$EndMarker, [string]$Description)
+
+    $start = $Content.IndexOf($StartMarker, [StringComparison]::Ordinal)
+    if ($start -lt 0) {
+        throw "Login source contract failed: $Description start marker missing."
+    }
+
+    $end = $Content.IndexOf($EndMarker, $start + $StartMarker.Length, [StringComparison]::Ordinal)
+    if ($end -lt 0) {
+        throw "Login source contract failed: $Description end marker missing."
+    }
+
+    return $Content.Substring($start, $end - $start)
 }
 
 $fixture = (Read-RequiredText $FixturePath) | ConvertFrom-Json
@@ -306,9 +297,10 @@ foreach ($fixtureCase in @($fixture.cases)) {
 
     $actual = Get-LoginOutcome $state
     foreach ($field in $expectedFields) {
-        $actualValue = Get-PropertyValue $actual $field
-        $expectedValue = Get-PropertyValue $fixtureCase.expected $field
-        Assert-SameValue -Actual $actualValue -Expected $expectedValue -Description "Fixture '$($fixtureCase.id)' failed for '$field'"
+        Assert-SameValue `
+            -Actual (Get-PropertyValue $actual $field) `
+            -Expected (Get-PropertyValue $fixtureCase.expected $field) `
+            -Description "Fixture '$($fixtureCase.id)' failed for '$field'"
     }
 }
 
@@ -323,12 +315,33 @@ if ($seen.Count -ne $requiredCaseIds.Count) {
 
 $handler = Read-RequiredText $LoginHandlerPath
 $failTypes = Read-RequiredText $LoginFailTypePath
+$legacyEntry = Get-Section $handler "public async Task VerifyLoginAsync(LoginPacket loginPacket)" '[Packet("NoS0576", "NoS0577")]' "legacy Login entry"
+$accountLoading = Get-Section $handler "private bool TryLoadAccount(" "private bool ValidateClientVersion(" "account loading"
+$versionValidation = Get-Section $handler "private bool ValidateClientVersion(" "private async Task<bool> CheckIsConnectedAsync" "version validation"
+$completion = Get-Section $handler "private async Task CompleteLoginAsync(" "private bool TryLoadAccount(" "shared completion"
 
-Assert-Ordered $handler @(
-    "if (loginPacket == null || string.IsNullOrWhiteSpace(loginPacket.Name) || string.IsNullOrWhiteSpace(loginPacket.Password))",
-    "AccountDTO loadedAccount = DAOFactory.AccountDAO.LoadByName(username);",
+Assert-Ordered $legacyEntry @(
+    "if (loginPacket == null || string.IsNullOrWhiteSpace(loginPacket.Name) ||",
+    "if (!TryLoadAccount(username, out AccountDTO loadedAccount))",
+    "if (!PasswordHashService.VerifyLoginPayload(",
+    "if (!ValidateClientVersion(hasClientVersion, clientVersion))",
+    "await CompleteLoginAsync("
+) "NoS0575 decision order must remain deterministic"
+
+Assert-Ordered $accountLoading @(
+    "loadedAccount = DAOFactory.AccountDAO.LoadByName(username);",
     "if (loadedAccount == null)",
     "if (!string.Equals(loadedAccount.Name, username, StringComparison.Ordinal))",
+    "if (ServerConfiguration.MaintenanceMode && loadedAccount.Authority < AuthorityType.GM)"
+) "account lookup, casing and maintenance order"
+
+Assert-Ordered $completion @(
+Assert-Ordered $handler @(
+    "if (loginPacket == null || string.IsNullOrWhiteSpace(loginPacket.Name) || string.IsNullOrWhiteSpace(loginPacket.Password))",
+    "if (!ClientRegionMap.TryResolveLoginPort(",
+    "AccountDTO loadedAccount = LoadAccountByLoginName(username, resolvedRegionType);",
+    "if (loadedAccount == null)",
+    "bool accountNameMatches = string.Equals(loadedAccount.Name, username, StringComparison.Ordinal) ||",
     "if (ServerConfiguration.MaintenanceMode && loadedAccount.Authority < AuthorityType.GM)",
     "if (!PasswordHashService.VerifyLoginPayload(",
     "if (ServerConfiguration.GameVersionRequired)",
@@ -336,14 +349,30 @@ Assert-Ordered $handler @(
     "if (await CheckIsConnectedAsync(loadedAccount.AccountId).ConfigureAwait(false))",
     "if (CommunicationServiceClient.Instance.IsAccountConnected(loadedAccount.AccountId))",
     "if (penalty != null || loadedAccount.Authority == AuthorityType.Banned)",
+    "if (!SynchronizeAccountLanguage(loadedAccount, clientCulture))",
     "CommunicationServiceClient.Instance.RegisterAccountLogin(",
     "string serversPacket = BuildServersPacket(",
     "CommunicationServiceClient.Instance.DisconnectAccount(loadedAccount.AccountId);",
     "_session.SendPacket(serversPacket);"
+) "shared completion order"
+
+Assert-Regex $accountLoading 'loadedAccount == null.*?Reject\(LoginFailType\.AccountOrPasswordWrong, "Session removed\. Reason: Unknown account"\)' "unknown account mapping"
+Assert-Regex $accountLoading '!string\.Equals\(loadedAccount\.Name, username, StringComparison\.Ordinal\).*?Reject\(LoginFailType\.WrongCaps' "account casing mapping"
+Assert-Regex $accountLoading 'MaintenanceMode && loadedAccount\.Authority < AuthorityType\.GM.*?Reject\(LoginFailType\.Maintenance' "maintenance mapping"
+Assert-Regex $legacyEntry '!PasswordHashService\.VerifyLoginPayload\(.*?Reject\(LoginFailType\.AccountOrPasswordWrong, "Session removed\. Reason: Wrong credentials"\)' "wrong credential mapping"
+Assert-Regex $versionValidation '!TryParseVersion\(ServerConfiguration\.GameVersion, out Version requiredVersion\).*?Reject\(LoginFailType\.CantConnect' "invalid server-version mapping"
+Assert-Regex $versionValidation '!hasClientVersion \|\| !requiredVersion\.Equals\(clientVersion\).*?Reject\(LoginFailType\.OldClient' "unsupported client mapping"
+Assert-Regex $completion 'PenaltyLogDAO\.LoadByIp\(ipAddress\)\.Any\(\).*?Reject\(LoginFailType\.CantConnect' "IP penalty mapping"
+Assert-Regex $completion 'CheckIsConnectedAsync\(loadedAccount\.AccountId\).*?Reject\(LoginFailType\.AlreadyConnected' "stale session mapping"
+Assert-Regex $completion 'IsAccountConnected\(loadedAccount\.AccountId\).*?LoginFailType\.AlreadyConnected.*?DisconnectAccount\(loadedAccount\.AccountId\).*?DisposeLoginPolling\(\)' "duplicate-session race cleanup"
+Assert-Regex $completion 'penalty != null \|\| loadedAccount\.Authority == AuthorityType\.Banned.*?Reject\(LoginFailType\.Banned' "ban mapping"
+Assert-Regex $completion 'catch \(Exception ex\).*?Reject\(LoginFailType\.CantConnect, "Session removed\. Reason: Login registration failed"\)' "Master registration failure mapping"
 ) "Login decision order must remain deterministic"
 
-Assert-Regex $handler 'loadedAccount == null.*?Reject\(LoginFailType\.AccountOrPasswordWrong, "Session removed\. Reason: Unknown account"\)' "unknown account mapping"
-Assert-Regex $handler '!string\.Equals\(loadedAccount\.Name, username, StringComparison\.Ordinal\).*?Reject\(LoginFailType\.WrongCaps' "account casing mapping"
+Assert-Regex $handler '!ClientRegionMap\.TryResolveLoginPort\(.*?Reject\(\s*LoginFailType\.CantConnect,\s*\$"Session removed\. Reason: Unsupported Login port' "unsupported regional port mapping"
+Assert-Regex $handler 'LoadAccountByLoginName\(username, resolvedRegionType\).*?loadedAccount == null.*?Reject\(LoginFailType\.AccountOrPasswordWrong, "Session removed\. Reason: Unknown account"\)' "unknown account and optional regional alias mapping"
+Assert-Regex $handler '!accountNameMatches.*?Reject\(LoginFailType\.WrongCaps' "exact account or trusted regional alias casing mapping"
+Assert-Regex $handler 'private static AccountDTO LoadAccountByLoginName.*?AccountDAO\.LoadByName\(username\).*?TryStripProtocolPrefix.*?profile\.RegionType != resolvedRegionType.*?AccountDAO\.LoadByName\(accountName\)' "regional alias resolution must prefer exact accounts and require the trusted Login region"
 Assert-Regex $handler 'MaintenanceMode && loadedAccount\.Authority < AuthorityType\.GM.*?Reject\(LoginFailType\.Maintenance' "maintenance mapping"
 Assert-Regex $handler '!PasswordHashService\.VerifyLoginPayload\(.*?Reject\(LoginFailType\.AccountOrPasswordWrong, "Session removed\. Reason: Wrong credentials"\)' "wrong credential mapping"
 Assert-Regex $handler '!TryParseVersion\(ServerConfiguration\.GameVersion, out Version requiredVersion\).*?Reject\(LoginFailType\.CantConnect' "invalid server-version mapping"
@@ -352,10 +381,11 @@ Assert-Regex $handler 'PenaltyLogDAO\.LoadByIp\(ipAddress\)\.Any\(\).*?Reject\(L
 Assert-Regex $handler 'CheckIsConnectedAsync\(loadedAccount\.AccountId\).*?Reject\(LoginFailType\.AlreadyConnected' "stale session mapping"
 Assert-Regex $handler 'IsAccountConnected\(loadedAccount\.AccountId\).*?LoginFailType\.AlreadyConnected.*?DisconnectAccount\(loadedAccount\.AccountId\).*?DisposeLoginPolling\(\)' "duplicate-session race cleanup"
 Assert-Regex $handler 'penalty != null \|\| loadedAccount\.Authority == AuthorityType\.Banned.*?Reject\(LoginFailType\.Banned' "ban mapping"
+Assert-Regex $handler '!SynchronizeAccountLanguage\(loadedAccount, clientCulture\).*?Reject\(LoginFailType\.CantConnect, "Session removed\. Reason: Unable to synchronize client language"\)' "language synchronization failure mapping"
 Assert-Regex $handler 'catch \(Exception ex\).*?Reject\(LoginFailType\.CantConnect, "Session removed\. Reason: Login registration failed"\)' "Master registration failure mapping"
 Assert-Regex $handler 'Client has been removed\. Reason: World Server not found.*?LoginFailType\.CantConnect' "missing World mapping"
-Assert-Regex $handler 'string\.IsNullOrWhiteSpace\(serversPacket\).*?DisconnectAccount\(loadedAccount\.AccountId\).*?DisposeLoginPolling\(\)' "missing World rollback"
-Assert-Regex $handler '_session\.SendPacket\(serversPacket\).*?Server list sent.*?DisposeLoginPolling\(\)' "successful world-list delivery"
+Assert-Regex $completion 'string\.IsNullOrWhiteSpace\(serversPacket\).*?DisconnectAccount\(loadedAccount\.AccountId\).*?DisposeLoginPolling\(\)' "missing World rollback"
+Assert-Regex $completion '_session\.SendPacket\(serversPacket\).*?Server list sent.*?DisposeLoginPolling\(\)' "successful world-list delivery"
 
 Assert-Regex $failTypes 'OldClient\s*=\s*1' "OldClient failc code changed"
 Assert-Regex $failTypes 'Maintenance\s*=\s*3' "Maintenance failc code changed"

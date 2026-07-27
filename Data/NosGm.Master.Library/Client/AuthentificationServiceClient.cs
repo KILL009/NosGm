@@ -1,4 +1,4 @@
-﻿using NosGm.Configuration;
+using NosGm.Configuration;
 using NosGm.Core;
 using NosGm.Data;
 using NosGm.Master.Library.Interface;
@@ -6,14 +6,15 @@ using NosGm.SCS.Communication.Scs.Communication;
 using NosGm.SCS.Communication.Scs.Communication.EndPoints.Tcp;
 using NosGm.SCS.Communication.ScsServices.Client;
 using System;
-using System.Configuration;
 using System.Threading;
 
 namespace NosGm.Master.Library.Client
 {
     public class AuthentificationServiceClient : IAuthentificationService
     {
-        #region Instantiation
+        private static AuthentificationServiceClient _instance;
+
+        private readonly IScsServiceClient<IAuthentificationService> _client;
 
         public AuthentificationServiceClient()
         {
@@ -22,6 +23,7 @@ namespace NosGm.Master.Library.Client
             _client = ScsServiceClientBuilder.CreateClient<IAuthentificationService>(new ScsTcpEndPoint(ip, port));
             Thread.Sleep(1000);
             while (_client.CommunicationState != CommunicationStates.Connected)
+            {
                 try
                 {
                     _client.Connect();
@@ -32,28 +34,13 @@ namespace NosGm.Master.Library.Client
                         memberName: nameof(AuthentificationServiceClient));
                     Thread.Sleep(1000);
                 }
+            }
         }
-
-        #endregion
-
-        #region Members
-
-        private static AuthentificationServiceClient _instance;
-
-        private readonly IScsServiceClient<IAuthentificationService> _client;
-
-        #endregion
-
-        #region Properties
 
         public static AuthentificationServiceClient Instance =>
             _instance ?? (_instance = new AuthentificationServiceClient());
 
         public CommunicationStates CommunicationState => _client.CommunicationState;
-
-        #endregion
-
-        #region Methods
 
         public bool Authenticate(string authKey)
         {
@@ -96,5 +83,28 @@ namespace NosGm.Master.Library.Client
         }
 
         #endregion
+        public bool RegisterGameforgeAuthTicket(
+            string accountName,
+            string authToken,
+            string installationId,
+            byte countryId)
+        {
+            return _client.ServiceProxy.RegisterGameforgeAuthTicket(
+                accountName,
+                authToken,
+                installationId,
+                countryId);
+        }
+
+        public string ConsumeGameforgeAuthTicket(
+            string authToken,
+            string installationId,
+            byte countryId)
+        {
+            return _client.ServiceProxy.ConsumeGameforgeAuthTicket(
+                authToken,
+                installationId,
+                countryId);
+        }
     }
 }

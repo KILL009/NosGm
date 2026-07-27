@@ -8,6 +8,7 @@ using NosGm.Domain;
 using NosGm.GameObject;
 using NosGm.Master.Library.Client;
 using NosGm.Master.Library.Data;
+using NosGm.Master.Library.Interface;
 using NosGm.Packets.Packets.ClientPackets;
 using System;
 using System.Linq;
@@ -25,18 +26,10 @@ namespace NosGm.Handler.BasicPacket.Login
 
         private readonly ClientSession _session;
 
-        #endregion
-
-        #region Instantiation
-
         public LoginPacketHandler(ClientSession session)
         {
             _session = session;
         }
-
-        #endregion
-
-        #region Methods
 
         private string BuildServersPacket(string username, byte regionType, int sessionId, bool ignoreUserName, long accountId)
         {
@@ -82,21 +75,47 @@ namespace NosGm.Handler.BasicPacket.Login
 
         public async Task VerifyLoginAsync(LoginPacket loginPacket)
         {
-            if (loginPacket == null || string.IsNullOrWhiteSpace(loginPacket.Name) || string.IsNullOrWhiteSpace(loginPacket.Password))
+            if (loginPacket == null || string.IsNullOrWhiteSpace(loginPacket.Name) ||
+                string.IsNullOrWhiteSpace(loginPacket.Password))
             {
                 DisposeLoginPolling();
                 return;
             }
 
+            if (!ClientRegionMap.TryResolveLoginPort(
+                    _session.ListeningPort,
+                    out byte resolvedRegionType,
+                    out string clientCulture))
+            {
+                Reject(
+                    LoginFailType.CantConnect,
+                    $"Session removed. Reason: Unsupported Login port {_session.ListeningPort}");
+                return;
+            }
+
+            if (loginPacket.RegionType != resolvedRegionType)
+            {
+                Logger.Debug(
+                    $"Login RegionType overridden by trusted port | Port={_session.ListeningPort} " +
+                    $"PacketRegion={loginPacket.RegionType} ResolvedRegion={resolvedRegionType} Culture={clientCulture}");
+            }
+
             string username = loginPacket.Name;
-            AccountDTO loadedAccount = DAOFactory.AccountDAO.LoadByName(username);
+            if (!TryLoadAccount(username, out AccountDTO loadedAccount))
+            {
+            AccountDTO loadedAccount = LoadAccountByLoginName(username, resolvedRegionType);
             if (loadedAccount == null)
             {
                 Reject(LoginFailType.AccountOrPasswordWrong, "Session removed. Reason: Unknown account");
                 return;
             }
 
-            if (!string.Equals(loadedAccount.Name, username, StringComparison.Ordinal))
+            bool accountNameMatches = string.Equals(loadedAccount.Name, username, StringComparison.Ordinal) ||
+                                      ClientRegionMap.IsProtocolUsernameForAccount(
+                                          username,
+                                          loadedAccount.Name,
+                                          resolvedRegionType);
+            if (!accountNameMatches)
             {
                 Reject(LoginFailType.WrongCaps, "Session removed. Reason: Wrong account casing");
                 return;
@@ -110,7 +129,6 @@ namespace NosGm.Handler.BasicPacket.Login
 
             string packetCredential = loginPacket.Password ?? string.Empty;
             string storedCredential = loadedAccount.Password ?? string.Empty;
-
             Logger.Info(
                 $"Login credential shape | AccountId={loadedAccount.AccountId} " +
                 $"UseOldCrypto={ServerConfiguration.UseOldCrypto} " +
@@ -137,26 +155,106 @@ namespace NosGm.Handler.BasicPacket.Login
                 UpgradePasswordHash(loadedAccount, clearPassword);
             }
 
-            Version clientVersion = null;
-            bool hasClientVersion = TryGetClientVersion(loginPacket, out clientVersion);
-            if (ServerConfiguration.GameVersionRequired)
+            bool hasClientVersion = TryGetClientVersion(loginPacket, out Version clientVersion);
+            if (!ValidateClientVersion(hasClientVersion, clientVersion))
             {
-                if (!TryParseVersion(ServerConfiguration.GameVersion, out Version requiredVersion))
-                {
-                    Logger.Error($"Invalid configured game version: '{ServerConfiguration.GameVersion}'");
-                    Reject(LoginFailType.CantConnect, "Session removed. Reason: Invalid server version configuration");
-                    return;
-                }
-
-                if (!hasClientVersion || !requiredVersion.Equals(clientVersion))
-                {
-                    Logger.Log.Warn($"Client version: {(hasClientVersion ? clientVersion.ToString() : "unparseable")}");
-                    Logger.Log.Warn($"Required version: {requiredVersion}");
-                    Reject(LoginFailType.OldClient, "Session removed. Reason: Unsupported client version");
-                    return;
-                }
+                return;
             }
 
+            bool ignoreUserName = ServerConfiguration.UseOldCrypto ||
+                                  hasClientVersion && clientVersion.Build >= 0 && clientVersion.Build < 3075;
+
+            await CompleteLoginAsync(
+                    loadedAccount,
+                    username,
+                    loginPacket.RegionType,
+                    null,
+                    ignoreUserName,
+                    "password")
+                .ConfigureAwait(false);
+        }
+
+        [Packet("NoS0576", "NoS0577")]
+        public void VerifyGameforgeLogin(string rawPacket)
+        {
+            VerifyGameforgeLoginAsync(rawPacket).ConfigureAwait(false).GetAwaiter().GetResult();
+        }
+
+        private async Task VerifyGameforgeLoginAsync(string rawPacket)
+        {
+            if (!ServerConfiguration.EnableGameforgeTokenLogin)
+            {
+                Reject(LoginFailType.CantConnect, "Session removed. Reason: Gameforge token login disabled");
+                return;
+            }
+
+            if (!GameforgeLoginPacketParser.TryParse(
+                    rawPacket,
+                    out GameforgeLoginPayload payload,
+                    out string parseError))
+            {
+                Logger.Warn(
+                    $"Malformed Gameforge login | {DescribePacket(rawPacket)} Reason={parseError}");
+                Reject(LoginFailType.AccountOrPasswordWrong,
+                    "Session removed. Reason: Invalid Gameforge login payload");
+                return;
+            }
+
+            if (!ValidateClientVersion(true, payload.ClientVersion))
+            {
+                return;
+            }
+
+            if (!string.IsNullOrWhiteSpace(ServerConfiguration.GameforgeClientMd5) &&
+                !string.Equals(
+                    ServerConfiguration.GameforgeClientMd5,
+                    payload.ClientMd5,
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                Reject(LoginFailType.OldClient, "Session removed. Reason: Unsupported client checksum");
+                return;
+            }
+
+            string username = AuthentificationServiceClient.Instance.ConsumeGameforgeAuthTicket(
+                payload.AuthToken,
+                payload.InstallationId.ToString("D"),
+                payload.CountryId);
+            if (string.IsNullOrWhiteSpace(username))
+            {
+                Reject(LoginFailType.AccountOrPasswordWrong,
+                    "Session removed. Reason: Invalid or expired Gameforge ticket");
+                return;
+            }
+
+            if (!TryLoadAccount(username, out AccountDTO loadedAccount))
+            {
+                return;
+            }
+
+            if (!GameforgeLoginPacketParser.TryGetCulture(payload.CountryId, out string culture))
+            {
+                Reject(LoginFailType.CantConnect, "Session removed. Reason: Unsupported Gameforge country");
+                return;
+            }
+
+            await CompleteLoginAsync(
+                    loadedAccount,
+                    username,
+                    payload.CountryId,
+                    culture,
+                    false,
+                    payload.Header)
+                .ConfigureAwait(false);
+        }
+
+        private async Task CompleteLoginAsync(
+            AccountDTO loadedAccount,
+            string username,
+            byte regionType,
+            string culture,
+            bool ignoreUserName,
+            string authenticationMode)
+        {
             string ipAddress = NormalizeRemoteIp(_session.IpAddress);
             if (DAOFactory.PenaltyLogDAO.LoadByIp(ipAddress).Any())
             {
@@ -192,11 +290,35 @@ namespace NosGm.Handler.BasicPacket.Login
                 return;
             }
 
-            Logger.Info($"ClientData: {loginPacket.ClientData}");
-            Logger.Info($"RegionType: {loginPacket.RegionType}");
+            if (!string.IsNullOrWhiteSpace(culture) &&
+                !DAOFactory.AccountDAO.TryUpdateLanguage(loadedAccount.AccountId, culture))
+            {
+                Reject(LoginFailType.CantConnect, "Session removed. Reason: Unable to persist client language");
+                return;
+            }
+
+            if (!string.IsNullOrWhiteSpace(culture))
+            {
+                loadedAccount.Language = culture;
+            }
 
             int newSessionId = SessionFactory.Instance.GenerateSessionId();
-            Logger.Info($"{username} connected | SessionID: {newSessionId}");
+            Logger.Info(
+                $"{username} connected | SessionID={newSessionId} Auth={authenticationMode} " +
+                $"RegionType={regionType} Culture={culture ?? "unchanged"}");
+            if (!SynchronizeAccountLanguage(loadedAccount, clientCulture))
+            {
+                Reject(LoginFailType.CantConnect, "Session removed. Reason: Unable to synchronize client language");
+                return;
+            }
+
+            Logger.Info($"ClientData: {loginPacket.ClientData}");
+            Logger.Info(
+                $"Login region resolved | Port={_session.ListeningPort} RegionType={resolvedRegionType} " +
+                $"Culture={clientCulture} PacketRegion={loginPacket.RegionType}");
+
+            int newSessionId = SessionFactory.Instance.GenerateSessionId();
+            Logger.Info($"{loadedAccount.Name} connected | SessionID: {newSessionId}");
 
             try
             {
@@ -212,12 +334,18 @@ namespace NosGm.Handler.BasicPacket.Login
                 return;
             }
 
+            string serversPacket = BuildServersPacket(
+                username,
+                regionType,
             bool ignoreUserName = ServerConfiguration.UseOldCrypto ||
                                   hasClientVersion && clientVersion.Build >= 0 && clientVersion.Build < 3075;
 
+            // Preserve the protocol username exactly as supplied by the client.
+            // Official regional accounts can arrive as ES_name, FR_name, etc.;
+            // local private-server accounts can continue using an unprefixed name.
             string serversPacket = BuildServersPacket(
                 username,
-                loginPacket.RegionType,
+                resolvedRegionType,
                 newSessionId,
                 ignoreUserName,
                 loadedAccount.AccountId);
@@ -230,7 +358,10 @@ namespace NosGm.Handler.BasicPacket.Login
             }
 
             _session.SendPacket(serversPacket);
-            Logger.Info($"Server list sent | Account={loadedAccount.Name} RegionType={loginPacket.RegionType}");
+            Logger.Info(
+                $"Server list sent | Account={loadedAccount.Name} RegionType={regionType} " +
+                $"Auth={authenticationMode}");
+                $"Server list sent | Account={loadedAccount.Name} RegionType={resolvedRegionType} Culture={clientCulture}");
             DisposeLoginPolling();
         }
 
@@ -293,12 +424,21 @@ namespace NosGm.Handler.BasicPacket.Login
             {
                 Reject(LoginFailType.AccountOrPasswordWrong, "Session removed. Reason: Modern ticket account not found");
                 return;
+        private bool TryLoadAccount(string username, out AccountDTO loadedAccount)
+        {
+            loadedAccount = DAOFactory.AccountDAO.LoadByName(username);
+            if (loadedAccount == null)
+            {
+                Reject(LoginFailType.AccountOrPasswordWrong, "Session removed. Reason: Unknown account");
+                return false;
             }
 
             if (!string.Equals(loadedAccount.Name, username, StringComparison.Ordinal))
             {
                 Reject(LoginFailType.WrongCaps, "Session removed. Reason: Wrong modern account casing");
                 return;
+                Reject(LoginFailType.WrongCaps, "Session removed. Reason: Wrong account casing");
+                return false;
             }
 
             if (ServerConfiguration.MaintenanceMode && loadedAccount.Authority < AuthorityType.GM)
@@ -394,6 +534,15 @@ namespace NosGm.Handler.BasicPacket.Login
         private static bool EnsureModernAuthServiceAuthenticated()
         {
             if (_modernAuthServiceAuthenticated)
+                return false;
+            }
+
+            return true;
+        }
+
+        private bool ValidateClientVersion(bool hasClientVersion, Version clientVersion)
+        {
+            if (!ServerConfiguration.GameVersionRequired)
             {
                 return true;
             }
@@ -418,6 +567,24 @@ namespace NosGm.Handler.BasicPacket.Login
 
                 return _modernAuthServiceAuthenticated;
             }
+            if (!TryParseVersion(ServerConfiguration.GameVersion, out Version requiredVersion))
+            {
+                Logger.Error($"Invalid configured game version: '{ServerConfiguration.GameVersion}'");
+                Reject(LoginFailType.CantConnect,
+                    "Session removed. Reason: Invalid server version configuration");
+                return false;
+            }
+
+            if (!hasClientVersion || !requiredVersion.Equals(clientVersion))
+            {
+                Logger.Warn(
+                    $"Unsupported client version | Received={(hasClientVersion ? clientVersion.ToString() : "unparseable")} " +
+                    $"Required={requiredVersion}");
+                Reject(LoginFailType.OldClient, "Session removed. Reason: Unsupported client version");
+                return false;
+            }
+
+            return true;
         }
 
         private async Task<bool> CheckIsConnectedAsync(long accountId)
@@ -441,6 +608,58 @@ namespace NosGm.Handler.BasicPacket.Login
         private void DisposeLoginPolling()
         {
             _session.PacketHandlerInterval?.Dispose();
+        }
+
+        private static string DescribePacket(string rawPacket)
+        {
+            if (rawPacket == null)
+            {
+                return "Header=<null> Length=0 ContainsVerticalTab=False";
+            }
+
+            int separator = rawPacket.IndexOf(' ');
+            string header = separator < 0 ? rawPacket : rawPacket.Substring(0, separator);
+            if (header.Length > 16)
+            {
+                header = header.Substring(0, 16);
+            }
+
+            for (int i = 0; i < header.Length; i++)
+            {
+                char character = header[i];
+                bool safe = char.IsLetterOrDigit(character) ||
+                            character == '_' || character == '-' || character == '$';
+                if (!safe)
+                {
+                    header = "<invalid>";
+                    break;
+                }
+            }
+
+            if (string.IsNullOrEmpty(header))
+            {
+                header = "<empty>";
+            }
+
+            return $"Header={header} Length={rawPacket.Length} ContainsVerticalTab={rawPacket.IndexOf('\v') >= 0}";
+        private static AccountDTO LoadAccountByLoginName(string username, byte resolvedRegionType)
+        {
+            AccountDTO account = DAOFactory.AccountDAO.LoadByName(username);
+            if (account != null)
+            {
+                return account;
+            }
+
+            if (!ClientRegionMap.TryStripProtocolPrefix(
+                    username,
+                    out string accountName,
+                    out ClientLanguageProfile profile) ||
+                profile.RegionType != resolvedRegionType)
+            {
+                return null;
+            }
+
+            return DAOFactory.AccountDAO.LoadByName(accountName);
         }
 
         private static string NormalizeRemoteIp(string endpoint)
@@ -472,6 +691,30 @@ namespace NosGm.Handler.BasicPacket.Login
             }
 
             return value;
+        }
+
+        private static bool SynchronizeAccountLanguage(AccountDTO account, string culture)
+        {
+            if (account == null || string.IsNullOrWhiteSpace(culture))
+            {
+                return false;
+            }
+
+            if (string.Equals(account.Language, culture, StringComparison.Ordinal))
+            {
+                return true;
+            }
+
+            if (!DAOFactory.AccountDAO.TryUpdateLanguage(account.AccountId, culture))
+            {
+                Logger.Error(
+                    $"Account language synchronization failed | AccountId={account.AccountId} Culture={culture}");
+                return false;
+            }
+
+            account.Language = culture;
+            Logger.Info($"Account language synchronized | AccountId={account.AccountId} Culture={culture}");
+            return true;
         }
 
         private static void UpgradePasswordHash(AccountDTO account, string clearPassword)
@@ -559,8 +802,6 @@ namespace NosGm.Handler.BasicPacket.Login
             version = null;
             return false;
         }
-
-        #endregion
     }
 
     internal sealed class ModernLoginPacket
@@ -702,4 +943,5 @@ namespace NosGm.Handler.BasicPacket.Login
             return true;
         }
     }
+}
 }
