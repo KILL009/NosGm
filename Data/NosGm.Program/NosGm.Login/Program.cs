@@ -19,16 +19,12 @@ namespace NosGm.Login
 {
     public static class Program
     {
-        #region Members
+        private const int MinimumGameforgeKeyLength = 32;
 
         private static readonly List<NetworkManager<LoginCryptography>> NetworkManagers =
             new List<NetworkManager<LoginCryptography>>();
 
         private static string _restartArguments = "--nomsg";
-
-        #endregion
-
-        #region Methods
 
         private static void PrintHeader()
         {
@@ -41,10 +37,15 @@ namespace NosGm.Login
 |  __| |  _  /| |  | |\___ \   | |    \ \/ / |  __|   | | | . ` |
 | |    | | \ \| |__| |____) |  | |     \  /  | |____ _| |_| |\  |
 |_|    |_|  \_\\____/|_____/   |_|      \/   |______|_____|_| \_|
+                                                                                             
                                                                                             
 ";
             string separator = new string('=', Console.WindowWidth);
-            string logo = text.Split('\n').Select(s => string.Format("{0," + (Console.WindowWidth / 2 + s.Length / 2) + "}\n", s)).Aggregate("", (current, i) => current + i);
+            string logo = text.Split('\n')
+                .Select(s => string.Format(
+                    "{0," + (Console.WindowWidth / 2 + s.Length / 2) + "}\n",
+                    s))
+                .Aggregate("", (current, i) => current + i);
             Console.ForegroundColor = ConsoleColor.White;
             Console.WriteLine(separator + logo + separator);
             Console.ForegroundColor = ConsoleColor.White;
@@ -59,6 +60,42 @@ namespace NosGm.Login
                     PrintHeader();
                     Logger.InitializeLogger(LogManager.GetLogger(typeof(Program)));
 
+                    int port = Convert.ToInt32(ServerConfiguration.LoginServerPort);
+                    int portArgIndex = Array.FindIndex(args, s => s == "--port");
+                    if (portArgIndex >= 0 &&
+                        portArgIndex + 1 < args.Length &&
+                        int.TryParse(args[portArgIndex + 1], out int overriddenPort))
+                    {
+                        port = overriddenPort;
+                        Console.WriteLine("Port override: " + port);
+                    }
+
+                    _port = port;
+
+                    if (!CommunicationServiceClient.Instance.Authenticate(ServerConfiguration.MasterAuthKey))
+                    {
+                        throw new InvalidOperationException(
+                            "Master communication authentication was rejected.");
+                    }
+
+                    if (ServerConfiguration.EnableGameforgeTokenLogin)
+                    {
+                        if (!HasSecureDistinctGameforgeKeys())
+                        {
+                            throw new InvalidOperationException(
+                                "Gameforge token login requires distinct issuer and consumer keys with at least 32 characters each.");
+                        }
+
+                        if (!AuthentificationServiceClient.Instance.Authenticate(
+                                ServerConfiguration.GameforgeTicketConsumerKey))
+                        {
+                            throw new InvalidOperationException(
+                                "Master authentication-ticket service rejected Login as a ticket consumer.");
+                        }
+                    }
+
+                    Logger.Info(
+                        $"Master services initialized | GameforgeTokenLogin={ServerConfiguration.EnableGameforgeTokenLogin}");
                     if (!TryGetPortOverride(args, out bool hasPortOverride, out int overridePort))
                     {
                         Console.ReadKey();
@@ -103,6 +140,7 @@ namespace NosGm.Login
 
                     Logger.Info(Language.Instance.GetMessageFromKey("CONFIG_LOADED"));
 
+                    AppDomain.CurrentDomain.UnhandledException += UnhandledExceptionHandler;
                     try
                     {
                         AppDomain.CurrentDomain.UnhandledException += UnhandledExceptionHandler;
@@ -125,6 +163,13 @@ namespace NosGm.Login
                     PacketFactory.Initialize<CClosePacket>();
                     PacketFactory.Initialize<HelpPacket>();
 
+                    var networkManager = new NetworkManager<LoginCryptography>(
+                        ServerConfiguration.IPAddress,
+                        port,
+                        typeof(LoginPacketHandler),
+                        typeof(LoginCryptography),
+                        false);
+                    AntiSpamModule.Instance.RunBlacklistTask();
                     foreach (int port in loginPorts)
                     {
                         if (!ClientRegionMap.TryResolveLoginPort(
@@ -191,6 +236,25 @@ namespace NosGm.Login
             }
         }
 
+        private static bool HasSecureDistinctGameforgeKeys()
+        {
+            string issuerKey = ServerConfiguration.GameforgeTicketIssuerKey;
+            string consumerKey = ServerConfiguration.GameforgeTicketConsumerKey;
+            return IsSecureGameforgeKey(issuerKey) &&
+                   IsSecureGameforgeKey(consumerKey) &&
+                   !string.Equals(issuerKey, consumerKey, StringComparison.Ordinal) &&
+                   !string.Equals(issuerKey, ServerConfiguration.AuthServiceKey, StringComparison.Ordinal) &&
+                   !string.Equals(consumerKey, ServerConfiguration.AuthServiceKey, StringComparison.Ordinal);
+        }
+
+        private static bool IsSecureGameforgeKey(string configuredKey)
+        {
+            return !string.IsNullOrWhiteSpace(configuredKey) &&
+                   configuredKey.Length >= MinimumGameforgeKeyLength;
+        }
+
+        private static void UnhandledExceptionHandler(object sender, UnhandledExceptionEventArgs e)
+        {
         private static void StopLoginServers()
         {
             foreach (NetworkManager<LoginCryptography> networkManager in NetworkManagers)
@@ -237,7 +301,5 @@ namespace NosGm.Login
             Process.Start("NosGm.Login.exe", _restartArguments);
             Environment.Exit(1);
         }
-
-        #endregion
     }
 }

@@ -120,8 +120,12 @@ $entry = Read-Source $EntryHandlerPath
 $entryPacket = Read-Source $EntryPacketPath
 $select = Read-Source $SelectHandlerPath
 
-$loginFlow = Get-Section -Content $login -StartMarker "public async Task VerifyLoginAsync(LoginPacket loginPacket)" -EndMarker "private async Task<bool> CheckIsConnectedAsync" -Description "Login handler"
+$legacyLoginFlow = Get-Section -Content $login -StartMarker "public async Task VerifyLoginAsync(LoginPacket loginPacket)" -EndMarker '[Packet("NoS0576", "NoS0577")]' -Description "legacy Login entry"
+$completionFlow = Get-Section -Content $login -StartMarker "private async Task CompleteLoginAsync(" -EndMarker "private bool TryLoadAccount(" -Description "shared Login completion"
 
+Assert-Regex $legacyLoginFlow 'CompleteLoginAsync\s*\(\s*loadedAccount\s*,\s*username\s*,\s*loginPacket\.RegionType\s*,\s*null\s*,\s*ignoreUserName\s*,\s*"password"\s*\)' "NoS0575 must pass its authenticated region into the shared completion path"
+
+Assert-Ordered $completionFlow @(
 Assert-Ordered $loginFlow @(
     "if (!ClientRegionMap.TryResolveLoginPort(",
     "if (!SynchronizeAccountLanguage(loadedAccount, clientCulture))",
@@ -132,6 +136,9 @@ Assert-Ordered $loginFlow @(
     "DisposeLoginPolling();"
 ) "Login must resolve the trusted port, synchronize language and register the generated session before sending the world list"
 
+Assert-Regex $completionFlow 'RegisterAccountLogin\s*\(\s*loadedAccount\.AccountId\s*,\s*newSessionId\s*,\s*ipAddress\s*\)' "Login must register the account with the generated session ID and normalized IP"
+Assert-Regex $completionFlow 'BuildServersPacket\s*\(\s*username\s*,\s*regionType\s*,\s*newSessionId\s*,\s*ignoreUserName\s*,\s*loadedAccount\.AccountId\s*\)' "World-list generation must use the same generated session ID and authenticated region"
+Assert-Contains $completionFlow "CommunicationServiceClient.Instance.DisconnectAccount(loadedAccount.AccountId);" "Failed world-list generation must roll back the Master account registration"
 Assert-Regex $loginFlow 'TryResolveLoginPort\s*\(\s*_session\.ListeningPort\s*,\s*out byte resolvedRegionType\s*,\s*out string clientCulture\s*\)' "Login must derive RegionType and culture from the accepted local port"
 Assert-Regex $loginFlow 'RegisterAccountLogin\s*\(\s*loadedAccount\.AccountId\s*,\s*newSessionId\s*,\s*ipAddress\s*\)' "Login must register the account with the generated session ID and normalized IP"
 Assert-Regex $loginFlow 'BuildServersPacket\s*\(\s*username\s*,\s*resolvedRegionType\s*,\s*newSessionId\s*,\s*ignoreUserName\s*,\s*loadedAccount\.AccountId\s*\)' "World-list generation must use the port-derived RegionType and generated session ID"

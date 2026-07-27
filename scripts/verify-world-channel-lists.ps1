@@ -427,6 +427,10 @@ $loginPacketSource = Read-RequiredText $LoginPacketPath
 $languageSource = Read-RequiredText $LanguagePath
 $localizationDoc = Read-RequiredText $LocalizationDocPath
 
+Assert-Regex $loginPacketSource '\[PacketIndex\(5\)\]\s*public byte RegionType' "RegionType must remain byte field 5 of NoS0575"
+Assert-Regex $loginHandlerSource 'CompleteLoginAsync\s*\(\s*loadedAccount\s*,\s*username\s*,\s*loginPacket\.RegionType\s*,\s*null\s*,\s*ignoreUserName\s*,\s*"password"\s*\)' "NoS0575 must pass its RegionType unchanged into shared Login completion"
+Assert-Regex $loginHandlerSource 'CompleteLoginAsync\s*\(\s*loadedAccount\s*,\s*username\s*,\s*payload\.CountryId\s*,\s*culture\s*,\s*false\s*,\s*payload\.Header\s*\)' "NoS0576 and NoS0577 must pass authenticated CountryId into shared Login completion"
+Assert-Regex $loginHandlerSource 'BuildServersPacket\s*\(\s*username\s*,\s*regionType\s*,\s*newSessionId\s*,\s*ignoreUserName\s*,\s*loadedAccount\.AccountId\s*\)' "Shared Login completion must pass the authenticated region unchanged to Master"
 Assert-Regex $loginPacketSource '\[PacketIndex\(5\)\]\s*public byte RegionType' "RegionType must remain byte field 5 of NoS0575 for compatibility diagnostics"
 Assert-Regex $loginHandlerSource 'TryResolveLoginPort\s*\(\s*_session\.ListeningPort\s*,\s*out byte resolvedRegionType\s*,\s*out string clientCulture\s*\)' "Login must derive RegionType and culture from the accepted local port"
 Assert-Regex $loginHandlerSource 'BuildServersPacket\s*\(\s*username\s*,\s*resolvedRegionType\s*,\s*newSessionId' "Login must pass the port-derived RegionType to Master"

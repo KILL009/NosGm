@@ -110,6 +110,26 @@ jobs:
         shell: powershell
         run: ./scripts/verify-password-hashing.ps1
 
+      - name: Verify NoS0576 and NoS0577 protocol
+        shell: powershell
+        run: |
+          New-Item -ItemType Directory -Force -Path "$env:ARTIFACTS" | Out-Null
+          $logPath = Join-Path "$env:ARTIFACTS" "gameforge-login-protocol.log"
+          Set-Content -LiteralPath $logPath -Value "Starting NoS0576/NoS0577 protocol verification."
+          & powershell.exe `
+            -NoLogo `
+            -NoProfile `
+            -NonInteractive `
+            -ExecutionPolicy Bypass `
+            -File ".\scripts\verify-gameforge-login-protocol.ps1" 2>&1 |
+            Tee-Object -FilePath $logPath -Append |
+            ForEach-Object { Write-Host $_ }
+          $exitCode = $LASTEXITCODE
+          if ($exitCode -ne 0) {
+            Write-Host "::error::NoS0576/NoS0577 verification failed with exit code $exitCode."
+            exit $exitCode
+          }
+
       - name: Verify login session flow contracts
         shell: powershell
         run: ./scripts/verify-login-session-flow.ps1
