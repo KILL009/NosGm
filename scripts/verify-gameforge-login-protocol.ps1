@@ -242,21 +242,37 @@ try {
         throw "The ticket store no longer guarantees hashed and bounded token storage."
     }
 
-    if ($configurationSource -notmatch 'EnableGameforgeTokenLogin\s*=\s*false') {
-        throw "Gameforge token login must remain disabled by default until the Auth Bridge is configured."
+    if ($configurationSource -notmatch 'EnableGameforgeTokenLogin\s*=\s*false' -or
+        $configurationSource -notmatch 'GameforgeTicketIssuerKey\s*=\s*""' -or
+        $configurationSource -notmatch 'GameforgeTicketConsumerKey\s*=\s*""') {
+        throw "Gameforge token login and both role keys must remain disabled or empty by default."
     }
 
     if ($managerSource -notmatch 'AuthenticationServiceClients' -or
+        $managerSource -notmatch 'GameforgeTicketIssuerClients' -or
+        $managerSource -notmatch 'GameforgeTicketConsumerClients') {
+        throw "Master no longer keeps legacy, issuer and consumer trust lists separate."
+    }
+
+    if ($masterAuthSource -notmatch 'string\.Equals\(authKey, ServerConfiguration\.AuthServiceKey' -or
         $masterAuthSource -notmatch 'AuthenticationServiceClients' -or
-        $masterAuthSource -match 'AuthentificatedClients\.Add' -or
-        $masterAuthSource -notmatch '!ServerConfiguration\.EnableGameforgeTokenLogin' -or
-        $masterAuthSource -notmatch 'MinimumAuthServiceKeyLength\s*=\s*32') {
-        throw "Master authentication-ticket privileges are not isolated and feature-gated."
+        $masterAuthSource -notmatch 'GameforgeTicketIssuerKey' -or
+        $masterAuthSource -notmatch 'GameforgeTicketConsumerKey' -or
+        $masterAuthSource -notmatch 'GameforgeTicketIssuerClients' -or
+        $masterAuthSource -notmatch 'GameforgeTicketConsumerClients' -or
+        $masterAuthSource -notmatch 'MinimumGameforgeKeyLength\s*=\s*32' -or
+        $masterAuthSource -notmatch 'HasSecureGameforgeKeys\(\)' -or
+        $masterAuthSource -notmatch '!string\.Equals\(issuerKey, consumerKey' -or
+        $masterAuthSource -notmatch 'RegisterGameforgeAuthTicket[\s\S]*?IsGameforgeIssuerClient\(\)' -or
+        $masterAuthSource -notmatch 'ConsumeGameforgeAuthTicket[\s\S]*?IsGameforgeConsumerClient\(\)') {
+        throw "Master does not preserve legacy authentication while isolating Gameforge issuer and consumer roles."
     }
 
     if ($loginProgramSource -notmatch 'if \(ServerConfiguration\.EnableGameforgeTokenLogin\)' -or
-        $loginProgramSource -notmatch 'IsSecureAuthServiceKey\(\)') {
-        throw "Login must initialize the authentication-ticket service only when securely enabled."
+        $loginProgramSource -notmatch 'HasSecureDistinctGameforgeKeys\(\)' -or
+        $loginProgramSource -notmatch 'Authenticate\(\s*ServerConfiguration\.GameforgeTicketConsumerKey\)' -or
+        $loginProgramSource -match 'Authenticate\(\s*ServerConfiguration\.GameforgeTicketIssuerKey\)') {
+        throw "Login must authenticate only as a securely configured Gameforge ticket consumer."
     }
 
     Write-Host "NoS0576/NoS0577 parsing, canonical tokens, country mapping and one-time ticket behavior verified."
