@@ -93,6 +93,9 @@
     <Compile Include="Interface\IConfigurationService.cs" />
     <Compile Include="Interface\IAuthentificationService.cs" />
     <Compile Include="Interface\IMallService.cs" />
+    <Compile Include="Security\GameforgeAuthTicketStore.cs" />
+    <Compile Include="Security\GameforgeLoginPacketParser.cs" />
+    <Compile Include="Security\GameforgeLoginPayload.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="Data\WorldServer.cs" />
     <Compile Include="Data\SerializableWorldServer.cs" />
