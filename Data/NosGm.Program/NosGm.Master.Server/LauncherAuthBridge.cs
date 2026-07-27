@@ -28,6 +28,8 @@ namespace NosGm.Master.Server
         private const string TicketPath = "/api/v1/launcher/ticket";
         private const int MaximumRequestBytes = 8192;
         private const int MaximumTrackedWindows = 10000;
+        private static readonly string DummyPasswordHash =
+            PasswordHashService.HashPassword("NosGM-invalid-account-sentinel");
 
         private sealed class AttemptWindow
         {
@@ -153,8 +155,22 @@ namespace NosGm.Master.Server
 
                 AccountDTO account = DAOFactory.AccountDAO.LoadByName(request.AccountName);
                 if (account == null ||
-                    !string.Equals(account.Name, request.AccountName, StringComparison.Ordinal) ||
-                    account.Authority == AuthorityType.Banned)
+                    !string.Equals(account.Name, request.AccountName, StringComparison.Ordinal))
+                {
+                    PasswordHashService.VerifyPassword(
+                        DummyPasswordHash,
+                        request.Password,
+                        true,
+                        out _);
+                    await WriteErrorAsync(context.Response, 401, "invalid_credentials").ConfigureAwait(false);
+                    return;
+                }
+
+                if (!PasswordHashService.VerifyPassword(
+                        account.Password,
+                        request.Password,
+                        true,
+                        out bool passwordNeedsUpgrade))
                 {
                     await WriteErrorAsync(context.Response, 401, "invalid_credentials").ConfigureAwait(false);
                     return;
@@ -166,19 +182,15 @@ namespace NosGm.Master.Server
                     return;
                 }
 
-                PenaltyLogDTO activeBan = DAOFactory.PenaltyLogDAO.LoadByAccount(account.AccountId)
-                    .FirstOrDefault(entry => entry.DateEnd > DateTime.Now && entry.Penalty == PenaltyType.Banned);
-                if (activeBan != null)
+                if (account.Authority == AuthorityType.Banned)
                 {
                     await WriteErrorAsync(context.Response, 401, "invalid_credentials").ConfigureAwait(false);
                     return;
                 }
 
-                if (!PasswordHashService.VerifyPassword(
-                        account.Password,
-                        request.Password,
-                        true,
-                        out bool passwordNeedsUpgrade))
+                PenaltyLogDTO activeBan = DAOFactory.PenaltyLogDAO.LoadByAccount(account.AccountId)
+                    .FirstOrDefault(entry => entry.DateEnd > DateTime.Now && entry.Penalty == PenaltyType.Banned);
+                if (activeBan != null)
                 {
                     await WriteErrorAsync(context.Response, 401, "invalid_credentials").ConfigureAwait(false);
                     return;
