@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "baseLoginPort": 4000,
+  "regions": [
+    { "code": "en", "regionType": 0, "loginPort": 4000 },
+    { "code": "de", "regionType": 1, "loginPort": 4001 },
+    { "code": "fr", "regionType": 2, "loginPort": 4002 },
+    { "code": "it", "regionType": 3, "loginPort": 4003 },
+    { "code": "pl", "regionType": 4, "loginPort": 4004 },
+    { "code": "es", "regionType": 5, "loginPort": 4005 },
+    { "code": "cs", "regionType": 6, "loginPort": 4006 },
+    { "code": "ru", "regionType": 7, "loginPort": 4007 },
+    { "code": "ja", "regionType": 8, "loginPort": 4008 },
+    { "code": "zh", "regionType": 9, "loginPort": 4009 }
+  ]
+}
