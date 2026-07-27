@@ -105,6 +105,10 @@ jobs:
         shell: powershell
         run: ./scripts/verify-modern-login-runtime-activation.ps1
 
+      - name: Verify modern login observability contracts
+        shell: powershell
+        run: ./scripts/verify-modern-login-observability.ps1
+
       - name: Upload build diagnostics
         if: always()
         uses: actions/upload-artifact@v7
