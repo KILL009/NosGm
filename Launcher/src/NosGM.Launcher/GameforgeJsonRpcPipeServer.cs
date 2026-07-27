@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: MIT
 
 using System.Buffers;
-using System.Diagnostics;
 using System.IO.Pipes;
 using System.Text.Json;
 
@@ -29,39 +28,24 @@ internal sealed class GameforgeJsonRpcPipeServer
         _sessionId = sessionId;
     }
 
-    public async Task RunAsync(Process process, CancellationToken cancellationToken)
+    public async Task RunAsync(CancellationToken cancellationToken)
     {
-        using var processExited = new CancellationTokenSource();
-        using var linked = CancellationTokenSource.CreateLinkedTokenSource(
-            cancellationToken,
-            processExited.Token);
-
-        void OnProcessExited(object? sender, EventArgs args) => processExited.Cancel();
-        process.EnableRaisingEvents = true;
-        process.Exited += OnProcessExited;
-        try
+        for (var requestIndex = 0;
+             requestIndex < MaximumRequests && !_accountNameDelivered;
+             requestIndex++)
         {
-            for (var requestIndex = 0;
-                 requestIndex < MaximumRequests && !_accountNameDelivered;
-                 requestIndex++)
-            {
-                await using var pipe = new NamedPipeServerStream(
-                    PipeName,
-                    PipeDirection.InOut,
-                    4,
-                    PipeTransmissionMode.Byte,
-                    PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);
+            await using var pipe = new NamedPipeServerStream(
+                PipeName,
+                PipeDirection.InOut,
+                4,
+                PipeTransmissionMode.Byte,
+                PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);
 
-                await pipe.WaitForConnectionAsync(linked.Token);
-                using var request = await ReadJsonRequestAsync(pipe, linked.Token);
-                var response = CreateResponse(request.RootElement);
-                await pipe.WriteAsync(response, linked.Token);
-                await pipe.FlushAsync(linked.Token);
-            }
-        }
-        finally
-        {
-            process.Exited -= OnProcessExited;
+            await pipe.WaitForConnectionAsync(cancellationToken);
+            using var request = await ReadJsonRequestAsync(pipe, cancellationToken);
+            var response = CreateResponse(request.RootElement);
+            await pipe.WriteAsync(response, cancellationToken);
+            await pipe.FlushAsync(cancellationToken);
         }
 
         if (!_authorizationCodeDelivered || !_accountNameDelivered)
