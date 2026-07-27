@@ -44,6 +44,20 @@ jobs:
           msbuild -version
           nuget help | Select-Object -First 1
 
+      - name: Validate MSBuild packages.config restore fallback
+        shell: powershell
+        run: |
+          msbuild "$env:SOLUTION" `
+            /t:Restore `
+            /m `
+            /nologo `
+            /nr:false `
+            /v:minimal `
+            /p:RestorePackagesConfig=true `
+            /p:Configuration="$env:CONFIGURATION" `
+            /p:Platform="$env:PLATFORM"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
       - name: Restore NuGet packages
         shell: pwsh
         run: nuget restore "$env:SOLUTION" -NonInteractive -Verbosity normal
