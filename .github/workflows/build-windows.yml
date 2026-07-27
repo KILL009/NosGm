@@ -127,6 +127,21 @@ jobs:
             throw
           }
 
+      - name: Verify official client RegionType map
+        shell: powershell
+        run: |
+          New-Item -ItemType Directory -Force -Path "$env:ARTIFACTS" | Out-Null
+          $logPath = Join-Path "$env:ARTIFACTS" "client-region-map.log"
+          try {
+            & ./scripts/verify-client-region-map.ps1 *>&1 | Tee-Object -FilePath $logPath
+          }
+          catch {
+            $message = $_.Exception.Message
+            Add-Content -LiteralPath $logPath -Value $message
+            Write-Host "::error::$message"
+            throw
+          }
+
       - name: Upload build diagnostics
         if: always()
         uses: actions/upload-artifact@v7
