@@ -19,6 +19,25 @@ NosGM resolves dynamic server messages per account. The neutral World Server res
 
 Chinese region aliases currently share the Simplified Chinese catalog. Add a separate Traditional Chinese catalog before distinguishing `zh-TW` or `zh-Hant`.
 
+## Official client RegionType map
+
+The `RegionType` byte is carried by the `NoS0575` login packet and echoed in the `NsTeST` world-list packet. The supported official client mapping is:
+
+| Client code | RegionType |
+| --- | ---: |
+| `en` | `0` |
+| `de` | `1` |
+| `fr` | `2` |
+| `it` | `3` |
+| `pl` | `4` |
+| `es` | `5` |
+| `cs` | `6` |
+| `ru` | `7` |
+| `ja` | `8` |
+| `zh` | `9` |
+
+This table describes the client protocol region only. It must not automatically select the language used for server-generated messages.
+
 ## Player selection
 
 The selected culture is stored in `Account.Language` and is loaded with the account on every World Server connection.
