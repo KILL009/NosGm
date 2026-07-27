@@ -20,6 +20,13 @@ namespace NosGm.Core.Handling
             Amount = 1;
         }
 
+        public PacketAttribute(bool isCharScreen, params string[] header)
+        {
+            Header = header;
+            Amount = 1;
+            IsCharScreen = isCharScreen;
+        }
+
         #endregion
 
         #region Properties
@@ -27,6 +34,8 @@ namespace NosGm.Core.Handling
         public int Amount { get; }
 
         public string[] Header { get; }
+
+        public bool IsCharScreen { get; }
 
         #endregion
     }
