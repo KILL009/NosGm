@@ -97,6 +97,10 @@ Require $startScript 'if ($nuget)' 'The startup script must prefer NuGet CLI whe
 Require $startScript 'nuget.exe not found; restoring packages.config with MSBuild' 'The startup script must explain the MSBuild restore fallback.'
 Require $startScript '/p:RestorePackagesConfig=true' 'MSBuild fallback must restore legacy packages.config dependencies.'
 Require $startScript '$solutionPath = Join-Path $root "NosGm.sln"' 'Restore and build must share one resolved solution path.'
+Require $startScript '$loginExecutable = Join-Path $root "bin\Release\Login\NosGm.Login.exe"' 'The startup script must use the Release|AnyCPU Login output path.'
+Require $startScript '$requiredExecutables = @(' 'All required binaries must be preflighted before startup.'
+Require $startScript 'Missing $($requiredExecutable.Name) executable after build' 'Preflight failures must identify the missing component and path.'
+Forbid $startScript 'Data\NosGm.Program\NosGm.Login\bin\Release\NosGm.Login.exe' 'The obsolete project-local Login output path must not return.'
 Forbid $startScript 'throw "nuget.exe was not found.' 'Missing NuGet CLI must not stop a machine with compatible MSBuild.'
 Forbid $startScript 'SetEnvironmentVariable($name, $previousEnvironment[$name], "User")' 'Secrets must never be written to the user environment.'
 Forbid $startScript 'SetEnvironmentVariable($name, $previousEnvironment[$name], "Machine")' 'Secrets must never be written to the machine environment.'
@@ -112,4 +116,4 @@ Require $documentation './scripts/stop-modern-login-local.ps1' 'Documentation mu
 Require $documentation 'NOSGM_MASTER_AUTH_KEY' 'Documentation must list the external secret configuration.'
 Require $documentation 'NuGet CLI is optional' 'Documentation must explain the MSBuild packages.config fallback.'
 
-Write-Host 'Modern Login runtime environment, package restore fallback, transient launcher endpoint, local startup and safe shutdown contracts verified.'
+Write-Host 'Modern Login runtime environment, package restore fallback, executable layout, transient launcher endpoint, local startup and safe shutdown contracts verified.'
