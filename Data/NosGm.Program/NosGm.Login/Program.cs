@@ -21,6 +21,8 @@ namespace NosGm.Login
     {
         #region Members
 
+        private const int MinimumGameforgeKeyLength = 32;
+
         private static readonly List<NetworkManager<LoginCryptography>> NetworkManagers =
             new List<NetworkManager<LoginCryptography>>();
 
@@ -41,10 +43,14 @@ namespace NosGm.Login
 |  __| |  _  /| |  | |\___ \   | |    \ \/ / |  __|   | | | . ` |
 | |    | | \ \| |__| |____) |  | |     \  /  | |____ _| |_| |\  |
 |_|    |_|  \_\\____/|_____/   |_|      \/   |______|_____|_| \_|
-                                                                                            
+                                                                                             
 ";
             string separator = new string('=', Console.WindowWidth);
-            string logo = text.Split('\n').Select(s => string.Format("{0," + (Console.WindowWidth / 2 + s.Length / 2) + "}\n", s)).Aggregate("", (current, i) => current + i);
+            string logo = text.Split('\n')
+                .Select(s => string.Format(
+                    "{0," + (Console.WindowWidth / 2 + s.Length / 2) + "}\n",
+                    s))
+                .Aggregate("", (current, i) => current + i);
             Console.ForegroundColor = ConsoleColor.White;
             Console.WriteLine(separator + logo + separator);
             Console.ForegroundColor = ConsoleColor.White;
@@ -93,7 +99,24 @@ namespace NosGm.Login
                         return;
                     }
 
-                    Logger.Info("Master Server API Communication has been initialized");
+                    if (ServerConfiguration.EnableGameforgeTokenLogin)
+                    {
+                        if (!HasSecureDistinctGameforgeKeys())
+                        {
+                            throw new InvalidOperationException(
+                                "Gameforge token login requires distinct issuer and consumer keys with at least 32 characters each.");
+                        }
+
+                        if (!AuthentificationServiceClient.Instance.Authenticate(
+                                ServerConfiguration.GameforgeTicketConsumerKey))
+                        {
+                            throw new InvalidOperationException(
+                                "Master authentication-ticket service rejected Login as a ticket consumer.");
+                        }
+                    }
+
+                    Logger.Info(
+                        $"Master services initialized | GameforgeTokenLogin={ServerConfiguration.EnableGameforgeTokenLogin}");
 
                     if (!DataAccessHelper.Initialize())
                     {
@@ -102,15 +125,7 @@ namespace NosGm.Login
                     }
 
                     Logger.Info(Language.Instance.GetMessageFromKey("CONFIG_LOADED"));
-
-                    try
-                    {
-                        AppDomain.CurrentDomain.UnhandledException += UnhandledExceptionHandler;
-                    }
-                    catch (Exception ex)
-                    {
-                        Logger.Error("General Error", ex);
-                    }
+                    AppDomain.CurrentDomain.UnhandledException += UnhandledExceptionHandler;
 
                     PacketFactory.Initialize<WalkPacket>();
                     PacketFactory.Initialize<NosGmEntryPointPacket>();
@@ -189,6 +204,23 @@ namespace NosGm.Login
                     Console.ReadKey();
                 }
             }
+        }
+
+        private static bool HasSecureDistinctGameforgeKeys()
+        {
+            string issuerKey = ServerConfiguration.GameforgeTicketIssuerKey;
+            string consumerKey = ServerConfiguration.GameforgeTicketConsumerKey;
+            return IsSecureGameforgeKey(issuerKey) &&
+                   IsSecureGameforgeKey(consumerKey) &&
+                   !string.Equals(issuerKey, consumerKey, StringComparison.Ordinal) &&
+                   !string.Equals(issuerKey, ServerConfiguration.AuthServiceKey, StringComparison.Ordinal) &&
+                   !string.Equals(consumerKey, ServerConfiguration.AuthServiceKey, StringComparison.Ordinal);
+        }
+
+        private static bool IsSecureGameforgeKey(string configuredKey)
+        {
+            return !string.IsNullOrWhiteSpace(configuredKey) &&
+                   configuredKey.Length >= MinimumGameforgeKeyLength;
         }
 
         private static void StopLoginServers()
