@@ -232,8 +232,23 @@ if (-not $SkipBuild) {
 
 $masterExecutable = Join-Path $root "bin\Release\Master\NosGm.Master.Server.exe"
 $worldExecutable = Join-Path $root "bin\Release\World\NosGm.World.exe"
-$loginExecutable = Join-Path $root "Data\NosGm.Program\NosGm.Login\bin\Release\NosGm.Login.exe"
+$loginExecutable = Join-Path $root "bin\Release\Login\NosGm.Login.exe"
 $launcherExecutable = Join-Path $root "Launcher\src\NosGM.Launcher\bin\Release\net9.0-windows\NosGM.Launcher.exe"
+
+$requiredExecutables = @(
+    [pscustomobject]@{ Name = "Master"; Path = $masterExecutable },
+    [pscustomobject]@{ Name = "World"; Path = $worldExecutable },
+    [pscustomobject]@{ Name = "Login"; Path = $loginExecutable }
+)
+if (-not $SkipLauncher) {
+    $requiredExecutables += [pscustomobject]@{ Name = "Launcher"; Path = $launcherExecutable }
+}
+
+foreach ($requiredExecutable in $requiredExecutables) {
+    if (-not (Test-Path -LiteralPath $requiredExecutable.Path -PathType Leaf)) {
+        throw "Missing $($requiredExecutable.Name) executable after build: $($requiredExecutable.Path)"
+    }
+}
 
 $env:NOSGM_MASTER_AUTH_KEY = New-NosGmSecret
 $env:NOSGM_AUTH_SERVICE_KEY = New-NosGmSecret
