@@ -101,6 +101,10 @@ jobs:
         shell: powershell
         run: ./scripts/verify-launcher-auth-bridge.ps1
 
+      - name: Verify modern login runtime activation contracts
+        shell: powershell
+        run: ./scripts/verify-modern-login-runtime-activation.ps1
+
       - name: Upload build diagnostics
         if: always()
         uses: actions/upload-artifact@v7
