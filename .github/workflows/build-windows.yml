@@ -93,6 +93,21 @@ jobs:
         shell: powershell
         run: ./scripts/verify-password-hashing.ps1
 
+      - name: Verify NoS0576 and NoS0577 protocol
+        shell: powershell
+        run: |
+          New-Item -ItemType Directory -Force -Path "$env:ARTIFACTS" | Out-Null
+          $logPath = Join-Path "$env:ARTIFACTS" "gameforge-login-protocol.log"
+          try {
+            & ./scripts/verify-gameforge-login-protocol.ps1 *>&1 | Tee-Object -FilePath $logPath
+          }
+          catch {
+            $message = $_.Exception.Message
+            Add-Content -LiteralPath $logPath -Value $message
+            Write-Host "::error::$message"
+            throw
+          }
+
       - name: Verify login session flow contracts
         shell: powershell
         run: ./scripts/verify-login-session-flow.ps1
