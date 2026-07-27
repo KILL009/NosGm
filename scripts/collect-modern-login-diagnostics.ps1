@@ -4,7 +4,8 @@ param(
     [ValidateRange(50, 2000)]
     [int]$MaxLogLines = 400,
     [ValidateRange(1, 50)]
-    [int]$MaxLogMegabytes = 8
+    [int]$MaxLogMegabytes = 8,
+    [switch]$SelfTest
 )
 
 $ErrorActionPreference = "Stop"
@@ -118,7 +119,7 @@ function Write-SanitizedLogTail {
     }
 
     $lines = @($text -split '\r?\n')
-    if ($sourceLength -gt $maximumBytes -and $lines.Count -gt 0) {
+    if ($sourceLength -gt $maximumBytes -and $lines.Count -gt 1) {
         $lines = @($lines | Select-Object -Skip 1)
     }
     $lines = @($lines | Select-Object -Last $MaxLogLines)
@@ -137,6 +138,88 @@ function Write-SanitizedLogTail {
     }
 
     Set-Content -LiteralPath $DestinationPath -Value $sanitizedText -Encoding UTF8
+}
+
+function Invoke-RedactionSelfTest {
+    $testDirectory = Join-Path ([IO.Path]::GetTempPath()) ("NosGM-redaction-" + [Guid]::NewGuid().ToString("N"))
+    $sourcePath = Join-Path $testDirectory "synthetic.log"
+    $destinationPath = Join-Path $testDirectory "sanitized.log"
+    New-Item -ItemType Directory -Path $testDirectory -Force | Out-Null
+
+    $syntheticPassword = "synthetic-" + "password-value"
+    $syntheticAccount = "SyntheticAccount"
+    $syntheticEmail = "tester" + "@" + "example.invalid"
+    $syntheticGuid = [Guid]::NewGuid().ToString("D")
+    $syntheticLongValue = ("A" * 48) + ("B" * 16)
+
+    try {
+        $writer = New-Object IO.StreamWriter($sourcePath, $false, [Text.Encoding]::UTF8)
+        try {
+            for ($index = 0; $index -lt 90000; $index++) {
+                $writer.WriteLine("noise-line-$index")
+            }
+            $writer.WriteLine("NoS0577 raw $syntheticPassword")
+            $writer.WriteLine("NsTeST $syntheticAccount $syntheticGuid")
+            $writer.WriteLine("password=$syntheticPassword")
+            $writer.WriteLine("accountName=$syntheticAccount")
+            $writer.WriteLine("contact=$syntheticEmail")
+            $writer.WriteLine("session=$syntheticGuid")
+            $writer.WriteLine("remote=8.8.8.8 local=127.0.0.1")
+            $writer.WriteLine("path=C:\Users\SyntheticUser\NosGM")
+            $writer.WriteLine("standalone=$syntheticLongValue")
+        }
+        finally {
+            $writer.Dispose()
+        }
+
+        Write-SanitizedLogTail -SourcePath $sourcePath -DestinationPath $destinationPath
+        $result = Get-Content -LiteralPath $destinationPath -Raw
+
+        foreach ($forbiddenValue in @(
+            $syntheticPassword,
+            $syntheticAccount,
+            $syntheticEmail,
+            $syntheticGuid,
+            '8.8.8.8',
+            'SyntheticUser',
+            $syntheticLongValue
+        )) {
+            if ($result.IndexOf($forbiddenValue, [StringComparison]::OrdinalIgnoreCase) -ge 0) {
+                throw "Diagnostic redaction self-test leaked a synthetic private value."
+            }
+        }
+
+        foreach ($requiredMarker in @(
+            '<redacted-modern-login-packet>',
+            '<redacted-entry-packet>',
+            '<redacted>',
+            '<email>',
+            '<guid>',
+            '<ip>',
+            'C:\Users\<user>',
+            '<long-value>',
+            '127.0.0.1'
+        )) {
+            if ($result.IndexOf($requiredMarker, [StringComparison]::Ordinal) -lt 0) {
+                throw "Diagnostic redaction self-test did not emit required marker $requiredMarker."
+            }
+        }
+
+        $maximumBytes = [long]$MaxLogMegabytes * 1MB
+        if ((Get-Item -LiteralPath $destinationPath).Length -gt ($maximumBytes + 4096)) {
+            throw "Diagnostic redaction self-test exceeded the configured output ceiling."
+        }
+    }
+    finally {
+        Remove-Item -LiteralPath $testDirectory -Recurse -Force -ErrorAction SilentlyContinue
+    }
+
+    Write-Host "Modern Login diagnostics redaction and bounded-tail self-test passed." -ForegroundColor Green
+}
+
+if ($SelfTest) {
+    Invoke-RedactionSelfTest
+    return
 }
 
 New-Item -ItemType Directory -Path $workingDirectory -Force | Out-Null
