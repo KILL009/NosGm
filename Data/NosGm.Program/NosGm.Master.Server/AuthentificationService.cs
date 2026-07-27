@@ -10,29 +10,52 @@ namespace NosGm.Master.Server
 {
     internal class AuthentificationService : ScsService, IAuthentificationService
     {
-        private const int MinimumAuthServiceKeyLength = 32;
+        private const int MinimumGameforgeKeyLength = 32;
 
         public bool Authenticate(string authKey)
         {
-            if (!ServerConfiguration.EnableGameforgeTokenLogin ||
-                !HasSecureConfiguredKey() ||
-                !string.Equals(authKey, ServerConfiguration.AuthServiceKey, StringComparison.Ordinal))
+            if (string.IsNullOrWhiteSpace(authKey))
             {
                 return false;
             }
 
-            if (!MSManager.Instance.AuthenticationServiceClients.Any(
-                    clientId => clientId.Equals(CurrentClient.ClientId)))
+            long clientId = CurrentClient.ClientId;
+            if (string.Equals(authKey, ServerConfiguration.AuthServiceKey, StringComparison.Ordinal))
             {
-                MSManager.Instance.AuthenticationServiceClients.Add(CurrentClient.ClientId);
+                AddClientOnce(MSManager.Instance.AuthenticationServiceClients, clientId);
+                return true;
             }
 
-            return true;
+            if (!ServerConfiguration.EnableGameforgeTokenLogin ||
+                !HasSecureGameforgeKeys())
+            {
+                return false;
+            }
+
+            if (string.Equals(
+                    authKey,
+                    ServerConfiguration.GameforgeTicketIssuerKey,
+                    StringComparison.Ordinal))
+            {
+                AddClientOnce(MSManager.Instance.GameforgeTicketIssuerClients, clientId);
+                return true;
+            }
+
+            if (string.Equals(
+                    authKey,
+                    ServerConfiguration.GameforgeTicketConsumerKey,
+                    StringComparison.Ordinal))
+            {
+                AddClientOnce(MSManager.Instance.GameforgeTicketConsumerClients, clientId);
+                return true;
+            }
+
+            return false;
         }
 
         public AccountDTO ValidateAccount(string userName, string passHash)
         {
-            if (!IsAuthenticatedClient() || string.IsNullOrEmpty(userName) || string.IsNullOrEmpty(passHash))
+            if (!IsLegacyAuthClient() || string.IsNullOrEmpty(userName) || string.IsNullOrEmpty(passHash))
             {
                 return null;
             }
@@ -43,7 +66,7 @@ namespace NosGm.Master.Server
 
         public CharacterDTO ValidateAccountAndCharacter(string userName, string characterName, string passHash)
         {
-            if (!IsAuthenticatedClient() || string.IsNullOrEmpty(userName) ||
+            if (!IsLegacyAuthClient() || string.IsNullOrEmpty(userName) ||
                 string.IsNullOrEmpty(characterName) || string.IsNullOrEmpty(passHash))
             {
                 return null;
@@ -66,7 +89,7 @@ namespace NosGm.Master.Server
             byte countryId)
         {
             if (!ServerConfiguration.EnableGameforgeTokenLogin ||
-                !IsAuthenticatedClient() ||
+                !IsGameforgeIssuerClient() ||
                 !Guid.TryParse(installationId, out Guid parsedInstallationId) ||
                 !GameforgeLoginPacketParser.TryGetCulture(countryId, out _))
             {
@@ -95,7 +118,7 @@ namespace NosGm.Master.Server
             byte countryId)
         {
             if (!ServerConfiguration.EnableGameforgeTokenLogin ||
-                !IsAuthenticatedClient() ||
+                !IsGameforgeConsumerClient() ||
                 !Guid.TryParse(installationId, out Guid parsedInstallationId))
             {
                 return null;
@@ -110,17 +133,46 @@ namespace NosGm.Master.Server
                 : null;
         }
 
-        private static bool HasSecureConfiguredKey()
+        private static void AddClientOnce(ThreadSafeGenericLockedList<long> clients, long clientId)
         {
-            string configuredKey = ServerConfiguration.AuthServiceKey;
-            return !string.IsNullOrWhiteSpace(configuredKey) &&
-                   configuredKey.Length >= MinimumAuthServiceKeyLength &&
-                   !string.Equals(configuredKey, "AuthServiceKey", StringComparison.Ordinal);
+            if (!clients.Any(existingId => existingId.Equals(clientId)))
+            {
+                clients.Add(clientId);
+            }
         }
 
-        private bool IsAuthenticatedClient()
+        private static bool HasSecureGameforgeKeys()
+        {
+            string issuerKey = ServerConfiguration.GameforgeTicketIssuerKey;
+            string consumerKey = ServerConfiguration.GameforgeTicketConsumerKey;
+            return IsSecureGameforgeKey(issuerKey) &&
+                   IsSecureGameforgeKey(consumerKey) &&
+                   !string.Equals(issuerKey, consumerKey, StringComparison.Ordinal) &&
+                   !string.Equals(issuerKey, ServerConfiguration.AuthServiceKey, StringComparison.Ordinal) &&
+                   !string.Equals(consumerKey, ServerConfiguration.AuthServiceKey, StringComparison.Ordinal);
+        }
+
+        private static bool IsSecureGameforgeKey(string configuredKey)
+        {
+            return !string.IsNullOrWhiteSpace(configuredKey) &&
+                   configuredKey.Length >= MinimumGameforgeKeyLength;
+        }
+
+        private bool IsLegacyAuthClient()
         {
             return MSManager.Instance.AuthenticationServiceClients.Any(
+                clientId => clientId.Equals(CurrentClient.ClientId));
+        }
+
+        private bool IsGameforgeIssuerClient()
+        {
+            return MSManager.Instance.GameforgeTicketIssuerClients.Any(
+                clientId => clientId.Equals(CurrentClient.ClientId));
+        }
+
+        private bool IsGameforgeConsumerClient()
+        {
+            return MSManager.Instance.GameforgeTicketConsumerClients.Any(
                 clientId => clientId.Equals(CurrentClient.ClientId));
         }
     }
