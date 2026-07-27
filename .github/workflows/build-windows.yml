@@ -98,14 +98,19 @@ jobs:
         run: |
           New-Item -ItemType Directory -Force -Path "$env:ARTIFACTS" | Out-Null
           $logPath = Join-Path "$env:ARTIFACTS" "gameforge-login-protocol.log"
-          try {
-            & ./scripts/verify-gameforge-login-protocol.ps1 *>&1 | Tee-Object -FilePath $logPath
-          }
-          catch {
-            $message = $_.Exception.Message
-            Add-Content -LiteralPath $logPath -Value $message
-            Write-Host "::error::$message"
-            throw
+          Set-Content -LiteralPath $logPath -Value "Starting NoS0576/NoS0577 protocol verification."
+          & powershell.exe `
+            -NoLogo `
+            -NoProfile `
+            -NonInteractive `
+            -ExecutionPolicy Bypass `
+            -File ".\scripts\verify-gameforge-login-protocol.ps1" 2>&1 |
+            Tee-Object -FilePath $logPath -Append |
+            ForEach-Object { Write-Host $_ }
+          $exitCode = $LASTEXITCODE
+          if ($exitCode -ne 0) {
+            Write-Host "::error::NoS0576/NoS0577 verification failed with exit code $exitCode."
+            exit $exitCode
           }
 
       - name: Verify login session flow contracts
