@@ -5,10 +5,6 @@ using System.Text;
 
 namespace NosGm.Master.Library.Interface
 {
-    /// <summary>
-    /// Thread-safe, in-memory ticket store. Tokens are kept only as SHA-256 lookup keys,
-    /// consumed atomically, bound to InstallationId and CountryId, and expire quickly.
-    /// </summary>
     public sealed class GameforgeAuthTicketStore
     {
         public const int MaximumOutstandingTickets = 10000;
@@ -21,41 +17,22 @@ namespace NosGm.Master.Library.Interface
             public DateTime ExpiresAtUtc { get; set; }
         }
 
-        private readonly ConcurrentDictionary<string, Ticket> _tickets =
-            new ConcurrentDictionary<string, Ticket>(StringComparer.Ordinal);
-
-        private GameforgeAuthTicketStore()
-        {
-        }
-
+        private readonly ConcurrentDictionary<string, Ticket> _tickets = new ConcurrentDictionary<string, Ticket>(StringComparer.Ordinal);
+        private GameforgeAuthTicketStore() { }
         public static GameforgeAuthTicketStore Instance { get; } = new GameforgeAuthTicketStore();
-
         public int Count => _tickets.Count;
 
-        public bool TryIssue(
-            string accountName,
-            string authToken,
-            Guid installationId,
-            byte countryId,
-            TimeSpan lifetime)
+        public bool TryIssue(string accountName, string authToken, Guid installationId, byte countryId, TimeSpan lifetime)
         {
             if (string.IsNullOrWhiteSpace(accountName) || accountName.Length > 255 ||
                 accountName.IndexOfAny(new[] { ' ', '\t', '\r', '\n', '\v', '\0' }) >= 0 ||
                 !GameforgeLoginPacketParser.TryNormalizeAuthToken(authToken, out string normalizedToken) ||
-                installationId == Guid.Empty ||
-                countryId > GameforgeLoginPacketParser.MaximumCountryId ||
-                lifetime <= TimeSpan.Zero || lifetime > TimeSpan.FromMinutes(10))
-            {
-                return false;
-            }
+                installationId == Guid.Empty || countryId > GameforgeLoginPacketParser.MaximumCountryId ||
+                lifetime <= TimeSpan.Zero || lifetime > TimeSpan.FromMinutes(10)) return false;
 
             DateTime nowUtc = DateTime.UtcNow;
             RemoveExpired(nowUtc);
-            if (_tickets.Count >= MaximumOutstandingTickets)
-            {
-                return false;
-            }
-
+            if (_tickets.Count >= MaximumOutstandingTickets) return false;
             string key = ComputeTokenKey(normalizedToken);
             return _tickets.TryAdd(key, new Ticket
             {
@@ -66,48 +43,26 @@ namespace NosGm.Master.Library.Interface
             });
         }
 
-        public bool TryConsume(
-            string authToken,
-            Guid installationId,
-            byte countryId,
-            out string accountName)
+        public bool TryConsume(string authToken, Guid installationId, byte countryId, out string accountName)
         {
             accountName = null;
             if (!GameforgeLoginPacketParser.TryNormalizeAuthToken(authToken, out string normalizedToken) ||
-                installationId == Guid.Empty ||
-                countryId > GameforgeLoginPacketParser.MaximumCountryId)
-            {
-                return false;
-            }
+                installationId == Guid.Empty || countryId > GameforgeLoginPacketParser.MaximumCountryId) return false;
 
             string key = ComputeTokenKey(normalizedToken);
-            if (!_tickets.TryRemove(key, out Ticket ticket))
-            {
-                return false;
-            }
-
-            if (ticket.ExpiresAtUtc <= DateTime.UtcNow ||
-                ticket.InstallationId != installationId ||
-                ticket.CountryId != countryId)
-            {
-                return false;
-            }
-
+            if (!_tickets.TryRemove(key, out Ticket ticket)) return false;
+            if (ticket.ExpiresAtUtc <= DateTime.UtcNow || ticket.InstallationId != installationId || ticket.CountryId != countryId) return false;
             accountName = ticket.AccountName;
             return true;
         }
 
-        public void Clear()
-        {
-            _tickets.Clear();
-        }
+        public void Clear() => _tickets.Clear();
 
         private static string ComputeTokenKey(string normalizedToken)
         {
             using (SHA256 sha256 = SHA256.Create())
             {
-                return Convert.ToBase64String(
-                    sha256.ComputeHash(Encoding.ASCII.GetBytes(normalizedToken)));
+                return Convert.ToBase64String(sha256.ComputeHash(Encoding.ASCII.GetBytes(normalizedToken)));
             }
         }
 
@@ -115,10 +70,72 @@ namespace NosGm.Master.Library.Interface
         {
             foreach (var pair in _tickets)
             {
-                if (pair.Value.ExpiresAtUtc <= nowUtc)
-                {
-                    _tickets.TryRemove(pair.Key, out _);
-                }
+                if (pair.Value.ExpiresAtUtc <= nowUtc) _tickets.TryRemove(pair.Key, out _);
+            }
+        }
+    }
+
+    public sealed class GameforgeWorldPermitStore
+    {
+        public const int MaximumOutstandingPermits = 10000;
+
+        private sealed class Permit
+        {
+            public DateTime ExpiresAtUtc { get; set; }
+            public string IpAddress { get; set; }
+        }
+
+        private readonly ConcurrentDictionary<string, Permit> _permits = new ConcurrentDictionary<string, Permit>(StringComparer.Ordinal);
+        private GameforgeWorldPermitStore() { }
+        public static GameforgeWorldPermitStore Instance { get; } = new GameforgeWorldPermitStore();
+        public int Count => _permits.Count;
+
+        public bool TryIssue(long accountId, int sessionId, string ipAddress, TimeSpan lifetime)
+        {
+            if (accountId <= 0 || sessionId <= 0 || lifetime <= TimeSpan.Zero || lifetime > TimeSpan.FromMinutes(10)) return false;
+            DateTime nowUtc = DateTime.UtcNow;
+            RemoveExpired(nowUtc);
+            if (_permits.Count >= MaximumOutstandingPermits) return false;
+            return _permits.TryAdd(BuildKey(accountId, sessionId), new Permit
+            {
+                ExpiresAtUtc = nowUtc.Add(lifetime),
+                IpAddress = NormalizeIpAddress(ipAddress)
+            });
+        }
+
+        public bool TryConsume(long accountId, int sessionId, string ipAddress)
+        {
+            if (accountId <= 0 || sessionId <= 0) return false;
+            if (!_permits.TryRemove(BuildKey(accountId, sessionId), out Permit permit)) return false;
+            string normalizedIp = NormalizeIpAddress(ipAddress);
+            return permit.ExpiresAtUtc > DateTime.UtcNow &&
+                   (string.IsNullOrEmpty(permit.IpAddress) || string.Equals(permit.IpAddress, normalizedIp, StringComparison.OrdinalIgnoreCase));
+        }
+
+        public void Revoke(long accountId, int sessionId) => _permits.TryRemove(BuildKey(accountId, sessionId), out _);
+        public void Clear() => _permits.Clear();
+        private static string BuildKey(long accountId, int sessionId) => accountId + ":" + sessionId;
+
+        private static string NormalizeIpAddress(string endpoint)
+        {
+            if (string.IsNullOrWhiteSpace(endpoint)) return string.Empty;
+            if (Uri.TryCreate(endpoint, UriKind.Absolute, out Uri uri) && !string.IsNullOrWhiteSpace(uri.Host)) return uri.Host;
+            string value = endpoint.Trim();
+            if (value.StartsWith("[", StringComparison.Ordinal))
+            {
+                int closingBracket = value.IndexOf(']');
+                if (closingBracket > 1) return value.Substring(1, closingBracket - 1);
+            }
+            int lastColon = value.LastIndexOf(':');
+            if (lastColon > 0 && value.IndexOf(':') == lastColon) return value.Substring(0, lastColon);
+            return value;
+        }
+
+        private void RemoveExpired(DateTime nowUtc)
+        {
+            foreach (var pair in _permits)
+            {
+                if (pair.Value.ExpiresAtUtc <= nowUtc) _permits.TryRemove(pair.Key, out _);
             }
         }
     }
