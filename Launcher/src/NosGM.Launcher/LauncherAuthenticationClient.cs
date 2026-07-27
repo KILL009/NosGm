@@ -63,7 +63,7 @@ internal sealed class LauncherAuthenticationClient
         var requestModel = new TicketRequest(
             accountName,
             password,
-            settings.InstallationId,
+            GameforgeInstallationId.Resolve(),
             countryId);
         var json = JsonSerializer.Serialize(requestModel);
         using var request = new HttpRequestMessage(HttpMethod.Post, endpoint)
