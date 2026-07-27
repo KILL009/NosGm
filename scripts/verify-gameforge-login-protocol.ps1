@@ -14,7 +14,7 @@ $assemblyDirectory = Split-Path -Parent $resolvedAssembly
 $resolver = [ResolveEventHandler]{
     param($sender, $eventArgs)
 
-    $assemblyName = New-Object Reflection.AssemblyName($eventArgs.Name)
+    $assemblyName = New-Object -TypeName System.Reflection.AssemblyName -ArgumentList $eventArgs.Name
     $candidate = Join-Path $assemblyDirectory ($assemblyName.Name + ".dll")
     if (Test-Path -LiteralPath $candidate) {
         return [Reflection.Assembly]::LoadFrom($candidate)
@@ -27,16 +27,16 @@ $resolver = [ResolveEventHandler]{
 try {
     [Reflection.Assembly]::LoadFrom($resolvedAssembly) | Out-Null
 
-    $store = [NosGm.Master.Library.Interface.GameforgeAuthTicketStore]::Instance
+    $storeType = [NosGm.Master.Library.Interface.GameforgeAuthTicketStore]
+    $store = $storeType::Instance
     $verticalTab = [char]0x0B
     $token = "37633936363633662D633332352D346461612D383933612D373031346639653063646463"
+    $rawGuidToken = "7c96663f-c325-4daa-893a-7014f9e0cddc"
     $installationId = [Guid]::Parse("CECAE467-B008-4CA5-BCC4-6C793467D0F6")
     $md5 = "8295D53DC9146B5B8EF686262C6FA8A6"
 
     function Assert-ParsedPacket {
-        param(
-            [string]$Header
-        )
+        param([string]$Header)
 
         $raw = "$Header $token  $($installationId.ToString('D')) 0023A85D 5${verticalTab}0.9.3.3256 0 $md5"
         $payload = $null
@@ -90,6 +90,19 @@ try {
     Assert-RejectedPacket "NoS0576 $token  $($installationId.ToString('D')) 0023A85D 5${verticalTab}0.9.3.3256 1 $md5" "non-zero constant"
     Assert-RejectedPacket "NoS0576 $token  $($installationId.ToString('D')) 0023A85D 5${verticalTab}0.9.3.3256 0 $($md5.Substring(1))" "short client MD5"
     Assert-RejectedPacket "NoS0575 $token  $validTail" "unsupported packet header"
+    Assert-RejectedPacket "NoS0576`rINJECT $token  $validTail" "control character in packet header"
+
+    $normalizedRaw = $null
+    $normalizedHex = $null
+    if (-not [NosGm.Master.Library.Interface.GameforgeLoginPacketParser]::TryNormalizeAuthToken(
+            $rawGuidToken,
+            [ref]$normalizedRaw) -or
+        -not [NosGm.Master.Library.Interface.GameforgeLoginPacketParser]::TryNormalizeAuthToken(
+            $token,
+            [ref]$normalizedHex) -or
+        $normalizedRaw -ne $normalizedHex) {
+        throw "Raw GUID and ASCII-hex GUID tokens did not normalize to the same value."
+    }
 
     $expectedCultures = @{
         0 = "en"
@@ -136,6 +149,16 @@ try {
         throw "A consumed ticket was accepted a second time."
     }
 
+    if (-not $store.TryIssue("test_account", $rawGuidToken, $installationId, [byte]5, [TimeSpan]::FromMinutes(2))) {
+        throw "A raw GUID ticket could not be issued."
+    }
+
+    $hexGuidAccount = $null
+    if (-not $store.TryConsume($token, $installationId, [byte]5, [ref]$hexGuidAccount) -or
+        $hexGuidAccount -ne "test_account") {
+        throw "An ASCII-hex GUID token did not consume the matching raw GUID ticket."
+    }
+
     if (-not $store.TryIssue("test_account", $token, $installationId, [byte]5, [TimeSpan]::FromMinutes(2))) {
         throw "A consumed token could not be safely issued as a new independent ticket."
     }
@@ -170,14 +193,28 @@ try {
         throw "An expired ticket was accepted."
     }
 
+    $ticketType = $storeType.GetNestedType(
+        "Ticket",
+        [Reflection.BindingFlags]::NonPublic)
+    if ($null -eq $ticketType -or
+        @($ticketType.GetProperties() | ForEach-Object { $_.Name }) -contains "AuthToken") {
+        throw "The in-memory ticket model must not store the raw authentication token."
+    }
+
     $store.Clear()
 
     $handlerPath = "Data/NosGm.Handler/PacketHandler/Login/LoginPacketHandler.cs"
     $ticketStorePath = "Data/NosGm.Master.Library/Security/GameforgeAuthTicketStore.cs"
     $configurationPath = "Data/NosGm.Configuration/ServerConfiguration.cs"
+    $masterAuthPath = "Data/NosGm.Program/NosGm.Master.Server/AuthentificationService.cs"
+    $managerPath = "Data/NosGm.Program/NosGm.Master.Server/MSManager.cs"
+    $loginProgramPath = "Data/NosGm.Program/NosGm.Login/Program.cs"
     $handlerSource = Get-Content -LiteralPath $handlerPath -Raw
     $ticketStoreSource = Get-Content -LiteralPath $ticketStorePath -Raw
     $configurationSource = Get-Content -LiteralPath $configurationPath -Raw
+    $masterAuthSource = Get-Content -LiteralPath $masterAuthPath -Raw
+    $managerSource = Get-Content -LiteralPath $managerPath -Raw
+    $loginProgramSource = Get-Content -LiteralPath $loginProgramPath -Raw
 
     if ($handlerSource -notmatch '\[Packet\("NoS0576",\s*"NoS0577"\)\]' -or
         $handlerSource -notmatch 'ConsumeGameforgeAuthTicket' -or
@@ -187,20 +224,35 @@ try {
     }
 
     if ($handlerSource -match '\{payload\.AuthToken\}' -or
-        $handlerSource -match '\{rawPacket\}') {
-        throw "The Login handler appears to interpolate sensitive Gameforge packet data into a log."
+        $handlerSource -match '\{rawPacket\}' -or
+        $handlerSource -notmatch 'header = "<invalid>"') {
+        throw "The Login handler does not fully redact malformed Gameforge packet diagnostics."
     }
 
     if ($ticketStoreSource -notmatch 'SHA256\.Create\(\)' -or
+        $ticketStoreSource -notmatch 'MaximumOutstandingTickets\s*=\s*10000' -or
         $ticketStoreSource -match 'private sealed class Ticket\s*\{[^\}]*AuthToken') {
-        throw "The ticket store no longer guarantees hashed token lookup keys."
+        throw "The ticket store no longer guarantees hashed and bounded token storage."
     }
 
     if ($configurationSource -notmatch 'EnableGameforgeTokenLogin\s*=\s*false') {
         throw "Gameforge token login must remain disabled by default until the Auth Bridge is configured."
     }
 
-    Write-Host "NoS0576/NoS0577 parsing, country mapping and one-time ticket behavior verified."
+    if ($managerSource -notmatch 'AuthenticationServiceClients' -or
+        $masterAuthSource -notmatch 'AuthenticationServiceClients' -or
+        $masterAuthSource -match 'AuthentificatedClients\.Add' -or
+        $masterAuthSource -notmatch '!ServerConfiguration\.EnableGameforgeTokenLogin' -or
+        $masterAuthSource -notmatch 'MinimumAuthServiceKeyLength\s*=\s*32') {
+        throw "Master authentication-ticket privileges are not isolated and feature-gated."
+    }
+
+    if ($loginProgramSource -notmatch 'if \(ServerConfiguration\.EnableGameforgeTokenLogin\)' -or
+        $loginProgramSource -notmatch 'IsSecureAuthServiceKey\(\)') {
+        throw "Login must initialize the authentication-ticket service only when securely enabled."
+    }
+
+    Write-Host "NoS0576/NoS0577 parsing, canonical tokens, country mapping and one-time ticket behavior verified."
 }
 finally {
     [AppDomain]::CurrentDomain.remove_AssemblyResolve($resolver)
