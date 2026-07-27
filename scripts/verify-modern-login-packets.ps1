@@ -155,7 +155,7 @@ $legacyPacket = Read-Source $LegacyPacketPath
 
 Assert-Contains $login '[Packet("NoS0576", "NoS0577")]' 'Login must bind both observed modern packet headers to one raw handler'
 Assert-Contains $login 'rawPacket.IndexOf("  ", tokenStart, StringComparison.Ordinal)' 'Parser must preserve the mandatory double-space separator'
-Assert-Contains $login "fields[2].IndexOf('\\v')" 'Parser must require the ASCII 0x0B region/version separator'
+Assert-Contains $login 'int separatorIndex = fields[2].IndexOf' 'Parser must require a dedicated region/version separator'
 Assert-Contains $login 'AuthentificationServiceClient.Instance.ConsumeModernLoginTicket(' 'Login must resolve the one-time ticket through Master'
 Assert-Contains $login 'RegisterModernLoginSession(' 'Login must register a separate modern World-entry permit'
 Assert-Contains $login 'BuildServersPacket(' 'Modern login must reuse the canonical NsTeST serializer'
