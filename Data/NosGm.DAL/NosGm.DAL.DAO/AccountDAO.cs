@@ -194,6 +194,7 @@ namespace NosGm.DAL.DAO
         public bool TryUpdateLanguage(long accountId, string language)
         {
             if (accountId <= 0 || string.IsNullOrWhiteSpace(language) || language.Length > 8)
+            if (accountId <= 0 || string.IsNullOrWhiteSpace(language) || language.Length > 10)
             {
                 return false;
             }
@@ -209,6 +210,7 @@ namespace NosGm.DAL.DAO
                     }
 
                     if (string.Equals(entity.Language, language, StringComparison.OrdinalIgnoreCase))
+                    if (string.Equals(entity.Language, language, StringComparison.Ordinal))
                     {
                         return true;
                     }

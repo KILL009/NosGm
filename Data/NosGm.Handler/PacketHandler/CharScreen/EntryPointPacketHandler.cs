@@ -71,7 +71,7 @@ namespace NosGm.Handler.BasicPacket.CharScreen
                     }
 
                     isCrossServerLogin = true;
-                    account = DAOFactory.AccountDAO.LoadByName(loginPacketParts[4]);
+                    account = LoadAccountByProtocolName(loginPacketParts[4]);
                 }
                 else
                 {
@@ -82,7 +82,7 @@ namespace NosGm.Handler.BasicPacket.CharScreen
                         return;
                     }
 
-                    account = DAOFactory.AccountDAO.LoadByName(loginPacketParts[3]);
+                    account = LoadAccountByProtocolName(loginPacketParts[3]);
                 }
 
                 if (account == null)
@@ -194,6 +194,25 @@ namespace NosGm.Handler.BasicPacket.CharScreen
 
                 Session.SendPacket("clist_end");
             }
+        }
+
+        private static AccountDTO LoadAccountByProtocolName(string protocolUsername)
+        {
+            AccountDTO account = DAOFactory.AccountDAO.LoadByName(protocolUsername);
+            if (account != null)
+            {
+                return account;
+            }
+
+            if (!ClientRegionMap.TryStripProtocolPrefix(
+                    protocolUsername,
+                    out string accountName,
+                    out _))
+            {
+                return null;
+            }
+
+            return DAOFactory.AccountDAO.LoadByName(accountName);
         }
 
         #endregion

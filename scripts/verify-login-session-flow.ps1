@@ -1,4 +1,4 @@
-param(
+﻿param(
     [string]$LoginHandlerPath = "Data/NosGm.Handler/PacketHandler/Login/LoginPacketHandler.cs",
     [string]$MasterServicePath = "Data/NosGm.Program/NosGm.Master.Server/CommunicationService.cs",
     [string]$ClientSessionPath = "Data/NosGm.GameObject/Networking/ClientSession.cs",
@@ -126,16 +126,24 @@ $completionFlow = Get-Section -Content $login -StartMarker "private async Task C
 Assert-Regex $legacyLoginFlow 'CompleteLoginAsync\s*\(\s*loadedAccount\s*,\s*username\s*,\s*loginPacket\.RegionType\s*,\s*null\s*,\s*ignoreUserName\s*,\s*"password"\s*\)' "NoS0575 must pass its authenticated region into the shared completion path"
 
 Assert-Ordered $completionFlow @(
+Assert-Ordered $loginFlow @(
+    "if (!ClientRegionMap.TryResolveLoginPort(",
+    "if (!SynchronizeAccountLanguage(loadedAccount, clientCulture))",
     "int newSessionId = SessionFactory.Instance.GenerateSessionId();",
     "CommunicationServiceClient.Instance.RegisterAccountLogin(",
     "string serversPacket = BuildServersPacket(",
     "_session.SendPacket(serversPacket);",
     "DisposeLoginPolling();"
-) "Login must register the generated session before retrieving and sending the world list"
+) "Login must resolve the trusted port, synchronize language and register the generated session before sending the world list"
 
 Assert-Regex $completionFlow 'RegisterAccountLogin\s*\(\s*loadedAccount\.AccountId\s*,\s*newSessionId\s*,\s*ipAddress\s*\)' "Login must register the account with the generated session ID and normalized IP"
 Assert-Regex $completionFlow 'BuildServersPacket\s*\(\s*username\s*,\s*regionType\s*,\s*newSessionId\s*,\s*ignoreUserName\s*,\s*loadedAccount\.AccountId\s*\)' "World-list generation must use the same generated session ID and authenticated region"
 Assert-Contains $completionFlow "CommunicationServiceClient.Instance.DisconnectAccount(loadedAccount.AccountId);" "Failed world-list generation must roll back the Master account registration"
+Assert-Regex $loginFlow 'TryResolveLoginPort\s*\(\s*_session\.ListeningPort\s*,\s*out byte resolvedRegionType\s*,\s*out string clientCulture\s*\)' "Login must derive RegionType and culture from the accepted local port"
+Assert-Regex $loginFlow 'RegisterAccountLogin\s*\(\s*loadedAccount\.AccountId\s*,\s*newSessionId\s*,\s*ipAddress\s*\)' "Login must register the account with the generated session ID and normalized IP"
+Assert-Regex $loginFlow 'BuildServersPacket\s*\(\s*username\s*,\s*resolvedRegionType\s*,\s*newSessionId\s*,\s*ignoreUserName\s*,\s*loadedAccount\.AccountId\s*\)' "World-list generation must use the port-derived RegionType and generated session ID"
+Assert-NotRegex $loginFlow 'BuildServersPacket\s*\(\s*username\s*,\s*loginPacket\.RegionType' "World-list generation must not trust the RegionType supplied by NoS0575"
+Assert-Contains $loginFlow "CommunicationServiceClient.Instance.DisconnectAccount(loadedAccount.AccountId);" "Failed world-list generation must roll back the Master account registration"
 
 Assert-Regex $master 'public void RegisterAccountLogin\s*\(long accountId, int sessionId, string ipAddress\).*?ConnectedAccounts\.RemoveAll\(a => a\.AccountId\.Equals\(accountId\)\).*?ConnectedAccounts\.Add\(new AccountConnection\(accountId, sessionId, ipAddress\)\);' "Master must replace stale account registrations with the new account/session/IP tuple"
 Assert-Regex $master 'public bool IsLoginPermitted\s*\(long accountId, int sessionId\).*?AccountId\.Equals\(accountId\).*?SessionId\.Equals\(sessionId\).*?ConnectedWorld == null' "Master permission checks must bind both account ID and session ID before World attachment"

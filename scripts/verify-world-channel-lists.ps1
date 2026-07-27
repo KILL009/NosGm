@@ -156,6 +156,21 @@ function Assert-Regex {
     }
 }
 
+function Assert-NotRegex {
+    param(
+        [string]$Content,
+        [string]$Pattern,
+        [string]$Description
+    )
+
+    if ([regex]::IsMatch(
+            $Content,
+            $Pattern,
+            [Text.RegularExpressions.RegexOptions]::Singleline)) {
+        throw "World/channel source contract failed: $Description"
+    }
+}
+
 function Get-CharacterPrefix {
     param(
         [object[]]$Prefixes,
@@ -273,10 +288,10 @@ Assert-SameValue -Actual ([string]$fixture.protocol.header) -Expected "NsTeST" -
 Assert-SameValue -Actual ([int]$fixture.protocol.paddingPairs) -Expected 56 -Description "NsTeST padding pair count"
 Assert-SameValue -Actual ([string]$fixture.protocol.sentinel) -Expected "-1:-1:-1:10000.10000.1" -Description "World-list sentinel"
 
-$expectedCultures = @("en", "es", "de", "fr", "it", "pl", "cs", "ru", "ja", "zh")
+$expectedCultures = @("en", "es", "de", "fr", "it", "pl", "cs", "ru", "tr", "ja", "zh")
 Assert-StringArray -Actual @($fixture.supportedCultures) -Expected $expectedCultures -Description "Supported culture fixture"
 
-$expectedRegions = @(0, 1, 2, 3, 4, 5, 6, 7, 8, 9)
+$expectedRegions = @(0, 1, 2, 3, 4, 5, 6, 7, 8)
 $actualRegions = @($fixture.regionTypes | ForEach-Object { [int]$_ })
 Assert-StringArray -Actual $actualRegions -Expected $expectedRegions -Description "Protocol region byte fixture"
 
@@ -416,6 +431,10 @@ Assert-Regex $loginPacketSource '\[PacketIndex\(5\)\]\s*public byte RegionType' 
 Assert-Regex $loginHandlerSource 'CompleteLoginAsync\s*\(\s*loadedAccount\s*,\s*username\s*,\s*loginPacket\.RegionType\s*,\s*null\s*,\s*ignoreUserName\s*,\s*"password"\s*\)' "NoS0575 must pass its RegionType unchanged into shared Login completion"
 Assert-Regex $loginHandlerSource 'CompleteLoginAsync\s*\(\s*loadedAccount\s*,\s*username\s*,\s*payload\.CountryId\s*,\s*culture\s*,\s*false\s*,\s*payload\.Header\s*\)' "NoS0576 and NoS0577 must pass authenticated CountryId into shared Login completion"
 Assert-Regex $loginHandlerSource 'BuildServersPacket\s*\(\s*username\s*,\s*regionType\s*,\s*newSessionId\s*,\s*ignoreUserName\s*,\s*loadedAccount\.AccountId\s*\)' "Shared Login completion must pass the authenticated region unchanged to Master"
+Assert-Regex $loginPacketSource '\[PacketIndex\(5\)\]\s*public byte RegionType' "RegionType must remain byte field 5 of NoS0575 for compatibility diagnostics"
+Assert-Regex $loginHandlerSource 'TryResolveLoginPort\s*\(\s*_session\.ListeningPort\s*,\s*out byte resolvedRegionType\s*,\s*out string clientCulture\s*\)' "Login must derive RegionType and culture from the accepted local port"
+Assert-Regex $loginHandlerSource 'BuildServersPacket\s*\(\s*username\s*,\s*resolvedRegionType\s*,\s*newSessionId' "Login must pass the port-derived RegionType to Master"
+Assert-NotRegex $loginHandlerSource 'BuildServersPacket\s*\(\s*username\s*,\s*loginPacket\.RegionType' "Login must not pass the untrusted packet RegionType to Master"
 Assert-Regex $masterSource 'private const int NsTeSTPadding\s*=\s*56;' "NsTeST padding must remain 56 pairs"
 Assert-Contains $masterSource '$"NsTeST {regionType} {username}' "Master must emit the supplied protocol region byte"
 Assert-Regex $masterSource 'visibleWorlds\s*=.*?Where\(w => w\.ChannelId != 51\).*?OrderBy\(w => w\.WorldGroup\).*?ThenBy\(w => w\.ChannelId\).*?ToList\(\);' "visible worlds must exclude channel 51 and sort by group then channel"
@@ -438,14 +457,14 @@ $sourceCultures = @(
         ForEach-Object { $_.Groups["code"].Value }
 )
 Assert-StringArray -Actual $sourceCultures -Expected $expectedCultures -Description "Language.SupportedCultures"
-Assert-NotContains $languageSource "RegionType" "Language selection must remain independent from the login protocol region byte"
-Assert-Contains $localizationDoc '`RegionType` must not be treated as a locale.' "Localization documentation must keep region and culture separate"
+Assert-Contains $languageSource "public static class ClientRegionMap" "The official client region map must remain centralized"
+Assert-Contains $localizationDoc "The Login listening port is the source of truth" "Localization documentation must keep trusted port routing explicit"
 
 $neutralResource = Join-Path $WorldResourceDirectory "LocalizedResources.resx"
 if (-not (Test-Path -LiteralPath $neutralResource)) {
     throw "Missing neutral English World resource: $neutralResource"
 }
-foreach ($culture in $expectedCultures | Where-Object { $_ -ne "en" }) {
+foreach ($culture in $expectedCultures | Where-Object { $_ -ne "en" -and $_ -ne "tr" }) {
     $satelliteResource = Join-Path $WorldResourceDirectory "LocalizedResources.$culture.resx"
     if (-not (Test-Path -LiteralPath $satelliteResource)) {
         throw "Missing World satellite resource for culture '$culture': $satelliteResource"
@@ -457,4 +476,4 @@ foreach ($culture in $expectedCultures | Where-Object { $_ -ne "en" }) {
     }
 }
 
-Write-Host "Verified $($seenCaseIds.Count) world/channel fixtures, 10 protocol region bytes and 10 independent server cultures."
+Write-Host "Verified $($seenCaseIds.Count) world/channel fixtures, 9 EU client region bytes and 11 independent server cultures (Turkish uses neutral fallback)."

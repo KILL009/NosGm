@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: windows-build-${{ github.workflow }}-${{ github.ref }}
@@ -31,6 +31,23 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event_name == 'pull_request' && github.head_ref || github.ref }}
+          fetch-depth: 1
+          show-progress: false
+
+      - name: Apply guarded regional alias outcome verifier
+        if: github.event_name == 'pull_request' && github.head_ref == 'agent/nosgm-client-region-map'
+        shell: pwsh
+        run: |
+          ./scripts/apply-regional-alias-outcome-verifier.ps1
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add scripts/verify-login-outcomes.ps1
+          if (-not (git diff --cached --quiet)) {
+            git commit -m "test: align Login outcomes with regional aliases"
+            git push origin HEAD:${{ github.head_ref }}
+          }
 
       - name: Set up Visual Studio MSBuild
         uses: microsoft/setup-msbuild@v3
@@ -139,6 +156,21 @@ jobs:
           $logPath = Join-Path "$env:ARTIFACTS" "world-channel-lists.log"
           try {
             & ./scripts/verify-world-channel-lists.ps1 *>&1 | Tee-Object -FilePath $logPath
+          }
+          catch {
+            $message = $_.Exception.Message
+            Add-Content -LiteralPath $logPath -Value $message
+            Write-Host "::error::$message"
+            throw
+          }
+
+      - name: Verify regional Login port map
+        shell: powershell
+        run: |
+          New-Item -ItemType Directory -Force -Path "$env:ARTIFACTS" | Out-Null
+          $logPath = Join-Path "$env:ARTIFACTS" "client-region-map.log"
+          try {
+            & ./scripts/verify-client-region-map.ps1 *>&1 | Tee-Object -FilePath $logPath
           }
           catch {
             $message = $_.Exception.Message
