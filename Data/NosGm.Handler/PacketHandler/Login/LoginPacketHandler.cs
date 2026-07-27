@@ -130,7 +130,12 @@ namespace NosGm.Handler.BasicPacket.Login
         }
 
         [Packet("NoS0576", "NoS0577")]
-        public async Task VerifyGameforgeLoginAsync(string rawPacket)
+        public void VerifyGameforgeLogin(string rawPacket)
+        {
+            VerifyGameforgeLoginAsync(rawPacket).ConfigureAwait(false).GetAwaiter().GetResult();
+        }
+
+        private async Task VerifyGameforgeLoginAsync(string rawPacket)
         {
             if (!ServerConfiguration.EnableGameforgeTokenLogin)
             {
