@@ -51,6 +51,11 @@ function Protect-DiagnosticLine {
         '$1<redacted>')
     $protected = [regex]::Replace(
         $protected,
+        '\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b',
+        '<email>',
+        [Text.RegularExpressions.RegexOptions]::IgnoreCase)
+    $protected = [regex]::Replace(
+        $protected,
         '\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}\b',
         '<guid>')
     $protected = [regex]::Replace(
@@ -134,7 +139,7 @@ try {
                 }
             }
 
-            $endpointUri = New-Object Uri([string]$state.AuthenticationEndpoint)
+            $endpointUri = [Uri]([string]$state.AuthenticationEndpoint)
             $sanitizedState = [pscustomobject]@{
                 SchemaVersion = [int]$state.SchemaVersion
                 CreatedAtUtc = [string]$state.CreatedAtUtc
@@ -283,6 +288,7 @@ Always omitted or redacted:
 - authorization codes and raw modern Login packets
 - authentication keys, tokens and secrets
 - account names and account identifiers
+- email addresses
 - InstallationId and other GUID values
 - non-loopback IP addresses
 - Windows user profile names
@@ -293,6 +299,10 @@ The collector never reads process environment blocks and never writes secret val
     Set-Content -LiteralPath (Join-Path $workingDirectory "MANIFEST.md") -Value $manifest -Encoding UTF8
 
     $outputDirectory = Split-Path -Parent $OutputPath
+    if ([string]::IsNullOrWhiteSpace($outputDirectory)) {
+        $outputDirectory = (Get-Location).Path
+        $OutputPath = Join-Path $outputDirectory $OutputPath
+    }
     New-Item -ItemType Directory -Path $outputDirectory -Force | Out-Null
     if (Test-Path -LiteralPath $OutputPath) {
         Remove-Item -LiteralPath $OutputPath -Force
