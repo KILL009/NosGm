@@ -69,30 +69,44 @@ internal sealed class GameforgeJsonRpcPipeServer
         }
 
         var method = methodElement.GetString();
+        if (!IsSupportedMethod(method))
+        {
+            return CreateErrorResponse(idElement, -32601, "Method not found");
+        }
+
+        if (!HasExpectedSession(root))
+        {
+            return CreateErrorResponse(idElement, -32602, "Invalid session");
+        }
+
         return method switch
         {
-            "ClientLibrary.isClientRunning" => CreateResultResponse(idElement, writer => writer.WriteBooleanValue(true)),
-            "ClientLibrary.initSession" => CreateInitSessionResponse(root, idElement),
+            "ClientLibrary.isClientRunning" =>
+                CreateResultResponse(idElement, writer => writer.WriteBooleanValue(true)),
+            "ClientLibrary.initSession" =>
+                CreateResultResponse(idElement, writer => writer.WriteStringValue(_sessionId.ToString("D"))),
             "ClientLibrary.queryAuthorizationCode" => CreateAuthorizationCodeResponse(idElement),
             "ClientLibrary.queryGameAccountName" => CreateAccountNameResponse(idElement),
             _ => CreateErrorResponse(idElement, -32601, "Method not found")
         };
     }
 
-    private byte[] CreateInitSessionResponse(JsonElement root, JsonElement idElement)
+    private static bool IsSupportedMethod(string? method)
     {
-        if (!root.TryGetProperty("params", out var paramsElement) ||
-            !paramsElement.TryGetProperty("sessionId", out var sessionElement) ||
-            sessionElement.ValueKind != JsonValueKind.String ||
-            !Guid.TryParse(sessionElement.GetString(), out var receivedSessionId) ||
-            receivedSessionId != _sessionId)
-        {
-            return CreateErrorResponse(idElement, -32602, "Invalid session");
-        }
+        return method == "ClientLibrary.isClientRunning" ||
+               method == "ClientLibrary.initSession" ||
+               method == "ClientLibrary.queryAuthorizationCode" ||
+               method == "ClientLibrary.queryGameAccountName";
+    }
 
-        return CreateResultResponse(
-            idElement,
-            writer => writer.WriteStringValue(receivedSessionId.ToString("D")));
+    private bool HasExpectedSession(JsonElement root)
+    {
+        return root.TryGetProperty("params", out var paramsElement) &&
+               paramsElement.ValueKind == JsonValueKind.Object &&
+               paramsElement.TryGetProperty("sessionId", out var sessionElement) &&
+               sessionElement.ValueKind == JsonValueKind.String &&
+               Guid.TryParse(sessionElement.GetString(), out var receivedSessionId) &&
+               receivedSessionId == _sessionId;
     }
 
     private byte[] CreateAuthorizationCodeResponse(JsonElement idElement)
