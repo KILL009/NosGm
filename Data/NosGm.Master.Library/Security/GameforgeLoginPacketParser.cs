@@ -1,7 +1,7 @@
 using System;
 using System.Globalization;
 
-namespace NosGm.Master.Library.Security
+namespace NosGm.Master.Library.Interface
 {
     /// <summary>
     /// Strict parser for the shared NoS0576/NoS0577 body observed in current Gameforge clients.
