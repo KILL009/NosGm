@@ -15,6 +15,10 @@ $required = @(
     "src/NosGM.ManifestBuilder/NosGM.ManifestBuilder.csproj",
     "src/NosGM.Launcher/NosGM.Launcher.csproj",
     "src/NosGM.Launcher/TrustedChannel.Placeholder.cs",
+    "src/NosGM.Launcher/LauncherAuthenticationClient.cs",
+    "src/NosGM.Launcher/GameforgeJsonRpcPipeServer.cs",
+    "src/NosGM.Launcher/ModernGameLauncher.cs",
+    "src/NosGM.Launcher/LauncherLoginDialog.cs",
     "tests/NosGM.Updater.SelfTest/NosGM.Updater.SelfTest.csproj"
 )
 
@@ -94,11 +98,27 @@ foreach ($requiredCode in @(
     "日本語",
     "中文",
     "IgnoredDeletes",
-    "UseShellExecute = true"
+    "UseShellExecute = true",
+    "UseShellExecute = false",
+    "GameforgeClientJSONRPC",
+    "PipeOptions.CurrentUserOnly",
+    "_TNT_CLIENT_APPLICATION_ID",
+    "_TNT_SESSION_ID",
+    "AuthenticationEndpoint",
+    "HttpCompletionOption.ResponseHeadersRead"
 )) {
     if (-not $source.Contains($requiredCode, [System.StringComparison]::Ordinal)) {
-        throw "Required launcher safety, release, or language control missing: $requiredCode"
+        throw "Required launcher safety, release, language, or authentication control missing: $requiredCode"
     }
+}
+
+$settingsSource = Get-Content (Join-Path $launcher "src/NosGM.Launcher/LauncherSettings.cs") -Raw
+if ($settingsSource.Contains("public string Password", [System.StringComparison]::Ordinal)) {
+    throw "Launcher settings must never persist a password."
+}
+if (-not $settingsSource.Contains("uri.IsLoopback", [System.StringComparison]::Ordinal) -or
+    -not $settingsSource.Contains("Uri.UriSchemeHttps", [System.StringComparison]::Ordinal)) {
+    throw "Launcher authentication endpoint validation must require HTTPS or loopback HTTP."
 }
 
 $privateKeyMarkers = @(
@@ -129,4 +149,4 @@ if ($serverSolution.Contains("NosGM.Launcher", [System.StringComparison]::Ordina
     throw "Launcher projects must remain outside the NosGM server solution."
 }
 
-Write-Host "NosGM Launcher attribution and safety checks passed."
+Write-Host "NosGM Launcher attribution, updater, and modern authentication safety checks passed."
