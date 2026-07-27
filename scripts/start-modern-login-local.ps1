@@ -194,23 +194,31 @@ if ($ConfigureUrlAcl) {
 }
 
 if (-not $SkipBuild) {
-    $nuget = Get-Command nuget.exe -ErrorAction SilentlyContinue
-    if (-not $nuget) {
-        throw "nuget.exe was not found. Install NuGet CLI or run with -SkipBuild after restoring the solution."
-    }
     if (-not (Get-Command dotnet.exe -ErrorAction SilentlyContinue)) {
         throw ".NET 9 SDK was not found. Install it or run with -SkipBuild after building the launcher."
     }
 
     $msbuild = Resolve-MSBuild
-    Write-Host "[BUILD] Restoring NosGm.sln"
-    & $nuget.Source restore (Join-Path $root "NosGm.sln") -NonInteractive
-    if ($LASTEXITCODE -ne 0) {
-        throw "NuGet restore failed."
+    $solutionPath = Join-Path $root "NosGm.sln"
+    $nuget = Get-Command nuget.exe -ErrorAction SilentlyContinue
+
+    if ($nuget) {
+        Write-Host "[BUILD] Restoring NosGm.sln with NuGet CLI"
+        & $nuget.Source restore $solutionPath -NonInteractive
+        if ($LASTEXITCODE -ne 0) {
+            throw "NuGet restore failed."
+        }
+    }
+    else {
+        Write-Host "[BUILD] nuget.exe not found; restoring packages.config with MSBuild"
+        & $msbuild $solutionPath /t:Restore /m /nologo /nr:false /v:minimal /p:RestorePackagesConfig=true /p:Configuration=Release "/p:Platform=Any CPU"
+        if ($LASTEXITCODE -ne 0) {
+            throw "MSBuild package restore failed. Install Visual Studio Build Tools 2022 with NuGet targets, or install NuGet CLI."
+        }
     }
 
     Write-Host "[BUILD] Building server Release / Any CPU"
-    & $msbuild (Join-Path $root "NosGm.sln") /t:Build /m /nologo /nr:false /v:minimal /p:Configuration=Release "/p:Platform=Any CPU"
+    & $msbuild $solutionPath /t:Build /m /nologo /nr:false /v:minimal /p:Configuration=Release "/p:Platform=Any CPU"
     if ($LASTEXITCODE -ne 0) {
         throw "Server build failed."
     }
