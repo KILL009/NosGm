@@ -41,6 +41,28 @@ function Assert-NotContains {
     }
 }
 
+function Assert-Regex {
+    param([string]$Content, [string]$Pattern, [string]$Description)
+
+    if (-not [regex]::IsMatch(
+            $Content,
+            $Pattern,
+            [Text.RegularExpressions.RegexOptions]::Singleline)) {
+        throw "Gameforge login contract failed: $Description"
+    }
+}
+
+function Assert-NotRegex {
+    param([string]$Content, [string]$Pattern, [string]$Description)
+
+    if ([regex]::IsMatch(
+            $Content,
+            $Pattern,
+            [Text.RegularExpressions.RegexOptions]::Singleline)) {
+        throw "Gameforge login contract failed: $Description"
+    }
+}
+
 function Assert-Count {
     param([string]$Content, [string]$Needle, [int]$Expected, [string]$Description)
 
@@ -97,7 +119,7 @@ Assert-Ordered $login @(
     'ConsumeGameforgeAuthTicket(',
     'RegisterAccountLogin(',
     'RegisterGameforgeWorldPermit(',
-    'BuildServersPacket(',
+    'string serversPacket = BuildServersPacket(',
     '_session.SendPacket(serversPacket);'
 ) 'The one-time ticket and World permit must precede server-list delivery'
 Assert-NotContains $login 'Logger.Info(rawPacket' 'Raw token-bearing packets must never be logged'
@@ -114,8 +136,8 @@ Assert-Contains $entry 'isGameforgePasswordlessLogin ||' 'Password bypass must b
 Assert-Count $program 'CommunicationServiceClient.Instance.Authenticate(' 1 'Login must authenticate the Master communication service once'
 Assert-Count $program 'AntiSpamModule.Instance.RunBlacklistTask();' 1 'Login must start the blacklist task once'
 Assert-NotContains $program 'var networkManager = new NetworkManager' 'No discarded duplicate listener may be created'
-Assert-Contains $program 'GameforgeTicketConsumerKey' 'Login must authenticate only as the Gameforge ticket consumer'
-Assert-NotContains $program 'GameforgeTicketIssuerKey))' 'Login must never authenticate as the ticket issuer'
+Assert-Regex $program 'AuthentificationServiceClient\.Instance\.Authenticate\s*\(\s*ServerConfiguration\.GameforgeTicketConsumerKey\s*\)' 'Login must authenticate as the Gameforge ticket consumer'
+Assert-NotRegex $program 'AuthentificationServiceClient\.Instance\.Authenticate\s*\(\s*ServerConfiguration\.GameforgeTicketIssuerKey\s*\)' 'Login must never authenticate as the ticket issuer'
 Assert-Contains $program 'Enumerable.Range(' 'Regional listeners 4000-4009 must remain supported'
 
 Assert-Contains $service 'IsGameforgeIssuerClient()' 'Only the bridge role may issue authentication tickets'
@@ -133,7 +155,7 @@ Assert-Contains $interface 'ConsumeGameforgeWorldPermit(' 'The World-permit cons
 Assert-Contains $client 'RevokeGameforgeWorldPermit(' 'The client proxy must expose permit rollback'
 
 Assert-Contains $parser 'rawPacket.IndexOf("  ", tokenStart, StringComparison.Ordinal)' 'The mandatory double-space boundary must be preserved'
-Assert-Contains $parser "countryAndVersion.IndexOf('\\v')" 'The ASCII 0x0B country/version delimiter must be required'
+Assert-Contains $parser 'int verticalTabIndex = countryAndVersion.IndexOf' 'The ASCII 0x0B country/version delimiter must be required'
 Assert-Contains $parser 'case 8:' 'Japanese region support must remain present'
 Assert-Contains $parser 'culture = "ja";' 'Region 8 must map to Japanese'
 Assert-Contains $parser 'case 9:' 'Chinese region support must remain present'
