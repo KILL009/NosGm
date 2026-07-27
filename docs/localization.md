@@ -14,17 +14,14 @@ NosGM resolves dynamic server messages per account. The neutral World Server res
 | Polish | `pl` | `pl-PL`, `polish`, `polski` |
 | Czech | `cs` | `cs-CZ`, legacy `cz`, `czech`, `čeština` |
 | Russian | `ru` | `ru-RU`, `russian`, `русский` |
-| Turkish | `tr` | `tr-TR`, `turkish`, `türkçe`, `turkce` |
 | Japanese | `ja` | `ja-JP`, legacy `jp`, `japanese`, `日本語` |
 | Chinese (Simplified) | `zh` | `zh-CN`, `zh-Hans`, legacy `cn`, `chinese`, `中文` |
 
 Chinese region aliases currently share the Simplified Chinese catalog. Add a separate Traditional Chinese catalog before distinguishing `zh-TW` or `zh-Hant`.
 
-Turkish is a verified client language in the European 0.9.3.3255/3256 client. NosGM does not yet contain a completed `LocalizedResources.tr.resx`, so emulator-generated Turkish messages deliberately use the neutral English fallback until a reviewed Turkish server catalog is added. The client still loads its own Turkish NPC, item, quest, skill and interface texts from the official local files.
+## Supported client profiles
 
-## Verified European client profiles
-
-The Login listening port is the source of truth for the installed client language. The launcher patches the client endpoint to the matching Login port. The verified European client profiles are:
+The Login listening port is the source of truth for the installed client language. The launcher patches the client endpoint to the matching Login port.
 
 | Protocol prefix | RegionType | Login port | NSlangData suffix | Server culture |
 | --- | ---: | ---: | --- | --- |
@@ -36,11 +33,12 @@ The Login listening port is the source of truth for the installed client languag
 | `ES` | `5` | `4005` | `ES` | `es` |
 | `CZ` | `6` | `4006` | `CZ` | `cs` |
 | `RU` | `7` | `4007` | `RU` | `ru` |
-| `TR` | `8` | `4008` | `TR` | `tr` |
+| `JP` | `8` | `4008` | `JP` | `ja` |
+| `CN` | `9` | `4009` | `CN` | `zh` |
 
-`NosGm.Login` opens the nine verified regional ports by default. Passing `--port 4005`, for example, starts only the Spanish listener for debugging or isolated deployment.
+`NosGm.Login` opens all ten regional ports by default. Passing `--port 4005`, for example, starts only the Spanish listener for debugging or isolated deployment.
 
-The accepted local port determines the trusted `RegionType` written into `NsTeST`. The `RegionType` byte received inside `NoS0575` is retained for compatibility diagnostics but cannot override the listening port. A successful regional login also synchronizes `Account.Language`, so World Server messages follow the same culture.
+The accepted local port determines the trusted `RegionType` written into `NsTeST`. The `RegionType` byte received inside `NoS0575` is retained for compatibility diagnostics but cannot override the listening port. Modern `NoS0576` and `NoS0577` packets must also report the country corresponding to that trusted port. A successful login synchronizes `Account.Language`, so World Server messages follow the same culture.
 
 ## NsTeST account identity
 
@@ -57,7 +55,7 @@ account
 ES_account
 ```
 
-The exact database account name is always tried first. Only when it does not exist may a recognized prefix be stripped, and the prefix must match the trusted Login port during authentication. World then resolves the same optional alias before Master validates `AccountId + SessionId`. The alias never replaces password verification or session authorization.
+The exact database account name is always tried first. Only when it does not exist may a recognized prefix be stripped, and the prefix must match the trusted Login port during password authentication. World then resolves the same optional alias before Master validates `AccountId + SessionId`. The alias never replaces password verification, ticket verification or session authorization.
 
 ## Login ports and World channel ports are different
 
@@ -69,7 +67,7 @@ HOST:4006:1:11.6.EU-Undercity
 
 means that a World channel is listening on TCP port `4006`; it does not mean that the channel is Czech. The language is selected by the `RegionType` immediately after `NsTeST`, while every endpoint keeps its own independently configured World port.
 
-Private NosGM deployments can therefore continue using World ports such as `1337`, `1338` and `1339` while Login listens on `4000` through `4008`.
+Private NosGM deployments can therefore continue using World ports such as `1337`, `1338` and `1339` while Login listens on `4000` through `4009`.
 
 ## Player selection
 
@@ -86,7 +84,6 @@ $Language it
 $Language pl
 $Language cs
 $Language ru
-$Language tr
 $Language ja
 $Language zh
 ```
@@ -102,7 +99,7 @@ The installed client reads most game content from its local language data:
 - `NSlangData_XX.NOS` contains item, NPC, monster, quest, skill, map and dialogue tables.
 - `conststring_XX.dat` contains interface labels and other client constants.
 
-To make the whole game appear in a language, distribute the matching official client data and configure the launcher to use the matching regional Login port. NosGM should not replace official client files with machine-translated data.
+To make the whole game appear in a language, distribute the matching authorized client data and configure the launcher to use the matching regional Login port. NosGM should not replace official client files with machine-translated data.
 
 ## Developer usage
 
@@ -131,7 +128,6 @@ The English neutral catalog has 690 real string keys. The French satellite cover
 | `pl` | 397 |
 | `cs` | 41 |
 | `ru` | 29 |
-| `tr` | English fallback only |
 | `ja` | 3 |
 | `zh` | 3 |
 
