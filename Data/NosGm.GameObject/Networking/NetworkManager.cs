@@ -19,6 +19,7 @@ namespace NosGm.GameObject
         public NetworkManager(string ipAddress, int port, Type packetHandler, Type fallbackEncryptor,
             bool isWorldServer) : base(packetHandler, isWorldServer)
         {
+            _listeningPort = port;
             _encryptor = (EncryptorT)Activator.CreateInstance(typeof(EncryptorT));
 
             if (fallbackEncryptor != null)
@@ -34,33 +35,22 @@ namespace NosGm.GameObject
             // Start the server
             _server.Start();
 
-            Console.Clear();
-            static void PrintHeader()
-            {
-                const string text = @"
-
- ______ _____   ____   _____ _________      ________ _____ _   _ 
-|  ____|  __ \ / __ \ / ____|__   __\ \    / /  ____|_   _| \ | |
-| |__  | |__) | |  | | (___    | |   \ \  / /| |__    | | |  \| |
-|  __| |  _  /| |  | |\___ \   | |    \ \/ / |  __|   | | | . ` |
-| |    | | \ \| |__| |____) |  | |     \  /  | |____ _| |_| |\  |
-|_|    |_|  \_\\____/|_____/   |_|      \/   |______|_____|_| \_|
-                                                                                           
-";
-                string separator = new string('=', Console.WindowWidth);
-                string logo = text.Split('\n').Select(s => string.Format("{0," + (Console.WindowWidth / 2 + s.Length / 2) + "}\n", s)).Aggregate("", (current, i) => current + i);
-                Console.ForegroundColor = ConsoleColor.White;
-                Console.WriteLine(separator + logo + separator);
-                Console.ForegroundColor = ConsoleColor.White;
-            }
-            PrintHeader();
-            if (port == 4000)
+            if (!isWorldServer)
             {
                 Console.ForegroundColor = ConsoleColor.Blue;
-                Console.WriteLine($"[{DateTime.Now}][INFO] Login Server is listening to Port 4000");
+                if (ClientRegionMap.TryResolveLoginPort(port, out byte regionType, out string culture))
+                {
+                    Console.WriteLine(
+                        $"[{DateTime.Now}][INFO] Login listener started | Port={port} RegionType={regionType} Culture={culture}");
+                }
+                else
+                {
+                    Console.WriteLine($"[{DateTime.Now}][WARN] Login listener started on unsupported Port={port}");
+                }
+
                 Console.ForegroundColor = ConsoleColor.Green;
-                Console.WriteLine($"[{DateTime.Now}][START] Login Server started successfully");
             }
+
             if (port == 5100)
             {
                 Console.Title += " | Glacernon";
@@ -69,6 +59,7 @@ namespace NosGm.GameObject
                 Console.Title = $"NosGm - World Server [Channel {ServerManager.Instance.ChannelId} | Players online: {PlayerCountThread.PlayerCount}]";
                 Console.WriteLine($"[{DateTime.Now}][INFO] World Server started successfully");
             }
+
             if (isWorldServer && port != 5100)
             {
                 Console.ForegroundColor = ConsoleColor.Blue;
@@ -93,6 +84,8 @@ namespace NosGm.GameObject
 
         private readonly CryptographyBase _fallbackEncryptor;
 
+        private readonly int _listeningPort;
+
         private readonly IScsServer _server;
 
         private IDictionary<string, DateTime> _connectionLog;
@@ -104,8 +97,8 @@ namespace NosGm.GameObject
         public override void StopServer()
         {
             _server.Stop();
-            _server.ClientConnected -= OnServerClientDisconnected;
-            _server.ClientDisconnected -= OnServerClientConnected;
+            _server.ClientConnected -= OnServerClientConnected;
+            _server.ClientDisconnected -= OnServerClientDisconnected;
         }
 
         protected override ClientSession IntializeNewSession(INetworkClient client)
@@ -119,7 +112,7 @@ namespace NosGm.GameObject
                 return null;
             }
 
-            var session = new ClientSession(client);
+            var session = new ClientSession(client, _listeningPort);
             session.Initialize(_encryptor, _packetHandler, IsWorldServer);
 
             return session;
@@ -141,6 +134,7 @@ namespace NosGm.GameObject
                 {
                     return false;
                 }
+
                 ConnectionLog.Add(client.IpAddress, DateTime.UtcNow);
                 return true;
             }
