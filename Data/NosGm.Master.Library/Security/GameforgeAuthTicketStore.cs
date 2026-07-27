@@ -3,7 +3,7 @@ using System.Collections.Concurrent;
 using System.Security.Cryptography;
 using System.Text;
 
-namespace NosGm.Master.Library.Security
+namespace NosGm.Master.Library.Interface
 {
     /// <summary>
     /// Thread-safe, in-memory ticket store. Tokens are kept only as SHA-256 lookup keys,
