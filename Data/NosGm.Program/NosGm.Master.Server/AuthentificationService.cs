@@ -10,9 +10,12 @@ namespace NosGm.Master.Server
 {
     internal class AuthentificationService : ScsService, IAuthentificationService
     {
+        private const int MinimumAuthServiceKeyLength = 32;
+
         public bool Authenticate(string authKey)
         {
-            if (string.IsNullOrWhiteSpace(authKey) ||
+            if (!ServerConfiguration.EnableGameforgeTokenLogin ||
+                !HasSecureConfiguredKey() ||
                 !string.Equals(authKey, ServerConfiguration.AuthServiceKey, StringComparison.Ordinal))
             {
                 return false;
@@ -62,7 +65,8 @@ namespace NosGm.Master.Server
             string installationId,
             byte countryId)
         {
-            if (!IsAuthenticatedClient() ||
+            if (!ServerConfiguration.EnableGameforgeTokenLogin ||
+                !IsAuthenticatedClient() ||
                 !Guid.TryParse(installationId, out Guid parsedInstallationId) ||
                 !GameforgeLoginPacketParser.TryGetCulture(countryId, out _))
             {
@@ -90,7 +94,8 @@ namespace NosGm.Master.Server
             string installationId,
             byte countryId)
         {
-            if (!IsAuthenticatedClient() ||
+            if (!ServerConfiguration.EnableGameforgeTokenLogin ||
+                !IsAuthenticatedClient() ||
                 !Guid.TryParse(installationId, out Guid parsedInstallationId))
             {
                 return null;
@@ -103,6 +108,14 @@ namespace NosGm.Master.Server
                 out string accountName)
                 ? accountName
                 : null;
+        }
+
+        private static bool HasSecureConfiguredKey()
+        {
+            string configuredKey = ServerConfiguration.AuthServiceKey;
+            return !string.IsNullOrWhiteSpace(configuredKey) &&
+                   configuredKey.Length >= MinimumAuthServiceKeyLength &&
+                   !string.Equals(configuredKey, "AuthServiceKey", StringComparison.Ordinal);
         }
 
         private bool IsAuthenticatedClient()
