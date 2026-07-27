@@ -21,6 +21,8 @@
 
         public static string MasterAuthKey = "NosGmServerMain2032NosGm";
         public static string AuthServiceKey = "AuthServiceKey";
+        public static string GameforgeTicketIssuerKey = "";
+        public static string GameforgeTicketConsumerKey = "";
         public static string MallAuthKey = "";
         public static string MallBaseURL = "";
         public static string MallAPIKey = "";
