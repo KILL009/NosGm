@@ -107,7 +107,7 @@ foreach ($requiredCode in @(
     "_TNT_SESSION_ID",
     "AuthenticationEndpoint",
     "HttpCompletionOption.ResponseHeadersRead",
-    "Software\\Gameforge4d\\TNTClient\\MainApp",
+    "Software\Gameforge4d\TNTClient\MainApp",
     "GameforgeInstallationId.Resolve()"
 )) {
     if (-not $source.Contains($requiredCode, [System.StringComparison]::Ordinal)) {
