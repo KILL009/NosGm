@@ -18,30 +18,15 @@ namespace NosGm.Handler.BasicPacket.CharScreen
 {
     internal class EntryPointPacketHandler : IPacketHandler
     {
-        #region Instantiation
+        private static readonly object GameforgeAuthSync = new object();
+        private static bool _authenticationServiceAuthenticated;
 
         public EntryPointPacketHandler(ClientSession session)
         {
             Session = session;
         }
 
-        #endregion
-
-        #region Members
-
-        private static readonly object ModernAuthSync = new object();
-
-        private static bool _modernAuthServiceAuthenticated;
-
-        #endregion
-
-        #region Properties
-
         private ClientSession Session { get; }
-
-        #endregion
-
-        #region Methods
 
         public void LoadCharacters(NosGmEntryPointPacket packet)
         {
@@ -50,7 +35,6 @@ namespace NosGm.Handler.BasicPacket.CharScreen
                 : packet.PacketData.Split(' ');
             bool isCrossServerLogin = false;
 
-            // Load account by given SessionId
             if (Session.Account == null)
             {
                 if (loginPacketParts.Length <= 3)
@@ -61,24 +45,15 @@ namespace NosGm.Handler.BasicPacket.CharScreen
                 }
 
                 AccountDTO account;
-                bool hasCrossServerMarker = string.Equals(
-                    loginPacketParts[3],
-                    "DAC",
-                    StringComparison.Ordinal);
-
+                bool hasCrossServerMarker = string.Equals(loginPacketParts[3], "DAC", StringComparison.Ordinal);
                 if (hasCrossServerMarker)
                 {
-                    if (loginPacketParts.Length <= 8 ||
-                        !string.Equals(
-                            loginPacketParts[8],
-                            "CrossServerAuthenticate",
-                            StringComparison.Ordinal))
+                    if (loginPacketParts.Length <= 8 || !string.Equals(loginPacketParts[8], "CrossServerAuthenticate", StringComparison.Ordinal))
                     {
                         Logger.Debug($"Client {Session.ClientId} forced Disconnection, malformed cross-server entry packet.");
                         Session.Disconnect();
                         return;
                     }
-
                     isCrossServerLogin = true;
                     account = LoadAccountByProtocolName(loginPacketParts[4]);
                 }
@@ -90,7 +65,6 @@ namespace NosGm.Handler.BasicPacket.CharScreen
                         Session.Disconnect();
                         return;
                     }
-
                     account = LoadAccountByProtocolName(loginPacketParts[3]);
                 }
 
@@ -105,27 +79,17 @@ namespace NosGm.Handler.BasicPacket.CharScreen
                 try
                 {
                     hasRegisteredAccountLogin = isCrossServerLogin
-                        ? CommunicationServiceClient.Instance.IsCrossServerLoginPermitted(
-                            account.AccountId,
-                            Session.SessionId)
-                        : CommunicationServiceClient.Instance.IsLoginPermitted(
-                            account.AccountId,
-                            Session.SessionId);
+                        ? CommunicationServiceClient.Instance.IsCrossServerLoginPermitted(account.AccountId, Session.SessionId)
+                        : CommunicationServiceClient.Instance.IsLoginPermitted(account.AccountId, Session.SessionId);
                 }
                 catch (Exception ex)
                 {
-                    Logger.Error(
-                        $"Character entry validation failed | ClientId={Session.ClientId} AccountId={account.AccountId}",
-                        ex);
+                    Logger.Error($"Character entry validation failed | ClientId={Session.ClientId} AccountId={account.AccountId}", ex);
                     Session.Disconnect();
                     return;
                 }
 
-                Logger.Debug(
-                    $"Character entry login check | ClientId={Session.ClientId} " +
-                    $"AccountId={account.AccountId} CrossServer={isCrossServerLogin} " +
-                    $"Permitted={hasRegisteredAccountLogin}");
-
+                Logger.Debug($"Character entry login check | ClientId={Session.ClientId} AccountId={account.AccountId} CrossServer={isCrossServerLogin} Permitted={hasRegisteredAccountLogin}");
                 if (!hasRegisteredAccountLogin)
                 {
                     Logger.Debug($"Client {Session.ClientId} forced Disconnection, login has not been registered or Account is already logged in.");
@@ -133,49 +97,38 @@ namespace NosGm.Handler.BasicPacket.CharScreen
                     return;
                 }
 
-                bool isModernPasswordlessLogin = !isCrossServerLogin &&
-                    string.Equals(loginPacketParts[7], "thisisgfmode", StringComparison.Ordinal);
-                if (isModernPasswordlessLogin)
+                bool isGameforgePasswordlessLogin = !isCrossServerLogin && string.Equals(loginPacketParts[7], "thisisgfmode", StringComparison.Ordinal);
+                if (isGameforgePasswordlessLogin)
                 {
-                    if (!EnsureModernAuthServiceAuthenticated())
+                    if (!ServerConfiguration.EnableGameforgeTokenLogin || !EnsureAuthenticationServiceAuthenticated())
                     {
-                        Logger.Debug($"Client {Session.ClientId} forced Disconnection, modern authentication service unavailable.");
+                        Logger.Debug($"Client {Session.ClientId} forced Disconnection, Gameforge authentication service unavailable.");
                         Session.Disconnect();
                         return;
                     }
 
-                    bool modernPermitValid;
+                    bool permitValid;
                     try
                     {
-                        modernPermitValid = AuthentificationServiceClient.Instance.ConsumeModernLoginSession(
-                            account.AccountId,
-                            Session.SessionId,
-                            NormalizeRemoteIp(Session.IpAddress));
+                        permitValid = AuthentificationServiceClient.Instance.ConsumeGameforgeWorldPermit(account.AccountId, Session.SessionId, NormalizeRemoteIp(Session.IpAddress));
                     }
                     catch (Exception ex)
                     {
-                        Logger.Error(
-                            $"Modern World-entry validation failed | ClientId={Session.ClientId} AccountId={account.AccountId}",
-                            ex);
+                        Logger.Error($"Gameforge World-entry validation failed | ClientId={Session.ClientId} AccountId={account.AccountId}", ex);
                         Session.Disconnect();
                         return;
                     }
 
-                    if (!modernPermitValid)
+                    if (!permitValid)
                     {
-                        Logger.Debug($"Client {Session.ClientId} forced Disconnection, modern World-entry permit is invalid or expired.");
+                        Logger.Debug($"Client {Session.ClientId} forced Disconnection, Gameforge World permit is invalid or expired.");
                         Session.Disconnect();
                         return;
                     }
                 }
 
-                bool passwordValid = isCrossServerLogin ||
-                                     isModernPasswordlessLogin ||
-                                     PasswordHashService.VerifyPassword(
-                                         account.Password,
-                                         loginPacketParts[7],
-                                         true,
-                                         out _);
+                bool passwordValid = isCrossServerLogin || isGameforgePasswordlessLogin ||
+                                     PasswordHashService.VerifyPassword(account.Password, loginPacketParts[7], true, out _);
                 if (!passwordValid)
                 {
                     Logger.Debug($"Client {Session.ClientId} forced Disconnection, invalid Password.");
@@ -195,29 +148,20 @@ namespace NosGm.Handler.BasicPacket.CharScreen
                     Session.Disconnect();
                     return;
                 }
-
                 new SelectCharacterPacketHandler(Session).SelectCharacter(new SelectPacket { Slot = slot });
             }
             else
             {
-                // TODO: Wrap Database access up to GO
                 var characters = DAOFactory.CharacterDAO.LoadByAccount(Session.Account.AccountId);
-
-                // load characterlist packet for each character in CharacterDTO
                 Session.SendPacket("clist_start 0");
 
                 foreach (CharacterDTO character in characters)
                 {
-                    var inventory =
-                        DAOFactory.ItemInstanceDAO.LoadByType(character.CharacterId, InventoryType.Wear);
-
+                    var inventory = DAOFactory.ItemInstanceDAO.LoadByType(character.CharacterId, InventoryType.Wear);
                     ItemInstance[] equipment = new ItemInstance[17];
-
                     foreach (ItemInstanceDTO equipmentEntry in inventory)
                     {
-                        // explicit load of iteminstance
                         ItemInstance currentInstance = new ItemInstance(equipmentEntry);
-
                         if (currentInstance != null)
                         {
                             equipment[(short)currentInstance.Item.EquipmentSlot] = currentInstance;
@@ -225,100 +169,58 @@ namespace NosGm.Handler.BasicPacket.CharScreen
                     }
 
                     string petlist = "";
-
                     var mates = DAOFactory.MateDAO.LoadByCharacterId(character.CharacterId).ToList();
-
                     for (int i = 0; i < 26; i++)
                     {
-                        //0.2105.1102.319.0.632.0.333.0.318.0.317.0.9.-1.-1.-1.-1.-1.-1.-1.-1.-1.-1.-1.-1
                         petlist += (i != 0 ? "." : "") + (mates.Count > i ? $"{mates[i].Skin}.{mates[i].NpcMonsterVNum}" : "-1");
                     }
 
-                    // 1 1 before long string of -1.-1 = act completion
                     Session.SendPacket($"clist {character.Slot} {character.Name} 0 {(byte)character.Gender} {(byte)character.HairStyle} {(byte)character.HairColor} 0 {(byte)character.Class} {character.Level} {character.HeroLevel} {equipment[(byte)EquipmentType.Hat]?.ItemVNum ?? -1}.{equipment[(byte)EquipmentType.Armor]?.ItemVNum ?? -1}.{equipment[(byte)EquipmentType.WeaponSkin]?.ItemVNum ?? (equipment[(byte)EquipmentType.MainWeapon]?.ItemVNum ?? -1)}.{equipment[(byte)EquipmentType.SecondaryWeapon]?.ItemVNum ?? -1}.{equipment[(byte)EquipmentType.Mask]?.ItemVNum ?? -1}.{equipment[(byte)EquipmentType.Fairy]?.ItemVNum ?? -1}.{equipment[(byte)EquipmentType.CostumeSuit]?.ItemVNum ?? -1}.{equipment[(byte)EquipmentType.CostumeHat]?.ItemVNum ?? -1} {character.JobLevel}  1 1 {petlist} {(equipment[(byte)EquipmentType.Hat]?.Item.IsColored == true ? equipment[(byte)EquipmentType.Hat].Design : 0)} 0");
                 }
-
                 Session.SendPacket("clist_end");
             }
         }
 
-        private static bool EnsureModernAuthServiceAuthenticated()
+        private static bool EnsureAuthenticationServiceAuthenticated()
         {
-            if (_modernAuthServiceAuthenticated)
+            if (_authenticationServiceAuthenticated) return true;
+            lock (GameforgeAuthSync)
             {
-                return true;
-            }
-
-            lock (ModernAuthSync)
-            {
-                if (_modernAuthServiceAuthenticated)
-                {
-                    return true;
-                }
-
+                if (_authenticationServiceAuthenticated) return true;
                 try
                 {
-                    _modernAuthServiceAuthenticated = AuthentificationServiceClient.Instance.Authenticate(
-                        ServerConfiguration.AuthServiceKey);
+                    _authenticationServiceAuthenticated = AuthentificationServiceClient.Instance.Authenticate(ServerConfiguration.AuthServiceKey);
                 }
                 catch (Exception ex)
                 {
-                    Logger.Error("Could not authenticate World against the modern authentication service", ex);
-                    _modernAuthServiceAuthenticated = false;
+                    Logger.Error("Could not authenticate World against the authentication service", ex);
+                    _authenticationServiceAuthenticated = false;
                 }
-
-                return _modernAuthServiceAuthenticated;
+                return _authenticationServiceAuthenticated;
             }
         }
 
         private static string NormalizeRemoteIp(string endpoint)
         {
-            if (string.IsNullOrWhiteSpace(endpoint))
-            {
-                return string.Empty;
-            }
-
-            if (Uri.TryCreate(endpoint, UriKind.Absolute, out Uri uri) && !string.IsNullOrWhiteSpace(uri.Host))
-            {
-                return uri.Host;
-            }
-
+            if (string.IsNullOrWhiteSpace(endpoint)) return string.Empty;
+            if (Uri.TryCreate(endpoint, UriKind.Absolute, out Uri uri) && !string.IsNullOrWhiteSpace(uri.Host)) return uri.Host;
             string value = endpoint.Trim();
             if (value.StartsWith("[", StringComparison.Ordinal))
             {
                 int closingBracket = value.IndexOf(']');
-                if (closingBracket > 1)
-                {
-                    return value.Substring(1, closingBracket - 1);
-                }
+                if (closingBracket > 1) return value.Substring(1, closingBracket - 1);
             }
-
             int lastColon = value.LastIndexOf(':');
-            if (lastColon > 0 && value.IndexOf(':') == lastColon)
-            {
-                return value.Substring(0, lastColon);
-            }
-
+            if (lastColon > 0 && value.IndexOf(':') == lastColon) return value.Substring(0, lastColon);
             return value;
+        }
+
         private static AccountDTO LoadAccountByProtocolName(string protocolUsername)
         {
             AccountDTO account = DAOFactory.AccountDAO.LoadByName(protocolUsername);
-            if (account != null)
-            {
-                return account;
-            }
-
-            if (!ClientRegionMap.TryStripProtocolPrefix(
-                    protocolUsername,
-                    out string accountName,
-                    out _))
-            {
-                return null;
-            }
-
+            if (account != null) return account;
+            if (!ClientRegionMap.TryStripProtocolPrefix(protocolUsername, out string accountName, out _)) return null;
             return DAOFactory.AccountDAO.LoadByName(accountName);
         }
-
-        #endregion
     }
 }

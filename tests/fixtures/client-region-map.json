@@ -10,6 +10,7 @@
     { "serverCulture": "es", "regionType": 5, "loginPort": 4005, "protocolPrefix": "ES", "clientFileSuffix": "ES" },
     { "serverCulture": "cs", "regionType": 6, "loginPort": 4006, "protocolPrefix": "CZ", "clientFileSuffix": "CZ" },
     { "serverCulture": "ru", "regionType": 7, "loginPort": 4007, "protocolPrefix": "RU", "clientFileSuffix": "RU" },
-    { "serverCulture": "tr", "regionType": 8, "loginPort": 4008, "protocolPrefix": "TR", "clientFileSuffix": "TR" }
+    { "serverCulture": "ja", "regionType": 8, "loginPort": 4008, "protocolPrefix": "JP", "clientFileSuffix": "JP" },
+    { "serverCulture": "zh", "regionType": 9, "loginPort": 4009, "protocolPrefix": "CN", "clientFileSuffix": "CN" }
   ]
 }
