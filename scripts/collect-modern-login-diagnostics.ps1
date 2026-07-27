@@ -92,7 +92,8 @@ function Write-SanitizedLogTail {
         [IO.FileAccess]::Read,
         [IO.FileShare]::ReadWrite)
     try {
-        $bytesToRead = [int][Math]::Min($maximumBytes, $stream.Length)
+        $sourceLength = $stream.Length
+        $bytesToRead = [int][Math]::Min($maximumBytes, $sourceLength)
         if ($bytesToRead -eq 0) {
             Set-Content -LiteralPath $DestinationPath -Value "" -Encoding UTF8
             return
@@ -117,7 +118,7 @@ function Write-SanitizedLogTail {
     }
 
     $lines = @($text -split '\r?\n')
-    if ($stream.Length -gt $maximumBytes -and $lines.Count -gt 0) {
+    if ($sourceLength -gt $maximumBytes -and $lines.Count -gt 0) {
         $lines = @($lines | Select-Object -Skip 1)
     }
     $lines = @($lines | Select-Object -Last $MaxLogLines)
