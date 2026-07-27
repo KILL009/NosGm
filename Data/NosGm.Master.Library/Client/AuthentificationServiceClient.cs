@@ -1,4 +1,4 @@
-using NosGm.Configuration;
+﻿using NosGm.Configuration;
 using NosGm.Core;
 using NosGm.Data;
 using NosGm.Master.Library.Interface;
@@ -13,7 +13,6 @@ namespace NosGm.Master.Library.Client
     public class AuthentificationServiceClient : IAuthentificationService
     {
         private static AuthentificationServiceClient _instance;
-
         private readonly IScsServiceClient<IAuthentificationService> _client;
 
         public AuthentificationServiceClient()
@@ -24,87 +23,44 @@ namespace NosGm.Master.Library.Client
             Thread.Sleep(1000);
             while (_client.CommunicationState != CommunicationStates.Connected)
             {
-                try
-                {
-                    _client.Connect();
-                }
+                try { _client.Connect(); }
                 catch (Exception)
                 {
-                    Logger.Error(Language.Instance.GetMessageFromKey("RETRY_CONNECTION"),
-                        memberName: nameof(AuthentificationServiceClient));
+                    Logger.Error(Language.Instance.GetMessageFromKey("RETRY_CONNECTION"), memberName: nameof(AuthentificationServiceClient));
                     Thread.Sleep(1000);
                 }
             }
         }
 
-        public static AuthentificationServiceClient Instance =>
-            _instance ?? (_instance = new AuthentificationServiceClient());
-
+        public static AuthentificationServiceClient Instance => _instance ?? (_instance = new AuthentificationServiceClient());
         public CommunicationStates CommunicationState => _client.CommunicationState;
+        public bool Authenticate(string authKey) => _client.ServiceProxy.Authenticate(authKey);
+        public AccountDTO ValidateAccount(string userName, string passHash) => _client.ServiceProxy.ValidateAccount(userName, passHash);
+        public CharacterDTO ValidateAccountAndCharacter(string userName, string characterName, string passHash) => _client.ServiceProxy.ValidateAccountAndCharacter(userName, characterName, passHash);
 
-        public bool Authenticate(string authKey)
+        public bool RegisterGameforgeAuthTicket(string accountName, string authToken, string installationId, byte countryId)
         {
-            return _client.ServiceProxy.Authenticate(authKey);
+            return _client.ServiceProxy.RegisterGameforgeAuthTicket(accountName, authToken, installationId, countryId);
         }
 
-        public AccountDTO ValidateAccount(string userName, string passHash)
+        public string ConsumeGameforgeAuthTicket(string authToken, string installationId, byte countryId)
         {
-            return _client.ServiceProxy.ValidateAccount(userName, passHash);
+            return _client.ServiceProxy.ConsumeGameforgeAuthTicket(authToken, installationId, countryId);
         }
 
-        public CharacterDTO ValidateAccountAndCharacter(string userName, string characterName, string passHash)
+        public bool RegisterGameforgeWorldPermit(long accountId, int sessionId, string ipAddress)
         {
-            return _client.ServiceProxy.ValidateAccountAndCharacter(userName, characterName, passHash);
+            return _client.ServiceProxy.RegisterGameforgeWorldPermit(accountId, sessionId, ipAddress);
         }
 
-        public bool StoreModernLoginTicket(string authCode, string accountName, string ipAddress)
+        public bool ConsumeGameforgeWorldPermit(long accountId, int sessionId, string ipAddress)
         {
-            return _client.ServiceProxy.StoreModernLoginTicket(authCode, accountName, ipAddress);
+            return _client.ServiceProxy.ConsumeGameforgeWorldPermit(accountId, sessionId, ipAddress);
         }
 
-        public string ConsumeModernLoginTicket(string authToken, string ipAddress)
+        public void RevokeGameforgeWorldPermit(long accountId, int sessionId)
         {
-            return _client.ServiceProxy.ConsumeModernLoginTicket(authToken, ipAddress);
-        }
-
-        public bool RegisterModernLoginSession(long accountId, int sessionId, string ipAddress)
-        {
-            return _client.ServiceProxy.RegisterModernLoginSession(accountId, sessionId, ipAddress);
-        }
-
-        public bool ConsumeModernLoginSession(long accountId, int sessionId, string ipAddress)
-        {
-            return _client.ServiceProxy.ConsumeModernLoginSession(accountId, sessionId, ipAddress);
-        }
-
-        public void RevokeModernLoginSession(long accountId, int sessionId)
-        {
-            _client.ServiceProxy.RevokeModernLoginSession(accountId, sessionId);
-        }
-
-        #endregion
-        public bool RegisterGameforgeAuthTicket(
-            string accountName,
-            string authToken,
-            string installationId,
-            byte countryId)
-        {
-            return _client.ServiceProxy.RegisterGameforgeAuthTicket(
-                accountName,
-                authToken,
-                installationId,
-                countryId);
-        }
-
-        public string ConsumeGameforgeAuthTicket(
-            string authToken,
-            string installationId,
-            byte countryId)
-        {
-            return _client.ServiceProxy.ConsumeGameforgeAuthTicket(
-                authToken,
-                installationId,
-                countryId);
+            _client.ServiceProxy.RevokeGameforgeWorldPermit(accountId, sessionId);
         }
     }
 }
