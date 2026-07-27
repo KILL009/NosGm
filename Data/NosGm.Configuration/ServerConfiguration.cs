@@ -32,6 +32,7 @@
         public static bool LoginUsesPrehashedSha512 = true;
         public static bool EnableGameforgeTokenLogin = false;
         public static int GameforgeAuthTicketTtlSeconds = 120;
+        public static int GameforgeWorldPermitTtlSeconds = 120;
         public static bool StartAllRegionalLoginPorts = true;
         public static bool StartGlacernonAutomaticly = false;
         public static bool StartAllChannelsAutomaticly = true;
