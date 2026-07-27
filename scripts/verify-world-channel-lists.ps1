@@ -156,6 +156,21 @@ function Assert-Regex {
     }
 }
 
+function Assert-NotRegex {
+    param(
+        [string]$Content,
+        [string]$Pattern,
+        [string]$Description
+    )
+
+    if ([regex]::IsMatch(
+            $Content,
+            $Pattern,
+            [Text.RegularExpressions.RegexOptions]::Singleline)) {
+        throw "World/channel source contract failed: $Description"
+    }
+}
+
 function Get-CharacterPrefix {
     param(
         [object[]]$Prefixes,
@@ -415,7 +430,7 @@ $localizationDoc = Read-RequiredText $LocalizationDocPath
 Assert-Regex $loginPacketSource '\[PacketIndex\(5\)\]\s*public byte RegionType' "RegionType must remain byte field 5 of NoS0575 for compatibility diagnostics"
 Assert-Regex $loginHandlerSource 'TryResolveLoginPort\s*\(\s*_session\.ListeningPort\s*,\s*out byte resolvedRegionType\s*,\s*out string clientCulture\s*\)' "Login must derive RegionType and culture from the accepted local port"
 Assert-Regex $loginHandlerSource 'BuildServersPacket\s*\(\s*username\s*,\s*resolvedRegionType\s*,\s*newSessionId' "Login must pass the port-derived RegionType to Master"
-Assert-NotContains $loginHandlerSource 'BuildServersPacket(`r`n                username,`r`n                loginPacket.RegionType' "Login must not pass the untrusted packet RegionType to Master"
+Assert-NotRegex $loginHandlerSource 'BuildServersPacket\s*\(\s*username\s*,\s*loginPacket\.RegionType' "Login must not pass the untrusted packet RegionType to Master"
 Assert-Regex $masterSource 'private const int NsTeSTPadding\s*=\s*56;' "NsTeST padding must remain 56 pairs"
 Assert-Contains $masterSource '$"NsTeST {regionType} {username}' "Master must emit the supplied protocol region byte"
 Assert-Regex $masterSource 'visibleWorlds\s*=.*?Where\(w => w\.ChannelId != 51\).*?OrderBy\(w => w\.WorldGroup\).*?ThenBy\(w => w\.ChannelId\).*?ToList\(\);' "visible worlds must exclude channel 51 and sort by group then channel"
