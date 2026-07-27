@@ -4,7 +4,10 @@ on:
   pull_request:
     paths:
       - "Launcher/**"
+      - "Data/NosGm.Configuration/ServerConfiguration.cs"
+      - "Data/NosGm.Program/NosGm.Master.Server/**"
       - "scripts/verify-launcher.ps1"
+      - "scripts/verify-launcher-auth-bridge.ps1"
       - ".github/workflows/validate-launcher.yml"
       - "AUTHORS.md"
       - "NOTICE.md"
@@ -12,6 +15,7 @@ on:
       - "README.md"
       - "docs/PROVENANCE.md"
       - "docs/LICENSING.md"
+      - "docs/launcher-authentication.md"
   workflow_dispatch:
 
 permissions:
@@ -91,3 +95,7 @@ jobs:
         if: steps.launcher_guard.outputs.exit_code != '0'
         shell: pwsh
         run: exit 1
+
+      - name: Verify launcher authentication bridge contracts
+        shell: pwsh
+        run: ./scripts/verify-launcher-auth-bridge.ps1
