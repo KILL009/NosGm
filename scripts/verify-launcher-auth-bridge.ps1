@@ -72,6 +72,7 @@ Require $bridge 'MaximumRequestBytes = 8192' 'The bridge request body is not bou
 Require $bridge '!string.Equals(context.Request.HttpMethod, "POST"' 'The bridge must reject non-POST requests.'
 Require $bridge 'StartsWith("application/json"' 'The bridge must require JSON.'
 Require $bridge 'TryConsumeAttempt(limiterKey)' 'The bridge must rate-limit credentials.'
+Require $bridge 'DummyPasswordHash' 'Unknown accounts must pay a password-hash verification cost.'
 Require-Ordered $bridge @(
     'DAOFactory.AccountDAO.LoadByName(request.AccountName)',
     'PasswordHashService.VerifyPassword(',
@@ -117,7 +118,12 @@ foreach ($method in @(
     Require $pipe $method "Missing Gameforge JSON-RPC method $method."
 }
 Require $pipe 'PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly' 'The JSON-RPC pipe must be restricted to the current Windows user.'
-Require $pipe 'receivedSessionId != _sessionId' 'The pipe must bind initSession to the launcher session ID.'
+Require-Ordered $pipe @(
+    'if (!IsSupportedMethod(method))',
+    'if (!HasExpectedSession(root))',
+    'return method switch'
+) 'Every supported JSON-RPC method must pass session validation before dispatch.'
+Require $pipe 'receivedSessionId == _sessionId' 'Every pipe request must bind to the launcher session ID.'
 Require $pipe '_authorizationCode = null;' 'The authorization code must be erased after delivery.'
 Require $pipe '!(_authorizationCodeDelivered && _accountNameDelivered)' 'The pipe must deliver both credentials before completing.'
 Require $pipe 'MaximumRequestBytes = 16 * 1024' 'JSON-RPC requests must be bounded.'
@@ -146,4 +152,4 @@ Require $mainWindow 'ModernGameLauncher.LaunchAsync(' 'The Play button is not co
 Require $mainWindow '_settings = _settings with { AccountName = credentials.AccountName };' 'Only the account name should be remembered after success.'
 Forbid $mainWindow 'Password = credentials.Password' 'The password must never be saved to settings.'
 
-Write-Host 'Launcher HTTPS ticket bridge, shared InstallationId, and Gameforge JSON-RPC handshake contracts verified.'
+Write-Host 'Launcher HTTPS ticket bridge, shared InstallationId, and session-bound Gameforge JSON-RPC handshake contracts verified.'
