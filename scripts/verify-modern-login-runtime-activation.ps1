@@ -1,5 +1,6 @@
 param(
     [string]$ConfigurationPath = "Data/NosGm.Configuration/ServerConfiguration.cs",
+    [string]$LauncherSettingsPath = "Launcher/src/NosGM.Launcher/LauncherSettings.cs",
     [string]$StartScriptPath = "scripts/start-modern-login-local.ps1",
     [string]$StopScriptPath = "scripts/stop-modern-login-local.ps1",
     [string]$DocumentationPath = "docs/modern-login-local-runbook.md"
@@ -41,6 +42,7 @@ function Assert-PowerShellParses([string]$Path) {
 }
 
 $configuration = Read-Required $ConfigurationPath
+$launcherSettings = Read-Required $LauncherSettingsPath
 $startScript = Read-Required $StartScriptPath
 $stopScript = Read-Required $StopScriptPath
 $documentation = Read-Required $DocumentationPath
@@ -63,6 +65,12 @@ Require $configuration 'var seen = new HashSet<string>(StringComparer.Ordinal);'
 Require $configuration 'EnableLauncherAuthBridge && !EnableGameforgeTokenLogin' 'The bridge must not start without modern Login.'
 Require $configuration 'uri.Scheme == Uri.UriSchemeHttp && !uri.IsLoopback' 'Plain HTTP must remain loopback-only.'
 Require $configuration 'uri.AbsolutePath != "/"' 'The HttpListener environment override must accept only a listener root.'
+
+Require $launcherSettings 'AuthenticationEndpointEnvironmentVariable = "NOSGM_AUTH_ENDPOINT"' 'Launcher settings must read the runtime endpoint explicitly.'
+Require $launcherSettings 'EnvironmentVariableTarget.Process' 'The launcher endpoint override must remain process-scoped.'
+Require $launcherSettings 'AuthenticationEndpoint = runtimeEndpoint' 'The runtime endpoint must override an existing settings file.'
+Require $launcherSettings 'AuthenticationEndpoint = _persistedAuthenticationEndpoint' 'Saving settings must restore the persisted endpoint instead of writing the runtime value.'
+Forbid $launcherSettings 'Environment.GetEnvironmentVariable("NOSGM_AUTH_ENDPOINT") ?? string.Empty' 'The endpoint must not depend only on a record property initializer.'
 
 foreach ($variableName in @(
     'NOSGM_MASTER_AUTH_KEY',
@@ -97,4 +105,4 @@ Require $documentation './scripts/start-modern-login-local.ps1' 'Documentation m
 Require $documentation './scripts/stop-modern-login-local.ps1' 'Documentation must expose the safe shutdown command.'
 Require $documentation 'NOSGM_MASTER_AUTH_KEY' 'Documentation must list the external secret configuration.'
 
-Write-Host 'Modern Login runtime environment, local startup and safe shutdown contracts verified.'
+Write-Host 'Modern Login runtime environment, transient launcher endpoint, local startup and safe shutdown contracts verified.'
