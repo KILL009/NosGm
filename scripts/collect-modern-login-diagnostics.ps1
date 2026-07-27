@@ -85,23 +85,57 @@ function Write-SanitizedLogTail {
         [Parameter(Mandatory = $true)][string]$DestinationPath
     )
 
-    $file = Get-Item -LiteralPath $SourcePath
-    $maximumBytes = $MaxLogMegabytes * 1MB
-    $lines = Get-Content -LiteralPath $file.FullName -Tail $MaxLogLines -ErrorAction Stop
+    $maximumBytes = [long]$MaxLogMegabytes * 1MB
+    $stream = [IO.File]::Open(
+        $SourcePath,
+        [IO.FileMode]::Open,
+        [IO.FileAccess]::Read,
+        [IO.FileShare]::ReadWrite)
+    try {
+        $bytesToRead = [int][Math]::Min($maximumBytes, $stream.Length)
+        if ($bytesToRead -eq 0) {
+            Set-Content -LiteralPath $DestinationPath -Value "" -Encoding UTF8
+            return
+        }
+
+        [void]$stream.Seek(-1 * $bytesToRead, [IO.SeekOrigin]::End)
+        $buffer = New-Object byte[] $bytesToRead
+        $readTotal = 0
+        while ($readTotal -lt $bytesToRead) {
+            $read = $stream.Read($buffer, $readTotal, $bytesToRead - $readTotal)
+            if ($read -le 0) {
+                break
+            }
+            $readTotal += $read
+        }
+
+        $text = [Text.Encoding]::UTF8.GetString($buffer, 0, $readTotal)
+        [Array]::Clear($buffer, 0, $buffer.Length)
+    }
+    finally {
+        $stream.Dispose()
+    }
+
+    $lines = @($text -split '\r?\n')
+    if ($stream.Length -gt $maximumBytes -and $lines.Count -gt 0) {
+        $lines = @($lines | Select-Object -Skip 1)
+    }
+    $lines = @($lines | Select-Object -Last $MaxLogLines)
+
     $sanitized = foreach ($line in $lines) {
         Protect-DiagnosticLine -Line ([string]$line)
     }
 
-    $text = $sanitized -join [Environment]::NewLine
-    if ([Text.Encoding]::UTF8.GetByteCount($text) -gt $maximumBytes) {
+    $sanitizedText = $sanitized -join [Environment]::NewLine
+    if ([Text.Encoding]::UTF8.GetByteCount($sanitizedText) -gt $maximumBytes) {
         $allowedCharacters = [Math]::Max(1024, [Math]::Floor($maximumBytes / 2))
-        if ($text.Length -gt $allowedCharacters) {
-            $text = "<tail truncated to diagnostic size limit>" + [Environment]::NewLine +
-                $text.Substring($text.Length - $allowedCharacters)
+        if ($sanitizedText.Length -gt $allowedCharacters) {
+            $sanitizedText = "<tail truncated to diagnostic size limit>" + [Environment]::NewLine +
+                $sanitizedText.Substring($sanitizedText.Length - $allowedCharacters)
         }
     }
 
-    Set-Content -LiteralPath $DestinationPath -Value $text -Encoding UTF8
+    Set-Content -LiteralPath $DestinationPath -Value $sanitizedText -Encoding UTF8
 }
 
 New-Item -ItemType Directory -Path $workingDirectory -Force | Out-Null
