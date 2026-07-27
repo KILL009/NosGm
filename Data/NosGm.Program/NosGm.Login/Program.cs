@@ -17,6 +17,8 @@ namespace NosGm.Login
 {
     public static class Program
     {
+        private const int MinimumAuthServiceKeyLength = 32;
+
         private static bool _isDebug;
 
         private static int _port;
@@ -72,13 +74,23 @@ namespace NosGm.Login
                             "Master communication authentication was rejected.");
                     }
 
-                    if (!AuthentificationServiceClient.Instance.Authenticate(ServerConfiguration.AuthServiceKey))
+                    if (ServerConfiguration.EnableGameforgeTokenLogin)
                     {
-                        throw new InvalidOperationException(
-                            "Master authentication-ticket service rejected Login.");
+                        if (!IsSecureAuthServiceKey())
+                        {
+                            throw new InvalidOperationException(
+                                "Gameforge token login requires a unique AuthServiceKey with at least 32 characters.");
+                        }
+
+                        if (!AuthentificationServiceClient.Instance.Authenticate(ServerConfiguration.AuthServiceKey))
+                        {
+                            throw new InvalidOperationException(
+                                "Master authentication-ticket service rejected Login.");
+                        }
                     }
 
-                    Logger.Info("Master services have been initialized");
+                    Logger.Info(
+                        $"Master services initialized | GameforgeTokenLogin={ServerConfiguration.EnableGameforgeTokenLogin}");
 
                     if (!DataAccessHelper.Initialize())
                     {
@@ -117,6 +129,14 @@ namespace NosGm.Login
                     Console.ReadKey();
                 }
             }
+        }
+
+        private static bool IsSecureAuthServiceKey()
+        {
+            string configuredKey = ServerConfiguration.AuthServiceKey;
+            return !string.IsNullOrWhiteSpace(configuredKey) &&
+                   configuredKey.Length >= MinimumAuthServiceKeyLength &&
+                   !string.Equals(configuredKey, "AuthServiceKey", StringComparison.Ordinal);
         }
 
         private static void UnhandledExceptionHandler(object sender, UnhandledExceptionEventArgs e)
