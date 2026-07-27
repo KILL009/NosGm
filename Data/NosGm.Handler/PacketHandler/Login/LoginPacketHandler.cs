@@ -83,6 +83,24 @@ namespace NosGm.Handler.BasicPacket.Login
                 return;
             }
 
+            if (!ClientRegionMap.TryResolveLoginPort(
+                    _session.ListeningPort,
+                    out byte resolvedRegionType,
+                    out string clientCulture))
+            {
+                Reject(
+                    LoginFailType.CantConnect,
+                    $"Session removed. Reason: Unsupported Login port {_session.ListeningPort}");
+                return;
+            }
+
+            if (loginPacket.RegionType != resolvedRegionType)
+            {
+                Logger.Debug(
+                    $"Login RegionType overridden by trusted port | Port={_session.ListeningPort} " +
+                    $"PacketRegion={loginPacket.RegionType} ResolvedRegion={resolvedRegionType} Culture={clientCulture}");
+            }
+
             string username = loginPacket.Name;
             AccountDTO loadedAccount = DAOFactory.AccountDAO.LoadByName(username);
             if (loadedAccount == null)
@@ -187,8 +205,16 @@ namespace NosGm.Handler.BasicPacket.Login
                 return;
             }
 
+            if (!SynchronizeAccountLanguage(loadedAccount, clientCulture))
+            {
+                Reject(LoginFailType.CantConnect, "Session removed. Reason: Unable to synchronize client language");
+                return;
+            }
+
             Logger.Info($"ClientData: {loginPacket.ClientData}");
-            Logger.Info($"RegionType: {loginPacket.RegionType}");
+            Logger.Info(
+                $"Login region resolved | Port={_session.ListeningPort} RegionType={resolvedRegionType} " +
+                $"Culture={clientCulture} PacketRegion={loginPacket.RegionType}");
 
             int newSessionId = SessionFactory.Instance.GenerateSessionId();
             Logger.Info($"{username} connected | SessionID: {newSessionId}");
@@ -212,7 +238,7 @@ namespace NosGm.Handler.BasicPacket.Login
 
             string serversPacket = BuildServersPacket(
                 username,
-                loginPacket.RegionType,
+                resolvedRegionType,
                 newSessionId,
                 ignoreUserName,
                 loadedAccount.AccountId);
@@ -225,7 +251,8 @@ namespace NosGm.Handler.BasicPacket.Login
             }
 
             _session.SendPacket(serversPacket);
-            Logger.Info($"Server list sent | Account={loadedAccount.Name} RegionType={loginPacket.RegionType}");
+            Logger.Info(
+                $"Server list sent | Account={loadedAccount.Name} RegionType={resolvedRegionType} Culture={clientCulture}");
             DisposeLoginPolling();
         }
 
@@ -281,6 +308,30 @@ namespace NosGm.Handler.BasicPacket.Login
             }
 
             return value;
+        }
+
+        private static bool SynchronizeAccountLanguage(AccountDTO account, string culture)
+        {
+            if (account == null || string.IsNullOrWhiteSpace(culture))
+            {
+                return false;
+            }
+
+            if (string.Equals(account.Language, culture, StringComparison.Ordinal))
+            {
+                return true;
+            }
+
+            if (!DAOFactory.AccountDAO.TryUpdateLanguage(account.AccountId, culture))
+            {
+                Logger.Error(
+                    $"Account language synchronization failed | AccountId={account.AccountId} Culture={culture}");
+                return false;
+            }
+
+            account.Language = culture;
+            Logger.Info($"Account language synchronized | AccountId={account.AccountId} Culture={culture}");
+            return true;
         }
 
         private static void UpgradePasswordHash(AccountDTO account, string clearPassword)
