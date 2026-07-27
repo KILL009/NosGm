@@ -274,14 +274,20 @@ try {
         Start-Sleep -Seconds 2
     }
 
-    $readinessParameters = @{
-        OutputPath = (Join-Path $stateDirectory "readiness.json")
-        PassThru = $true
+    $readiness = [pscustomobject]@{ OverallStatus = "failed" }
+    try {
+        $readinessParameters = @{
+            OutputPath = (Join-Path $stateDirectory "readiness.json")
+            PassThru = $true
+        }
+        if (-not $SkipLauncher) {
+            $readinessParameters["RequireLauncher"] = $true
+        }
+        $readiness = & (Join-Path $PSScriptRoot "test-modern-login-readiness.ps1") @readinessParameters
     }
-    if (-not $SkipLauncher) {
-        $readinessParameters["RequireLauncher"] = $true
+    catch {
+        Write-Warning "The stack is running, but the readiness inspector could not complete: $($_.Exception.Message)"
     }
-    $readiness = & (Join-Path $PSScriptRoot "test-modern-login-readiness.ps1") @readinessParameters
 
     Write-Host ""
     Write-Host "NosGM modern Login local stack is ready." -ForegroundColor Green
