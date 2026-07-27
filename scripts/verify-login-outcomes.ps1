@@ -333,9 +333,9 @@ $failTypes = Read-RequiredText $LoginFailTypePath
 Assert-Ordered $handler @(
     "if (loginPacket == null || string.IsNullOrWhiteSpace(loginPacket.Name) || string.IsNullOrWhiteSpace(loginPacket.Password))",
     "if (!ClientRegionMap.TryResolveLoginPort(",
-    "AccountDTO loadedAccount = DAOFactory.AccountDAO.LoadByName(username);",
+    "AccountDTO loadedAccount = LoadAccountByLoginName(username, resolvedRegionType);",
     "if (loadedAccount == null)",
-    "if (!string.Equals(loadedAccount.Name, username, StringComparison.Ordinal))",
+    "bool accountNameMatches = string.Equals(loadedAccount.Name, username, StringComparison.Ordinal) ||",
     "if (ServerConfiguration.MaintenanceMode && loadedAccount.Authority < AuthorityType.GM)",
     "if (!PasswordHashService.VerifyLoginPayload(",
     "if (ServerConfiguration.GameVersionRequired)",
@@ -351,8 +351,9 @@ Assert-Ordered $handler @(
 ) "Login decision order must remain deterministic"
 
 Assert-Regex $handler '!ClientRegionMap\.TryResolveLoginPort\(.*?Reject\(\s*LoginFailType\.CantConnect,\s*\$"Session removed\. Reason: Unsupported Login port' "unsupported regional port mapping"
-Assert-Regex $handler 'loadedAccount == null.*?Reject\(LoginFailType\.AccountOrPasswordWrong, "Session removed\. Reason: Unknown account"\)' "unknown account mapping"
-Assert-Regex $handler '!string\.Equals\(loadedAccount\.Name, username, StringComparison\.Ordinal\).*?Reject\(LoginFailType\.WrongCaps' "account casing mapping"
+Assert-Regex $handler 'LoadAccountByLoginName\(username, resolvedRegionType\).*?loadedAccount == null.*?Reject\(LoginFailType\.AccountOrPasswordWrong, "Session removed\. Reason: Unknown account"\)' "unknown account and optional regional alias mapping"
+Assert-Regex $handler '!accountNameMatches.*?Reject\(LoginFailType\.WrongCaps' "exact account or trusted regional alias casing mapping"
+Assert-Regex $handler 'private static AccountDTO LoadAccountByLoginName.*?AccountDAO\.LoadByName\(username\).*?TryStripProtocolPrefix.*?profile\.RegionType != resolvedRegionType.*?AccountDAO\.LoadByName\(accountName\)' "regional alias resolution must prefer exact accounts and require the trusted Login region"
 Assert-Regex $handler 'MaintenanceMode && loadedAccount\.Authority < AuthorityType\.GM.*?Reject\(LoginFailType\.Maintenance' "maintenance mapping"
 Assert-Regex $handler '!PasswordHashService\.VerifyLoginPayload\(.*?Reject\(LoginFailType\.AccountOrPasswordWrong, "Session removed\. Reason: Wrong credentials"\)' "wrong credential mapping"
 Assert-Regex $handler '!TryParseVersion\(ServerConfiguration\.GameVersion, out Version requiredVersion\).*?Reject\(LoginFailType\.CantConnect' "invalid server-version mapping"
