@@ -289,22 +289,24 @@ namespace NosGm.Handler.BasicPacket.Login
 
         private static AccountDTO LoadAccountByLoginName(string username, byte resolvedRegionType)
         {
+            bool hasRegionalPrefix = ClientRegionMap.TryStripProtocolPrefix(
+                username,
+                out string accountName,
+                out ClientLanguageProfile prefixProfile);
+            if (hasRegionalPrefix && prefixProfile.RegionType != resolvedRegionType)
+            {
+                return null;
+            }
+
             AccountDTO account = DAOFactory.AccountDAO.LoadByName(username);
             if (account != null)
             {
                 return account;
             }
 
-            if (!ClientRegionMap.TryStripProtocolPrefix(
-                    username,
-                    out string accountName,
-                    out ClientLanguageProfile profile) ||
-                profile.RegionType != resolvedRegionType)
-            {
-                return null;
-            }
-
-            return DAOFactory.AccountDAO.LoadByName(accountName);
+            return hasRegionalPrefix
+                ? DAOFactory.AccountDAO.LoadByName(accountName)
+                : null;
         }
 
         private static string NormalizeRemoteIp(string endpoint)
