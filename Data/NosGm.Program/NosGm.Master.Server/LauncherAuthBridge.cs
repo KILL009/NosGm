@@ -217,19 +217,16 @@ namespace NosGm.Master.Server
             }
             catch (SerializationException)
             {
-                await WriteErrorAsync(context.Response, 400, "invalid_request").ConfigureAwait(false);
+                await TryWriteErrorAsync(context.Response, 400, "invalid_request").ConfigureAwait(false);
             }
             catch (OperationCanceledException)
             {
-                context.Response.Abort();
+                // Normal during Master shutdown or a cancelled request.
             }
             catch (Exception ex)
             {
                 Logger.Error("Launcher authentication bridge request failed", ex);
-                if (context.Response.OutputStream.CanWrite)
-                {
-                    await WriteErrorAsync(context.Response, 500, "server_error").ConfigureAwait(false);
-                }
+                await TryWriteErrorAsync(context.Response, 500, "server_error").ConfigureAwait(false);
             }
             finally
             {
@@ -337,6 +334,21 @@ namespace NosGm.Master.Server
         private static Task WriteErrorAsync(HttpListenerResponse response, int statusCode, string error)
         {
             return WriteJsonAsync(response, statusCode, new ErrorResponse { Error = error });
+        }
+
+        private static async Task TryWriteErrorAsync(
+            HttpListenerResponse response,
+            int statusCode,
+            string error)
+        {
+            try
+            {
+                await WriteErrorAsync(response, statusCode, error).ConfigureAwait(false);
+            }
+            catch
+            {
+                // The requester may have disconnected before the error could be returned.
+            }
         }
 
         private static async Task WriteJsonAsync<T>(HttpListenerResponse response, int statusCode, T value)
