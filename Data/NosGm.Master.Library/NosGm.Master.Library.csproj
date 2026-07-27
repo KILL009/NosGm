@@ -96,6 +96,10 @@
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="Data\WorldServer.cs" />
     <Compile Include="Data\SerializableWorldServer.cs" />
+    <Compile Include="Security\GameforgeAuthTicketStore.cs" />
+    <Compile Include="Security\GameforgeLoginPacketParser.cs" />
+    <Compile Include="Security\GameforgeLoginPayload.cs" />
+    <Compile Include="Security\GameforgeWorldPermitStore.cs" />
   </ItemGroup>
   <ItemGroup>
     <None Include="app.config" />
