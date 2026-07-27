@@ -11,6 +11,8 @@ namespace NosGm.Master.Library.Interface
     /// </summary>
     public sealed class GameforgeAuthTicketStore
     {
+        public const int MaximumOutstandingTickets = 10000;
+
         private sealed class Ticket
         {
             public string AccountName { get; set; }
@@ -37,8 +39,8 @@ namespace NosGm.Master.Library.Interface
             byte countryId,
             TimeSpan lifetime)
         {
-            if (string.IsNullOrWhiteSpace(accountName) || accountName.Length > 64 ||
-                accountName.IndexOfAny(new[] { ' ', '\t', '\r', '\n', '\v' }) >= 0 ||
+            if (string.IsNullOrWhiteSpace(accountName) || accountName.Length > 255 ||
+                accountName.IndexOfAny(new[] { ' ', '\t', '\r', '\n', '\v', '\0' }) >= 0 ||
                 !GameforgeLoginPacketParser.IsSupportedAuthToken(authToken) ||
                 installationId == Guid.Empty ||
                 countryId > GameforgeLoginPacketParser.MaximumCountryId ||
@@ -49,6 +51,11 @@ namespace NosGm.Master.Library.Interface
 
             DateTime nowUtc = DateTime.UtcNow;
             RemoveExpired(nowUtc);
+            if (_tickets.Count >= MaximumOutstandingTickets)
+            {
+                return false;
+            }
+
             string key = ComputeTokenKey(authToken);
             return _tickets.TryAdd(key, new Ticket
             {
