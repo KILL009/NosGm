@@ -33,11 +33,7 @@ function Get-PropertyNames {
 }
 
 function Assert-ExactProperties {
-    param(
-        [object]$Value,
-        [string[]]$ExpectedNames,
-        [string]$Description
-    )
+    param([object]$Value, [string[]]$ExpectedNames, [string]$Description)
 
     if ($null -eq $Value) {
         throw "$Description must not be null."
@@ -57,11 +53,7 @@ function Assert-ExactProperties {
 }
 
 function Assert-SameValue {
-    param(
-        [AllowNull()][object]$Actual,
-        [AllowNull()][object]$Expected,
-        [string]$Description
-    )
+    param([AllowNull()][object]$Actual, [AllowNull()][object]$Expected, [string]$Description)
 
     if (-not [object]::Equals($Actual, $Expected)) {
         $actualText = if ($null -eq $Actual) { "<null>" } else { [string]$Actual }
@@ -71,11 +63,7 @@ function Assert-SameValue {
 }
 
 function Assert-Contains {
-    param(
-        [string]$Content,
-        [string]$Needle,
-        [string]$Description
-    )
+    param([string]$Content, [string]$Needle, [string]$Description)
 
     if ($Content.IndexOf($Needle, [StringComparison]::Ordinal) -lt 0) {
         throw "Regional-login source contract failed: $Description"
@@ -83,11 +71,7 @@ function Assert-Contains {
 }
 
 function Assert-NotContains {
-    param(
-        [string]$Content,
-        [string]$Needle,
-        [string]$Description
-    )
+    param([string]$Content, [string]$Needle, [string]$Description)
 
     if ($Content.IndexOf($Needle, [StringComparison]::Ordinal) -ge 0) {
         throw "Regional-login source contract failed: $Description"
@@ -95,11 +79,7 @@ function Assert-NotContains {
 }
 
 function Assert-Regex {
-    param(
-        [string]$Content,
-        [string]$Pattern,
-        [string]$Description
-    )
+    param([string]$Content, [string]$Pattern, [string]$Description)
 
     if (-not [regex]::IsMatch(
             $Content,
@@ -110,11 +90,7 @@ function Assert-Regex {
 }
 
 function Assert-NotRegex {
-    param(
-        [string]$Content,
-        [string]$Pattern,
-        [string]$Description
-    )
+    param([string]$Content, [string]$Pattern, [string]$Description)
 
     if ([regex]::IsMatch(
             $Content,
@@ -143,7 +119,8 @@ $expectedRegions = @(
     [pscustomobject][ordered]@{ serverCulture = "es"; regionType = 5; loginPort = 4005; protocolPrefix = "ES"; clientFileSuffix = "ES" },
     [pscustomobject][ordered]@{ serverCulture = "cs"; regionType = 6; loginPort = 4006; protocolPrefix = "CZ"; clientFileSuffix = "CZ" },
     [pscustomobject][ordered]@{ serverCulture = "ru"; regionType = 7; loginPort = 4007; protocolPrefix = "RU"; clientFileSuffix = "RU" },
-    [pscustomobject][ordered]@{ serverCulture = "tr"; regionType = 8; loginPort = 4008; protocolPrefix = "TR"; clientFileSuffix = "TR" }
+    [pscustomobject][ordered]@{ serverCulture = "ja"; regionType = 8; loginPort = 4008; protocolPrefix = "JP"; clientFileSuffix = "JP" },
+    [pscustomobject][ordered]@{ serverCulture = "zh"; regionType = 9; loginPort = 4009; protocolPrefix = "CN"; clientFileSuffix = "CN" }
 )
 
 $actualRegions = @($fixture.regions)
@@ -207,10 +184,11 @@ Assert-Contains $languageSource "public sealed class ClientLanguageProfile" "cli
 Assert-Contains $languageSource "public static class ClientRegionMap" "ClientRegionMap must be centralized in NosGm.Core"
 Assert-Regex $languageSource 'BaseLoginPort\s*=\s*4000' "regional Login base port must remain 4000"
 Assert-Regex $languageSource 'new ClientLanguageProfile\(5,\s*4005,\s*"ES",\s*"ES",\s*"es"\)' "Spanish profile must map RegionType 5, ES protocol prefix and NSlangData_ES"
-Assert-Regex $languageSource 'new ClientLanguageProfile\(8,\s*4008,\s*"TR",\s*"TR",\s*"tr"\)' "Turkish must be the final verified EU client profile"
-Assert-NotContains $languageSource 'new ClientLanguageProfile(9,' "the verified EU client must not invent a RegionType 9 profile"
-Assert-Contains $configurationSource "public static bool StartAllRegionalLoginPorts = true;" "all verified regional Login listeners must be enabled by default"
-Assert-Regex $loginProgramSource 'Enumerable\.Range\s*\(\s*ClientRegionMap\.BaseLoginPort\s*,\s*ClientRegionMap\.RegionCount\s*\)' "Login must start every verified regional port in one process"
+Assert-Regex $languageSource 'new ClientLanguageProfile\(8,\s*4008,\s*"JP",\s*"JP",\s*"ja"\)' "Japanese must map to RegionType 8 and port 4008"
+Assert-Regex $languageSource 'new ClientLanguageProfile\(9,\s*4009,\s*"CN",\s*"CN",\s*"zh"\)' "Chinese must map to RegionType 9 and port 4009"
+Assert-NotContains $languageSource 'new ClientLanguageProfile(8, 4008, "TR"' "The ten-language map must not replace Japanese with Turkish"
+Assert-Contains $configurationSource "public static bool StartAllRegionalLoginPorts = true;" "all regional Login listeners must be enabled by default"
+Assert-Regex $loginProgramSource 'Enumerable\.Range\s*\(\s*ClientRegionMap\.BaseLoginPort\s*,\s*ClientRegionMap\.RegionCount\s*\)' "Login must start every regional port in one process"
 Assert-Contains $loginProgramSource "ClientRegionMap.TryResolveLoginPort" "Login startup must reject unsupported regional ports"
 Assert-Regex $loginProgramSource 'args\.Length\s*<=\s*portArgIndex\s*\+\s*1\s*\|\|' "--port parsing must reject a missing value before reading it"
 Assert-Contains $networkManagerSource "new ClientSession(client, _listeningPort)" "the accepted local port must be attached to ClientSession"
@@ -218,9 +196,9 @@ Assert-NotContains $networkManagerSource "if (port == 4000)" "Login listener dia
 Assert-Regex $clientSessionSource 'public ClientSession\(INetworkClient client, int listeningPort = 0\)' "ClientSession must accept the local listening port"
 Assert-Contains $clientSessionSource "public int ListeningPort { get; }" "ClientSession must expose its trusted local listening port"
 Assert-Regex $loginPacketSource '\[PacketIndex\(5\)\]\s*public byte RegionType' "NoS0575 RegionType must remain available for compatibility diagnostics"
-Assert-Regex $loginHandlerSource 'TryResolveLoginPort\(\s*_session\.ListeningPort\s*,\s*out byte resolvedRegionType\s*,\s*out string clientCulture\s*\)' "Login must resolve region and culture from the accepted local port"
-Assert-Regex $loginHandlerSource 'BuildServersPacket\s*\(\s*username\s*,\s*resolvedRegionType\s*,\s*newSessionId' "NsTeST must preserve the supplied protocol username and use the port-derived RegionType"
-Assert-NotRegex $loginHandlerSource 'BuildServersPacket\s*\(\s*username\s*,\s*loginPacket\.RegionType' "Login must not route worlds with the packet RegionType"
+Assert-Regex $loginHandlerSource 'TryResolveLoginPort\(\s*_session\.ListeningPort\s*,\s*out regionType\s*,\s*out culture\s*\)' "Login must resolve region and culture from the accepted local port"
+Assert-Regex $loginHandlerSource 'BuildServersPacket\s*\(\s*protocolUsername\s*,\s*regionType\s*,\s*newSessionId' "NsTeST must preserve the supplied protocol username and use the resolved RegionType"
+Assert-NotRegex $loginHandlerSource 'BuildServersPacket\s*\([^;]*loginPacket\.RegionType' "Login must not route worlds with the packet RegionType"
 Assert-Contains $loginHandlerSource "LoadAccountByLoginName" "Login must support an optional regional account alias"
 Assert-Contains $loginHandlerSource "ClientRegionMap.IsProtocolUsernameForAccount" "regional aliases must retain exact casing checks"
 Assert-Contains $entryPointHandlerSource "LoadAccountByProtocolName" "World entry must resolve the same optional regional alias"
@@ -236,4 +214,4 @@ foreach ($mapping in $expectedRegions) {
     Assert-Contains $localizationDoc $tableToken "localization documentation must include the complete profile for $($mapping.protocolPrefix)"
 }
 
-Write-Host "Verified EU regional Login routing: EN/UK=4000 through TR=4008, optional protocol account prefixes and independent World channel ports."
+Write-Host "Verified ten-language regional Login routing: EN/UK=4000 through CN=4009, optional protocol account prefixes and independent World channel ports."
