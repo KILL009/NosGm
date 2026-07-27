@@ -1,5 +1,6 @@
 ﻿using NosGm.Packets.Packets.ClientPackets;
 
+using NosGm.Configuration;
 using NosGm.Core;
 using NosGm.DAL;
 using NosGm.Data;
@@ -17,6 +18,14 @@ namespace NosGm.Handler.BasicPacket.CharScreen
 {
     internal class EntryPointPacketHandler : IPacketHandler
     {
+        #region Members
+
+        private static readonly object GameforgeAuthSync = new object();
+
+        private static bool _authenticationServiceAuthenticated;
+
+        #endregion
+
         #region Instantiation
 
         public EntryPointPacketHandler(ClientSession session)
@@ -41,7 +50,6 @@ namespace NosGm.Handler.BasicPacket.CharScreen
                 : packet.PacketData.Split(' ');
             bool isCrossServerLogin = false;
 
-            // Load account by given SessionId
             if (Session.Account == null)
             {
                 if (loginPacketParts.Length <= 3)
@@ -124,7 +132,45 @@ namespace NosGm.Handler.BasicPacket.CharScreen
                     return;
                 }
 
+                bool isGameforgePasswordlessLogin = !isCrossServerLogin &&
+                    string.Equals(loginPacketParts[7], "thisisgfmode", StringComparison.Ordinal);
+                if (isGameforgePasswordlessLogin)
+                {
+                    if (!ServerConfiguration.EnableGameforgeTokenLogin ||
+                        !EnsureAuthenticationServiceAuthenticated())
+                    {
+                        Logger.Debug($"Client {Session.ClientId} forced Disconnection, Gameforge authentication service unavailable.");
+                        Session.Disconnect();
+                        return;
+                    }
+
+                    bool permitValid;
+                    try
+                    {
+                        permitValid = AuthentificationServiceClient.Instance.ConsumeGameforgeWorldPermit(
+                            account.AccountId,
+                            Session.SessionId,
+                            NormalizeRemoteIp(Session.IpAddress));
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.Error(
+                            $"Gameforge World-entry validation failed | ClientId={Session.ClientId} AccountId={account.AccountId}",
+                            ex);
+                        Session.Disconnect();
+                        return;
+                    }
+
+                    if (!permitValid)
+                    {
+                        Logger.Debug($"Client {Session.ClientId} forced Disconnection, Gameforge World permit is invalid or expired.");
+                        Session.Disconnect();
+                        return;
+                    }
+                }
+
                 bool passwordValid = isCrossServerLogin ||
+                                     isGameforgePasswordlessLogin ||
                                      PasswordHashService.VerifyPassword(
                                          account.Password,
                                          loginPacketParts[7],
@@ -154,10 +200,7 @@ namespace NosGm.Handler.BasicPacket.CharScreen
             }
             else
             {
-                // TODO: Wrap Database access up to GO
                 var characters = DAOFactory.CharacterDAO.LoadByAccount(Session.Account.AccountId);
-
-                // load characterlist packet for each character in CharacterDTO
                 Session.SendPacket("clist_start 0");
 
                 foreach (CharacterDTO character in characters)
@@ -169,7 +212,6 @@ namespace NosGm.Handler.BasicPacket.CharScreen
 
                     foreach (ItemInstanceDTO equipmentEntry in inventory)
                     {
-                        // explicit load of iteminstance
                         ItemInstance currentInstance = new ItemInstance(equipmentEntry);
 
                         if (currentInstance != null)
@@ -179,21 +221,79 @@ namespace NosGm.Handler.BasicPacket.CharScreen
                     }
 
                     string petlist = "";
-
                     var mates = DAOFactory.MateDAO.LoadByCharacterId(character.CharacterId).ToList();
 
                     for (int i = 0; i < 26; i++)
                     {
-                        //0.2105.1102.319.0.632.0.333.0.318.0.317.0.9.-1.-1.-1.-1.-1.-1.-1.-1.-1.-1.-1.-1
-                        petlist += (i != 0 ? "." : "") + (mates.Count > i ? $"{mates[i].Skin}.{mates[i].NpcMonsterVNum}" : "-1");
+                        petlist += (i != 0 ? "." : "") +
+                                   (mates.Count > i ? $"{mates[i].Skin}.{mates[i].NpcMonsterVNum}" : "-1");
                     }
 
-                    // 1 1 before long string of -1.-1 = act completion
                     Session.SendPacket($"clist {character.Slot} {character.Name} 0 {(byte)character.Gender} {(byte)character.HairStyle} {(byte)character.HairColor} 0 {(byte)character.Class} {character.Level} {character.HeroLevel} {equipment[(byte)EquipmentType.Hat]?.ItemVNum ?? -1}.{equipment[(byte)EquipmentType.Armor]?.ItemVNum ?? -1}.{equipment[(byte)EquipmentType.WeaponSkin]?.ItemVNum ?? (equipment[(byte)EquipmentType.MainWeapon]?.ItemVNum ?? -1)}.{equipment[(byte)EquipmentType.SecondaryWeapon]?.ItemVNum ?? -1}.{equipment[(byte)EquipmentType.Mask]?.ItemVNum ?? -1}.{equipment[(byte)EquipmentType.Fairy]?.ItemVNum ?? -1}.{equipment[(byte)EquipmentType.CostumeSuit]?.ItemVNum ?? -1}.{equipment[(byte)EquipmentType.CostumeHat]?.ItemVNum ?? -1} {character.JobLevel}  1 1 {petlist} {(equipment[(byte)EquipmentType.Hat]?.Item.IsColored == true ? equipment[(byte)EquipmentType.Hat].Design : 0)} 0");
                 }
 
                 Session.SendPacket("clist_end");
             }
+        }
+
+        private static bool EnsureAuthenticationServiceAuthenticated()
+        {
+            if (_authenticationServiceAuthenticated)
+            {
+                return true;
+            }
+
+            lock (GameforgeAuthSync)
+            {
+                if (_authenticationServiceAuthenticated)
+                {
+                    return true;
+                }
+
+                try
+                {
+                    _authenticationServiceAuthenticated = AuthentificationServiceClient.Instance.Authenticate(
+                        ServerConfiguration.AuthServiceKey);
+                }
+                catch (Exception ex)
+                {
+                    Logger.Error("Could not authenticate World against the authentication service", ex);
+                    _authenticationServiceAuthenticated = false;
+                }
+
+                return _authenticationServiceAuthenticated;
+            }
+        }
+
+        private static string NormalizeRemoteIp(string endpoint)
+        {
+            if (string.IsNullOrWhiteSpace(endpoint))
+            {
+                return string.Empty;
+            }
+
+            if (Uri.TryCreate(endpoint, UriKind.Absolute, out Uri uri) && !string.IsNullOrWhiteSpace(uri.Host))
+            {
+                return uri.Host;
+            }
+
+            string value = endpoint.Trim();
+            if (value.StartsWith("[", StringComparison.Ordinal))
+            {
+                int closingBracket = value.IndexOf(']');
+                if (closingBracket > 1)
+                {
+                    return value.Substring(1, closingBracket - 1);
+                }
+            }
+
+            int lastColon = value.LastIndexOf(':');
+            if (lastColon > 0 && value.IndexOf(':') == lastColon)
+            {
+                return value.Substring(0, lastColon);
+            }
+
+            return value;
         }
 
         private static AccountDTO LoadAccountByProtocolName(string protocolUsername)
