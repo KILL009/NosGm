@@ -12,23 +12,24 @@ namespace NosGm.Master.Server
     {
         public bool Authenticate(string authKey)
         {
-            if (string.IsNullOrWhiteSpace(authKey))
+            if (string.IsNullOrWhiteSpace(authKey) ||
+                !string.Equals(authKey, ServerConfiguration.AuthServiceKey, StringComparison.Ordinal))
             {
                 return false;
             }
 
-            if (authKey == ServerConfiguration.AuthServiceKey)
+            if (!MSManager.Instance.AuthenticationServiceClients.Any(
+                    clientId => clientId.Equals(CurrentClient.ClientId)))
             {
-                MSManager.Instance.AuthentificatedClients.Add(CurrentClient.ClientId);
-                return true;
+                MSManager.Instance.AuthenticationServiceClients.Add(CurrentClient.ClientId);
             }
 
-            return false;
+            return true;
         }
 
         public AccountDTO ValidateAccount(string userName, string passHash)
         {
-            if (string.IsNullOrEmpty(userName) || string.IsNullOrEmpty(passHash))
+            if (!IsAuthenticatedClient() || string.IsNullOrEmpty(userName) || string.IsNullOrEmpty(passHash))
             {
                 return null;
             }
@@ -106,7 +107,7 @@ namespace NosGm.Master.Server
 
         private bool IsAuthenticatedClient()
         {
-            return MSManager.Instance.AuthentificatedClients.Any(
+            return MSManager.Instance.AuthenticationServiceClients.Any(
                 clientId => clientId.Equals(CurrentClient.ClientId));
         }
     }
