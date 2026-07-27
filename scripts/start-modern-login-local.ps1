@@ -6,11 +6,7 @@ param(
     [ValidateRange(10, 180)]
     [int]$StartupTimeoutSeconds = 60,
     [ValidateRange(1, 65535)]
-    [int]$MasterPort = 4545,
-    [ValidateRange(1, 65535)]
     [int]$WorldPort = 1337,
-    [ValidateRange(1, 65535)]
-    [int]$SpanishLoginPort = 4005,
     [ValidateRange(1, 65535)]
     [int]$BridgePort = 8081
 )
@@ -23,6 +19,8 @@ if ($env:OS -ne "Windows_NT") {
 }
 
 $root = Split-Path -Parent $PSScriptRoot
+$masterPort = 4545
+$spanishLoginPort = 4005
 $stateDirectory = Join-Path $root "artifacts\modern-login-local"
 $statePath = Join-Path $stateDirectory "processes.json"
 $startedProcesses = New-Object System.Collections.Generic.List[object]
@@ -246,14 +244,14 @@ try {
     New-Item -ItemType Directory -Path $stateDirectory -Force | Out-Null
 
     Start-TrackedProcess -Name "Master" -Executable $masterExecutable | Out-Null
-    Wait-TcpPort -HostName "127.0.0.1" -Port $MasterPort -Description "Master"
+    Wait-TcpPort -HostName "127.0.0.1" -Port $masterPort -Description "Master"
     Wait-TcpPort -HostName "127.0.0.1" -Port $BridgePort -Description "Launcher AuthBridge"
 
     Start-TrackedProcess -Name "World" -Executable $worldExecutable -Arguments @("--nomsg", "--port", $WorldPort.ToString()) | Out-Null
     Wait-TcpPort -HostName "127.0.0.1" -Port $WorldPort -Description "World"
 
     Start-TrackedProcess -Name "Login" -Executable $loginExecutable -Arguments @("--nomsg") | Out-Null
-    Wait-TcpPort -HostName "127.0.0.1" -Port $SpanishLoginPort -Description "Spanish Login"
+    Wait-TcpPort -HostName "127.0.0.1" -Port $spanishLoginPort -Description "Spanish Login"
 
     if (-not $SkipLauncher) {
         Start-TrackedProcess -Name "Launcher" -Executable $launcherExecutable | Out-Null
@@ -263,7 +261,7 @@ try {
         SchemaVersion = 1
         CreatedAtUtc = [DateTime]::UtcNow.ToString("O")
         AuthenticationEndpoint = $launcherEndpoint
-        SpanishLoginPort = $SpanishLoginPort
+        SpanishLoginPort = $spanishLoginPort
         WorldPort = $WorldPort
         Processes = @($startedProcesses)
     }
@@ -273,7 +271,7 @@ try {
     Write-Host ""
     Write-Host "NosGM modern Login local stack is ready." -ForegroundColor Green
     Write-Host "Authentication endpoint: $launcherEndpoint"
-    Write-Host "Launcher language: Español (region 5 / Login $SpanishLoginPort)"
+    Write-Host "Launcher language: Español (region 5 / Login $spanishLoginPort)"
     Write-Host "Secrets were inherited by the child processes, removed from this shell and never written to disk."
     Write-Host "Stop the stack with: ./scripts/stop-modern-login-local.ps1"
 }
