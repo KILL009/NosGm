@@ -382,7 +382,24 @@ namespace NosGm.Handler.BasicPacket.Login
             string header = separator < 0 ? rawPacket : rawPacket.Substring(0, separator);
             if (header.Length > 16)
             {
-                header = header.Substring(0, 16) + "...";
+                header = header.Substring(0, 16);
+            }
+
+            for (int i = 0; i < header.Length; i++)
+            {
+                char character = header[i];
+                bool safe = char.IsLetterOrDigit(character) ||
+                            character == '_' || character == '-' || character == '$';
+                if (!safe)
+                {
+                    header = "<invalid>";
+                    break;
+                }
+            }
+
+            if (string.IsNullOrEmpty(header))
+            {
+                header = "<empty>";
             }
 
             return $"Header={header} Length={rawPacket.Length} ContainsVerticalTab={rawPacket.IndexOf('\v') >= 0}";
