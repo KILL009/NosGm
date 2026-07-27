@@ -4,19 +4,12 @@ using NosGm.Master.Library.Data;
 using NosGm.SCS.Communication.ScsServices.Service;
 using System;
 using System.Collections.Generic;
-using System.Configuration;
 
 namespace NosGm.Master.Server
 {
     internal class MSManager
     {
-        #region Members
-
         private static MSManager _instance;
-
-        #endregion
-
-        #region Instantiation
 
         public MSManager()
         {
@@ -25,19 +18,25 @@ namespace NosGm.Master.Server
             CharactersUnderSaveProcess = new Dictionary<long, DateTime>();
             ConnectedAccounts = new ThreadSafeGenericList<AccountConnection>();
             AuthentificatedClients = new ThreadSafeGenericLockedList<long>();
+            AuthenticationServiceClients = new ThreadSafeGenericLockedList<long>();
             ConfigurationObject = new ConfigurationObject
             {
                 MaxGold = GameConfiguration.MaxGold
             };
         }
 
-        #endregion
-
-        #region Properties
-
         public static MSManager Instance => _instance ?? (_instance = new MSManager());
 
+        /// <summary>
+        /// Clients authenticated for the legacy Master communication service.
+        /// </summary>
         public ThreadSafeGenericLockedList<long> AuthentificatedClients { get; set; }
+
+        /// <summary>
+        /// Clients authenticated specifically with AuthServiceKey. This list is deliberately
+        /// separate so a World or Login communication client cannot issue modern login tickets.
+        /// </summary>
+        public ThreadSafeGenericLockedList<long> AuthenticationServiceClients { get; set; }
 
         public ConfigurationObject ConfigurationObject { get; set; }
 
@@ -48,7 +47,5 @@ namespace NosGm.Master.Server
         public List<WorldServer> WorldServers { get; set; }
 
         public Dictionary<long, DateTime> CharactersUnderSaveProcess { get; set; }
-
-        #endregion
     }
 }
