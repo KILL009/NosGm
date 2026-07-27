@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: windows-build-${{ github.workflow }}-${{ github.ref }}
@@ -31,23 +31,6 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v6
-        with:
-          ref: ${{ github.event_name == 'pull_request' && github.head_ref || github.ref }}
-          fetch-depth: 1
-          show-progress: false
-
-      - name: Apply guarded regional alias outcome verifier
-        if: github.event_name == 'pull_request' && github.head_ref == 'agent/nosgm-client-region-map'
-        shell: pwsh
-        run: |
-          ./scripts/apply-regional-alias-outcome-verifier.ps1
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add scripts/verify-login-outcomes.ps1
-          if (-not (git diff --cached --quiet)) {
-            git commit -m "test: align Login outcomes with regional aliases"
-            git push origin HEAD:${{ github.head_ref }}
-          }
 
       - name: Set up Visual Studio MSBuild
         uses: microsoft/setup-msbuild@v3
@@ -109,6 +92,10 @@ jobs:
       - name: Verify password hashing behavior
         shell: powershell
         run: ./scripts/verify-password-hashing.ps1
+
+      - name: Verify Gameforge login integration
+        shell: powershell
+        run: ./scripts/verify-gameforge-login-integration.ps1
 
       - name: Verify login session flow contracts
         shell: powershell
