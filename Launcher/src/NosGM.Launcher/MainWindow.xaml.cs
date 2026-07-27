@@ -166,21 +166,63 @@ public partial class MainWindow : Window
         }
     }
 
-    private void Play_Click(object sender, RoutedEventArgs e)
+    private async void Play_Click(object sender, RoutedEventArgs e)
     {
+        LauncherCredentials? credentials = null;
+        var usesModernLogin = !string.IsNullOrWhiteSpace(_settings.AuthenticationEndpoint);
+        if (usesModernLogin)
+        {
+            credentials = LauncherLoginDialog.Prompt(
+                this,
+                _settings.Language,
+                _settings.AccountName);
+            if (credentials is null)
+            {
+                return;
+            }
+
+            BeginOperation(LauncherLoginDialog.Authenticating(_settings.Language));
+        }
+
         try
         {
-            LauncherController.LaunchGame(_settings);
+            if (credentials is null)
+            {
+                LauncherController.LaunchGame(_settings);
+                DetailTextBlock.Text = T(LauncherTextKeys.GameStartedDetail);
+            }
+            else
+            {
+                _ = await ModernGameLauncher.LaunchAsync(
+                    _settings,
+                    credentials.AccountName,
+                    credentials.Password,
+                    _operationCancellation!.Token);
+                _settings = _settings with { AccountName = credentials.AccountName };
+                await LauncherSettingsStore.SaveAsync(_settings);
+                DetailTextBlock.Text = LauncherLoginDialog.StartedDetail(_settings.Language);
+            }
+
             StatusTextBlock.Text = T(LauncherTextKeys.GameStarted);
-            DetailTextBlock.Text = T(LauncherTextKeys.GameStartedDetail);
             if (_settings.CloseAfterLaunch)
             {
                 Close();
             }
         }
+        catch (OperationCanceledException)
+        {
+            StatusTextBlock.Text = T(LauncherTextKeys.Cancelled);
+        }
         catch (Exception exception)
         {
             ShowError(exception);
+        }
+        finally
+        {
+            if (usesModernLogin)
+            {
+                EndOperation();
+            }
         }
     }
 
