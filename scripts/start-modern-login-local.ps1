@@ -26,6 +26,25 @@ $root = Split-Path -Parent $PSScriptRoot
 $stateDirectory = Join-Path $root "artifacts\modern-login-local"
 $statePath = Join-Path $stateDirectory "processes.json"
 $startedProcesses = New-Object System.Collections.Generic.List[object]
+$environmentVariableNames = @(
+    "NOSGM_MASTER_AUTH_KEY",
+    "NOSGM_AUTH_SERVICE_KEY",
+    "NOSGM_GAMEFORGE_TICKET_ISSUER_KEY",
+    "NOSGM_GAMEFORGE_TICKET_CONSUMER_KEY",
+    "NOSGM_ENABLE_GAMEFORGE_TOKEN_LOGIN",
+    "NOSGM_ENABLE_LAUNCHER_AUTH_BRIDGE",
+    "NOSGM_START_ALL_REGIONAL_LOGIN_PORTS",
+    "NOSGM_LAUNCHER_AUTH_BRIDGE_PREFIX",
+    "NOSGM_GAMEFORGE_AUTH_TICKET_TTL_SECONDS",
+    "NOSGM_GAMEFORGE_WORLD_PERMIT_TTL_SECONDS",
+    "NOSGM_LAUNCHER_AUTH_ATTEMPT_WINDOW_SECONDS",
+    "NOSGM_LAUNCHER_AUTH_MAX_ATTEMPTS_PER_WINDOW",
+    "NOSGM_AUTH_ENDPOINT"
+)
+$previousEnvironment = @{}
+foreach ($name in $environmentVariableNames) {
+    $previousEnvironment[$name] = [Environment]::GetEnvironmentVariable($name, "Process")
+}
 
 function New-NosGmSecret {
     $bytes = New-Object byte[] 48
@@ -40,10 +59,21 @@ function New-NosGmSecret {
     }
 }
 
+function Restore-ProcessEnvironment {
+    foreach ($name in $environmentVariableNames) {
+        [Environment]::SetEnvironmentVariable($name, $previousEnvironment[$name], "Process")
+    }
+}
+
 function Test-IsAdministrator {
     $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
-    $principal = New-Object Security.Principal.WindowsPrincipal($identity)
-    return $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+    try {
+        $principal = New-Object Security.Principal.WindowsPrincipal($identity)
+        return $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+    }
+    finally {
+        $identity.Dispose()
+    }
 }
 
 function Wait-TcpPort {
@@ -56,6 +86,7 @@ function Wait-TcpPort {
     $deadline = [DateTime]::UtcNow.AddSeconds($StartupTimeoutSeconds)
     while ([DateTime]::UtcNow -lt $deadline) {
         $client = New-Object Net.Sockets.TcpClient
+        $result = $null
         try {
             $result = $client.BeginConnect($HostName, $Port, $null, $null)
             if ($result.AsyncWaitHandle.WaitOne(500) -and $client.Connected) {
@@ -68,6 +99,9 @@ function Wait-TcpPort {
             # The service may still be starting.
         }
         finally {
+            if ($null -ne $result) {
+                $result.AsyncWaitHandle.Close()
+            }
             $client.Dispose()
         }
         Start-Sleep -Milliseconds 350
@@ -87,12 +121,16 @@ function Start-TrackedProcess {
         throw "Missing $Name executable: $Executable"
     }
 
-    $process = Start-Process \
-        -FilePath $Executable \
-        -ArgumentList $Arguments \
-        -WorkingDirectory (Split-Path -Parent $Executable) \
-        -PassThru
+    $startParameters = @{
+        FilePath = $Executable
+        WorkingDirectory = (Split-Path -Parent $Executable)
+        PassThru = $true
+    }
+    if ($Arguments.Count -gt 0) {
+        $startParameters["ArgumentList"] = $Arguments
+    }
 
+    $process = Start-Process @startParameters
     $startedAtUtc = $process.StartTime.ToUniversalTime().ToString("O")
     $record = [pscustomobject]@{
         Name = $Name
@@ -107,7 +145,9 @@ function Start-TrackedProcess {
 }
 
 function Stop-StartedProcesses {
-    foreach ($record in @($startedProcesses | Select-Object -Reverse)) {
+    $records = $startedProcesses.ToArray()
+    [Array]::Reverse($records)
+    foreach ($record in $records) {
         try {
             Stop-Process -Id $record.Id -Force -ErrorAction SilentlyContinue
         }
@@ -123,7 +163,8 @@ function Resolve-MSBuild {
         return $command.Source
     }
 
-    $vswhere = Join-Path ${env:ProgramFiles(x86)} "Microsoft Visual Studio\Installer\vswhere.exe"
+    $programFilesX86 = [Environment]::GetFolderPath([Environment+SpecialFolder]::ProgramFilesX86)
+    $vswhere = Join-Path $programFilesX86 "Microsoft Visual Studio\Installer\vswhere.exe"
     if (Test-Path -LiteralPath $vswhere) {
         $resolved = & $vswhere -latest -requires Microsoft.Component.MSBuild -find MSBuild\**\Bin\MSBuild.exe | Select-Object -First 1
         if ($resolved) {
@@ -157,6 +198,9 @@ if (-not $SkipBuild) {
     $nuget = Get-Command nuget.exe -ErrorAction SilentlyContinue
     if (-not $nuget) {
         throw "nuget.exe was not found. Install NuGet CLI or run with -SkipBuild after restoring the solution."
+    }
+    if (-not (Get-Command dotnet.exe -ErrorAction SilentlyContinue)) {
+        throw ".NET 9 SDK was not found. Install it or run with -SkipBuild after building the launcher."
     }
 
     $msbuild = Resolve-MSBuild
@@ -224,15 +268,17 @@ try {
         Processes = @($startedProcesses)
     }
     $state | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $statePath -Encoding UTF8
+    Restore-ProcessEnvironment
 
     Write-Host ""
     Write-Host "NosGM modern Login local stack is ready." -ForegroundColor Green
     Write-Host "Authentication endpoint: $launcherEndpoint"
     Write-Host "Launcher language: Español (region 5 / Login $SpanishLoginPort)"
-    Write-Host "Secrets exist only in the child process environments and were not written to disk."
+    Write-Host "Secrets were inherited by the child processes, removed from this shell and never written to disk."
     Write-Host "Stop the stack with: ./scripts/stop-modern-login-local.ps1"
 }
 catch {
+    Restore-ProcessEnvironment
     Stop-StartedProcesses
     Remove-Item -LiteralPath $statePath -Force -ErrorAction SilentlyContinue
     throw
