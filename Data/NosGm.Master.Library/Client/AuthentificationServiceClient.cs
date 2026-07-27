@@ -6,13 +6,20 @@ using NosGm.SCS.Communication.Scs.Communication;
 using NosGm.SCS.Communication.Scs.Communication.EndPoints.Tcp;
 using NosGm.SCS.Communication.ScsServices.Client;
 using System;
-using System.Configuration;
 using System.Threading;
 
 namespace NosGm.Master.Library.Client
 {
     public class AuthentificationServiceClient : IAuthentificationService
     {
+        #region Members
+
+        private static AuthentificationServiceClient _instance;
+
+        private readonly IScsServiceClient<IAuthentificationService> _client;
+
+        #endregion
+
         #region Instantiation
 
         public AuthentificationServiceClient()
@@ -22,6 +29,7 @@ namespace NosGm.Master.Library.Client
             _client = ScsServiceClientBuilder.CreateClient<IAuthentificationService>(new ScsTcpEndPoint(ip, port));
             Thread.Sleep(1000);
             while (_client.CommunicationState != CommunicationStates.Connected)
+            {
                 try
                 {
                     _client.Connect();
@@ -32,15 +40,8 @@ namespace NosGm.Master.Library.Client
                         memberName: nameof(AuthentificationServiceClient));
                     Thread.Sleep(1000);
                 }
+            }
         }
-
-        #endregion
-
-        #region Members
-
-        private static AuthentificationServiceClient _instance;
-
-        private readonly IScsServiceClient<IAuthentificationService> _client;
 
         #endregion
 
@@ -68,6 +69,45 @@ namespace NosGm.Master.Library.Client
         public CharacterDTO ValidateAccountAndCharacter(string userName, string characterName, string passHash)
         {
             return _client.ServiceProxy.ValidateAccountAndCharacter(userName, characterName, passHash);
+        }
+
+        public bool RegisterGameforgeAuthTicket(
+            string accountName,
+            string authToken,
+            string installationId,
+            byte countryId)
+        {
+            return _client.ServiceProxy.RegisterGameforgeAuthTicket(
+                accountName,
+                authToken,
+                installationId,
+                countryId);
+        }
+
+        public string ConsumeGameforgeAuthTicket(
+            string authToken,
+            string installationId,
+            byte countryId)
+        {
+            return _client.ServiceProxy.ConsumeGameforgeAuthTicket(
+                authToken,
+                installationId,
+                countryId);
+        }
+
+        public bool RegisterGameforgeWorldPermit(long accountId, int sessionId, string ipAddress)
+        {
+            return _client.ServiceProxy.RegisterGameforgeWorldPermit(accountId, sessionId, ipAddress);
+        }
+
+        public bool ConsumeGameforgeWorldPermit(long accountId, int sessionId, string ipAddress)
+        {
+            return _client.ServiceProxy.ConsumeGameforgeWorldPermit(accountId, sessionId, ipAddress);
+        }
+
+        public void RevokeGameforgeWorldPermit(long accountId, int sessionId)
+        {
+            _client.ServiceProxy.RevokeGameforgeWorldPermit(accountId, sessionId);
         }
 
         #endregion
