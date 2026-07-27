@@ -1,5 +1,6 @@
 ﻿using NosGm.Packets.Packets.ClientPackets;
 
+using NosGm.Configuration;
 using NosGm.Core;
 using NosGm.DAL;
 using NosGm.Data;
@@ -23,6 +24,14 @@ namespace NosGm.Handler.BasicPacket.CharScreen
         {
             Session = session;
         }
+
+        #endregion
+
+        #region Members
+
+        private static readonly object ModernAuthSync = new object();
+
+        private static bool _modernAuthServiceAuthenticated;
 
         #endregion
 
@@ -124,7 +133,44 @@ namespace NosGm.Handler.BasicPacket.CharScreen
                     return;
                 }
 
+                bool isModernPasswordlessLogin = !isCrossServerLogin &&
+                    string.Equals(loginPacketParts[7], "thisisgfmode", StringComparison.Ordinal);
+                if (isModernPasswordlessLogin)
+                {
+                    if (!EnsureModernAuthServiceAuthenticated())
+                    {
+                        Logger.Debug($"Client {Session.ClientId} forced Disconnection, modern authentication service unavailable.");
+                        Session.Disconnect();
+                        return;
+                    }
+
+                    bool modernPermitValid;
+                    try
+                    {
+                        modernPermitValid = AuthentificationServiceClient.Instance.ConsumeModernLoginSession(
+                            account.AccountId,
+                            Session.SessionId,
+                            NormalizeRemoteIp(Session.IpAddress));
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.Error(
+                            $"Modern World-entry validation failed | ClientId={Session.ClientId} AccountId={account.AccountId}",
+                            ex);
+                        Session.Disconnect();
+                        return;
+                    }
+
+                    if (!modernPermitValid)
+                    {
+                        Logger.Debug($"Client {Session.ClientId} forced Disconnection, modern World-entry permit is invalid or expired.");
+                        Session.Disconnect();
+                        return;
+                    }
+                }
+
                 bool passwordValid = isCrossServerLogin ||
+                                     isModernPasswordlessLogin ||
                                      PasswordHashService.VerifyPassword(
                                          account.Password,
                                          loginPacketParts[7],
@@ -196,6 +242,64 @@ namespace NosGm.Handler.BasicPacket.CharScreen
             }
         }
 
+        private static bool EnsureModernAuthServiceAuthenticated()
+        {
+            if (_modernAuthServiceAuthenticated)
+            {
+                return true;
+            }
+
+            lock (ModernAuthSync)
+            {
+                if (_modernAuthServiceAuthenticated)
+                {
+                    return true;
+                }
+
+                try
+                {
+                    _modernAuthServiceAuthenticated = AuthentificationServiceClient.Instance.Authenticate(
+                        ServerConfiguration.AuthServiceKey);
+                }
+                catch (Exception ex)
+                {
+                    Logger.Error("Could not authenticate World against the modern authentication service", ex);
+                    _modernAuthServiceAuthenticated = false;
+                }
+
+                return _modernAuthServiceAuthenticated;
+            }
+        }
+
+        private static string NormalizeRemoteIp(string endpoint)
+        {
+            if (string.IsNullOrWhiteSpace(endpoint))
+            {
+                return string.Empty;
+            }
+
+            if (Uri.TryCreate(endpoint, UriKind.Absolute, out Uri uri) && !string.IsNullOrWhiteSpace(uri.Host))
+            {
+                return uri.Host;
+            }
+
+            string value = endpoint.Trim();
+            if (value.StartsWith("[", StringComparison.Ordinal))
+            {
+                int closingBracket = value.IndexOf(']');
+                if (closingBracket > 1)
+                {
+                    return value.Substring(1, closingBracket - 1);
+                }
+            }
+
+            int lastColon = value.LastIndexOf(':');
+            if (lastColon > 0 && value.IndexOf(':') == lastColon)
+            {
+                return value.Substring(0, lastColon);
+            }
+
+            return value;
         private static AccountDTO LoadAccountByProtocolName(string protocolUsername)
         {
             AccountDTO account = DAOFactory.AccountDAO.LoadByName(protocolUsername);

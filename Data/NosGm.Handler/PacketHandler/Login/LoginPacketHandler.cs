@@ -18,6 +18,12 @@ namespace NosGm.Handler.BasicPacket.Login
 {
     public class LoginPacketHandler : IPacketHandler
     {
+        #region Members
+
+        private static readonly object ModernAuthSync = new object();
+
+        private static bool _modernAuthServiceAuthenticated;
+
         private readonly ClientSession _session;
 
         public LoginPacketHandler(ClientSession session)
@@ -359,6 +365,65 @@ namespace NosGm.Handler.BasicPacket.Login
             DisposeLoginPolling();
         }
 
+        [Packet("NoS0576", "NoS0577")]
+        public async Task VerifyModernLoginAsync(string rawPacket)
+        {
+            if (!ModernLoginPacketParser.TryParse(rawPacket, out ModernLoginPacket modernPacket))
+            {
+                Reject(LoginFailType.CantConnect, "Session removed. Reason: Malformed modern login packet");
+                return;
+            }
+
+            if (ServerConfiguration.GameVersionRequired)
+            {
+                if (!TryParseVersion(ServerConfiguration.GameVersion, out Version requiredVersion))
+                {
+                    Logger.Error($"Invalid configured game version: '{ServerConfiguration.GameVersion}'");
+                    Reject(LoginFailType.CantConnect, "Session removed. Reason: Invalid server version configuration");
+                    return;
+                }
+
+                if (!requiredVersion.Equals(modernPacket.ClientVersion))
+                {
+                    Logger.Log.Warn($"Client version: {modernPacket.ClientVersion}");
+                    Logger.Log.Warn($"Required version: {requiredVersion}");
+                    Reject(LoginFailType.OldClient, "Session removed. Reason: Unsupported modern client version");
+                    return;
+                }
+            }
+
+            if (!EnsureModernAuthServiceAuthenticated())
+            {
+                Reject(LoginFailType.CantConnect, "Session removed. Reason: Modern authentication service unavailable");
+                return;
+            }
+
+            string ipAddress = NormalizeRemoteIp(_session.IpAddress);
+            string username;
+            try
+            {
+                username = AuthentificationServiceClient.Instance.ConsumeModernLoginTicket(
+                    modernPacket.AuthToken,
+                    ipAddress);
+            }
+            catch (Exception ex)
+            {
+                Logger.Error("Modern login ticket resolution failed", ex);
+                Reject(LoginFailType.CantConnect, "Session removed. Reason: Modern authentication service failed");
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(username))
+            {
+                Reject(LoginFailType.AccountOrPasswordWrong, "Session removed. Reason: Invalid or expired modern login ticket");
+                return;
+            }
+
+            AccountDTO loadedAccount = DAOFactory.AccountDAO.LoadByName(username);
+            if (loadedAccount == null)
+            {
+                Reject(LoginFailType.AccountOrPasswordWrong, "Session removed. Reason: Modern ticket account not found");
+                return;
         private bool TryLoadAccount(string username, out AccountDTO loadedAccount)
         {
             loadedAccount = DAOFactory.AccountDAO.LoadByName(username);
@@ -370,6 +435,8 @@ namespace NosGm.Handler.BasicPacket.Login
 
             if (!string.Equals(loadedAccount.Name, username, StringComparison.Ordinal))
             {
+                Reject(LoginFailType.WrongCaps, "Session removed. Reason: Wrong modern account casing");
+                return;
                 Reject(LoginFailType.WrongCaps, "Session removed. Reason: Wrong account casing");
                 return false;
             }
@@ -377,6 +444,96 @@ namespace NosGm.Handler.BasicPacket.Login
             if (ServerConfiguration.MaintenanceMode && loadedAccount.Authority < AuthorityType.GM)
             {
                 Reject(LoginFailType.Maintenance, "Session removed. Reason: Maintenance mode");
+                return;
+            }
+
+            if (DAOFactory.PenaltyLogDAO.LoadByIp(ipAddress).Any())
+            {
+                Reject(LoginFailType.CantConnect, "Session removed. Reason: IP penalty");
+                return;
+            }
+
+            if (await CheckIsConnectedAsync(loadedAccount.AccountId).ConfigureAwait(false) ||
+                CommunicationServiceClient.Instance.IsAccountConnected(loadedAccount.AccountId))
+            {
+                Reject(LoginFailType.AlreadyConnected, "Session removed. Reason: Already connected");
+                return;
+            }
+
+            PenaltyLogDTO penalty = DAOFactory.PenaltyLogDAO.LoadByAccount(loadedAccount.AccountId)
+                .FirstOrDefault(s => s.DateEnd > DateTime.Now && s.Penalty == PenaltyType.Banned);
+            if (penalty != null || loadedAccount.Authority == AuthorityType.Banned)
+            {
+                Reject(LoginFailType.Banned, "Session removed. Reason: Banned");
+                return;
+            }
+
+            int newSessionId = SessionFactory.Instance.GenerateSessionId();
+            bool accountRegistered = false;
+            bool modernPermitRegistered = false;
+            try
+            {
+                CommunicationServiceClient.Instance.RegisterAccountLogin(
+                    loadedAccount.AccountId,
+                    newSessionId,
+                    ipAddress);
+                accountRegistered = true;
+
+                modernPermitRegistered = AuthentificationServiceClient.Instance.RegisterModernLoginSession(
+                    loadedAccount.AccountId,
+                    newSessionId,
+                    ipAddress);
+                if (!modernPermitRegistered)
+                {
+                    throw new InvalidOperationException("Master rejected the modern World-entry permit.");
+                }
+
+                string serversPacket = BuildServersPacket(
+                    loadedAccount.Name,
+                    modernPacket.RegionType,
+                    newSessionId,
+                    true,
+                    loadedAccount.AccountId);
+
+                if (string.IsNullOrWhiteSpace(serversPacket))
+                {
+                    AuthentificationServiceClient.Instance.RevokeModernLoginSession(
+                        loadedAccount.AccountId,
+                        newSessionId);
+                    CommunicationServiceClient.Instance.DisconnectAccount(loadedAccount.AccountId);
+                    DisposeLoginPolling();
+                    return;
+                }
+
+                _session.SendPacket(serversPacket);
+                Logger.Info(
+                    $"Modern server list sent | Account={loadedAccount.Name} " +
+                    $"Header={modernPacket.Header} RegionType={modernPacket.RegionType} " +
+                    $"ClientVersion={modernPacket.ClientVersion} SessionID={newSessionId}");
+                DisposeLoginPolling();
+            }
+            catch (Exception ex)
+            {
+                if (modernPermitRegistered)
+                {
+                    AuthentificationServiceClient.Instance.RevokeModernLoginSession(
+                        loadedAccount.AccountId,
+                        newSessionId);
+                }
+
+                if (accountRegistered)
+                {
+                    CommunicationServiceClient.Instance.DisconnectAccount(loadedAccount.AccountId);
+                }
+
+                Logger.Error("Modern login registration failed", ex);
+                Reject(LoginFailType.CantConnect, "Session removed. Reason: Modern login registration failed");
+            }
+        }
+
+        private static bool EnsureModernAuthServiceAuthenticated()
+        {
+            if (_modernAuthServiceAuthenticated)
                 return false;
             }
 
@@ -390,6 +547,26 @@ namespace NosGm.Handler.BasicPacket.Login
                 return true;
             }
 
+            lock (ModernAuthSync)
+            {
+                if (_modernAuthServiceAuthenticated)
+                {
+                    return true;
+                }
+
+                try
+                {
+                    _modernAuthServiceAuthenticated = AuthentificationServiceClient.Instance.Authenticate(
+                        ServerConfiguration.AuthServiceKey);
+                }
+                catch (Exception ex)
+                {
+                    Logger.Error("Could not authenticate Login against the modern authentication service", ex);
+                    _modernAuthServiceAuthenticated = false;
+                }
+
+                return _modernAuthServiceAuthenticated;
+            }
             if (!TryParseVersion(ServerConfiguration.GameVersion, out Version requiredVersion))
             {
                 Logger.Error($"Invalid configured game version: '{ServerConfiguration.GameVersion}'");
@@ -626,4 +803,145 @@ namespace NosGm.Handler.BasicPacket.Login
             return false;
         }
     }
+
+    internal sealed class ModernLoginPacket
+    {
+        public string AuthToken { get; set; }
+
+        public Version ClientVersion { get; set; }
+
+        public string Header { get; set; }
+
+        public byte RegionType { get; set; }
+    }
+
+    internal static class ModernLoginPacketParser
+    {
+        private const int MaximumPacketLength = 4096;
+        private const int MaximumTokenLength = 1024;
+
+        public static bool TryParse(string rawPacket, out ModernLoginPacket packet)
+        {
+            packet = null;
+            if (string.IsNullOrEmpty(rawPacket) || rawPacket.Length > MaximumPacketLength)
+            {
+                return false;
+            }
+
+            int headerEnd = rawPacket.IndexOf(' ');
+            if (headerEnd <= 0)
+            {
+                return false;
+            }
+
+            string header = rawPacket.Substring(0, headerEnd);
+            if (!string.Equals(header, "NoS0576", StringComparison.Ordinal) &&
+                !string.Equals(header, "NoS0577", StringComparison.Ordinal))
+            {
+                return false;
+            }
+
+            int tokenStart = headerEnd + 1;
+            int doubleSpace = rawPacket.IndexOf("  ", tokenStart, StringComparison.Ordinal);
+            if (doubleSpace <= tokenStart || doubleSpace + 2 >= rawPacket.Length)
+            {
+                return false;
+            }
+
+            if (rawPacket[doubleSpace + 2] == ' ')
+            {
+                return false;
+            }
+
+            string authToken = rawPacket.Substring(tokenStart, doubleSpace - tokenStart);
+            if (!IsSafeToken(authToken))
+            {
+                return false;
+            }
+
+            string tail = rawPacket.Substring(doubleSpace + 2);
+            if (tail.StartsWith(" ", StringComparison.Ordinal) ||
+                tail.EndsWith(" ", StringComparison.Ordinal) ||
+                tail.Contains("  "))
+            {
+                return false;
+            }
+
+            string[] fields = tail.Split(new[] { ' ' }, StringSplitOptions.None);
+            if (fields.Length != 5 ||
+                !Guid.TryParse(fields[0], out _) ||
+                !IsHex(fields[1], 1, 32) ||
+                !string.Equals(fields[3], "0", StringComparison.Ordinal) ||
+                !IsHex(fields[4], 32, 32))
+            {
+                return false;
+            }
+
+            int separatorIndex = fields[2].IndexOf('\v');
+            if (separatorIndex <= 0 ||
+                separatorIndex != fields[2].LastIndexOf('\v') ||
+                separatorIndex + 1 >= fields[2].Length)
+            {
+                return false;
+            }
+
+            string regionText = fields[2].Substring(0, separatorIndex);
+            string versionText = fields[2].Substring(separatorIndex + 1);
+            if (!byte.TryParse(regionText, out byte regionType) ||
+                !Version.TryParse(versionText, out Version clientVersion))
+            {
+                return false;
+            }
+
+            packet = new ModernLoginPacket
+            {
+                AuthToken = authToken,
+                ClientVersion = clientVersion,
+                Header = header,
+                RegionType = regionType
+            };
+            return true;
+        }
+
+        private static bool IsSafeToken(string value)
+        {
+            if (string.IsNullOrEmpty(value) || value.Length < 16 || value.Length > MaximumTokenLength)
+            {
+                return false;
+            }
+
+            foreach (char character in value)
+            {
+                if (char.IsWhiteSpace(character) || char.IsControl(character))
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        private static bool IsHex(string value, int minimumLength, int maximumLength)
+        {
+            if (string.IsNullOrEmpty(value) ||
+                value.Length < minimumLength ||
+                value.Length > maximumLength)
+            {
+                return false;
+            }
+
+            foreach (char character in value)
+            {
+                if (!(character >= '0' && character <= '9') &&
+                    !(character >= 'a' && character <= 'f') &&
+                    !(character >= 'A' && character <= 'F'))
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+    }
+}
 }

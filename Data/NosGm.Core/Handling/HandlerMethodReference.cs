@@ -33,6 +33,8 @@ namespace NosGm.Core.Handling
             Identification = HandlerMethodAttribute.Header;
             PassNonParseablePacket = false;
             Authority = AuthorityType.User;
+            IsCharScreen = HandlerMethodAttribute.IsCharScreen;
+            Amount = HandlerMethodAttribute.Amount;
             string header = ResolveMetricHeader(Identification);
             HandlerMethod = Wrap(handlerMethod, ParentHandler, header, Authority,
                 new HandlerPacketRateGuard(header));
