@@ -14,7 +14,7 @@ $assemblyDirectory = Split-Path -Parent $resolvedAssembly
 $resolver = [ResolveEventHandler]{
     param($sender, $eventArgs)
 
-    $assemblyName = New-Object -TypeName System.Reflection.AssemblyName -ArgumentList $eventArgs.Name
+    $assemblyName = New-Object -TypeName System.Reflection.AssemblyName -ArgumentList (, $eventArgs.Name)
     $candidate = Join-Path $assemblyDirectory ($assemblyName.Name + ".dll")
     if (Test-Path -LiteralPath $candidate) {
         return [Reflection.Assembly]::LoadFrom($candidate)
@@ -25,10 +25,11 @@ $resolver = [ResolveEventHandler]{
 
 [AppDomain]::CurrentDomain.add_AssemblyResolve($resolver)
 try {
+    Write-Host "[Gameforge protocol] Loading compiled assembly"
     [Reflection.Assembly]::LoadFrom($resolvedAssembly) | Out-Null
 
     $storeType = [NosGm.Master.Library.Interface.GameforgeAuthTicketStore]
-    $store = $storeType::Instance
+    $store = [NosGm.Master.Library.Interface.GameforgeAuthTicketStore]::Instance
     $verticalTab = [char]0x0B
     $token = "37633936363633662D633332352D346461612D383933612D373031346639653063646463"
     $rawGuidToken = "7c96663f-c325-4daa-893a-7014f9e0cddc"
@@ -80,6 +81,7 @@ try {
         }
     }
 
+    Write-Host "[Gameforge protocol] Verifying strict packet parsing"
     Assert-ParsedPacket "NoS0576"
     Assert-ParsedPacket "NoS0577"
 
@@ -92,6 +94,7 @@ try {
     Assert-RejectedPacket "NoS0575 $token  $validTail" "unsupported packet header"
     Assert-RejectedPacket "NoS0576`rINJECT $token  $validTail" "control character in packet header"
 
+    Write-Host "[Gameforge protocol] Verifying token canonicalization"
     $normalizedRaw = $null
     $normalizedHex = $null
     if (-not [NosGm.Master.Library.Interface.GameforgeLoginPacketParser]::TryNormalizeAuthToken(
@@ -104,6 +107,7 @@ try {
         throw "Raw GUID and ASCII-hex GUID tokens did not normalize to the same value."
     }
 
+    Write-Host "[Gameforge protocol] Verifying country mapping"
     $expectedCultures = @{
         0 = "en"
         1 = "de"
@@ -133,6 +137,7 @@ try {
         throw "CountryId 9 was incorrectly accepted."
     }
 
+    Write-Host "[Gameforge protocol] Verifying one-time ticket behavior"
     $store.Clear()
     if (-not $store.TryIssue("test_account", $token, $installationId, [byte]5, [TimeSpan]::FromMinutes(2))) {
         throw "A valid one-time ticket could not be issued."
@@ -193,6 +198,7 @@ try {
         throw "An expired ticket was accepted."
     }
 
+    Write-Host "[Gameforge protocol] Verifying that raw tokens are not stored"
     $ticketType = $storeType.GetNestedType(
         "Ticket",
         [Reflection.BindingFlags]::NonPublic)
@@ -203,6 +209,7 @@ try {
 
     $store.Clear()
 
+    Write-Host "[Gameforge protocol] Verifying source-level trust boundaries"
     $handlerPath = "Data/NosGm.Handler/PacketHandler/Login/LoginPacketHandler.cs"
     $ticketStorePath = "Data/NosGm.Master.Library/Security/GameforgeAuthTicketStore.cs"
     $configurationPath = "Data/NosGm.Configuration/ServerConfiguration.cs"
