@@ -108,6 +108,21 @@ function Assert-Regex {
     }
 }
 
+function Assert-NotRegex {
+    param(
+        [string]$Content,
+        [string]$Pattern,
+        [string]$Description
+    )
+
+    if ([regex]::IsMatch(
+            $Content,
+            $Pattern,
+            [Text.RegularExpressions.RegexOptions]::Singleline)) {
+        throw "Regional-login source contract failed: $Description"
+    }
+}
+
 $fixtureJson = Read-RequiredText $FixturePath
 if ([regex]::IsMatch($fixtureJson, '(?i)"(?:username|password|passwordHash|sessionId|accountId|email|token|ipAddress)"')) {
     throw "Regional-login fixture contains a forbidden sensitive field."
@@ -184,9 +199,9 @@ Assert-Contains $languageSource "public static class ClientRegionMap" "ClientReg
 Assert-Regex $languageSource 'BaseLoginPort\s*=\s*4000' "regional login base port must remain 4000"
 Assert-Regex $languageSource '"en"\s*,\s*"de"\s*,\s*"fr"\s*,\s*"it"\s*,\s*"pl"\s*,\s*"es"\s*,\s*"cs"\s*,\s*"ru"\s*,\s*"ja"\s*,\s*"zh"' "ClientRegionMap culture order must match the official port suffix"
 Assert-Contains $configurationSource "public static bool StartAllRegionalLoginPorts = true;" "all ten regional Login listeners must be enabled by default"
-Assert-Contains $loginProgramSource "Enumerable.Range(ClientRegionMap.BaseLoginPort, ClientRegionMap.RegionCount)" "Login must start all ten regional ports in one process"
+Assert-Regex $loginProgramSource 'Enumerable\.Range\s*\(\s*ClientRegionMap\.BaseLoginPort\s*,\s*ClientRegionMap\.RegionCount\s*\)' "Login must start all ten regional ports in one process"
 Assert-Contains $loginProgramSource "ClientRegionMap.TryResolveLoginPort" "Login startup must reject unsupported regional ports"
-Assert-Regex $loginProgramSource 'portArgIndex.*?args\.Length > portArgIndex \+ 1' "--port parsing must bounds-check its value"
+Assert-Regex $loginProgramSource 'args\.Length\s*<=\s*portArgIndex\s*\+\s*1\s*\|\|' "--port parsing must reject a missing value before reading it"
 Assert-Contains $networkManagerSource "new ClientSession(client, _listeningPort)" "the accepted local port must be attached to ClientSession"
 Assert-NotContains $networkManagerSource "if (port == 4000)" "Login listener diagnostics must support every regional port"
 Assert-Regex $clientSessionSource 'public ClientSession\(INetworkClient client, int listeningPort = 0\)' "ClientSession must accept the local listening port"
@@ -194,7 +209,7 @@ Assert-Contains $clientSessionSource "public int ListeningPort { get; }" "Client
 Assert-Regex $loginPacketSource '\[PacketIndex\(5\)\]\s*public byte RegionType' "NoS0575 RegionType must remain available only for compatibility diagnostics"
 Assert-Regex $loginHandlerSource 'TryResolveLoginPort\(\s*_session\.ListeningPort\s*,\s*out byte resolvedRegionType\s*,\s*out string clientCulture\s*\)' "Login must resolve region and culture from the accepted local port"
 Assert-Regex $loginHandlerSource 'BuildServersPacket\s*\(\s*username\s*,\s*resolvedRegionType\s*,\s*newSessionId' "NsTeST must use the port-derived RegionType"
-Assert-NotContains $loginHandlerSource "BuildServersPacket(`r`n                username,`r`n                loginPacket.RegionType" "Login must not route worlds with the untrusted packet RegionType"
+Assert-NotRegex $loginHandlerSource 'BuildServersPacket\s*\(\s*username\s*,\s*loginPacket\.RegionType' "Login must not route worlds with the untrusted packet RegionType"
 Assert-Contains $loginHandlerSource "DAOFactory.AccountDAO.TryUpdateLanguage" "Login must synchronize Account.Language from the regional port"
 Assert-Contains $accountInterfaceSource "bool TryUpdateLanguage(long accountId, string language);" "AccountDAO contract must expose a targeted language update"
 Assert-Regex $accountDaoSource 'public bool TryUpdateLanguage\(long accountId, string language\).*?entity\.Language = language;.*?SaveChanges' "AccountDAO must update only the account language field"
