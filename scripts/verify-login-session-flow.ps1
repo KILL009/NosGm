@@ -120,9 +120,12 @@ $entry = Read-Source $EntryHandlerPath
 $entryPacket = Read-Source $EntryPacketPath
 $select = Read-Source $SelectHandlerPath
 
-$loginFlow = Get-Section -Content $login -StartMarker "public async Task VerifyLoginAsync(LoginPacket loginPacket)" -EndMarker "private async Task<bool> CheckIsConnectedAsync" -Description "Login handler"
+$legacyLoginFlow = Get-Section -Content $login -StartMarker "public async Task VerifyLoginAsync(LoginPacket loginPacket)" -EndMarker '[Packet("NoS0576", "NoS0577")]' -Description "legacy Login entry"
+$completionFlow = Get-Section -Content $login -StartMarker "private async Task CompleteLoginAsync(" -EndMarker "private bool TryLoadAccount(" -Description "shared Login completion"
 
-Assert-Ordered $loginFlow @(
+Assert-Regex $legacyLoginFlow 'CompleteLoginAsync\s*\(\s*loadedAccount\s*,\s*username\s*,\s*loginPacket\.RegionType\s*,\s*null\s*,\s*ignoreUserName\s*,\s*"password"\s*\)' "NoS0575 must pass its authenticated region into the shared completion path"
+
+Assert-Ordered $completionFlow @(
     "int newSessionId = SessionFactory.Instance.GenerateSessionId();",
     "CommunicationServiceClient.Instance.RegisterAccountLogin(",
     "string serversPacket = BuildServersPacket(",
@@ -130,9 +133,9 @@ Assert-Ordered $loginFlow @(
     "DisposeLoginPolling();"
 ) "Login must register the generated session before retrieving and sending the world list"
 
-Assert-Regex $loginFlow 'RegisterAccountLogin\s*\(\s*loadedAccount\.AccountId\s*,\s*newSessionId\s*,\s*ipAddress\s*\)' "Login must register the account with the generated session ID and normalized IP"
-Assert-Regex $loginFlow 'BuildServersPacket\s*\(\s*username\s*,\s*loginPacket\.RegionType\s*,\s*newSessionId\s*,\s*ignoreUserName\s*,\s*loadedAccount\.AccountId\s*\)' "World-list generation must use the same generated session ID"
-Assert-Contains $loginFlow "CommunicationServiceClient.Instance.DisconnectAccount(loadedAccount.AccountId);" "Failed world-list generation must roll back the Master account registration"
+Assert-Regex $completionFlow 'RegisterAccountLogin\s*\(\s*loadedAccount\.AccountId\s*,\s*newSessionId\s*,\s*ipAddress\s*\)' "Login must register the account with the generated session ID and normalized IP"
+Assert-Regex $completionFlow 'BuildServersPacket\s*\(\s*username\s*,\s*regionType\s*,\s*newSessionId\s*,\s*ignoreUserName\s*,\s*loadedAccount\.AccountId\s*\)' "World-list generation must use the same generated session ID and authenticated region"
+Assert-Contains $completionFlow "CommunicationServiceClient.Instance.DisconnectAccount(loadedAccount.AccountId);" "Failed world-list generation must roll back the Master account registration"
 
 Assert-Regex $master 'public void RegisterAccountLogin\s*\(long accountId, int sessionId, string ipAddress\).*?ConnectedAccounts\.RemoveAll\(a => a\.AccountId\.Equals\(accountId\)\).*?ConnectedAccounts\.Add\(new AccountConnection\(accountId, sessionId, ipAddress\)\);' "Master must replace stale account registrations with the new account/session/IP tuple"
 Assert-Regex $master 'public bool IsLoginPermitted\s*\(long accountId, int sessionId\).*?AccountId\.Equals\(accountId\).*?SessionId\.Equals\(sessionId\).*?ConnectedWorld == null' "Master permission checks must bind both account ID and session ID before World attachment"
