@@ -1,14 +1,17 @@
 # NosGM launcher authentication
 
-NosGM can launch the authorized NosTale client through the modern `NoS0576` / `NoS0577` flow without placing the account password in the game packet.
+NosGM can launch an authorized NosTale client through the modern `NoS0576` / `NoS0577` flow without placing the account password in the game packet.
 
-The implementation has three trust boundaries:
+For the one-command Windows development environment, use [`modern-login-local-runbook.md`](modern-login-local-runbook.md).
+
+## Trust boundaries
 
 1. the launcher sends the NosGM account name and password to the versioned authentication endpoint;
 2. Master verifies the account and returns a short-lived, one-use authorization code;
-3. the launcher gives that code to the game client through the current-user `GameforgeClientJSONRPC` named pipe.
+3. the launcher gives that code to the client through the current-user `GameforgeClientJSONRPC` named pipe;
+4. Login consumes the ticket and creates a separate one-use World permit.
 
-The password is never stored in launcher settings, never written to logs and never sent to Login or World.
+The password is never stored in launcher settings, written to logs or sent to Login or World.
 
 ## Runtime flow
 
@@ -20,8 +23,8 @@ NosGM Launcher
     v
 Master LauncherAuthBridge
     |
-    | verifies password, maintenance and bans
-    | stores one-use ticket as a SHA-256 lookup key
+    | verifies credentials, maintenance and bans
+    | stores one-use ticket by SHA-256 lookup key
     v
 GameforgeClientJSONRPC pipe
     |
@@ -34,81 +37,74 @@ NostaleClientX.exe gf <countryId>
 Login -> Master -> one-use World permit -> World
 ```
 
-The authorization ticket and World permit expire quickly. Both are consumed atomically and cannot be replayed successfully.
+Tickets and World permits expire quickly, are consumed atomically and cannot be replayed successfully.
 
 ## Shared InstallationId
 
-The current client uses the per-user Gameforge registry value:
+The client and launcher use the same per-user registry value:
 
 ```text
 HKCU\Software\Gameforge4d\TNTClient\MainApp\InstallationId
 ```
 
-The launcher reads the same value. If the value is absent, it creates one GUID before starting the client. It is not copied into `settings.json`.
+If the value is absent, the launcher creates one GUID before starting the client. It is not copied into `settings.json`.
 
-This identity must match because Master binds the one-use authorization code to the `InstallationId` later received inside `NoS0577`.
+## Runtime configuration
 
-## Server configuration
-
-Modern login and the HTTP bridge are disabled by default. Configure them deliberately in `ServerConfiguration.cs` or the deployment-specific configuration layer:
-
-```csharp
-EnableGameforgeTokenLogin = true;
-EnableLauncherAuthBridge = true;
-LauncherAuthBridgePrefix = "http://127.0.0.1:8081/";
-GameforgeAuthTicketTtlSeconds = 120;
-GameforgeWorldPermitTtlSeconds = 120;
-LauncherAuthBridgeAttemptWindowSeconds = 60;
-LauncherAuthBridgeMaxAttemptsPerWindow = 10;
-```
-
-The authentication service still separates issuer and consumer roles. Configure three different secrets:
-
-```csharp
-AuthServiceKey = "<world-authentication-secret>";
-GameforgeTicketIssuerKey = "<ticket-issuer-secret>";
-GameforgeTicketConsumerKey = "<login-consumer-secret>";
-```
-
-Each Gameforge key must contain at least 32 characters. Never commit production values. Generate them on the server and inject them through the deployment configuration.
-
-A PowerShell example for generating one random value:
+Modern Login remains disabled by default. Enable it through process environment variables instead of editing or committing secrets:
 
 ```powershell
-$bytes = New-Object byte[] 48
-[Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($bytes)
-[Convert]::ToBase64String($bytes)
-```
-
-Run it separately for every secret.
-
-## Local development
-
-The default bridge prefix is loopback-only:
-
-```text
-http://127.0.0.1:8081/
-```
-
-The launcher endpoint must include the exact versioned path:
-
-```powershell
+$env:NOSGM_MASTER_AUTH_KEY = "<master-secret-at-least-32-characters>"
+$env:NOSGM_AUTH_SERVICE_KEY = "<world-secret-at-least-32-characters>"
+$env:NOSGM_GAMEFORGE_TICKET_ISSUER_KEY = "<issuer-secret-at-least-32-characters>"
+$env:NOSGM_GAMEFORGE_TICKET_CONSUMER_KEY = "<consumer-secret-at-least-32-characters>"
+$env:NOSGM_ENABLE_GAMEFORGE_TOKEN_LOGIN = "true"
+$env:NOSGM_ENABLE_LAUNCHER_AUTH_BRIDGE = "true"
+$env:NOSGM_START_ALL_REGIONAL_LOGIN_PORTS = "true"
+$env:NOSGM_LAUNCHER_AUTH_BRIDGE_PREFIX = "http://127.0.0.1:8081/"
 $env:NOSGM_AUTH_ENDPOINT = "http://127.0.0.1:8081/api/v1/launcher/ticket"
 ```
 
-`HttpListener` may require a one-time URL ACL when Master runs without administrator rights. Execute this from an elevated deployment shell, replacing the user as appropriate:
+All four service secrets must be different. Invalid or short values stop initialization rather than falling back to committed defaults.
 
-```powershell
-netsh http add urlacl url=http://127.0.0.1:8081/ user="$env:USERDOMAIN\$env:USERNAME"
+Supported optional bounds:
+
+```text
+NOSGM_GAMEFORGE_AUTH_TICKET_TTL_SECONDS          15..600
+NOSGM_GAMEFORGE_WORLD_PERMIT_TTL_SECONDS         15..600
+NOSGM_LAUNCHER_AUTH_ATTEMPT_WINDOW_SECONDS       10..600
+NOSGM_LAUNCHER_AUTH_MAX_ATTEMPTS_PER_WINDOW      1..100
 ```
 
-Do not run the launcher or game as administrator. The named pipe is restricted to the current Windows user.
+`NOSGM_AUTH_ENDPOINT` has process-level precedence over an existing launcher `settings.json`, but the runtime value is never persisted when launcher preferences are saved.
+
+## Local development
+
+The normal path is:
+
+```powershell
+./scripts/start-modern-login-local.ps1 -ConfigureUrlAcl
+```
+
+After the first URL reservation, later starts can use:
+
+```powershell
+./scripts/start-modern-login-local.ps1
+```
+
+Stop the processes safely with:
+
+```powershell
+./scripts/stop-modern-login-local.ps1
+```
+
+The startup script generates independent secrets in memory, launches the services in dependency order and waits for Master `4545`, AuthBridge `8081`, World `1337` and Spanish Login `4005`.
+
+Do not run the launcher or game as administrator. The named pipe is restricted to the current Windows user and validates `_TNT_SESSION_ID` for every supported method.
 
 ## Production TLS
 
-Do not expose the loopback HTTP listener directly. Terminate TLS in a maintained reverse proxy and forward only the exact ticket path to Master.
-
-Example Nginx location:
+Do not expose the loopback HTTP listener directly. Terminate TLS in a maintained reverse proxy and forward only the exact ticket route.
 
 ```nginx
 location = /api/v1/launcher/ticket {
@@ -117,22 +113,19 @@ location = /api/v1/launcher/ticket {
     proxy_http_version 1.1;
     proxy_set_header Host $host;
     proxy_set_header X-Forwarded-Proto https;
-    proxy_set_header X-Content-Type-Options nosniff;
     proxy_request_buffering on;
 }
 ```
 
-The public launcher configuration then uses:
+The public launcher endpoint then uses a URL such as:
 
 ```text
 https://auth.example.org/api/v1/launcher/ticket
 ```
 
-The launcher rejects remote plain HTTP, URLs containing user information, fragments, redirects and paths other than `/api/v1/launcher/ticket`. Certificate revocation checking is enabled.
+The launcher rejects remote plain HTTP, redirects, user information, fragments and paths other than `/api/v1/launcher/ticket`. Certificate revocation checking is enabled.
 
 ## Language and region mapping
-
-The language selected in the launcher controls the `gf <countryId>` argument and must match the private Login endpoint already configured in the authorized client:
 
 | Launcher language | CountryId | Login port |
 | --- | ---: | ---: |
@@ -147,39 +140,15 @@ The language selected in the launcher controls the `gf <countryId>` argument and
 | `jp` | 8 | 4008 |
 | `cn` | 9 | 4009 |
 
-Login rejects a `countryId` that does not match the trusted local port accepting the connection.
+Login rejects a `countryId` that does not match the trusted port accepting the connection.
 
-## Launcher behavior
-
-When `AuthenticationEndpoint` is empty, the existing legacy launch action remains available for compatibility.
-
-When the endpoint is configured:
-
-1. pressing **Play** opens a localized account dialog;
-2. only the account name may be remembered;
-3. the launcher obtains a one-use ticket;
-4. it starts the named-pipe listener before starting the client;
-5. it launches `NostaleClientX.exe` with `gf <countryId>` and the two `_TNT_*` environment variables;
-6. it terminates the spawned client if the handshake fails or times out.
-
-## Verification checklist
-
-1. Build the complete server solution in Release.
-2. Build `Launcher/NosGM.Launcher.sln` in Release.
-3. Start Master and confirm the bridge reports its loopback prefix.
-4. Start Login and confirm the ten regional listeners.
-5. Start World.
-6. Set `NOSGM_AUTH_ENDPOINT` to the local or production endpoint.
-7. Select Spanish and confirm the client connects through region `5` and Login port `4005`.
-8. Enter a valid account password and confirm the character list appears.
-9. Retry the same authorization code and confirm it is rejected.
-10. Enter an invalid password repeatedly and confirm rate limiting returns HTTP `429`.
-11. Confirm launcher settings contain the account name but no password or authorization code.
-12. Repeat with French on `4002` and Japanese on `4008`.
-
-Automated source contracts run through:
+## Verification
 
 ```powershell
+./scripts/verify-modern-login-runtime-activation.ps1
 ./scripts/verify-launcher-auth-bridge.ps1
+./scripts/verify-repaired-login.ps1
 ./scripts/verify-launcher.ps1
 ```
+
+The final real-client test must confirm Spanish region `5`, Login port `4005`, server-list delivery and one-use World permit consumption.

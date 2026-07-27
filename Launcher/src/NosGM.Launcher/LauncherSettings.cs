@@ -14,14 +14,16 @@ internal sealed record LauncherSettings
         "Client");
     public string GameExecutable { get; init; } = "NostaleClientX.exe";
     public string Language { get; init; } = "es";
-    public string AuthenticationEndpoint { get; init; } =
-        Environment.GetEnvironmentVariable("NOSGM_AUTH_ENDPOINT") ?? string.Empty;
+    public string AuthenticationEndpoint { get; init; } = string.Empty;
     public string AccountName { get; init; } = string.Empty;
     public bool CloseAfterLaunch { get; init; }
 }
 
 internal static class LauncherSettingsStore
 {
+    private const string AuthenticationEndpointEnvironmentVariable = "NOSGM_AUTH_ENDPOINT";
+    private static string _persistedAuthenticationEndpoint = string.Empty;
+
     private static string SettingsPath => Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
         "NosGM",
@@ -30,22 +32,50 @@ internal static class LauncherSettingsStore
 
     public static async Task<LauncherSettings> LoadAsync()
     {
+        LauncherSettings persistedSettings;
         if (!File.Exists(SettingsPath))
         {
-            var defaults = new LauncherSettings();
-            await SaveAsync(defaults);
-            return defaults;
+            persistedSettings = new LauncherSettings();
+            Validate(persistedSettings);
+            await JsonSupport.WriteAtomicAsync(SettingsPath, persistedSettings);
+        }
+        else
+        {
+            persistedSettings = await JsonSupport.ReadAsync<LauncherSettings>(SettingsPath);
+            Validate(persistedSettings);
         }
 
-        var settings = await JsonSupport.ReadAsync<LauncherSettings>(SettingsPath);
-        Validate(settings);
-        return settings;
+        _persistedAuthenticationEndpoint = persistedSettings.AuthenticationEndpoint;
+        var runtimeEndpoint = GetRuntimeAuthenticationEndpoint();
+        if (runtimeEndpoint is null)
+        {
+            return persistedSettings;
+        }
+
+        var effectiveSettings = persistedSettings with
+        {
+            AuthenticationEndpoint = runtimeEndpoint
+        };
+        Validate(effectiveSettings);
+        return effectiveSettings;
     }
 
     public static Task SaveAsync(LauncherSettings settings)
     {
-        Validate(settings);
-        return JsonSupport.WriteAtomicAsync(SettingsPath, settings);
+        var persistedSettings = GetRuntimeAuthenticationEndpoint() is null
+            ? settings
+            : settings with { AuthenticationEndpoint = _persistedAuthenticationEndpoint };
+        Validate(persistedSettings);
+        _persistedAuthenticationEndpoint = persistedSettings.AuthenticationEndpoint;
+        return JsonSupport.WriteAtomicAsync(SettingsPath, persistedSettings);
+    }
+
+    private static string? GetRuntimeAuthenticationEndpoint()
+    {
+        var configuredEndpoint = Environment.GetEnvironmentVariable(
+            AuthenticationEndpointEnvironmentVariable,
+            EnvironmentVariableTarget.Process);
+        return configuredEndpoint?.Trim();
     }
 
     private static void Validate(LauncherSettings settings)
