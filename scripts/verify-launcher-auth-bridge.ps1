@@ -4,6 +4,7 @@ param(
     [string]$MasterProjectPath = "Data/NosGm.Program/NosGm.Master.Server/NosGm.Master.Server.csproj",
     [string]$ConfigurationPath = "Data/NosGm.Configuration/ServerConfiguration.cs",
     [string]$SettingsPath = "Launcher/src/NosGM.Launcher/LauncherSettings.cs",
+    [string]$InstallationIdentityPath = "Launcher/src/NosGM.Launcher/GameforgeInstallationId.cs",
     [string]$AuthenticationClientPath = "Launcher/src/NosGM.Launcher/LauncherAuthenticationClient.cs",
     [string]$PipePath = "Launcher/src/NosGM.Launcher/GameforgeJsonRpcPipeServer.cs",
     [string]$ModernLauncherPath = "Launcher/src/NosGM.Launcher/ModernGameLauncher.cs",
@@ -48,6 +49,7 @@ $masterProgram = Read-Required $MasterProgramPath
 $masterProject = Read-Required $MasterProjectPath
 $configuration = Read-Required $ConfigurationPath
 $settings = Read-Required $SettingsPath
+$installationIdentity = Read-Required $InstallationIdentityPath
 $authenticationClient = Read-Required $AuthenticationClientPath
 $pipe = Read-Required $PipePath
 $modernLauncher = Read-Required $ModernLauncherPath
@@ -79,21 +81,30 @@ Require-Ordered $bridge @(
 Require $bridge 'Guid.NewGuid().ToString("D")' 'Authorization codes must be generated cryptographically through Guid.NewGuid.'
 Require $bridge 'Cache-Control"] = "no-store"' 'Authentication responses must not be cached.'
 Require $bridge 'uri.Scheme == Uri.UriSchemeHttp && !uri.IsLoopback' 'Plain HTTP must be restricted to loopback.'
+Require $bridge 'TryWriteErrorAsync' 'Bridge error handling must tolerate disconnected clients.'
+Forbid $bridge 'context.Response.Abort()' 'The bridge must not rely on unavailable response-abort APIs.'
 Forbid $bridge 'Logger.Info(request.Password' 'The bridge must never log a password.'
 Forbid $bridge 'Logger.Info(authorizationCode' 'The bridge must never log an authorization code.'
 
 Require $settings 'AuthenticationEndpoint' 'Launcher settings must expose the authentication endpoint.'
-Require $settings 'InstallationId' 'Launcher settings must persist a stable installation identifier.'
 Require $settings 'AccountName' 'Launcher settings may remember only the account name.'
 Forbid $settings 'public string Password' 'Launcher settings must never persist a password.'
+Forbid $settings 'public string InstallationId' 'The client installation identity belongs in the Gameforge registry, not launcher settings.'
 Require $settings 'Uri.UriSchemeHttps' 'Remote authentication endpoints must use HTTPS.'
 Require $settings 'Uri.UriSchemeHttp' 'Loopback development endpoints must remain supported.'
 Require $settings 'uri.IsLoopback' 'Plain HTTP must be limited to loopback in launcher settings.'
+
+Require $installationIdentity 'Software\Gameforge4d\TNTClient\MainApp' 'The launcher must use the same registry key as the game client.'
+Require $installationIdentity 'private const string ValueName = "InstallationId";' 'The shared Gameforge InstallationId value is missing.'
+Require $installationIdentity 'Registry.CurrentUser.CreateSubKey' 'The installation identity must be scoped to the current Windows user.'
+Require $installationIdentity 'Guid.NewGuid().ToString("D")' 'A missing installation identity must be created once.'
+Require $installationIdentity 'RegistryValueKind.String' 'The InstallationId must be stored in the expected registry format.'
 
 Require $authenticationClient 'AllowAutoRedirect = false' 'Authentication requests must not follow redirects.'
 Require $authenticationClient 'CheckCertificateRevocationList = true' 'TLS certificate revocation checking is missing.'
 Require $authenticationClient 'MaximumResponseBytes = 16 * 1024' 'Authentication responses must be bounded.'
 Require $authenticationClient 'HttpCompletionOption.ResponseHeadersRead' 'Authentication responses must stream with bounds.'
+Require $authenticationClient 'GameforgeInstallationId.Resolve()' 'Ticket requests must use the same InstallationId that the client will send.'
 Forbid $authenticationClient 'Console.WriteLine(password' 'The launcher must not log the password.'
 Forbid $authenticationClient 'AuthorizationCode}' 'The launcher must not interpolate authorization codes into logs.'
 
@@ -135,4 +146,4 @@ Require $mainWindow 'ModernGameLauncher.LaunchAsync(' 'The Play button is not co
 Require $mainWindow '_settings = _settings with { AccountName = credentials.AccountName };' 'Only the account name should be remembered after success.'
 Forbid $mainWindow 'Password = credentials.Password' 'The password must never be saved to settings.'
 
-Write-Host 'Launcher HTTPS ticket bridge and Gameforge JSON-RPC handshake contracts verified.'
+Write-Host 'Launcher HTTPS ticket bridge, shared InstallationId, and Gameforge JSON-RPC handshake contracts verified.'
