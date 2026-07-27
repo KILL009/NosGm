@@ -19,6 +19,8 @@ namespace NosGm.Master.Server
             ConnectedAccounts = new ThreadSafeGenericList<AccountConnection>();
             AuthentificatedClients = new ThreadSafeGenericLockedList<long>();
             AuthenticationServiceClients = new ThreadSafeGenericLockedList<long>();
+            GameforgeTicketIssuerClients = new ThreadSafeGenericLockedList<long>();
+            GameforgeTicketConsumerClients = new ThreadSafeGenericLockedList<long>();
             ConfigurationObject = new ConfigurationObject
             {
                 MaxGold = GameConfiguration.MaxGold
@@ -33,10 +35,19 @@ namespace NosGm.Master.Server
         public ThreadSafeGenericLockedList<long> AuthentificatedClients { get; set; }
 
         /// <summary>
-        /// Clients authenticated specifically with AuthServiceKey. This list is deliberately
-        /// separate so a World or Login communication client cannot issue modern login tickets.
+        /// Clients authenticated with the legacy AuthServiceKey for account-validation calls.
         /// </summary>
         public ThreadSafeGenericLockedList<long> AuthenticationServiceClients { get; set; }
+
+        /// <summary>
+        /// Trusted Auth Bridge clients allowed to register one-time Gameforge tickets.
+        /// </summary>
+        public ThreadSafeGenericLockedList<long> GameforgeTicketIssuerClients { get; set; }
+
+        /// <summary>
+        /// Login Server clients allowed to consume one-time Gameforge tickets.
+        /// </summary>
+        public ThreadSafeGenericLockedList<long> GameforgeTicketConsumerClients { get; set; }
 
         public ConfigurationObject ConfigurationObject { get; set; }
 
