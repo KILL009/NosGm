@@ -16,6 +16,8 @@ namespace NosGm.DAL.Interface
 
         bool TryUpgradePassword(long accountId, string expectedPassword, string upgradedPassword);
 
+        bool TryUpdateLanguage(long accountId, string language);
+
         bool ContainsAccounts();
 
         void Insert(List<AccountDTO> account);

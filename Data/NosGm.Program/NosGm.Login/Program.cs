@@ -10,9 +10,10 @@ using NosGm.GameObject.Networking;
 using NosGm.Handler.BasicPacket.Login;
 using NosGm.Master.Library.Client;
 using System;
-using System.Configuration;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
+using System.Net.Sockets;
 
 namespace NosGm.Login
 {
@@ -20,9 +21,10 @@ namespace NosGm.Login
     {
         #region Members
 
-        private static bool _isDebug;
+        private static readonly List<NetworkManager<LoginCryptography>> NetworkManagers =
+            new List<NetworkManager<LoginCryptography>>();
 
-        private static int _port;
+        private static string _restartArguments = "--nomsg";
 
         #endregion
 
@@ -39,7 +41,7 @@ namespace NosGm.Login
 |  __| |  _  /| |  | |\___ \   | |    \ \/ / |  __|   | | | . ` |
 | |    | | \ \| |__| |____) |  | |     \  /  | |____ _| |_| |\  |
 |_|    |_|  \_\\____/|_____/   |_|      \/   |______|_____|_| \_|
-                                                                                           
+                                                                                            
 ";
             string separator = new string('=', Console.WindowWidth);
             string logo = text.Split('\n').Select(s => string.Format("{0," + (Console.WindowWidth / 2 + s.Length / 2) + "}\n", s)).Aggregate("", (current, i) => current + i);
@@ -47,6 +49,7 @@ namespace NosGm.Login
             Console.WriteLine(separator + logo + separator);
             Console.ForegroundColor = ConsoleColor.White;
         }
+
         public static void Main(string[] args)
         {
             checked
@@ -54,26 +57,44 @@ namespace NosGm.Login
                 try
                 {
                     PrintHeader();
-                    // initialize Logger
                     Logger.InitializeLogger(LogManager.GetLogger(typeof(Program)));
 
-                    int port = Convert.ToInt32(ServerConfiguration.LoginServerPort);
-                    var portArgIndex = Array.FindIndex(args, s => s == "--port");
-                    if (portArgIndex != -1
-                        && args.Length >= portArgIndex + 1
-                        && int.TryParse(args[portArgIndex + 1], out port))
+                    if (!TryGetPortOverride(args, out bool hasPortOverride, out int overridePort))
                     {
-                        Console.WriteLine("Port override: " + port);
+                        Console.ReadKey();
+                        return;
                     }
 
-                    _port = port;
-                    // initialize api
-                    if (CommunicationServiceClient.Instance.Authenticate(ServerConfiguration.MasterAuthKey));
+                    IReadOnlyCollection<int> loginPorts;
+                    if (hasPortOverride)
                     {
-                        Logger.Info("Master Server API Communication has been initialized");
+                        loginPorts = new[] { overridePort };
+                        _restartArguments = $"--nomsg --port {overridePort}";
+                        Console.WriteLine("Port override: " + overridePort);
+                    }
+                    else if (ServerConfiguration.StartAllRegionalLoginPorts)
+                    {
+                        loginPorts = Enumerable.Range(
+                                ClientRegionMap.BaseLoginPort,
+                                ClientRegionMap.RegionCount)
+                            .ToArray();
+                        _restartArguments = "--nomsg";
+                    }
+                    else
+                    {
+                        loginPorts = new[] { Convert.ToInt32(ServerConfiguration.LoginServerPort) };
+                        _restartArguments = "--nomsg";
                     }
 
-                    // initialize DB
+                    if (!CommunicationServiceClient.Instance.Authenticate(ServerConfiguration.MasterAuthKey))
+                    {
+                        Logger.Error("Master Server API authentication failed");
+                        Console.ReadKey();
+                        return;
+                    }
+
+                    Logger.Info("Master Server API Communication has been initialized");
+
                     if (!DataAccessHelper.Initialize())
                     {
                         Console.ReadKey();
@@ -91,53 +112,129 @@ namespace NosGm.Login
                         Logger.Error("General Error", ex);
                     }
 
-                    try
-                    {
-                        // initialize PacketSerialization
-                        PacketFactory.Initialize<WalkPacket>();
-                        PacketFactory.Initialize<WalkPacket>();
-                        PacketFactory.Initialize<NosGmEntryPointPacket>();
-                        PacketFactory.Initialize<UseSkillPacket>();
-                        PacketFactory.Initialize<CBuyPacket>();
-                        PacketFactory.Initialize<CreateFamilyPacket>();
-                        PacketFactory.Initialize<BIPacket>();
-                        PacketFactory.Initialize<SuctlPacket>();
-                        PacketFactory.Initialize<AddObjPacket>();
-                        PacketFactory.Initialize<BuyPacket>();
-                        PacketFactory.Initialize<EscapePacket>();
-                        PacketFactory.Initialize<CClosePacket>();
-                        PacketFactory.Initialize<HelpPacket>();
+                    PacketFactory.Initialize<WalkPacket>();
+                    PacketFactory.Initialize<NosGmEntryPointPacket>();
+                    PacketFactory.Initialize<UseSkillPacket>();
+                    PacketFactory.Initialize<CBuyPacket>();
+                    PacketFactory.Initialize<CreateFamilyPacket>();
+                    PacketFactory.Initialize<BIPacket>();
+                    PacketFactory.Initialize<SuctlPacket>();
+                    PacketFactory.Initialize<AddObjPacket>();
+                    PacketFactory.Initialize<BuyPacket>();
+                    PacketFactory.Initialize<EscapePacket>();
+                    PacketFactory.Initialize<CClosePacket>();
+                    PacketFactory.Initialize<HelpPacket>();
 
-                        var networkManager = new NetworkManager<LoginCryptography>(ServerConfiguration.IPAddress, port,
-                            typeof(LoginPacketHandler), typeof(LoginCryptography), false);
-                        AntiSpamModule.Instance.RunBlacklistTask();
-                    }
-                    catch (Exception ex)
+                    foreach (int port in loginPorts)
                     {
-                        Logger.LogEventError("INITIALIZATION_EXCEPTION", "General Error Server", ex);
+                        if (!ClientRegionMap.TryResolveLoginPort(
+                                port,
+                                out byte regionType,
+                                out string culture))
+                        {
+                            Logger.Error(
+                                $"Unsupported Login port {port}. Expected {ClientRegionMap.BaseLoginPort}-" +
+                                $"{ClientRegionMap.BaseLoginPort + ClientRegionMap.RegionCount - 1}.");
+                            StopLoginServers();
+                            Console.ReadKey();
+                            return;
+                        }
+
+                        try
+                        {
+                            NetworkManagers.Add(new NetworkManager<LoginCryptography>(
+                                ServerConfiguration.IPAddress,
+                                port,
+                                typeof(LoginPacketHandler),
+                                typeof(LoginCryptography),
+                                false));
+                        }
+                        catch (SocketException ex)
+                        {
+                            Logger.Error(
+                                $"Unable to start Login listener | Port={port} RegionType={regionType} Culture={culture}",
+                                ex);
+                            StopLoginServers();
+                            Console.ReadKey();
+                            return;
+                        }
                     }
+
+                    AntiSpamModule.Instance.RunBlacklistTask();
+
+                    if (loginPorts.Count == 1 &&
+                        ClientRegionMap.TryResolveLoginPort(
+                            loginPorts.First(),
+                            out byte singleRegionType,
+                            out string singleCulture))
+                    {
+                        Console.Title =
+                            $"NosGm - Login Server [{singleCulture.ToUpperInvariant()} | {loginPorts.First()} | Region {singleRegionType}]";
+                    }
+                    else
+                    {
+                        Console.Title =
+                            $"NosGm - Login Server [{ClientRegionMap.BaseLoginPort}-" +
+                            $"{ClientRegionMap.BaseLoginPort + ClientRegionMap.RegionCount - 1}]";
+                    }
+
+                    Logger.Info(
+                        $"Regional Login listeners started | Count={loginPorts.Count} " +
+                        $"Ports={string.Join(",", loginPorts)}");
                 }
                 catch (Exception ex)
                 {
                     Logger.LogEventError("INITIALIZATION_EXCEPTION", "General Error", ex);
+                    StopLoginServers();
                     Console.ReadKey();
                 }
             }
         }
 
+        private static void StopLoginServers()
+        {
+            foreach (NetworkManager<LoginCryptography> networkManager in NetworkManagers)
+            {
+                try
+                {
+                    networkManager.StopServer();
+                }
+                catch (Exception ex)
+                {
+                    Logger.Error("Unable to stop a Login listener", ex);
+                }
+            }
+
+            NetworkManagers.Clear();
+        }
+
+        private static bool TryGetPortOverride(string[] args, out bool hasPortOverride, out int port)
+        {
+            hasPortOverride = false;
+            port = 0;
+
+            int portArgIndex = Array.FindIndex(args, argument => argument == "--port");
+            if (portArgIndex == -1)
+            {
+                return true;
+            }
+
+            if (args.Length <= portArgIndex + 1 ||
+                !int.TryParse(args[portArgIndex + 1], out port))
+            {
+                Logger.Error("The --port option requires a numeric Login port.");
+                return false;
+            }
+
+            hasPortOverride = true;
+            return true;
+        }
+
         private static void UnhandledExceptionHandler(object sender, UnhandledExceptionEventArgs e)
         {
             Logger.Log.Error("Crash", (Exception)e.ExceptionObject);
-            try
-            {
-            }
-            catch (Exception ex)
-            {
-                Logger.Log.Error("Login server crashed", ex);
-            }
-
             Logger.Debug("Login Server crashed! Rebooting gracefully...");
-            Process.Start("NosGm.Login.exe", $"--nomsg --port {_port}");
+            Process.Start("NosGm.Login.exe", _restartArguments);
             Environment.Exit(1);
         }
 

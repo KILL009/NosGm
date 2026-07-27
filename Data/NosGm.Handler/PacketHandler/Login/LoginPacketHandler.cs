@@ -83,15 +83,38 @@ namespace NosGm.Handler.BasicPacket.Login
                 return;
             }
 
+            if (!ClientRegionMap.TryResolveLoginPort(
+                    _session.ListeningPort,
+                    out byte resolvedRegionType,
+                    out string clientCulture))
+            {
+                Reject(
+                    LoginFailType.CantConnect,
+                    $"Session removed. Reason: Unsupported Login port {_session.ListeningPort}");
+                return;
+            }
+
+            if (loginPacket.RegionType != resolvedRegionType)
+            {
+                Logger.Debug(
+                    $"Login RegionType overridden by trusted port | Port={_session.ListeningPort} " +
+                    $"PacketRegion={loginPacket.RegionType} ResolvedRegion={resolvedRegionType} Culture={clientCulture}");
+            }
+
             string username = loginPacket.Name;
-            AccountDTO loadedAccount = DAOFactory.AccountDAO.LoadByName(username);
+            AccountDTO loadedAccount = LoadAccountByLoginName(username, resolvedRegionType);
             if (loadedAccount == null)
             {
                 Reject(LoginFailType.AccountOrPasswordWrong, "Session removed. Reason: Unknown account");
                 return;
             }
 
-            if (!string.Equals(loadedAccount.Name, username, StringComparison.Ordinal))
+            bool accountNameMatches = string.Equals(loadedAccount.Name, username, StringComparison.Ordinal) ||
+                                      ClientRegionMap.IsProtocolUsernameForAccount(
+                                          username,
+                                          loadedAccount.Name,
+                                          resolvedRegionType);
+            if (!accountNameMatches)
             {
                 Reject(LoginFailType.WrongCaps, "Session removed. Reason: Wrong account casing");
                 return;
@@ -187,11 +210,19 @@ namespace NosGm.Handler.BasicPacket.Login
                 return;
             }
 
+            if (!SynchronizeAccountLanguage(loadedAccount, clientCulture))
+            {
+                Reject(LoginFailType.CantConnect, "Session removed. Reason: Unable to synchronize client language");
+                return;
+            }
+
             Logger.Info($"ClientData: {loginPacket.ClientData}");
-            Logger.Info($"RegionType: {loginPacket.RegionType}");
+            Logger.Info(
+                $"Login region resolved | Port={_session.ListeningPort} RegionType={resolvedRegionType} " +
+                $"Culture={clientCulture} PacketRegion={loginPacket.RegionType}");
 
             int newSessionId = SessionFactory.Instance.GenerateSessionId();
-            Logger.Info($"{username} connected | SessionID: {newSessionId}");
+            Logger.Info($"{loadedAccount.Name} connected | SessionID: {newSessionId}");
 
             try
             {
@@ -210,9 +241,12 @@ namespace NosGm.Handler.BasicPacket.Login
             bool ignoreUserName = ServerConfiguration.UseOldCrypto ||
                                   hasClientVersion && clientVersion.Build >= 0 && clientVersion.Build < 3075;
 
+            // Preserve the protocol username exactly as supplied by the client.
+            // Official regional accounts can arrive as ES_name, FR_name, etc.;
+            // local private-server accounts can continue using an unprefixed name.
             string serversPacket = BuildServersPacket(
                 username,
-                loginPacket.RegionType,
+                resolvedRegionType,
                 newSessionId,
                 ignoreUserName,
                 loadedAccount.AccountId);
@@ -225,7 +259,8 @@ namespace NosGm.Handler.BasicPacket.Login
             }
 
             _session.SendPacket(serversPacket);
-            Logger.Info($"Server list sent | Account={loadedAccount.Name} RegionType={loginPacket.RegionType}");
+            Logger.Info(
+                $"Server list sent | Account={loadedAccount.Name} RegionType={resolvedRegionType} Culture={clientCulture}");
             DisposeLoginPolling();
         }
 
@@ -250,6 +285,26 @@ namespace NosGm.Handler.BasicPacket.Login
         private void DisposeLoginPolling()
         {
             _session.PacketHandlerInterval?.Dispose();
+        }
+
+        private static AccountDTO LoadAccountByLoginName(string username, byte resolvedRegionType)
+        {
+            AccountDTO account = DAOFactory.AccountDAO.LoadByName(username);
+            if (account != null)
+            {
+                return account;
+            }
+
+            if (!ClientRegionMap.TryStripProtocolPrefix(
+                    username,
+                    out string accountName,
+                    out ClientLanguageProfile profile) ||
+                profile.RegionType != resolvedRegionType)
+            {
+                return null;
+            }
+
+            return DAOFactory.AccountDAO.LoadByName(accountName);
         }
 
         private static string NormalizeRemoteIp(string endpoint)
@@ -281,6 +336,30 @@ namespace NosGm.Handler.BasicPacket.Login
             }
 
             return value;
+        }
+
+        private static bool SynchronizeAccountLanguage(AccountDTO account, string culture)
+        {
+            if (account == null || string.IsNullOrWhiteSpace(culture))
+            {
+                return false;
+            }
+
+            if (string.Equals(account.Language, culture, StringComparison.Ordinal))
+            {
+                return true;
+            }
+
+            if (!DAOFactory.AccountDAO.TryUpdateLanguage(account.AccountId, culture))
+            {
+                Logger.Error(
+                    $"Account language synchronization failed | AccountId={account.AccountId} Culture={culture}");
+                return false;
+            }
+
+            account.Language = culture;
+            Logger.Info($"Account language synchronized | AccountId={account.AccountId} Culture={culture}");
+            return true;
         }
 
         private static void UpgradePasswordHash(AccountDTO account, string clearPassword)

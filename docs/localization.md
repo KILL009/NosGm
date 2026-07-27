@@ -2,7 +2,7 @@
 
 NosGM resolves dynamic server messages per account. The neutral World Server resource is English, and culture-specific satellite resources override the keys they translate. Missing entries safely fall back to English instead of exposing a resource key or disconnecting the player.
 
-## Supported languages
+## Supported server cultures
 
 | Language | Code | Accepted aliases |
 | --- | --- | --- |
@@ -14,16 +14,68 @@ NosGM resolves dynamic server messages per account. The neutral World Server res
 | Polish | `pl` | `pl-PL`, `polish`, `polski` |
 | Czech | `cs` | `cs-CZ`, legacy `cz`, `czech`, `čeština` |
 | Russian | `ru` | `ru-RU`, `russian`, `русский` |
+| Turkish | `tr` | `tr-TR`, `turkish`, `türkçe`, `turkce` |
 | Japanese | `ja` | `ja-JP`, legacy `jp`, `japanese`, `日本語` |
 | Chinese (Simplified) | `zh` | `zh-CN`, `zh-Hans`, legacy `cn`, `chinese`, `中文` |
 
 Chinese region aliases currently share the Simplified Chinese catalog. Add a separate Traditional Chinese catalog before distinguishing `zh-TW` or `zh-Hant`.
 
+Turkish is a verified client language in the European 0.9.3.3255/3256 client. NosGM does not yet contain a completed `LocalizedResources.tr.resx`, so emulator-generated Turkish messages deliberately use the neutral English fallback until a reviewed Turkish server catalog is added. The client still loads its own Turkish NPC, item, quest, skill and interface texts from the official local files.
+
+## Verified European client profiles
+
+The Login listening port is the source of truth for the installed client language. The launcher patches the client endpoint to the matching Login port. The verified European client profiles are:
+
+| Protocol prefix | RegionType | Login port | NSlangData suffix | Server culture |
+| --- | ---: | ---: | --- | --- |
+| `EN` | `0` | `4000` | `UK` | `en` |
+| `DE` | `1` | `4001` | `DE` | `de` |
+| `FR` | `2` | `4002` | `FR` | `fr` |
+| `IT` | `3` | `4003` | `IT` | `it` |
+| `PL` | `4` | `4004` | `PL` | `pl` |
+| `ES` | `5` | `4005` | `ES` | `es` |
+| `CZ` | `6` | `4006` | `CZ` | `cs` |
+| `RU` | `7` | `4007` | `RU` | `ru` |
+| `TR` | `8` | `4008` | `TR` | `tr` |
+
+`NosGm.Login` opens the nine verified regional ports by default. Passing `--port 4005`, for example, starts only the Spanish listener for debugging or isolated deployment.
+
+The accepted local port determines the trusted `RegionType` written into `NsTeST`. The `RegionType` byte received inside `NoS0575` is retained for compatibility diagnostics but cannot override the listening port. A successful regional login also synchronizes `Account.Language`, so World Server messages follow the same culture.
+
+## NsTeST account identity
+
+The official service can place a regional alias in the second `NsTeST` field, for example:
+
+```text
+NsTeST 5 ES_account ...
+```
+
+NosGM therefore accepts both forms without forcing a database migration:
+
+```text
+account
+ES_account
+```
+
+The exact database account name is always tried first. Only when it does not exist may a recognized prefix be stripped, and the prefix must match the trusted Login port during authentication. World then resolves the same optional alias before Master validates `AccountId + SessionId`. The alias never replaces password verification or session authorization.
+
+## Login ports and World channel ports are different
+
+World endpoint ports are independent from Login language ports. In an official packet, an entry such as:
+
+```text
+HOST:4006:1:11.6.EU-Undercity
+```
+
+means that a World channel is listening on TCP port `4006`; it does not mean that the channel is Czech. The language is selected by the `RegionType` immediately after `NsTeST`, while every endpoint keeps its own independently configured World port.
+
+Private NosGM deployments can therefore continue using World ports such as `1337`, `1338` and `1339` while Login listens on `4000` through `4008`.
+
 ## Player selection
 
-The selected culture is stored in `Account.Language` and is loaded with the account on every World Server connection.
+The selected culture is stored in `Account.Language` and is loaded with the account on every World Server connection. Regional Login ports synchronize this value automatically on every successful login.
 
-Players can change it in game with:
+Players and administrators can still change it manually in game with:
 
 ```text
 $Language en
@@ -34,17 +86,23 @@ $Language it
 $Language pl
 $Language cs
 $Language ru
+$Language tr
 $Language ja
 $Language zh
 ```
 
-Registration panels should save one of the canonical codes above in `Account.Language`. The current login/world protocol does not carry a trustworthy client-language field, so `RegionType` must not be treated as a locale.
+Registration panels should save a canonical server culture in `Account.Language`. The packet `RegionType` alone must not be treated as a locale because clients can send a stale or default value; the accepted Login port is authoritative.
 
 ## Server and client responsibilities
 
 This system translates messages generated by the emulator: information boxes, chat messages, warnings, commands and other strings already routed through `LocalizedResources`.
 
-Static item, skill, NPC, monster, map and interface names are read from the installed NosTale client files. To make the whole game appear in a language, distribute the matching official client data together with the server-side culture selection. The server must not replace official client files with machine-translated data.
+The installed client reads most game content from its local language data:
+
+- `NSlangData_XX.NOS` contains item, NPC, monster, quest, skill, map and dialogue tables.
+- `conststring_XX.dat` contains interface labels and other client constants.
+
+To make the whole game appear in a language, distribute the matching official client data and configure the launcher to use the matching regional Login port. NosGM should not replace official client files with machine-translated data.
 
 ## Developer usage
 
@@ -73,6 +131,7 @@ The English neutral catalog has 690 real string keys. The French satellite cover
 | `pl` | 397 |
 | `cs` | 41 |
 | `ru` | 29 |
+| `tr` | English fallback only |
 | `ja` | 3 |
 | `zh` | 3 |
 
@@ -85,6 +144,6 @@ Every missing key automatically uses English. This is intentional: a correct Eng
 3. Never copy a value from another emulator unless the key semantics and all format tokens match.
 4. Leave untranslated keys out of the satellite resource so the neutral English resource is used.
 5. Replace hard-coded player-facing strings with resource keys and the session-aware resolver.
-6. Test selection, persistence after reconnect, formatted messages and broadcast delivery.
+6. Test the regional Login port, persistence after reconnect, formatted messages and broadcast delivery.
 
 The compatible community catalogs were adapted from OpenNos-family resources, the project's own archived sources and NosCore. Only keys still present in NosGM with matching format tokens are included.
