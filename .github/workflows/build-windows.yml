@@ -97,6 +97,10 @@ jobs:
         shell: powershell
         run: ./scripts/verify-login-session-flow.ps1
 
+      - name: Verify modern login packet contracts
+        shell: powershell
+        run: ./scripts/verify-modern-login-packets.ps1
+
       - name: Verify sanitized login outcome fixtures
         shell: powershell
         run: |
