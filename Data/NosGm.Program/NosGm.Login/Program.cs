@@ -17,7 +17,7 @@ namespace NosGm.Login
 {
     public static class Program
     {
-        private const int MinimumAuthServiceKeyLength = 32;
+        private const int MinimumGameforgeKeyLength = 32;
 
         private static bool _isDebug;
 
@@ -34,7 +34,7 @@ namespace NosGm.Login
 |  __| |  _  /| |  | |\___ \   | |    \ \/ / |  __|   | | | . ` |
 | |    | | \ \| |__| |____) |  | |     \  /  | |____ _| |_| |\  |
 |_|    |_|  \_\\____/|_____/   |_|      \/   |______|_____|_| \_|
-                                                                                            
+                                                                                             
 ";
             string separator = new string('=', Console.WindowWidth);
             string logo = text.Split('\n')
@@ -76,16 +76,17 @@ namespace NosGm.Login
 
                     if (ServerConfiguration.EnableGameforgeTokenLogin)
                     {
-                        if (!IsSecureAuthServiceKey())
+                        if (!HasSecureDistinctGameforgeKeys())
                         {
                             throw new InvalidOperationException(
-                                "Gameforge token login requires a unique AuthServiceKey with at least 32 characters.");
+                                "Gameforge token login requires distinct issuer and consumer keys with at least 32 characters each.");
                         }
 
-                        if (!AuthentificationServiceClient.Instance.Authenticate(ServerConfiguration.AuthServiceKey))
+                        if (!AuthentificationServiceClient.Instance.Authenticate(
+                                ServerConfiguration.GameforgeTicketConsumerKey))
                         {
                             throw new InvalidOperationException(
-                                "Master authentication-ticket service rejected Login.");
+                                "Master authentication-ticket service rejected Login as a ticket consumer.");
                         }
                     }
 
@@ -131,12 +132,21 @@ namespace NosGm.Login
             }
         }
 
-        private static bool IsSecureAuthServiceKey()
+        private static bool HasSecureDistinctGameforgeKeys()
         {
-            string configuredKey = ServerConfiguration.AuthServiceKey;
+            string issuerKey = ServerConfiguration.GameforgeTicketIssuerKey;
+            string consumerKey = ServerConfiguration.GameforgeTicketConsumerKey;
+            return IsSecureGameforgeKey(issuerKey) &&
+                   IsSecureGameforgeKey(consumerKey) &&
+                   !string.Equals(issuerKey, consumerKey, StringComparison.Ordinal) &&
+                   !string.Equals(issuerKey, ServerConfiguration.AuthServiceKey, StringComparison.Ordinal) &&
+                   !string.Equals(consumerKey, ServerConfiguration.AuthServiceKey, StringComparison.Ordinal);
+        }
+
+        private static bool IsSecureGameforgeKey(string configuredKey)
+        {
             return !string.IsNullOrWhiteSpace(configuredKey) &&
-                   configuredKey.Length >= MinimumAuthServiceKeyLength &&
-                   !string.Equals(configuredKey, "AuthServiceKey", StringComparison.Ordinal);
+                   configuredKey.Length >= MinimumGameforgeKeyLength;
         }
 
         private static void UnhandledExceptionHandler(object sender, UnhandledExceptionEventArgs e)
