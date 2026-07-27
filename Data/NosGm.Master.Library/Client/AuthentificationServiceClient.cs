@@ -70,6 +70,31 @@ namespace NosGm.Master.Library.Client
             return _client.ServiceProxy.ValidateAccountAndCharacter(userName, characterName, passHash);
         }
 
+        public bool StoreModernLoginTicket(string authCode, string accountName, string ipAddress)
+        {
+            return _client.ServiceProxy.StoreModernLoginTicket(authCode, accountName, ipAddress);
+        }
+
+        public string ConsumeModernLoginTicket(string authToken, string ipAddress)
+        {
+            return _client.ServiceProxy.ConsumeModernLoginTicket(authToken, ipAddress);
+        }
+
+        public bool RegisterModernLoginSession(long accountId, int sessionId, string ipAddress)
+        {
+            return _client.ServiceProxy.RegisterModernLoginSession(accountId, sessionId, ipAddress);
+        }
+
+        public bool ConsumeModernLoginSession(long accountId, int sessionId, string ipAddress)
+        {
+            return _client.ServiceProxy.ConsumeModernLoginSession(accountId, sessionId, ipAddress);
+        }
+
+        public void RevokeModernLoginSession(long accountId, int sessionId)
+        {
+            _client.ServiceProxy.RevokeModernLoginSession(accountId, sessionId);
+        }
+
         #endregion
     }
 }
