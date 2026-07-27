@@ -21,11 +21,7 @@ function Read-Source {
 }
 
 function Assert-Contains {
-    param(
-        [string]$Content,
-        [string]$Needle,
-        [string]$Description
-    )
+    param([string]$Content, [string]$Needle, [string]$Description)
 
     if ($Content.IndexOf($Needle, [StringComparison]::Ordinal) -lt 0) {
         throw "Session-flow contract failed: $Description"
@@ -33,11 +29,7 @@ function Assert-Contains {
 }
 
 function Assert-NotContains {
-    param(
-        [string]$Content,
-        [string]$Needle,
-        [string]$Description
-    )
+    param([string]$Content, [string]$Needle, [string]$Description)
 
     if ($Content.IndexOf($Needle, [StringComparison]::Ordinal) -ge 0) {
         throw "Session-flow contract failed: $Description"
@@ -45,11 +37,7 @@ function Assert-NotContains {
 }
 
 function Assert-Regex {
-    param(
-        [string]$Content,
-        [string]$Pattern,
-        [string]$Description
-    )
+    param([string]$Content, [string]$Pattern, [string]$Description)
 
     if (-not [regex]::IsMatch(
             $Content,
@@ -60,11 +48,7 @@ function Assert-Regex {
 }
 
 function Assert-NotRegex {
-    param(
-        [string]$Content,
-        [string]$Pattern,
-        [string]$Description
-    )
+    param([string]$Content, [string]$Pattern, [string]$Description)
 
     if ([regex]::IsMatch(
             $Content,
@@ -75,11 +59,7 @@ function Assert-NotRegex {
 }
 
 function Assert-Ordered {
-    param(
-        [string]$Content,
-        [string[]]$Needles,
-        [string]$Description
-    )
+    param([string]$Content, [string[]]$Needles, [string]$Description)
 
     $position = 0
     foreach ($needle in $Needles) {
@@ -120,35 +100,56 @@ $entry = Read-Source $EntryHandlerPath
 $entryPacket = Read-Source $EntryPacketPath
 $select = Read-Source $SelectHandlerPath
 
-$loginFlow = Get-Section -Content $login -StartMarker "public async Task VerifyLoginAsync(LoginPacket loginPacket)" -EndMarker "private async Task<bool> CheckIsConnectedAsync" -Description "Login handler"
+$legacyLogin = Get-Section -Content $login `
+    -StartMarker "public async Task VerifyLoginAsync(LoginPacket loginPacket)" `
+    -EndMarker '[Packet("NoS0576", "NoS0577")]' `
+    -Description "legacy Login handler"
 
-Assert-Ordered $loginFlow @(
-    "if (!ClientRegionMap.TryResolveLoginPort(",
-    "if (!SynchronizeAccountLanguage(loadedAccount, clientCulture))",
+$completeLogin = Get-Section -Content $login `
+    -StartMarker "private async Task CompleteLoginAsync(" `
+    -EndMarker "private bool TryResolveClientRegion(" `
+    -Description "shared Login completion"
+
+Assert-Ordered $legacyLogin @(
+    "if (!TryResolveClientRegion(out byte resolvedRegionType, out string clientCulture))",
+    "PasswordHashService.VerifyLoginPayload(",
+    "ValidateClientVersion(hasClientVersion, clientVersion)",
+    "CompleteLoginAsync("
+) "Legacy Login must resolve the trusted port, verify credentials and use the shared completion path"
+Assert-NotRegex $legacyLogin 'CompleteLoginAsync\s*\([^;]*loginPacket\.RegionType' "Legacy Login must not trust the RegionType supplied by NoS0575"
+Assert-Contains $legacyLogin 'false)' "Legacy Login must not create a Gameforge World permit"
+
+Assert-Ordered $completeLogin @(
+    "if (!SynchronizeAccountLanguage(loadedAccount, culture))",
     "int newSessionId = SessionFactory.Instance.GenerateSessionId();",
     "CommunicationServiceClient.Instance.RegisterAccountLogin(",
+    "RegisterGameforgeWorldPermit(",
     "string serversPacket = BuildServersPacket(",
     "_session.SendPacket(serversPacket);",
     "DisposeLoginPolling();"
-) "Login must resolve the trusted port, synchronize language and register the generated session before sending the world list"
-
-Assert-Regex $loginFlow 'TryResolveLoginPort\s*\(\s*_session\.ListeningPort\s*,\s*out byte resolvedRegionType\s*,\s*out string clientCulture\s*\)' "Login must derive RegionType and culture from the accepted local port"
-Assert-Regex $loginFlow 'RegisterAccountLogin\s*\(\s*loadedAccount\.AccountId\s*,\s*newSessionId\s*,\s*ipAddress\s*\)' "Login must register the account with the generated session ID and normalized IP"
-Assert-Regex $loginFlow 'BuildServersPacket\s*\(\s*username\s*,\s*resolvedRegionType\s*,\s*newSessionId\s*,\s*ignoreUserName\s*,\s*loadedAccount\.AccountId\s*\)' "World-list generation must use the port-derived RegionType and generated session ID"
-Assert-NotRegex $loginFlow 'BuildServersPacket\s*\(\s*username\s*,\s*loginPacket\.RegionType' "World-list generation must not trust the RegionType supplied by NoS0575"
-Assert-Contains $loginFlow "CommunicationServiceClient.Instance.DisconnectAccount(loadedAccount.AccountId);" "Failed world-list generation must roll back the Master account registration"
+) "Shared Login completion must synchronize language, register the session, optionally create the permit and send the world list"
+Assert-Regex $completeLogin 'RegisterAccountLogin\s*\(\s*loadedAccount\.AccountId\s*,\s*newSessionId\s*,\s*ipAddress\s*\)' "Login must register the generated session ID and normalized IP"
+Assert-Regex $completeLogin 'BuildServersPacket\s*\(\s*protocolUsername\s*,\s*regionType\s*,\s*newSessionId\s*,\s*ignoreUserName\s*,\s*loadedAccount\.AccountId\s*\)' "World-list generation must use the resolved RegionType and generated session ID"
+Assert-Contains $completeLogin "CommunicationServiceClient.Instance.DisconnectAccount(loadedAccount.AccountId);" "Failed Login completion must roll back the Master account registration"
+Assert-Contains $completeLogin "RevokeGameforgeWorldPermit(" "Failed Gameforge completion must revoke its World permit"
 
 Assert-Regex $master 'public void RegisterAccountLogin\s*\(long accountId, int sessionId, string ipAddress\).*?ConnectedAccounts\.RemoveAll\(a => a\.AccountId\.Equals\(accountId\)\).*?ConnectedAccounts\.Add\(new AccountConnection\(accountId, sessionId, ipAddress\)\);' "Master must replace stale account registrations with the new account/session/IP tuple"
 Assert-Regex $master 'public bool IsLoginPermitted\s*\(long accountId, int sessionId\).*?AccountId\.Equals\(accountId\).*?SessionId\.Equals\(sessionId\).*?ConnectedWorld == null' "Master permission checks must bind both account ID and session ID before World attachment"
 Assert-Regex $master 'public bool ConnectAccount\s*\(Guid worldId, long accountId, int sessionId\).*?AccountId\.Equals\(accountId\) && a\.SessionId\.Equals\(sessionId\).*?account\.ConnectedWorld =' "World attachment must resolve the same account/session pair"
 
-$receiveFlow = Get-Section -Content $clientSession -StartMarker "private bool ProcessReceivedMessage(byte[] packetData)" -EndMarker "private void OnNetworkClientMessageReceived" -Description "World session bootstrap"
+$receiveFlow = Get-Section -Content $clientSession `
+    -StartMarker "private bool ProcessReceivedMessage(byte[] packetData)" `
+    -EndMarker "private void OnNetworkClientMessageReceived" `
+    -Description "World session bootstrap"
 Assert-Ordered $receiveFlow @(
     "SessionId = sessid;",
     'TriggerHandler("NosGm.EntryPoint", string.Empty, false);'
 ) "World must assign the decrypted session ID before starting the entry-point packet bundle"
 
-$initializeAccount = Get-Section -Content $clientSession -StartMarker "public void InitializeAccount(Account account, bool crossServer = false)" -EndMarker "public void ReceivePacket" -Description "Account initialization"
+$initializeAccount = Get-Section -Content $clientSession `
+    -StartMarker "public void InitializeAccount(Account account, bool crossServer = false)" `
+    -EndMarker "public void ReceivePacket" `
+    -Description "Account initialization"
 Assert-Ordered $initializeAccount @(
     "CommunicationServiceClient.Instance.ConnectAccount(ServerManager.Instance.WorldId, account.AccountId, SessionId);",
     "IsAuthenticated = true;"
@@ -160,7 +161,13 @@ Assert-Contains $entry ": packet.PacketData.Split(' ');" "Entry parsing must pre
 Assert-Regex $entry 'IsLoginPermitted\s*\(\s*account\.AccountId\s*,\s*Session\.SessionId\s*\)' "World entry authorization must use the decrypted session ID owned by ClientSession"
 Assert-NotRegex $entry 'IsLoginPermitted\s*\(\s*account\.AccountId\s*,\s*loginPacketParts' "World entry must never trust a session ID supplied inside the packet payload"
 Assert-Regex $entry 'loginPacketParts\.Length <= 8.*?loginPacketParts\[8\].*?CrossServerAuthenticate' "Cross-server authentication must validate index 8 before reading the marker"
-Assert-Regex $entry 'PasswordHashService\.VerifyPassword\s*\(\s*account\.Password\s*,\s*loginPacketParts\[7\]\s*,\s*true' "Normal World entry must verify the expected SHA-512 credential field"
+Assert-Ordered $entry @(
+    "CommunicationServiceClient.Instance.IsLoginPermitted(",
+    'string.Equals(loginPacketParts[7], "thisisgfmode", StringComparison.Ordinal);',
+    "ConsumeGameforgeWorldPermit(",
+    "Session.InitializeAccount(new Account(account), isCrossServerLogin);"
+) "Gameforge World entry must consume its one-use permit after normal session validation and before account initialization"
+Assert-Regex $entry 'PasswordHashService\.VerifyPassword\s*\(\s*account\.Password\s*,\s*loginPacketParts\[7\]\s*,\s*true' "Normal World entry must continue verifying the expected credential field"
 Assert-Ordered $entry @(
     "Session.InitializeAccount(new Account(account), isCrossServerLogin);",
     "ServerManager.Instance.CharacterScreenSessions[Session.Account.AccountId] = Session;"
