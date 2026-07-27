@@ -265,7 +265,7 @@ $report = [pscustomobject]@{
     OverallStatus = $overallStatus
     FailedChecks = $failedCount
     WarningChecks = $warningCount
-    Checks = @($checks)
+    Checks = $checks.ToArray()
 }
 
 $outputDirectory = Split-Path -Parent $OutputPath
