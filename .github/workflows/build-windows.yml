@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: windows-build-${{ github.workflow }}-${{ github.ref }}
@@ -31,23 +31,6 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v6
-        with:
-          ref: ${{ github.event_name == 'pull_request' && github.head_ref || github.ref }}
-          fetch-depth: 1
-          show-progress: false
-
-      - name: Apply guarded regional alias outcome verifier
-        if: github.event_name == 'pull_request' && github.head_ref == 'agent/nosgm-client-region-map'
-        shell: pwsh
-        run: |
-          ./scripts/apply-regional-alias-outcome-verifier.ps1
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add scripts/verify-login-outcomes.ps1
-          if (-not (git diff --cached --quiet)) {
-            git commit -m "test: align Login outcomes with regional aliases"
-            git push origin HEAD:${{ github.head_ref }}
-          }
 
       - name: Set up Visual Studio MSBuild
         uses: microsoft/setup-msbuild@v3
@@ -110,78 +93,9 @@ jobs:
         shell: powershell
         run: ./scripts/verify-password-hashing.ps1
 
-      - name: Verify NoS0576 and NoS0577 protocol
+      - name: Verify repaired login contracts
         shell: powershell
-        run: |
-          New-Item -ItemType Directory -Force -Path "$env:ARTIFACTS" | Out-Null
-          $logPath = Join-Path "$env:ARTIFACTS" "gameforge-login-protocol.log"
-          Set-Content -LiteralPath $logPath -Value "Starting NoS0576/NoS0577 protocol verification."
-          & powershell.exe `
-            -NoLogo `
-            -NoProfile `
-            -NonInteractive `
-            -ExecutionPolicy Bypass `
-            -File ".\scripts\verify-gameforge-login-protocol.ps1" 2>&1 |
-            Tee-Object -FilePath $logPath -Append |
-            ForEach-Object { Write-Host $_ }
-          $exitCode = $LASTEXITCODE
-          if ($exitCode -ne 0) {
-            Write-Host "::error::NoS0576/NoS0577 verification failed with exit code $exitCode."
-            exit $exitCode
-          }
-
-      - name: Verify login session flow contracts
-        shell: powershell
-        run: ./scripts/verify-login-session-flow.ps1
-
-      - name: Verify modern login packet contracts
-        shell: powershell
-        run: ./scripts/verify-modern-login-packets.ps1
-
-      - name: Verify sanitized login outcome fixtures
-        shell: powershell
-        run: |
-          New-Item -ItemType Directory -Force -Path "$env:ARTIFACTS" | Out-Null
-          $logPath = Join-Path "$env:ARTIFACTS" "login-outcomes.log"
-          try {
-            & ./scripts/verify-login-outcomes.ps1 *>&1 | Tee-Object -FilePath $logPath
-          }
-          catch {
-            $message = $_.Exception.Message
-            Add-Content -LiteralPath $logPath -Value $message
-            Write-Host "::error::$message"
-            throw
-          }
-
-      - name: Verify world, channel and language fixtures
-        shell: powershell
-        run: |
-          New-Item -ItemType Directory -Force -Path "$env:ARTIFACTS" | Out-Null
-          $logPath = Join-Path "$env:ARTIFACTS" "world-channel-lists.log"
-          try {
-            & ./scripts/verify-world-channel-lists.ps1 *>&1 | Tee-Object -FilePath $logPath
-          }
-          catch {
-            $message = $_.Exception.Message
-            Add-Content -LiteralPath $logPath -Value $message
-            Write-Host "::error::$message"
-            throw
-          }
-
-      - name: Verify regional Login port map
-        shell: powershell
-        run: |
-          New-Item -ItemType Directory -Force -Path "$env:ARTIFACTS" | Out-Null
-          $logPath = Join-Path "$env:ARTIFACTS" "client-region-map.log"
-          try {
-            & ./scripts/verify-client-region-map.ps1 *>&1 | Tee-Object -FilePath $logPath
-          }
-          catch {
-            $message = $_.Exception.Message
-            Add-Content -LiteralPath $logPath -Value $message
-            Write-Host "::error::$message"
-            throw
-          }
+        run: ./scripts/verify-repaired-login.ps1
 
       - name: Upload build diagnostics
         if: always()
@@ -217,13 +131,13 @@ jobs:
             if ($matches) {
               $found = $true
               Write-Host "=== $($log.Name) ==="
-              $matches | Select-Object -First 40 | ForEach-Object { Write-Host $_.ToString() }
+              $matches | Select-Object -First 60 | ForEach-Object { Write-Host $_.ToString() }
             }
           }
           if (-not $found) {
             foreach ($log in $logs) {
               Write-Host "=== $($log.Name) (tail) ==="
-              Get-Content $log.FullName -Tail 80
+              Get-Content $log.FullName -Tail 100
             }
           }
           exit 1
