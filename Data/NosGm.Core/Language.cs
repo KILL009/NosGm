@@ -1,4 +1,4 @@
-using NosGm.Configuration;
+﻿using NosGm.Configuration;
 using System;
 using System.Collections.Concurrent;
 using System.Globalization;
@@ -101,7 +101,6 @@ namespace NosGm.Core
                 try
                 {
                     value = _manager?.GetString(key, CultureInfo.GetCultureInfo(normalizedCulture));
-
                     if (string.IsNullOrEmpty(value) && normalizedCulture != _defaultCultureName)
                     {
                         value = _manager?.GetString(key, CultureInfo.GetCultureInfo(_defaultCultureName));
@@ -247,6 +246,63 @@ namespace NosGm.Core
                 _owner._ambientCulture.Value = _previousCulture;
                 _disposed = true;
             }
+        }
+    }
+
+    /// <summary>
+    /// Maps the official NosTale client region suffix to its Login port and
+    /// canonical server culture. The accepted local port is authoritative;
+    /// the RegionType byte supplied by the client is compatibility data only.
+    /// </summary>
+    public static class ClientRegionMap
+    {
+        private static readonly string[] CulturesByRegion =
+        {
+            "en", "de", "fr", "it", "pl", "es", "cs", "ru", "ja", "zh"
+        };
+
+        public const int BaseLoginPort = 4000;
+
+        public static int RegionCount => CulturesByRegion.Length;
+
+        public static int GetLoginPort(byte regionType)
+        {
+            if (regionType >= CulturesByRegion.Length)
+            {
+                throw new ArgumentOutOfRangeException(nameof(regionType));
+            }
+
+            return BaseLoginPort + regionType;
+        }
+
+        public static bool TryGetCulture(byte regionType, out string culture)
+        {
+            if (regionType >= CulturesByRegion.Length)
+            {
+                culture = null;
+                return false;
+            }
+
+            culture = CulturesByRegion[regionType];
+            return true;
+        }
+
+        public static bool TryResolveLoginPort(
+            int loginPort,
+            out byte regionType,
+            out string culture)
+        {
+            int regionIndex = loginPort - BaseLoginPort;
+            if (regionIndex < 0 || regionIndex >= CulturesByRegion.Length)
+            {
+                regionType = 0;
+                culture = null;
+                return false;
+            }
+
+            regionType = (byte)regionIndex;
+            culture = CulturesByRegion[regionIndex];
+            return true;
         }
     }
 }
