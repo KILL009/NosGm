@@ -102,14 +102,19 @@ namespace NosGm.Handler.BasicPacket.Login
             }
 
             string username = loginPacket.Name;
-            AccountDTO loadedAccount = DAOFactory.AccountDAO.LoadByName(username);
+            AccountDTO loadedAccount = LoadAccountByLoginName(username, resolvedRegionType);
             if (loadedAccount == null)
             {
                 Reject(LoginFailType.AccountOrPasswordWrong, "Session removed. Reason: Unknown account");
                 return;
             }
 
-            if (!string.Equals(loadedAccount.Name, username, StringComparison.Ordinal))
+            bool accountNameMatches = string.Equals(loadedAccount.Name, username, StringComparison.Ordinal) ||
+                                      ClientRegionMap.IsProtocolUsernameForAccount(
+                                          username,
+                                          loadedAccount.Name,
+                                          resolvedRegionType);
+            if (!accountNameMatches)
             {
                 Reject(LoginFailType.WrongCaps, "Session removed. Reason: Wrong account casing");
                 return;
@@ -217,7 +222,7 @@ namespace NosGm.Handler.BasicPacket.Login
                 $"Culture={clientCulture} PacketRegion={loginPacket.RegionType}");
 
             int newSessionId = SessionFactory.Instance.GenerateSessionId();
-            Logger.Info($"{username} connected | SessionID: {newSessionId}");
+            Logger.Info($"{loadedAccount.Name} connected | SessionID: {newSessionId}");
 
             try
             {
@@ -236,6 +241,9 @@ namespace NosGm.Handler.BasicPacket.Login
             bool ignoreUserName = ServerConfiguration.UseOldCrypto ||
                                   hasClientVersion && clientVersion.Build >= 0 && clientVersion.Build < 3075;
 
+            // Preserve the protocol username exactly as supplied by the client.
+            // Official regional accounts can arrive as ES_name, FR_name, etc.;
+            // local private-server accounts can continue using an unprefixed name.
             string serversPacket = BuildServersPacket(
                 username,
                 resolvedRegionType,
@@ -277,6 +285,26 @@ namespace NosGm.Handler.BasicPacket.Login
         private void DisposeLoginPolling()
         {
             _session.PacketHandlerInterval?.Dispose();
+        }
+
+        private static AccountDTO LoadAccountByLoginName(string username, byte resolvedRegionType)
+        {
+            AccountDTO account = DAOFactory.AccountDAO.LoadByName(username);
+            if (account != null)
+            {
+                return account;
+            }
+
+            if (!ClientRegionMap.TryStripProtocolPrefix(
+                    username,
+                    out string accountName,
+                    out ClientLanguageProfile profile) ||
+                profile.RegionType != resolvedRegionType)
+            {
+                return null;
+            }
+
+            return DAOFactory.AccountDAO.LoadByName(accountName);
         }
 
         private static string NormalizeRemoteIp(string endpoint)
