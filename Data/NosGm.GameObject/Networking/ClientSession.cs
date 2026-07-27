@@ -26,7 +26,7 @@ namespace NosGm.GameObject
     {
         #region Instantiation
 
-        public ClientSession(INetworkClient client)
+        public ClientSession(INetworkClient client, int listeningPort = 0)
         {
             // set the time of last received packet
             _lastPacketReceive = DateTime.Now.Ticks;
@@ -36,6 +36,7 @@ namespace NosGm.GameObject
 
             // initialize network client
             _client = client;
+            ListeningPort = listeningPort;
 
             // absolutely new instantiated Client has no SessionId
             SessionId = 0;
@@ -152,6 +153,8 @@ namespace NosGm.GameObject
         }
 
         public long ClientId => _client.ClientId;
+
+        public int ListeningPort { get; }
 
         public MapInstance CurrentMapInstance { get; set; }
 

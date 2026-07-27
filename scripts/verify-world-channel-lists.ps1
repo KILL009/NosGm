@@ -412,8 +412,10 @@ $loginPacketSource = Read-RequiredText $LoginPacketPath
 $languageSource = Read-RequiredText $LanguagePath
 $localizationDoc = Read-RequiredText $LocalizationDocPath
 
-Assert-Regex $loginPacketSource '\[PacketIndex\(5\)\]\s*public byte RegionType' "RegionType must remain byte field 5 of NoS0575"
-Assert-Regex $loginHandlerSource 'BuildServersPacket\s*\(\s*username\s*,\s*loginPacket\.RegionType\s*,\s*newSessionId' "Login must pass RegionType unchanged to Master"
+Assert-Regex $loginPacketSource '\[PacketIndex\(5\)\]\s*public byte RegionType' "RegionType must remain byte field 5 of NoS0575 for compatibility diagnostics"
+Assert-Regex $loginHandlerSource 'TryResolveLoginPort\s*\(\s*_session\.ListeningPort\s*,\s*out byte resolvedRegionType\s*,\s*out string clientCulture\s*\)' "Login must derive RegionType and culture from the accepted local port"
+Assert-Regex $loginHandlerSource 'BuildServersPacket\s*\(\s*username\s*,\s*resolvedRegionType\s*,\s*newSessionId' "Login must pass the port-derived RegionType to Master"
+Assert-NotContains $loginHandlerSource 'BuildServersPacket(`r`n                username,`r`n                loginPacket.RegionType' "Login must not pass the untrusted packet RegionType to Master"
 Assert-Regex $masterSource 'private const int NsTeSTPadding\s*=\s*56;' "NsTeST padding must remain 56 pairs"
 Assert-Contains $masterSource '$"NsTeST {regionType} {username}' "Master must emit the supplied protocol region byte"
 Assert-Regex $masterSource 'visibleWorlds\s*=.*?Where\(w => w\.ChannelId != 51\).*?OrderBy\(w => w\.WorldGroup\).*?ThenBy\(w => w\.ChannelId\).*?ToList\(\);' "visible worlds must exclude channel 51 and sort by group then channel"
@@ -436,8 +438,8 @@ $sourceCultures = @(
         ForEach-Object { $_.Groups["code"].Value }
 )
 Assert-StringArray -Actual $sourceCultures -Expected $expectedCultures -Description "Language.SupportedCultures"
-Assert-NotContains $languageSource "RegionType" "Language selection must remain independent from the login protocol region byte"
-Assert-Contains $localizationDoc '`RegionType` must not be treated as a locale.' "Localization documentation must keep region and culture separate"
+Assert-Contains $languageSource "public static class ClientRegionMap" "The official client region map must remain centralized"
+Assert-Contains $localizationDoc "The Login listening port is the source of truth" "Localization documentation must keep trusted port routing explicit"
 
 $neutralResource = Join-Path $WorldResourceDirectory "LocalizedResources.resx"
 if (-not (Test-Path -LiteralPath $neutralResource)) {
