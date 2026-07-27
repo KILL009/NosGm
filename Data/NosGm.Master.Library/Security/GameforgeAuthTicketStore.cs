@@ -41,7 +41,7 @@ namespace NosGm.Master.Library.Interface
         {
             if (string.IsNullOrWhiteSpace(accountName) || accountName.Length > 255 ||
                 accountName.IndexOfAny(new[] { ' ', '\t', '\r', '\n', '\v', '\0' }) >= 0 ||
-                !GameforgeLoginPacketParser.IsSupportedAuthToken(authToken) ||
+                !GameforgeLoginPacketParser.TryNormalizeAuthToken(authToken, out string normalizedToken) ||
                 installationId == Guid.Empty ||
                 countryId > GameforgeLoginPacketParser.MaximumCountryId ||
                 lifetime <= TimeSpan.Zero || lifetime > TimeSpan.FromMinutes(10))
@@ -56,7 +56,7 @@ namespace NosGm.Master.Library.Interface
                 return false;
             }
 
-            string key = ComputeTokenKey(authToken);
+            string key = ComputeTokenKey(normalizedToken);
             return _tickets.TryAdd(key, new Ticket
             {
                 AccountName = accountName,
@@ -73,14 +73,14 @@ namespace NosGm.Master.Library.Interface
             out string accountName)
         {
             accountName = null;
-            if (!GameforgeLoginPacketParser.IsSupportedAuthToken(authToken) ||
+            if (!GameforgeLoginPacketParser.TryNormalizeAuthToken(authToken, out string normalizedToken) ||
                 installationId == Guid.Empty ||
                 countryId > GameforgeLoginPacketParser.MaximumCountryId)
             {
                 return false;
             }
 
-            string key = ComputeTokenKey(authToken);
+            string key = ComputeTokenKey(normalizedToken);
             if (!_tickets.TryRemove(key, out Ticket ticket))
             {
                 return false;
@@ -102,21 +102,12 @@ namespace NosGm.Master.Library.Interface
             _tickets.Clear();
         }
 
-        private static string ComputeTokenKey(string authToken)
+        private static string ComputeTokenKey(string normalizedToken)
         {
-            string normalized;
-            if (Guid.TryParse(authToken, out Guid guid))
-            {
-                normalized = guid.ToString("D");
-            }
-            else
-            {
-                normalized = authToken.ToUpperInvariant();
-            }
-
             using (SHA256 sha256 = SHA256.Create())
             {
-                return Convert.ToBase64String(sha256.ComputeHash(Encoding.ASCII.GetBytes(normalized)));
+                return Convert.ToBase64String(
+                    sha256.ComputeHash(Encoding.ASCII.GetBytes(normalizedToken)));
             }
         }
 
