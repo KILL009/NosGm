@@ -1,4 +1,5 @@
 ﻿using NosGm.Configuration;
+using NosGm.Core;
 using NosGm.DAL;
 using NosGm.Data;
 using NosGm.Master.Library.Interface;
