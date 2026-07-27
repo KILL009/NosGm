@@ -16,6 +16,7 @@ $required = @(
     "src/NosGM.Launcher/NosGM.Launcher.csproj",
     "src/NosGM.Launcher/TrustedChannel.Placeholder.cs",
     "src/NosGM.Launcher/LauncherAuthenticationClient.cs",
+    "src/NosGM.Launcher/GameforgeInstallationId.cs",
     "src/NosGM.Launcher/GameforgeJsonRpcPipeServer.cs",
     "src/NosGM.Launcher/ModernGameLauncher.cs",
     "src/NosGM.Launcher/LauncherLoginDialog.cs",
@@ -105,7 +106,9 @@ foreach ($requiredCode in @(
     "_TNT_CLIENT_APPLICATION_ID",
     "_TNT_SESSION_ID",
     "AuthenticationEndpoint",
-    "HttpCompletionOption.ResponseHeadersRead"
+    "HttpCompletionOption.ResponseHeadersRead",
+    "Software\\Gameforge4d\\TNTClient\\MainApp",
+    "GameforgeInstallationId.Resolve()"
 )) {
     if (-not $source.Contains($requiredCode, [System.StringComparison]::Ordinal)) {
         throw "Required launcher safety, release, language, or authentication control missing: $requiredCode"
@@ -115,6 +118,9 @@ foreach ($requiredCode in @(
 $settingsSource = Get-Content (Join-Path $launcher "src/NosGM.Launcher/LauncherSettings.cs") -Raw
 if ($settingsSource.Contains("public string Password", [System.StringComparison]::Ordinal)) {
     throw "Launcher settings must never persist a password."
+}
+if ($settingsSource.Contains("public string InstallationId", [System.StringComparison]::Ordinal)) {
+    throw "Gameforge InstallationId must remain in the current-user registry instead of launcher settings."
 }
 if (-not $settingsSource.Contains("uri.IsLoopback", [System.StringComparison]::Ordinal) -or
     -not $settingsSource.Contains("Uri.UriSchemeHttps", [System.StringComparison]::Ordinal)) {
