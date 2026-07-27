@@ -77,7 +77,8 @@ internal static class ModernGameLauncher
             StartInfo = startInfo,
             EnableRaisingEvents = true
         };
-        process.Exited += (_, _) => processExited.Cancel();
+        EventHandler onProcessExited = (_, _) => processExited.Cancel();
+        process.Exited += onProcessExited;
 
         var pipeTask = pipeServer.RunAsync(handshakeTimeout.Token);
         try
@@ -106,7 +107,7 @@ internal static class ModernGameLauncher
         }
         finally
         {
-            processExited.Dispose();
+            process.Exited -= onProcessExited;
         }
     }
 
