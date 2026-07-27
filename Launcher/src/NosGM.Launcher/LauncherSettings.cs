@@ -14,6 +14,10 @@ internal sealed record LauncherSettings
         "Client");
     public string GameExecutable { get; init; } = "NostaleClientX.exe";
     public string Language { get; init; } = "es";
+    public string AuthenticationEndpoint { get; init; } =
+        Environment.GetEnvironmentVariable("NOSGM_AUTH_ENDPOINT") ?? string.Empty;
+    public string AccountName { get; init; } = string.Empty;
+    public string InstallationId { get; init; } = Guid.NewGuid().ToString("D");
     public bool CloseAfterLaunch { get; init; }
 }
 
@@ -52,7 +56,12 @@ internal static class LauncherSettingsStore
             !Path.IsPathFullyQualified(settings.InstallRoot) ||
             string.IsNullOrWhiteSpace(settings.GameExecutable) ||
             Path.GetFileName(settings.GameExecutable) != settings.GameExecutable ||
-            settings.GameExecutable.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0)
+            settings.GameExecutable.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0 ||
+            !Guid.TryParse(settings.InstallationId, out var installationId) ||
+            installationId == Guid.Empty ||
+            settings.AccountName.Length > 255 ||
+            settings.AccountName.IndexOfAny(['\t', '\r', '\n', '\v', '\0']) >= 0 ||
+            !IsSafeAuthenticationEndpoint(settings.AuthenticationEndpoint))
         {
             throw new InvalidDataException("Launcher settings are invalid.");
         }
@@ -65,5 +74,24 @@ internal static class LauncherSettingsStore
         {
             throw new InvalidDataException($"Unsupported launcher language '{settings.Language}'.");
         }
+    }
+
+    private static bool IsSafeAuthenticationEndpoint(string endpoint)
+    {
+        if (string.IsNullOrWhiteSpace(endpoint))
+        {
+            return true;
+        }
+
+        if (!Uri.TryCreate(endpoint.Trim(), UriKind.Absolute, out var uri) ||
+            !string.IsNullOrEmpty(uri.UserInfo) ||
+            !string.IsNullOrEmpty(uri.Fragment) ||
+            !string.Equals(uri.AbsolutePath, "/api/v1/launcher/ticket", StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        return string.Equals(uri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase) ||
+               string.Equals(uri.Scheme, Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase) && uri.IsLoopback;
     }
 }
