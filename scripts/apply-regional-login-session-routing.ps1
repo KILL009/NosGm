@@ -92,8 +92,9 @@ else {
 $worldVerifierPath = "scripts/verify-world-channel-lists.ps1"
 $worldVerifierContent = Get-Content -LiteralPath $worldVerifierPath -Raw
 $worldVerifierNewLine = if ($worldVerifierContent.Contains("`r`n")) { "`r`n" } else { "`n" }
+$worldVerifierChanged = $false
 
-if ($worldVerifierContent.Contains("loginPacket\.RegionType")) {
+if ($worldVerifierContent.Contains("Login must pass RegionType unchanged to Master")) {
     $worldVerifierContent = Replace-ExactOnce $worldVerifierContent @'
 Assert-Regex $loginPacketSource '\[PacketIndex\(5\)\]\s*public byte RegionType' "RegionType must remain byte field 5 of NoS0575"
 Assert-Regex $loginHandlerSource 'BuildServersPacket\s*\(\s*username\s*,\s*loginPacket\.RegionType\s*,\s*newSessionId' "Login must pass RegionType unchanged to Master"
@@ -114,10 +115,75 @@ Assert-Contains $languageSource "public static class ClientRegionMap" "The offic
 Assert-Contains $localizationDoc "The Login listening port is the source of truth" "Localization documentation must keep trusted port routing explicit"
 '@ "update language boundary verification for the official client region map" $worldVerifierNewLine
 
+    $worldVerifierChanged = $true
+}
+
+if (-not $worldVerifierContent.Contains("function Assert-NotRegex")) {
+    $worldVerifierContent = Replace-ExactOnce $worldVerifierContent @'
+function Assert-Regex {
+    param(
+        [string]$Content,
+        [string]$Pattern,
+        [string]$Description
+    )
+
+    if (-not [regex]::IsMatch(
+            $Content,
+            $Pattern,
+            [Text.RegularExpressions.RegexOptions]::Singleline)) {
+        throw "World/channel source contract failed: $Description"
+    }
+}
+
+'@ @'
+function Assert-Regex {
+    param(
+        [string]$Content,
+        [string]$Pattern,
+        [string]$Description
+    )
+
+    if (-not [regex]::IsMatch(
+            $Content,
+            $Pattern,
+            [Text.RegularExpressions.RegexOptions]::Singleline)) {
+        throw "World/channel source contract failed: $Description"
+    }
+}
+
+function Assert-NotRegex {
+    param(
+        [string]$Content,
+        [string]$Pattern,
+        [string]$Description
+    )
+
+    if ([regex]::IsMatch(
+            $Content,
+            $Pattern,
+            [Text.RegularExpressions.RegexOptions]::Singleline)) {
+        throw "World/channel source contract failed: $Description"
+    }
+}
+
+'@ "add a format-independent negative source assertion" $worldVerifierNewLine
+    $worldVerifierChanged = $true
+}
+
+if ($worldVerifierContent.Contains("Assert-NotContains `$loginHandlerSource 'BuildServersPacket(``r``n")) {
+    $worldVerifierContent = Replace-ExactOnce $worldVerifierContent @'
+Assert-NotContains $loginHandlerSource 'BuildServersPacket(`r`n                username,`r`n                loginPacket.RegionType' "Login must not pass the untrusted packet RegionType to Master"
+'@ @'
+Assert-NotRegex $loginHandlerSource 'BuildServersPacket\s*\(\s*username\s*,\s*loginPacket\.RegionType' "Login must not pass the untrusted packet RegionType to Master"
+'@ "make the packet-RegionType prohibition format independent" $worldVerifierNewLine
+    $worldVerifierChanged = $true
+}
+
+if ($worldVerifierChanged) {
     Write-Utf8Bom $worldVerifierPath $worldVerifierContent
 }
 else {
-    Write-Host "World/channel verifier already uses port-derived regional routing."
+    Write-Host "World/channel verifier already uses hardened port-derived routing."
 }
 
 Write-Host "Regional Login session routing applied successfully."
