@@ -1,4 +1,5 @@
 ﻿using NosGm.Configuration;
+using NosGm.Core;
 using NosGm.Master.Library.Data;
 using NosGm.SCS.Communication.ScsServices.Service;
 using System;
