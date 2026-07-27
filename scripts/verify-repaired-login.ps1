@@ -59,7 +59,6 @@ $store = Read-Source $StorePath
 $language = Read-Source $LanguagePath
 $config = Read-Source $ConfigurationPath
 
-# Damage left by PR #100/#101 must never return.
 Forbid $program '_port = port;' 'Login Program still contains the abandoned single-port merge fragment.'
 Forbid $program 'var networkManager = new NetworkManager' 'Login Program still creates a discarded duplicate listener.'
 Require-Count $program 'CommunicationServiceClient.Instance.Authenticate(' 1 'Master communication must authenticate exactly once.'
@@ -112,7 +111,7 @@ Require $service 'GameforgeWorldPermitStore.Instance.TryConsume' 'Master does no
 
 Require $parser 'MaximumCountryId = 9' 'Parser does not accept all ten region bytes.'
 Require $parser 'rawPacket.IndexOf("  ", tokenStart, StringComparison.Ordinal)' 'Parser lost the mandatory double-space token boundary.'
-Require $parser "countryAndVersion.IndexOf('`v')" 'Parser lost the ASCII 0x0B country/version boundary.'
+Require $parser 'int verticalTabIndex = countryAndVersion.IndexOf' 'Parser lost the ASCII 0x0B country/version boundary.'
 Require $parser 'case 8: culture = "ja";' 'Region 8 is not Japanese.'
 Require $parser 'case 9: culture = "zh";' 'Region 9 is not Chinese.'
 Require $store 'SHA256.Create()' 'Raw tickets are not reduced to SHA-256 lookup keys.'
