@@ -12,6 +12,7 @@
 
         public static bool GameVersionRequired = false;
         public static string GameVersion = "0.9.3.3255";
+        public static string GameforgeClientMd5 = "";
 
         public static string Language = "uk";
         public static string ServerName = "Sumeria";
@@ -20,6 +21,8 @@
 
         public static string MasterAuthKey = "NosGmServerMain2032NosGm";
         public static string AuthServiceKey = "AuthServiceKey";
+        public static string GameforgeTicketIssuerKey = "";
+        public static string GameforgeTicketConsumerKey = "";
         public static string MallAuthKey = "";
         public static string MallBaseURL = "";
         public static string MallAPIKey = "";
@@ -27,6 +30,9 @@
         public static bool AutoReboot = true;
         public static bool UseOldCrypto = false;
         public static bool LoginUsesPrehashedSha512 = true;
+        public static bool EnableGameforgeTokenLogin = false;
+        public static int GameforgeAuthTicketTtlSeconds = 120;
+        public static int GameforgeWorldPermitTtlSeconds = 120;
         public static bool StartAllRegionalLoginPorts = true;
         public static bool StartGlacernonAutomaticly = false;
         public static bool StartAllChannelsAutomaticly = true;
