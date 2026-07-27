@@ -413,7 +413,9 @@ $languageSource = Read-RequiredText $LanguagePath
 $localizationDoc = Read-RequiredText $LocalizationDocPath
 
 Assert-Regex $loginPacketSource '\[PacketIndex\(5\)\]\s*public byte RegionType' "RegionType must remain byte field 5 of NoS0575"
-Assert-Regex $loginHandlerSource 'BuildServersPacket\s*\(\s*username\s*,\s*loginPacket\.RegionType\s*,\s*newSessionId' "Login must pass RegionType unchanged to Master"
+Assert-Regex $loginHandlerSource 'CompleteLoginAsync\s*\(\s*loadedAccount\s*,\s*username\s*,\s*loginPacket\.RegionType\s*,\s*null\s*,\s*ignoreUserName\s*,\s*"password"\s*\)' "NoS0575 must pass its RegionType unchanged into shared Login completion"
+Assert-Regex $loginHandlerSource 'CompleteLoginAsync\s*\(\s*loadedAccount\s*,\s*username\s*,\s*payload\.CountryId\s*,\s*culture\s*,\s*false\s*,\s*payload\.Header\s*\)' "NoS0576 and NoS0577 must pass authenticated CountryId into shared Login completion"
+Assert-Regex $loginHandlerSource 'BuildServersPacket\s*\(\s*username\s*,\s*regionType\s*,\s*newSessionId\s*,\s*ignoreUserName\s*,\s*loadedAccount\.AccountId\s*\)' "Shared Login completion must pass the authenticated region unchanged to Master"
 Assert-Regex $masterSource 'private const int NsTeSTPadding\s*=\s*56;' "NsTeST padding must remain 56 pairs"
 Assert-Contains $masterSource '$"NsTeST {regionType} {username}' "Master must emit the supplied protocol region byte"
 Assert-Regex $masterSource 'visibleWorlds\s*=.*?Where\(w => w\.ChannelId != 51\).*?OrderBy\(w => w\.WorldGroup\).*?ThenBy\(w => w\.ChannelId\).*?ToList\(\);' "visible worlds must exclude channel 51 and sort by group then channel"
