@@ -288,10 +288,10 @@ Assert-SameValue -Actual ([string]$fixture.protocol.header) -Expected "NsTeST" -
 Assert-SameValue -Actual ([int]$fixture.protocol.paddingPairs) -Expected 56 -Description "NsTeST padding pair count"
 Assert-SameValue -Actual ([string]$fixture.protocol.sentinel) -Expected "-1:-1:-1:10000.10000.1" -Description "World-list sentinel"
 
-$expectedCultures = @("en", "es", "de", "fr", "it", "pl", "cs", "ru", "ja", "zh")
+$expectedCultures = @("en", "es", "de", "fr", "it", "pl", "cs", "ru", "tr", "ja", "zh")
 Assert-StringArray -Actual @($fixture.supportedCultures) -Expected $expectedCultures -Description "Supported culture fixture"
 
-$expectedRegions = @(0, 1, 2, 3, 4, 5, 6, 7, 8, 9)
+$expectedRegions = @(0, 1, 2, 3, 4, 5, 6, 7, 8)
 $actualRegions = @($fixture.regionTypes | ForEach-Object { [int]$_ })
 Assert-StringArray -Actual $actualRegions -Expected $expectedRegions -Description "Protocol region byte fixture"
 
@@ -460,7 +460,7 @@ $neutralResource = Join-Path $WorldResourceDirectory "LocalizedResources.resx"
 if (-not (Test-Path -LiteralPath $neutralResource)) {
     throw "Missing neutral English World resource: $neutralResource"
 }
-foreach ($culture in $expectedCultures | Where-Object { $_ -ne "en" }) {
+foreach ($culture in $expectedCultures | Where-Object { $_ -ne "en" -and $_ -ne "tr" }) {
     $satelliteResource = Join-Path $WorldResourceDirectory "LocalizedResources.$culture.resx"
     if (-not (Test-Path -LiteralPath $satelliteResource)) {
         throw "Missing World satellite resource for culture '$culture': $satelliteResource"
@@ -472,4 +472,4 @@ foreach ($culture in $expectedCultures | Where-Object { $_ -ne "en" }) {
     }
 }
 
-Write-Host "Verified $($seenCaseIds.Count) world/channel fixtures, 10 protocol region bytes and 10 independent server cultures."
+Write-Host "Verified $($seenCaseIds.Count) world/channel fixtures, 9 EU client region bytes and 11 independent server cultures (Turkish uses neutral fallback)."
