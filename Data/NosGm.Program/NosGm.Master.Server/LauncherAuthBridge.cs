@@ -28,8 +28,7 @@ namespace NosGm.Master.Server
         private const string TicketPath = "/api/v1/launcher/ticket";
         private const int MaximumRequestBytes = 8192;
         private const int MaximumTrackedWindows = 10000;
-        private static readonly string DummyPasswordHash =
-            PasswordHashService.HashPassword("NosGM-invalid-account-sentinel");
+        private static readonly string DummyPasswordHash = CreateDummyPasswordHash();
 
         private sealed class AttemptWindow
         {
@@ -289,6 +288,19 @@ namespace NosGm.Master.Server
                 window.Attempts++;
                 return true;
             }
+        }
+
+        private static string CreateDummyPasswordHash()
+        {
+            if (!PasswordHashService.TryHashPassword(
+                    "NosGM-invalid-account-sentinel",
+                    out string encodedHash))
+            {
+                throw new InvalidOperationException(
+                    "Unable to initialize the launcher authentication timing sentinel.");
+            }
+
+            return encodedHash;
         }
 
         private static bool TryValidateRequest(TicketRequest request, out Guid installationId)
