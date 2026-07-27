@@ -173,10 +173,10 @@ try {
     $store.Clear()
 
     $handlerPath = "Data/NosGm.Handler/PacketHandler/Login/LoginPacketHandler.cs"
-    $authContractPath = "Data/NosGm.Master.Library/Interface/IAuthentificationService.cs"
+    $ticketStorePath = "Data/NosGm.Master.Library/Security/GameforgeAuthTicketStore.cs"
     $configurationPath = "Data/NosGm.Configuration/ServerConfiguration.cs"
     $handlerSource = Get-Content -LiteralPath $handlerPath -Raw
-    $authContractSource = Get-Content -LiteralPath $authContractPath -Raw
+    $ticketStoreSource = Get-Content -LiteralPath $ticketStorePath -Raw
     $configurationSource = Get-Content -LiteralPath $configurationPath -Raw
 
     if ($handlerSource -notmatch '\[Packet\("NoS0576",\s*"NoS0577"\)\]' -or
@@ -191,8 +191,8 @@ try {
         throw "The Login handler appears to interpolate sensitive Gameforge packet data into a log."
     }
 
-    if ($authContractSource -notmatch 'SHA256\.Create\(\)' -or
-        $authContractSource -match 'private sealed class Ticket\s*\{[^\}]*AuthToken') {
+    if ($ticketStoreSource -notmatch 'SHA256\.Create\(\)' -or
+        $ticketStoreSource -match 'private sealed class Ticket\s*\{[^\}]*AuthToken') {
         throw "The ticket store no longer guarantees hashed token lookup keys."
     }
 
