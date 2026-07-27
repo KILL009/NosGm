@@ -1,6 +1,7 @@
 ﻿using NosGm.Configuration;
 using System;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Reflection;
@@ -18,7 +19,7 @@ namespace NosGm.Core
     {
         private static readonly string[] SupportedCultures =
         {
-            "en", "es", "de", "fr", "it", "pl", "cs", "ru", "ja", "zh"
+            "en", "es", "de", "fr", "it", "pl", "cs", "ru", "tr", "ja", "zh"
         };
 
         private static readonly Lazy<Language> LazyInstance =
@@ -184,6 +185,11 @@ namespace NosGm.Core
             {
                 candidate = "ru";
             }
+            else if (candidate == "turkish" || candidate == "türkçe" ||
+                     candidate == "turkce" || candidate.StartsWith("tr-"))
+            {
+                candidate = "tr";
+            }
             else if (candidate == "jp" || candidate == "japanese" ||
                      candidate == "日本語" || candidate.StartsWith("ja-") ||
                      candidate.StartsWith("jp-"))
@@ -249,41 +255,91 @@ namespace NosGm.Core
         }
     }
 
+    public sealed class ClientLanguageProfile
+    {
+        public ClientLanguageProfile(
+            byte regionType,
+            int loginPort,
+            string protocolPrefix,
+            string clientFileSuffix,
+            string serverCulture)
+        {
+            RegionType = regionType;
+            LoginPort = loginPort;
+            ProtocolPrefix = protocolPrefix;
+            ClientFileSuffix = clientFileSuffix;
+            ServerCulture = serverCulture;
+        }
+
+        public byte RegionType { get; }
+
+        public int LoginPort { get; }
+
+        public string ProtocolPrefix { get; }
+
+        public string ClientFileSuffix { get; }
+
+        public string ServerCulture { get; }
+    }
+
     /// <summary>
-    /// Maps the official NosTale client region suffix to its Login port and
-    /// canonical server culture. The accepted local port is authoritative;
-    /// the RegionType byte supplied by the client is compatibility data only.
+    /// Maps the verified European NosTale client region to its Login port,
+    /// protocol account prefix, NSlangData suffix and server culture.
+    /// The accepted local Login port is authoritative. World endpoint ports
+    /// listed later in NsTeST are independent channel ports.
     /// </summary>
     public static class ClientRegionMap
     {
-        private static readonly string[] CulturesByRegion =
+        private static readonly ClientLanguageProfile[] Profiles =
         {
-            "en", "de", "fr", "it", "pl", "es", "cs", "ru", "ja", "zh"
+            new ClientLanguageProfile(0, 4000, "EN", "UK", "en"),
+            new ClientLanguageProfile(1, 4001, "DE", "DE", "de"),
+            new ClientLanguageProfile(2, 4002, "FR", "FR", "fr"),
+            new ClientLanguageProfile(3, 4003, "IT", "IT", "it"),
+            new ClientLanguageProfile(4, 4004, "PL", "PL", "pl"),
+            new ClientLanguageProfile(5, 4005, "ES", "ES", "es"),
+            new ClientLanguageProfile(6, 4006, "CZ", "CZ", "cs"),
+            new ClientLanguageProfile(7, 4007, "RU", "RU", "ru"),
+            new ClientLanguageProfile(8, 4008, "TR", "TR", "tr")
         };
 
         public const int BaseLoginPort = 4000;
 
-        public static int RegionCount => CulturesByRegion.Length;
+        public static IReadOnlyList<ClientLanguageProfile> All => Profiles;
+
+        public static int RegionCount => Profiles.Length;
 
         public static int GetLoginPort(byte regionType)
         {
-            if (regionType >= CulturesByRegion.Length)
+            if (!TryGetProfile(regionType, out ClientLanguageProfile profile))
             {
                 throw new ArgumentOutOfRangeException(nameof(regionType));
             }
 
-            return BaseLoginPort + regionType;
+            return profile.LoginPort;
+        }
+
+        public static bool TryGetProfile(byte regionType, out ClientLanguageProfile profile)
+        {
+            if (regionType >= Profiles.Length)
+            {
+                profile = null;
+                return false;
+            }
+
+            profile = Profiles[regionType];
+            return true;
         }
 
         public static bool TryGetCulture(byte regionType, out string culture)
         {
-            if (regionType >= CulturesByRegion.Length)
+            if (!TryGetProfile(regionType, out ClientLanguageProfile profile))
             {
                 culture = null;
                 return false;
             }
 
-            culture = CulturesByRegion[regionType];
+            culture = profile.ServerCulture;
             return true;
         }
 
@@ -293,16 +349,69 @@ namespace NosGm.Core
             out string culture)
         {
             int regionIndex = loginPort - BaseLoginPort;
-            if (regionIndex < 0 || regionIndex >= CulturesByRegion.Length)
+            if (regionIndex < 0 || regionIndex >= Profiles.Length ||
+                Profiles[regionIndex].LoginPort != loginPort)
             {
                 regionType = 0;
                 culture = null;
                 return false;
             }
 
-            regionType = (byte)regionIndex;
-            culture = CulturesByRegion[regionIndex];
+            ClientLanguageProfile profile = Profiles[regionIndex];
+            regionType = profile.RegionType;
+            culture = profile.ServerCulture;
             return true;
+        }
+
+        public static bool TryStripProtocolPrefix(
+            string protocolUsername,
+            out string accountName,
+            out ClientLanguageProfile profile)
+        {
+            accountName = null;
+            profile = null;
+            if (string.IsNullOrWhiteSpace(protocolUsername))
+            {
+                return false;
+            }
+
+            foreach (ClientLanguageProfile candidate in Profiles)
+            {
+                string prefix = candidate.ProtocolPrefix + "_";
+                if (!protocolUsername.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                string suffix = protocolUsername.Substring(prefix.Length);
+                if (string.IsNullOrWhiteSpace(suffix))
+                {
+                    return false;
+                }
+
+                accountName = suffix;
+                profile = candidate;
+                return true;
+            }
+
+            return false;
+        }
+
+        public static bool IsProtocolUsernameForAccount(
+            string protocolUsername,
+            string accountName,
+            byte regionType)
+        {
+            if (string.IsNullOrEmpty(protocolUsername) || string.IsNullOrEmpty(accountName) ||
+                !TryGetProfile(regionType, out ClientLanguageProfile profile))
+            {
+                return false;
+            }
+
+            return string.Equals(
+                protocolUsername,
+                profile.ProtocolPrefix + "_" + accountName,
+                StringComparison.Ordinal);
         }
     }
 }
