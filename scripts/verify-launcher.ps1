@@ -133,6 +133,27 @@ foreach ($requiredCode in @(
     }
 }
 
+$launcherProjectPath = Join-Path $launcher "src/NosGM.Launcher/NosGM.Launcher.csproj"
+$launcherProject = Get-Content $launcherProjectPath -Raw
+foreach ($requiredProjectCode in @(
+    '<SteamAuthStubDotNetHost Condition="''$(DotNetHostPath)'' != ''''">$(DotNetHostPath)</SteamAuthStubDotNetHost>',
+    '<SteamAuthStubDotNetHost Condition="''$(SteamAuthStubDotNetHost)'' == ''''">dotnet</SteamAuthStubDotNetHost>',
+    '&quot;$(SteamAuthStubDotNetHost)&quot; publish'
+)) {
+    if (-not $launcherProject.Contains($requiredProjectCode, [System.StringComparison]::Ordinal)) {
+        throw "Launcher project must invoke the Steam NativeAOT publish through the resolved dotnet host: $requiredProjectCode"
+    }
+}
+foreach ($forbiddenProjectCode in @(
+    '%PATH%',
+    'set &quot;PATH=',
+    'set "PATH='
+)) {
+    if ($launcherProject.Contains($forbiddenProjectCode, [System.StringComparison]::OrdinalIgnoreCase)) {
+        throw "Launcher project must not expand PATH inside the Steam NativeAOT publish command: $forbiddenProjectCode"
+    }
+}
+
 $stubSourcePath = Join-Path $launcher "src/NosGM.SteamAuthStub/SteamAuthStub.cs"
 $stubSource = Get-Content $stubSourcePath -Raw
 foreach ($requiredStubCode in @(
@@ -207,4 +228,4 @@ if ($serverSolution.Contains("NosGM.Launcher", [System.StringComparison]::Ordina
     throw "Launcher projects must remain outside the NosGM server solution."
 }
 
-Write-Host "NosGM Launcher attribution, updater, Gameforge pipe and Steam stub safety checks passed."
+Write-Host "NosGM Launcher attribution, updater, Gameforge pipe, PATH-safe NativeAOT publish and Steam stub safety checks passed."

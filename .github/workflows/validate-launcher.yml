@@ -40,12 +40,14 @@ jobs:
       - name: Restore
         run: dotnet restore Launcher/NosGM.Launcher.sln
 
-      - name: Build Release
+      - name: Build Release with quoted PATH entry
         id: launcher_build
         shell: pwsh
         run: |
           $log = Join-Path $PWD "launcher-build.log"
-          dotnet build Launcher/NosGM.Launcher.sln --configuration Release --no-restore *> $log
+          $dotnet = (Get-Command dotnet.exe -ErrorAction Stop).Source
+          $env:PATH = '"C:\Program Files\MySQL\MySQL Server 8.0\bin";' + $env:PATH
+          & $dotnet build Launcher/NosGM.Launcher.sln --configuration Release --no-restore *> $log
           $exitCode = $LASTEXITCODE
           Get-Content $log
           "exit_code=$exitCode" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
