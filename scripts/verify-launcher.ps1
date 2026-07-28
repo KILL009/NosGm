@@ -18,9 +18,13 @@ $required = @(
     "src/NosGM.Launcher/LauncherAuthenticationClient.cs",
     "src/NosGM.Launcher/GameforgeInstallationId.cs",
     "src/NosGM.Launcher/GameforgeJsonRpcPipeServer.cs",
+    "src/NosGM.Launcher/SteamClientPatcher.cs",
     "src/NosGM.Launcher/ModernGameLauncher.cs",
     "src/NosGM.Launcher/LauncherLoginDialog.cs",
-    "tests/NosGM.Updater.SelfTest/NosGM.Updater.SelfTest.csproj"
+    "src/NosGM.SteamAuthStub/NosGM.SteamAuthStub.csproj",
+    "src/NosGM.SteamAuthStub/SteamAuthStub.cs",
+    "tests/NosGM.Updater.SelfTest/NosGM.Updater.SelfTest.csproj",
+    "tests/NosGM.SteamClient.SelfTest/NosGM.SteamClient.SelfTest.csproj"
 )
 
 foreach ($path in $required) {
@@ -46,14 +50,19 @@ foreach ($needle in @(
     "Mati18505/HexTaleLauncher",
     "50aa50580aa35a45b156a1899a340a25e50f7fb5",
     "no HexTaleLauncher source code",
-    "ECDSA P-256 / SHA-256"
+    "ECDSA P-256 / SHA-256",
+    "NosCoreIO/NosCore.DeveloperTools",
+    "39e2cd2085ff7fc7250966d58893a95262157113",
+    "MIT License"
 )) {
     if (-not $notice.Contains($needle, [System.StringComparison]::OrdinalIgnoreCase)) {
         throw "Launcher notice is missing: $needle"
     }
 }
 
-$sourceFiles = @($trackedFiles | Where-Object { $_.Extension -eq ".cs" })
+$sourceFiles = @($trackedFiles | Where-Object {
+    $_.Extension -eq ".cs" -and $_.FullName -notlike "*NosGM.SteamAuthStub*"
+})
 $source = ($sourceFiles | ForEach-Object { Get-Content $_.FullName -Raw }) -join "`n"
 
 foreach ($forbidden in @(
@@ -105,13 +114,55 @@ foreach ($requiredCode in @(
     "PipeOptions.CurrentUserOnly",
     "_TNT_CLIENT_APPLICATION_ID",
     "_TNT_SESSION_ID",
+    "_NC_AUTH_CODE",
+    "_NC_INSTALLATION_ID",
     "AuthenticationEndpoint",
+    "AuthenticationTransport",
+    "LoginServerAddress",
+    "steam-stub",
+    "gameforge-pipe",
+    "NostaleClientX_NosGM.exe",
+    "noscore_gf.dll",
     "HttpCompletionOption.ResponseHeadersRead",
     "Software\Gameforge4d\TNTClient\MainApp",
-    "GameforgeInstallationId.Resolve()"
+    "GameforgeInstallationId.Resolve()",
+    "EnsureSteamClientIdentity"
 )) {
     if (-not $source.Contains($requiredCode, [System.StringComparison]::Ordinal)) {
         throw "Required launcher safety, release, language, or authentication control missing: $requiredCode"
+    }
+}
+
+$stubSourcePath = Join-Path $launcher "src/NosGM.SteamAuthStub/SteamAuthStub.cs"
+$stubSource = Get-Content $stubSourcePath -Raw
+foreach ($requiredStubCode in @(
+    'EntryPoint = "Steam_Init"',
+    'EntryPoint = "Steam_GetAuthSessionTicket"',
+    'EntryPoint = "Steam_GetSteamLanguage"',
+    'Environment.GetEnvironmentVariable("_NC_AUTH_CODE")',
+    'Environment.GetEnvironmentVariable("_NC_INSTALLATION_ID")',
+    'DllImport("advapi32.dll"',
+    'RegCreateKeyExW',
+    'RegSetValueExW',
+    'RegCloseKey'
+)) {
+    if (-not $stubSource.Contains($requiredStubCode, [System.StringComparison]::Ordinal)) {
+        throw "Steam authentication stub contract missing: $requiredStubCode"
+    }
+}
+foreach ($forbiddenStubCode in @(
+    'CreateRemoteThread',
+    'OpenProcess',
+    'VirtualAllocEx',
+    'WriteProcessMemory',
+    'LoadLibrary',
+    'WinHttp',
+    'InternetOpen',
+    'WebClient',
+    'HttpClient'
+)) {
+    if ($stubSource.Contains($forbiddenStubCode, [System.StringComparison]::OrdinalIgnoreCase)) {
+        throw "Steam authentication stub contains forbidden injection or network primitive: $forbiddenStubCode"
     }
 }
 
@@ -120,7 +171,7 @@ if ($settingsSource.Contains("public string Password", [System.StringComparison]
     throw "Launcher settings must never persist a password."
 }
 if ($settingsSource.Contains("public string InstallationId", [System.StringComparison]::Ordinal)) {
-    throw "Gameforge InstallationId must remain in the current-user registry instead of launcher settings."
+    throw "Gameforge InstallationId must remain in the registry instead of launcher settings."
 }
 if (-not $settingsSource.Contains("uri.IsLoopback", [System.StringComparison]::Ordinal) -or
     -not $settingsSource.Contains("Uri.UriSchemeHttps", [System.StringComparison]::Ordinal)) {
@@ -151,8 +202,9 @@ if ($proprietary.Count -gt 0) {
 
 $serverSolution = Get-Content (Join-Path $root "NosGm.sln") -Raw
 if ($serverSolution.Contains("NosGM.Launcher", [System.StringComparison]::OrdinalIgnoreCase) -or
-    $serverSolution.Contains("NosGM.Updater.Core", [System.StringComparison]::OrdinalIgnoreCase)) {
+    $serverSolution.Contains("NosGM.Updater.Core", [System.StringComparison]::OrdinalIgnoreCase) -or
+    $serverSolution.Contains("NosGM.SteamAuthStub", [System.StringComparison]::OrdinalIgnoreCase)) {
     throw "Launcher projects must remain outside the NosGM server solution."
 }
 
-Write-Host "NosGM Launcher attribution, updater, and modern authentication safety checks passed."
+Write-Host "NosGM Launcher attribution, updater, Gameforge pipe and Steam stub safety checks passed."
