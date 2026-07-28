@@ -7,6 +7,7 @@ param(
     [string]$InstallationIdentityPath = "Launcher/src/NosGM.Launcher/GameforgeInstallationId.cs",
     [string]$AuthenticationClientPath = "Launcher/src/NosGM.Launcher/LauncherAuthenticationClient.cs",
     [string]$PipePath = "Launcher/src/NosGM.Launcher/GameforgeJsonRpcPipeServer.cs",
+    [string]$PipeSelfTestPath = "Launcher/tests/NosGM.GameforgePipe.SelfTest/Program.cs",
     [string]$ModernLauncherPath = "Launcher/src/NosGM.Launcher/ModernGameLauncher.cs",
     [string]$MainWindowPath = "Launcher/src/NosGM.Launcher/MainWindow.xaml.cs"
 )
@@ -52,6 +53,7 @@ $settings = Read-Required $SettingsPath
 $installationIdentity = Read-Required $InstallationIdentityPath
 $authenticationClient = Read-Required $AuthenticationClientPath
 $pipe = Read-Required $PipePath
+$pipeSelfTest = Read-Required $PipeSelfTestPath
 $modernLauncher = Read-Required $ModernLauncherPath
 $mainWindow = Read-Required $MainWindowPath
 
@@ -120,13 +122,25 @@ foreach ($method in @(
 Require $pipe 'PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly' 'The JSON-RPC pipe must be restricted to the current Windows user.'
 Require-Ordered $pipe @(
     'if (!IsSupportedMethod(method))',
-    'if (!HasExpectedSession(root))',
+    'if (RequiresExpectedSession(method) && !HasExpectedSession(root))',
     'return method switch'
-) 'Every supported JSON-RPC method must pass session validation before dispatch.'
-Require $pipe 'receivedSessionId == _sessionId' 'Every pipe request must bind to the launcher session ID.'
+) 'Sensitive JSON-RPC methods must pass session validation before dispatch.'
+Require $pipe 'return method != "ClientLibrary.isClientRunning";' 'The non-sensitive liveness probe must remain compatible with clients that omit params.'
+Require $pipe 'receivedSessionId == _sessionId' 'Sensitive pipe requests must bind to the launcher session ID.'
+Require $pipe 'while (pipe.IsConnected &&' 'The pipe must support several JSON-RPC calls over one connection.'
+Require $pipe 'if (request is null)' 'The pipe must also accept clients that reconnect between requests.'
+Require $pipe 'Task<JsonDocument?> ReadJsonRequestAsync' 'A clean pipe disconnect must be represented without treating it as malformed JSON.'
 Require $pipe '_authorizationCode = null;' 'The authorization code must be erased after delivery.'
 Require $pipe '!(_authorizationCodeDelivered && _accountNameDelivered)' 'The pipe must deliver both credentials before completing.'
 Require $pipe 'MaximumRequestBytes = 16 * 1024' 'JSON-RPC requests must be bounded.'
+Forbid $pipe 'if (!HasExpectedSession(root))' 'The liveness probe must not be rejected merely because it has no session params.'
+
+Require $pipeSelfTest 'RunPersistentConnectionScenarioAsync' 'The Gameforge pipe must be exercised over one persistent connection.'
+Require $pipeSelfTest 'RunReconnectScenarioAsync' 'The Gameforge pipe must be exercised with one connection per request.'
+Require $pipeSelfTest 'method = "ClientLibrary.isClientRunning"' 'The self-test must send the liveness probe without params.'
+Require $pipeSelfTest 'ValueKind == JsonValueKind.True' 'The liveness response must remain a JSON boolean.'
+Require $pipeSelfTest 'GetInt32() == -32602' 'The self-test must prove that a wrong session is rejected.'
+Require $pipeSelfTest 'GetInt32() == -32001' 'The self-test must prove that an authorization code cannot be replayed.'
 
 $expectedRegions = @(
     '["en"] = 0', '["de"] = 1', '["fr"] = 2', '["it"] = 3', '["pl"] = 4',
@@ -152,4 +166,4 @@ Require $mainWindow 'ModernGameLauncher.LaunchAsync(' 'The Play button is not co
 Require $mainWindow '_settings = _settings with { AccountName = credentials.AccountName };' 'Only the account name should be remembered after success.'
 Forbid $mainWindow 'Password = credentials.Password' 'The password must never be saved to settings.'
 
-Write-Host 'Launcher HTTPS ticket bridge, shared InstallationId, and session-bound Gameforge JSON-RPC handshake contracts verified.'
+Write-Host 'Launcher HTTPS ticket bridge, shared InstallationId, compatible session-bound Gameforge JSON-RPC handshake, and behavioral pipe tests verified.'

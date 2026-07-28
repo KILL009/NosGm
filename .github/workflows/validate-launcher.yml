@@ -66,6 +66,9 @@ jobs:
       - name: Run updater synthetic regression test
         run: dotnet run --project Launcher/tests/NosGM.Updater.SelfTest/NosGM.Updater.SelfTest.csproj --configuration Release --no-build
 
+      - name: Run Gameforge pipe protocol self-test
+        run: dotnet run --project Launcher/tests/NosGM.GameforgePipe.SelfTest/NosGM.GameforgePipe.SelfTest.csproj --configuration Release
+
       - name: Run launcher safety and attribution checks
         id: launcher_guard
         shell: pwsh
