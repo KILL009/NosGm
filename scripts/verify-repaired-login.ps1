@@ -75,12 +75,17 @@ Forbid $login 'Logger.Info(rawPacket' 'Raw authentication packets must not be lo
 Require-Ordered $login @(
     'GameforgeLoginPacketParser.TryParse(',
     'payload.CountryId != resolvedRegionType',
+    'GameforgeLoginPacketParser.TryGetCulture(resolvedRegionType',
     'ConsumeGameforgeAuthTicket(',
     'RegisterAccountLogin(',
     'RegisterGameforgeWorldPermit(',
     'string serversPacket = BuildServersPacket(',
     '_session.SendPacket(serversPacket);'
 ) 'The Gameforge Login flow is not ordered safely.'
+Require $login 'Gameforge CountryId overridden by trusted Login port' 'Modern Login does not record client/port region mismatches safely.'
+Require-Regex $login 'ConsumeGameforgeAuthTicket\(\s*payload\.AuthToken,\s*payload\.InstallationId\.ToString\("D"\),\s*resolvedRegionType\)' 'Modern tickets must be consumed against the region resolved from the accepted Login port.'
+Forbid-Regex $login 'ConsumeGameforgeAuthTicket\(\s*payload\.AuthToken,\s*payload\.InstallationId\.ToString\("D"\),\s*payload\.CountryId\)' 'The untrusted packet CountryId must not select the ticket region.'
+Forbid $login 'Session removed. Reason: Gameforge country does not match the trusted Login port' 'Steam-compatible CountryId mismatches must not be rejected before the region-bound ticket is checked.'
 Require $login 'PasswordHashService.VerifyLoginPayload(' 'Legacy NoS0575 password verification was removed.'
 Require $login 'ClientRegionMap.TryResolveLoginPort(_session.ListeningPort' 'Login no longer trusts the accepted local port.'
 Require $login 'CommunicationServiceClient.Instance.DisconnectAccount(loadedAccount.AccountId);' 'Failed Login registration no longer rolls Master back.'
@@ -144,4 +149,4 @@ foreach ($item in @(
     @{ Name = 'AuthentificationServiceClient.cs'; Content = $client }
 )) { Require-BalancedRegions $item.Content $item.Name }
 
-Write-Host 'Repaired Login -> Master -> World and ten-language contracts verified.'
+Write-Host 'Repaired Login -> Master -> World, trusted-port region binding and ten-language contracts verified.'
