@@ -10,7 +10,7 @@ internal sealed class GameforgeJsonRpcPipeServer
 {
     private const string PipeName = "GameforgeClientJSONRPC";
     private const int MaximumRequestBytes = 16 * 1024;
-    private const int MaximumRequests = 8;
+    private const int MaximumRequests = 12;
 
     private readonly string _accountName;
     private string? _authorizationCode;
@@ -30,10 +30,9 @@ internal sealed class GameforgeJsonRpcPipeServer
 
     public async Task RunAsync(CancellationToken cancellationToken)
     {
-        for (var requestIndex = 0;
-             requestIndex < MaximumRequests &&
-             !(_authorizationCodeDelivered && _accountNameDelivered);
-             requestIndex++)
+        var requestCount = 0;
+        while (requestCount < MaximumRequests &&
+               !(_authorizationCodeDelivered && _accountNameDelivered))
         {
             await using var pipe = new NamedPipeServerStream(
                 PipeName,
@@ -43,10 +42,21 @@ internal sealed class GameforgeJsonRpcPipeServer
                 PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);
 
             await pipe.WaitForConnectionAsync(cancellationToken);
-            using var request = await ReadJsonRequestAsync(pipe, cancellationToken);
-            var response = CreateResponse(request.RootElement);
-            await pipe.WriteAsync(response, cancellationToken);
-            await pipe.FlushAsync(cancellationToken);
+            while (pipe.IsConnected &&
+                   requestCount < MaximumRequests &&
+                   !(_authorizationCodeDelivered && _accountNameDelivered))
+            {
+                using var request = await ReadJsonRequestAsync(pipe, cancellationToken);
+                if (request is null)
+                {
+                    break;
+                }
+
+                requestCount++;
+                var response = CreateResponse(request.RootElement);
+                await pipe.WriteAsync(response, cancellationToken);
+                await pipe.FlushAsync(cancellationToken);
+            }
         }
 
         if (!_authorizationCodeDelivered || !_accountNameDelivered)
@@ -74,7 +84,7 @@ internal sealed class GameforgeJsonRpcPipeServer
             return CreateErrorResponse(idElement, -32601, "Method not found");
         }
 
-        if (!HasExpectedSession(root))
+        if (RequiresExpectedSession(method) && !HasExpectedSession(root))
         {
             return CreateErrorResponse(idElement, -32602, "Invalid session");
         }
@@ -97,6 +107,11 @@ internal sealed class GameforgeJsonRpcPipeServer
                method == "ClientLibrary.initSession" ||
                method == "ClientLibrary.queryAuthorizationCode" ||
                method == "ClientLibrary.queryGameAccountName";
+    }
+
+    private static bool RequiresExpectedSession(string? method)
+    {
+        return method != "ClientLibrary.isClientRunning";
     }
 
     private bool HasExpectedSession(JsonElement root)
@@ -172,7 +187,7 @@ internal sealed class GameforgeJsonRpcPipeServer
         return buffer.WrittenSpan.ToArray();
     }
 
-    private static async Task<JsonDocument> ReadJsonRequestAsync(
+    private static async Task<JsonDocument?> ReadJsonRequestAsync(
         NamedPipeServerStream pipe,
         CancellationToken cancellationToken)
     {
@@ -183,6 +198,11 @@ internal sealed class GameforgeJsonRpcPipeServer
             var read = await pipe.ReadAsync(buffer.AsMemory(), cancellationToken);
             if (read == 0)
             {
+                if (memory.Length == 0)
+                {
+                    return null;
+                }
+
                 break;
             }
 
