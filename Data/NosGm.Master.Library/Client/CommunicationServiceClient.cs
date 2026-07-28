@@ -1,4 +1,4 @@
-﻿using NosGm.Configuration;
+using NosGm.Configuration;
 using NosGm.Core;
 using NosGm.DAL;
 using NosGm.Domain;
@@ -46,7 +46,6 @@ namespace NosGm.Master.Library.Client
         private static CommunicationServiceClient _instance;
 
         private readonly IScsServiceClient<ICommunicationService> _client;
-
         private readonly CommunicationClient _commClient;
 
         #endregion
@@ -268,9 +267,50 @@ namespace NosGm.Master.Library.Client
             return _client.ServiceProxy.RetrieveOriginWorld(accountId);
         }
 
-        public string RetrieveRegisteredWorldServers(string username, byte regionType, int sessionId, bool ignoreUserName, long AccountId) => _client.ServiceProxy.RetrieveRegisteredWorldServers(username, regionType, sessionId, ignoreUserName, AccountId);
+        public string RetrieveRegisteredWorldServers(string username, byte regionType, int sessionId, bool ignoreUserName, long AccountId)
+        {
+            string packet = _client.ServiceProxy.RetrieveRegisteredWorldServers(
+                username,
+                regionType,
+                sessionId,
+                ignoreUserName,
+                AccountId);
+            return NormalizeNsTeSTPacketLayout(packet);
+        }
 
+        private static string NormalizeNsTeSTPacketLayout(string packet)
+        {
+            const string header = "NsTeST";
+            const string modernPrefix = "NsTeST  ";
+            const string legacyPrefix = "NsTeST ";
 
+            if (string.IsNullOrEmpty(packet) ||
+                packet.StartsWith(modernPrefix, StringComparison.Ordinal) ||
+                !packet.StartsWith(legacyPrefix, StringComparison.Ordinal))
+            {
+                return packet;
+            }
+
+            int regionStart = legacyPrefix.Length;
+            int regionEnd = packet.IndexOf(' ', regionStart);
+            if (regionEnd <= regionStart) return packet;
+
+            int accountStart = regionEnd + 1;
+            int accountEnd = packet.IndexOf(' ', accountStart);
+            if (accountEnd <= accountStart) return packet;
+
+            string region = packet.Substring(regionStart, regionEnd - regionStart);
+            string account = packet.Substring(accountStart, accountEnd - accountStart);
+            string remainder = packet.Substring(accountEnd + 1);
+            if (string.IsNullOrWhiteSpace(region) ||
+                string.IsNullOrWhiteSpace(account) ||
+                string.IsNullOrWhiteSpace(remainder))
+            {
+                return packet;
+            }
+
+            return $"{header}  {region} {account} 2 0 0 0 0 0 0 {remainder}";
+        }
 
         public IEnumerable<string> RetrieveServerStatistics(bool isStart)
         {
