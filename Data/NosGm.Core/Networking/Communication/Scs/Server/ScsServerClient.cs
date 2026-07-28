@@ -5,6 +5,7 @@ using NosGm.Core.Networking.Communication.Scs.Communication.EndPoints;
 using NosGm.Core.Networking.Communication.Scs.Communication.Messages;
 using NosGm.Core.Networking.Communication.Scs.Communication.Protocols;
 using System;
+using System.Collections.Generic;
 using System.Threading.Tasks;
 
 namespace NosGm.Core.Networking.Communication.Scs.Server
@@ -139,6 +140,16 @@ namespace NosGm.Core.Networking.Communication.Scs.Server
         }
 
         /// <summary>
+        /// Allows a concrete network client to turn one transport message into an
+        /// ordered sequence of logical messages without changing the wire protocol.
+        /// The default implementation preserves the original message unchanged.
+        /// </summary>
+        protected virtual IEnumerable<IScsMessage> TransformReceivedMessages(IScsMessage message)
+        {
+            yield return message;
+        }
+
+        /// <summary>
         ///     Handles Disconnected event of _communicationChannel object.
         /// </summary>
         /// <param name="sender">Source of event</param>
@@ -182,7 +193,13 @@ namespace NosGm.Core.Networking.Communication.Scs.Server
                 }
             }
 
-            OnMessageReceived(message);
+            foreach (IScsMessage transformedMessage in TransformReceivedMessages(message))
+            {
+                if (transformedMessage != null)
+                {
+                    OnMessageReceived(transformedMessage);
+                }
+            }
         }
 
         /// <summary>
