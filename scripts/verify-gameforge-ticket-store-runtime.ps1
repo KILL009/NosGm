@@ -80,9 +80,13 @@ Assert-True $second.Success "The regional selection authentication should consum
 Assert-Equal "test1" $second.AccountName "The second ticket stage resolved the wrong account."
 
 $third = Consume-Ticket $token $installationId 5
-Assert-False $third.Success "A third authentication must be rejected."
+Assert-True $third.Success "The channel selection authentication should consume the third ticket stage."
+Assert-Equal "test1" $third.AccountName "The third ticket stage resolved the wrong account."
+
+$fourth = Consume-Ticket $token $installationId 5
+Assert-False $fourth.Success "A fourth authentication must be rejected."
 Assert-Equal 0 ([int]$countProperty.GetValue($instance, $null)) "A fully consumed ticket must be removed."
-Write-Host "[PASS] Modern Login ticket permits exactly two matching consumptions."
+Write-Host "[PASS] Modern Login ticket permits exactly three matching consumptions."
 
 Clear-Tickets
 $mismatchToken = [Guid]::NewGuid().ToString("D")
@@ -117,4 +121,4 @@ Assert-False (Consume-Ticket $expiredToken $expiredInstallationId 5).Success `
 Write-Host "[PASS] Expired modern Login ticket is rejected."
 
 Clear-Tickets
-Write-Host "Gameforge modern Login tickets support the client's two-stage language flow while preserving TTL, InstallationId and region binding."
+Write-Host "Gameforge modern Login tickets support the client's three-stage language, region and channel flow while preserving TTL, InstallationId and region binding."
