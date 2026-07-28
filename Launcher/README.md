@@ -19,7 +19,7 @@ A release is accepted only when:
 - only files recorded in the local managed-install state may be removed;
 - one exclusive installation lock prevents concurrent update, import and recovery operations;
 - a durable transaction journal recovers or finalizes interrupted commits on the next launch;
-- the game is launched without administrator elevation.
+- the game is launched without administrator elevation after any required one-time client preparation.
 
 The private release-signing key is never part of the launcher, repository or web server. Only the public key is pinned in the launcher build.
 
@@ -29,29 +29,40 @@ When an authentication endpoint is configured, **Play** uses the modern `NoS0576
 
 - the account password is sent only to the configured NosGM HTTPS ticket endpoint;
 - the password is never saved in launcher settings or passed to Login or World;
-- Master returns a short-lived, one-use authorization code;
+- Master returns a short-lived, one-use authorization code bound to region and InstallationId;
+- the launcher automatically selects the transport appropriate for the client installation;
+- a failed or incomplete launch terminates the spawned client.
+
+### Gameforge installations
+
+The existing `gameforge-pipe` transport remains available:
+
 - the launcher starts a current-user-only `GameforgeClientJSONRPC` named pipe;
 - the client receives the code and account name through the four expected JSON-RPC methods;
-- the client starts with `gf <countryId>`, `_TNT_CLIENT_APPLICATION_ID` and `_TNT_SESSION_ID`;
-- a failed or incomplete handshake terminates the spawned client.
+- the client starts with `gf <countryId>`, `_TNT_CLIENT_APPLICATION_ID` and `_TNT_SESSION_ID`.
 
-The launcher reads the same Gameforge `InstallationId` that the client uses from:
+### Steam installations
 
-```text
-HKCU\Software\Gameforge4d\TNTClient\MainApp\InstallationId
-```
+The `steam-stub` transport is selected automatically for a Steam installation:
 
-If it does not exist, the launcher creates it before starting the client. It is not duplicated into `settings.json`.
+- the original `NostaleClientX.exe` is never modified;
+- the launcher transactionally creates `NostaleClientX_NosGM.exe` beside it;
+- the copy receives only the Login IPv4 address and the equal-length `gf_wrapper.dll` to `noscore_gf.dll` import rewrite;
+- the embedded NativeAOT x86 stub receives the one-use GUID through `_NC_AUTH_CODE`;
+- the same InstallationId is synchronized before the ticket is issued;
+- no patched proprietary executable is stored in this repository or launcher package.
 
-For local development:
+The default transport is `auto`. Runtime overrides are available for controlled testing:
 
 ```powershell
+$env:NOSGM_LOGIN_TRANSPORT = "auto"          # auto | steam-stub | gameforge-pipe
+$env:NOSGM_LOGIN_ADDRESS = "127.0.0.1"       # IPv4, maximum 15 characters
 $env:NOSGM_AUTH_ENDPOINT = "http://127.0.0.1:8081/api/v1/launcher/ticket"
 ```
 
-Remote endpoints must use HTTPS and the exact path `/api/v1/launcher/ticket`. When no authentication endpoint is configured, the previous launch action remains available for compatibility.
+Remote authentication endpoints must use HTTPS and the exact path `/api/v1/launcher/ticket`. When no authentication endpoint is configured, the previous launch action remains available for compatibility.
 
-See [`docs/launcher-authentication.md`](../docs/launcher-authentication.md) for server flags, TLS reverse-proxy deployment, regional mapping and real-client verification.
+See [`docs/launcher-authentication.md`](../docs/launcher-authentication.md) for server deployment and [`docs/steam-client-authentication.md`](../docs/steam-client-authentication.md) for Steam preparation, testing and cleanup.
 
 ## Launcher languages
 
@@ -96,19 +107,28 @@ The local `.nosgm/update.lock` file is opened with exclusive sharing during impo
 ## Projects
 
 - `src/NosGM.Updater.Core`: manifest validation, signature verification, path sandboxing, planning, streaming downloads, staging, rollback, installation locking, import and crash recovery.
-- `src/NosGM.ManifestBuilder`: package-free CLI for generating signing keys, building and verifying manifests, calculating public-key fingerprints and generating trusted public channel source.
-- `src/NosGM.Launcher`: multilingual WPF shell for importing, checking, repairing and launching the client through legacy or modern authentication.
-- `tests/NosGM.Updater.SelfTest`: package-free synthetic regression suite, including interrupted-commit recovery.
+- `src/NosGM.ManifestBuilder`: package-free CLI for signing keys, manifests, fingerprints and trusted channel source.
+- `src/NosGM.Launcher`: multilingual WPF shell, HTTPS ticket client, Gameforge pipe and Steam client preparation.
+- `src/NosGM.SteamAuthStub`: MIT-attributed NativeAOT x86 compatibility DLL embedded in the launcher.
+- `tests/NosGM.Updater.SelfTest`: package-free updater and recovery regression suite.
+- `tests/NosGM.GameforgePipe.SelfTest`: behavioral named-pipe protocol tests.
+- `tests/NosGM.SteamClient.SelfTest`: transactional binary-patch and x86 PE stub tests.
 
 ## Build
+
+Building from source requires the .NET 9 SDK, .NET 10 SDK and the Windows native C++ toolchain used by NativeAOT win-x86.
 
 ```powershell
 dotnet restore Launcher/NosGM.Launcher.sln
 dotnet build Launcher/NosGM.Launcher.sln --configuration Release --no-restore
 dotnet run --project Launcher/tests/NosGM.Updater.SelfTest --configuration Release --no-build
+dotnet run --project Launcher/tests/NosGM.GameforgePipe.SelfTest --configuration Release
+dotnet run --project Launcher/tests/NosGM.SteamClient.SelfTest --configuration Release
 ./scripts/verify-launcher.ps1
 ./scripts/verify-launcher-auth-bridge.ps1
 ```
+
+A published self-contained launcher embeds the NativeAOT x86 stub. It does not download a compatibility DLL at runtime.
 
 ## Generate release keys
 
@@ -157,4 +177,4 @@ The resulting self-contained package includes `release-info.json`, SHA-256 metad
 
 ## Boundaries
 
-This repository does not contain a NosTale executable, client archive, proprietary asset, private signing key, account credential, packet injector, gameplay automation or administrator-elevation mechanism.
+This repository does not contain a NosTale executable, client archive, proprietary asset, private signing key, account credential, packet injector, gameplay automation or administrator-elevation mechanism. The Steam path derives its patched executable locally from the user's own authorized installation and never distributes that executable.
