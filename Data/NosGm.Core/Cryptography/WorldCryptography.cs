@@ -160,7 +160,7 @@ namespace NosGm.Core
                 var builder = new StringBuilder();
                 for (var i = 1; i < data.Length; i++)
                 {
-                    if (Convert.ToChar(data[i]) == 0xE) return builder.ToString();
+                    if (Convert.ToChar(data[i]) == 0xE) return NormalizeInitialWorldHandshake(builder.ToString());
 
                     var firstByte = Convert.ToInt32(data[i] - 0xF);
                     var secondByte = firstByte;
@@ -211,12 +211,40 @@ namespace NosGm.Core
                     }
                 }
 
-                return builder.ToString();
+                return NormalizeInitialWorldHandshake(builder.ToString());
             }
             catch (OverflowException)
             {
                 return "";
             }
+        }
+
+        /// <summary>
+        /// Modern Steam/Gameforge clients send only the session identifier in the
+        /// World custom parameter. The legacy ClientSession pipeline expects an
+        /// initial packet identity followed by the session identifier. Normalize
+        /// the modern one-token form to packet identity zero while preserving the
+        /// existing two-token legacy form byte-for-byte.
+        /// </summary>
+        private static string NormalizeInitialWorldHandshake(string decoded)
+        {
+            if (string.IsNullOrWhiteSpace(decoded)) return decoded;
+
+            string[] parts = decoded.Split(
+                new[] { ' ', '\t', '\r', '\n' },
+                StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length != 1) return decoded;
+
+            string sessionToken = parts[0];
+            int metadataSeparator = sessionToken.IndexOf('\\');
+            if (metadataSeparator >= 0)
+            {
+                sessionToken = sessionToken.Substring(0, metadataSeparator);
+            }
+
+            return int.TryParse(sessionToken, out int sessionId) && sessionId > 0
+                ? $"0 {sessionId}"
+                : decoded;
         }
 
         public override byte[] Encrypt(string data)
