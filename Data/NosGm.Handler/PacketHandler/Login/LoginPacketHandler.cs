@@ -143,26 +143,24 @@ namespace NosGm.Handler.BasicPacket.Login
                 return;
             }
 
-            if (!TryResolveClientRegion(out byte resolvedRegionType, out string clientCulture)) return;
+            // Modern Steam-derived clients can use the base Login listener (4000)
+            // for every country. The port must still be one of our configured
+            // listeners, but it is not the regional authority for NoS0577.
+            if (!TryResolveClientRegion(out byte listenerRegionType, out string listenerCulture)) return;
 
-            // The accepted local Login port and the one-use Master ticket are the
-            // trusted region boundary. Steam-derived clients may preserve a legacy
-            // CountryId inside NoS0577 even when they were launched for another
-            // regional port. Keep that value as telemetry, but never let it select
-            // the ticket region or account culture.
-            if (payload.CountryId != resolvedRegionType)
+            if (!GameforgeLoginPacketParser.TryGetCulture(payload.CountryId, out string clientCulture))
             {
-                Logger.Warn(
-                    $"Gameforge CountryId overridden by trusted Login port | " +
-                    $"Port={_session.ListeningPort} PacketRegion={payload.CountryId} " +
-                    $"ResolvedRegion={resolvedRegionType} Culture={clientCulture}");
+                Reject(LoginFailType.CantConnect, "Session removed. Reason: Unsupported Gameforge country");
+                return;
             }
 
-            if (!GameforgeLoginPacketParser.TryGetCulture(resolvedRegionType, out string resolvedCulture) ||
-                !string.Equals(resolvedCulture, clientCulture, StringComparison.Ordinal))
+            if (payload.CountryId != listenerRegionType)
             {
-                Reject(LoginFailType.CantConnect, "Session removed. Reason: Unsupported trusted Login region");
-                return;
+                Logger.Warn(
+                    $"Gameforge region selected by ticket-bound packet | " +
+                    $"Port={_session.ListeningPort} ListenerRegion={listenerRegionType} " +
+                    $"ListenerCulture={listenerCulture} PacketRegion={payload.CountryId} " +
+                    $"EffectiveCulture={clientCulture}");
             }
 
             if (!ValidateClientVersion(true, payload.ClientVersion)) return;
@@ -177,10 +175,13 @@ namespace NosGm.Handler.BasicPacket.Login
             string accountName;
             try
             {
+                // The packet country is only accepted when Master can consume a
+                // one-use ticket that was issued for the same country and
+                // InstallationId. The ticket store is the regional authority.
                 accountName = AuthentificationServiceClient.Instance.ConsumeGameforgeAuthTicket(
                     payload.AuthToken,
                     payload.InstallationId.ToString("D"),
-                    resolvedRegionType);
+                    payload.CountryId);
             }
             catch (Exception ex)
             {
@@ -213,7 +214,7 @@ namespace NosGm.Handler.BasicPacket.Login
             await CompleteLoginAsync(
                     loadedAccount,
                     loadedAccount.Name,
-                    resolvedRegionType,
+                    payload.CountryId,
                     clientCulture,
                     false,
                     payload.Header,
