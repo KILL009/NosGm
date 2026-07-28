@@ -70,10 +70,21 @@ Require $configuration 'uri.Scheme == Uri.UriSchemeHttp && !uri.IsLoopback' 'Pla
 Require $configuration 'uri.AbsolutePath != "/"' 'The HttpListener environment override must accept only a listener root.'
 
 Require $launcherSettings 'AuthenticationEndpointEnvironmentVariable = "NOSGM_AUTH_ENDPOINT"' 'Launcher settings must read the runtime endpoint explicitly.'
-Require $launcherSettings 'EnvironmentVariableTarget.Process' 'The launcher endpoint override must remain process-scoped.'
-Require $launcherSettings 'AuthenticationEndpoint = runtimeEndpoint' 'The runtime endpoint must override an existing settings file.'
-Require $launcherSettings 'AuthenticationEndpoint = _persistedAuthenticationEndpoint' 'Saving settings must restore the persisted endpoint instead of writing the runtime value.'
+Require $launcherSettings 'AuthenticationTransportEnvironmentVariable = "NOSGM_LOGIN_TRANSPORT"' 'Launcher settings must read the runtime transport explicitly.'
+Require $launcherSettings 'LoginServerAddressEnvironmentVariable = "NOSGM_LOGIN_ADDRESS"' 'Launcher settings must read the runtime Login address explicitly.'
+Require $launcherSettings 'EnvironmentVariableTarget.Process' 'Launcher runtime overrides must remain process-scoped.'
+Require $launcherSettings 'AuthenticationEndpoint = GetRuntimeValue(AuthenticationEndpointEnvironmentVariable) ??' 'The runtime endpoint must override an existing settings file.'
+Require $launcherSettings 'AuthenticationTransport = GetRuntimeValue(AuthenticationTransportEnvironmentVariable) ??' 'The runtime transport must override an existing settings file.'
+Require $launcherSettings 'LoginServerAddress = GetRuntimeValue(LoginServerAddressEnvironmentVariable) ??' 'The runtime Login address must override an existing settings file.'
+Require $launcherSettings 'AuthenticationEndpoint = GetRuntimeValue(AuthenticationEndpointEnvironmentVariable) is null' 'Saving settings must distinguish a persistent endpoint from a process override.'
+Require $launcherSettings ': _persistedAuthenticationEndpoint' 'Saving settings must restore the persistent endpoint instead of writing the process override.'
+Require $launcherSettings 'AuthenticationTransport = GetRuntimeValue(AuthenticationTransportEnvironmentVariable) is null' 'Saving settings must distinguish a persistent transport from a process override.'
+Require $launcherSettings ': _persistedAuthenticationTransport' 'Saving settings must restore the persistent transport instead of writing the process override.'
+Require $launcherSettings 'LoginServerAddress = GetRuntimeValue(LoginServerAddressEnvironmentVariable) is null' 'Saving settings must distinguish a persistent Login address from a process override.'
+Require $launcherSettings ': _persistedLoginServerAddress' 'Saving settings must restore the persistent Login address instead of writing the process override.'
 Forbid $launcherSettings 'Environment.GetEnvironmentVariable("NOSGM_AUTH_ENDPOINT") ?? string.Empty' 'The endpoint must not depend only on a record property initializer.'
+Forbid $launcherSettings 'EnvironmentVariableTarget.User' 'Launcher runtime authentication overrides must never be written to the user environment.'
+Forbid $launcherSettings 'EnvironmentVariableTarget.Machine' 'Launcher runtime authentication overrides must never be written to the machine environment.'
 
 foreach ($variableName in @(
     'NOSGM_MASTER_AUTH_KEY',
@@ -130,4 +141,4 @@ Require $documentation './scripts/stop-modern-login-local.ps1' 'Documentation mu
 Require $documentation 'NOSGM_MASTER_AUTH_KEY' 'Documentation must list the external secret configuration.'
 Require $documentation 'NuGet CLI is optional' 'Documentation must explain the MSBuild packages.config fallback.'
 
-Write-Host 'Modern Login runtime environment, PowerShell 5.1 collection serialization, package restore fallback, executable layout, transient launcher endpoint, local startup and safe shutdown contracts verified.'
+Write-Host 'Modern Login runtime environment, transient endpoint/transport/address overrides, PowerShell 5.1 serialization, package restore fallback, executable layout and safe shutdown contracts verified.'

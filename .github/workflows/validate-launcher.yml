@@ -24,16 +24,18 @@ permissions:
 jobs:
   build-and-test:
     runs-on: windows-2022
-    timeout-minutes: 20
+    timeout-minutes: 30
 
     steps:
       - name: Check out repository
         uses: actions/checkout@v6
 
-      - name: Set up .NET 9
+      - name: Set up .NET 9 and .NET 10
         uses: actions/setup-dotnet@v5
         with:
-          dotnet-version: 9.0.x
+          dotnet-version: |
+            9.0.x
+            10.0.x
 
       - name: Restore
         run: dotnet restore Launcher/NosGM.Launcher.sln
@@ -68,6 +70,9 @@ jobs:
 
       - name: Run Gameforge pipe protocol self-test
         run: dotnet run --project Launcher/tests/NosGM.GameforgePipe.SelfTest/NosGM.GameforgePipe.SelfTest.csproj --configuration Release
+
+      - name: Run Steam client patcher self-test
+        run: dotnet run --project Launcher/tests/NosGM.SteamClient.SelfTest/NosGM.SteamClient.SelfTest.csproj --configuration Release
 
       - name: Run launcher safety and attribution checks
         id: launcher_guard

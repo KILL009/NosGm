@@ -36,6 +36,7 @@ internal sealed class LauncherAuthenticationClient
         string accountName,
         string password,
         byte countryId,
+        string installationId,
         CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(settings.AuthenticationEndpoint))
@@ -47,6 +48,11 @@ internal sealed class LauncherAuthenticationClient
         if (!Uri.TryCreate(settings.AuthenticationEndpoint, UriKind.Absolute, out var endpoint))
         {
             throw new InvalidDataException("The launcher authentication endpoint is invalid.");
+        }
+
+        if (!Guid.TryParse(installationId, out var parsedInstallationId) || parsedInstallationId == Guid.Empty)
+        {
+            throw new InvalidDataException("The launcher InstallationId is invalid.");
         }
 
         using var handler = new HttpClientHandler
@@ -63,7 +69,7 @@ internal sealed class LauncherAuthenticationClient
         var requestModel = new TicketRequest(
             accountName,
             password,
-            GameforgeInstallationId.Resolve(),
+            parsedInstallationId.ToString("D"),
             countryId);
         var json = JsonSerializer.Serialize(requestModel);
         using var request = new HttpRequestMessage(HttpMethod.Post, endpoint)

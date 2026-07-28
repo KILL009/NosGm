@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 
 using System.IO;
+using System.Net;
+using System.Net.Sockets;
 using NosGM.Updater.Core;
 
 namespace NosGM.Launcher;
@@ -15,6 +17,8 @@ internal sealed record LauncherSettings
     public string GameExecutable { get; init; } = "NostaleClientX.exe";
     public string Language { get; init; } = "es";
     public string AuthenticationEndpoint { get; init; } = string.Empty;
+    public string AuthenticationTransport { get; init; } = "auto";
+    public string LoginServerAddress { get; init; } = "127.0.0.1";
     public string AccountName { get; init; } = string.Empty;
     public bool CloseAfterLaunch { get; init; }
 }
@@ -22,7 +26,12 @@ internal sealed record LauncherSettings
 internal static class LauncherSettingsStore
 {
     private const string AuthenticationEndpointEnvironmentVariable = "NOSGM_AUTH_ENDPOINT";
+    private const string AuthenticationTransportEnvironmentVariable = "NOSGM_LOGIN_TRANSPORT";
+    private const string LoginServerAddressEnvironmentVariable = "NOSGM_LOGIN_ADDRESS";
+
     private static string _persistedAuthenticationEndpoint = string.Empty;
+    private static string _persistedAuthenticationTransport = "auto";
+    private static string _persistedLoginServerAddress = "127.0.0.1";
 
     private static string SettingsPath => Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
@@ -46,15 +55,17 @@ internal static class LauncherSettingsStore
         }
 
         _persistedAuthenticationEndpoint = persistedSettings.AuthenticationEndpoint;
-        var runtimeEndpoint = GetRuntimeAuthenticationEndpoint();
-        if (runtimeEndpoint is null)
-        {
-            return persistedSettings;
-        }
+        _persistedAuthenticationTransport = persistedSettings.AuthenticationTransport;
+        _persistedLoginServerAddress = persistedSettings.LoginServerAddress;
 
         var effectiveSettings = persistedSettings with
         {
-            AuthenticationEndpoint = runtimeEndpoint
+            AuthenticationEndpoint = GetRuntimeValue(AuthenticationEndpointEnvironmentVariable) ??
+                                     persistedSettings.AuthenticationEndpoint,
+            AuthenticationTransport = GetRuntimeValue(AuthenticationTransportEnvironmentVariable) ??
+                                      persistedSettings.AuthenticationTransport,
+            LoginServerAddress = GetRuntimeValue(LoginServerAddressEnvironmentVariable) ??
+                                 persistedSettings.LoginServerAddress
         };
         Validate(effectiveSettings);
         return effectiveSettings;
@@ -62,20 +73,29 @@ internal static class LauncherSettingsStore
 
     public static Task SaveAsync(LauncherSettings settings)
     {
-        var persistedSettings = GetRuntimeAuthenticationEndpoint() is null
-            ? settings
-            : settings with { AuthenticationEndpoint = _persistedAuthenticationEndpoint };
+        var persistedSettings = settings with
+        {
+            AuthenticationEndpoint = GetRuntimeValue(AuthenticationEndpointEnvironmentVariable) is null
+                ? settings.AuthenticationEndpoint
+                : _persistedAuthenticationEndpoint,
+            AuthenticationTransport = GetRuntimeValue(AuthenticationTransportEnvironmentVariable) is null
+                ? settings.AuthenticationTransport
+                : _persistedAuthenticationTransport,
+            LoginServerAddress = GetRuntimeValue(LoginServerAddressEnvironmentVariable) is null
+                ? settings.LoginServerAddress
+                : _persistedLoginServerAddress
+        };
         Validate(persistedSettings);
         _persistedAuthenticationEndpoint = persistedSettings.AuthenticationEndpoint;
+        _persistedAuthenticationTransport = persistedSettings.AuthenticationTransport;
+        _persistedLoginServerAddress = persistedSettings.LoginServerAddress;
         return JsonSupport.WriteAtomicAsync(SettingsPath, persistedSettings);
     }
 
-    private static string? GetRuntimeAuthenticationEndpoint()
+    private static string? GetRuntimeValue(string variableName)
     {
-        var configuredEndpoint = Environment.GetEnvironmentVariable(
-            AuthenticationEndpointEnvironmentVariable,
-            EnvironmentVariableTarget.Process);
-        return configuredEndpoint?.Trim();
+        var value = Environment.GetEnvironmentVariable(variableName, EnvironmentVariableTarget.Process);
+        return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
     }
 
     private static void Validate(LauncherSettings settings)
@@ -88,7 +108,9 @@ internal static class LauncherSettingsStore
             settings.GameExecutable.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0 ||
             settings.AccountName.Length > 255 ||
             settings.AccountName.IndexOfAny(['\t', '\r', '\n', '\v', '\0']) >= 0 ||
-            !IsSafeAuthenticationEndpoint(settings.AuthenticationEndpoint))
+            !IsSafeAuthenticationEndpoint(settings.AuthenticationEndpoint) ||
+            !IsSupportedTransport(settings.AuthenticationTransport) ||
+            !IsIpv4Address(settings.LoginServerAddress))
         {
             throw new InvalidDataException("Launcher settings are invalid.");
         }
@@ -101,6 +123,19 @@ internal static class LauncherSettingsStore
         {
             throw new InvalidDataException($"Unsupported launcher language '{settings.Language}'.");
         }
+    }
+
+    private static bool IsSupportedTransport(string value)
+    {
+        return string.Equals(value, "auto", StringComparison.OrdinalIgnoreCase) ||
+               string.Equals(value, "gameforge-pipe", StringComparison.OrdinalIgnoreCase) ||
+               string.Equals(value, "steam-stub", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsIpv4Address(string value)
+    {
+        return IPAddress.TryParse(value?.Trim(), out var address) &&
+               address.AddressFamily == AddressFamily.InterNetwork;
     }
 
     private static bool IsSafeAuthenticationEndpoint(string endpoint)
