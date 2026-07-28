@@ -14,12 +14,36 @@ namespace NosGm.Master.Library.Interface
         {
             payload = null;
             errorCode = null;
-            if (string.IsNullOrEmpty(rawPacket) || rawPacket.Length > MaximumPacketLength)
+            if (string.IsNullOrEmpty(rawPacket))
             {
                 errorCode = "InvalidLength";
                 return false;
             }
-            if (rawPacket.IndexOf('\r') >= 0 || rawPacket.IndexOf('\n') >= 0 || rawPacket.IndexOf('\0') >= 0)
+
+            // Some authorized NosTale clients include the protocol's terminal NUL
+            // in the string delivered to the packet handler. Accept exactly one
+            // terminal delimiter, but never an embedded or repeated NUL.
+            if (rawPacket[rawPacket.Length - 1] == '\0')
+            {
+                rawPacket = rawPacket.Substring(0, rawPacket.Length - 1);
+                if (rawPacket.Length == 0 || rawPacket.IndexOf('\0') >= 0)
+                {
+                    errorCode = "UnexpectedControlCharacter";
+                    return false;
+                }
+            }
+            else if (rawPacket.IndexOf('\0') >= 0)
+            {
+                errorCode = "UnexpectedControlCharacter";
+                return false;
+            }
+
+            if (rawPacket.Length > MaximumPacketLength)
+            {
+                errorCode = "InvalidLength";
+                return false;
+            }
+            if (rawPacket.IndexOf('\r') >= 0 || rawPacket.IndexOf('\n') >= 0)
             {
                 errorCode = "UnexpectedControlCharacter";
                 return false;
