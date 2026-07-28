@@ -3,7 +3,9 @@ using NosGm.Core.Networking.Communication.Scs.Communication;
 using NosGm.Core.Networking.Communication.Scs.Communication.Channels;
 using NosGm.Core.Networking.Communication.Scs.Communication.Messages;
 using NosGm.Core.Networking.Communication.Scs.Server;
+using System;
 using System.Collections.Generic;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace NosGm.Core
@@ -22,8 +24,13 @@ namespace NosGm.Core
 
         #region Members
 
+        private const int MaximumInitialCustomParameterBytes = 4096;
+
         private CryptographyBase _encryptor;
         private object _session;
+        private readonly object _initialCustomParameterSync = new object();
+        private byte[] _pendingInitialCustomParameterBytes = Array.Empty<byte>();
+        private int _initialCustomParameterFrameSplit;
 
         #endregion
 
@@ -80,6 +87,94 @@ namespace NosGm.Core
         public void SetClientSession(object clientSession)
         {
             _session = clientSession;
+        }
+
+        /// <summary>
+        /// The current Steam/Gameforge client may coalesce the initial World custom
+        /// parameter and the first encrypted packets in one transport message. Split
+        /// at the protocol terminator and raise both logical messages in order so the
+        /// session parser cannot discard the encrypted tail.
+        /// </summary>
+        protected override IEnumerable<IScsMessage> TransformReceivedMessages(IScsMessage message)
+        {
+            if (!(message is ScsRawDataMessage rawMessage) ||
+                _encryptor?.HasCustomParameter != true ||
+                Volatile.Read(ref _initialCustomParameterFrameSplit) != 0 ||
+                rawMessage.MessageData == null)
+            {
+                yield return message;
+                yield break;
+            }
+
+            byte[] candidate;
+            lock (_initialCustomParameterSync)
+            {
+                int pendingLength = _pendingInitialCustomParameterBytes.Length;
+                int incomingLength = rawMessage.MessageData.Length;
+                if (pendingLength + incomingLength > MaximumInitialCustomParameterBytes)
+                {
+                    _pendingInitialCustomParameterBytes = Array.Empty<byte>();
+                    Logger.Warn(
+                        $"Initial custom-parameter frame exceeded {MaximumInitialCustomParameterBytes} bytes for client {ClientId} ({RemoteEndPoint}).");
+                    Disconnect();
+                    yield break;
+                }
+
+                candidate = new byte[pendingLength + incomingLength];
+                if (pendingLength > 0)
+                {
+                    Buffer.BlockCopy(_pendingInitialCustomParameterBytes, 0, candidate, 0, pendingLength);
+                }
+                Buffer.BlockCopy(rawMessage.MessageData, 0, candidate, pendingLength, incomingLength);
+
+                if (!TrySplitInitialCustomParameterFrame(candidate, out byte[] customParameterFrame, out byte[] remainder))
+                {
+                    _pendingInitialCustomParameterBytes = candidate;
+                    yield break;
+                }
+
+                _pendingInitialCustomParameterBytes = Array.Empty<byte>();
+                Interlocked.Exchange(ref _initialCustomParameterFrameSplit, 1);
+                candidate = customParameterFrame;
+                rawMessage = new ScsRawDataMessage(remainder);
+            }
+
+            yield return new ScsRawDataMessage(candidate);
+            if (rawMessage.MessageData.Length > 0)
+            {
+                yield return rawMessage;
+            }
+        }
+
+        private static bool TrySplitInitialCustomParameterFrame(
+            byte[] data,
+            out byte[] customParameterFrame,
+            out byte[] remainder)
+        {
+            customParameterFrame = null;
+            remainder = null;
+            if (data == null || data.Length < 2)
+            {
+                return false;
+            }
+
+            int terminatorIndex = Array.IndexOf(data, (byte)0x0E, 1);
+            if (terminatorIndex < 1)
+            {
+                return false;
+            }
+
+            int customLength = terminatorIndex + 1;
+            customParameterFrame = new byte[customLength];
+            Buffer.BlockCopy(data, 0, customParameterFrame, 0, customLength);
+
+            int remainingLength = data.Length - customLength;
+            remainder = new byte[remainingLength];
+            if (remainingLength > 0)
+            {
+                Buffer.BlockCopy(data, customLength, remainder, 0, remainingLength);
+            }
+            return true;
         }
 
         private static void RecordReceivedMessage(object sender, MessageEventArgs eventArgs)
