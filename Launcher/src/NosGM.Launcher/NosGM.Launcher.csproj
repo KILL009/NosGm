@@ -21,6 +21,8 @@
     <SteamAuthStubProjectPath>$(MSBuildThisFileDirectory)..\NosGM.SteamAuthStub\NosGM.SteamAuthStub.csproj</SteamAuthStubProjectPath>
     <SteamAuthStubPublishDirectory>$(MSBuildThisFileDirectory)..\NosGM.SteamAuthStub\bin\$(Configuration)\net10.0\win-x86\publish\</SteamAuthStubPublishDirectory>
     <SteamAuthStubDllPath>$(SteamAuthStubPublishDirectory)noscore_gf.dll</SteamAuthStubDllPath>
+    <SteamAuthStubDotNetHost Condition="'$(DotNetHostPath)' != ''">$(DotNetHostPath)</SteamAuthStubDotNetHost>
+    <SteamAuthStubDotNetHost Condition="'$(SteamAuthStubDotNetHost)' == ''">dotnet</SteamAuthStubDotNetHost>
   </PropertyGroup>
 
   <ItemGroup Condition="Exists('TrustedChannel.Generated.cs')">
@@ -34,7 +36,7 @@
           BeforeTargets="BeforeBuild"
           Condition="'$(DesignTimeBuild)' != 'true' and '$(OS)' == 'Windows_NT'">
     <Message Importance="high" Text="Publishing NosGM Steam authentication stub (NativeAOT x86)..." />
-    <Exec Command="set &quot;PATH=$(MSBuildProgramFiles32)\Microsoft Visual Studio\Installer;%PATH%&quot; &amp;&amp; dotnet publish &quot;$(SteamAuthStubProjectPath)&quot; -c $(Configuration) -r win-x86 --nologo -v minimal" />
+    <Exec Command="&quot;$(SteamAuthStubDotNetHost)&quot; publish &quot;$(SteamAuthStubProjectPath)&quot; -c $(Configuration) -r win-x86 --nologo -v minimal" />
     <Error Condition="!Exists('$(SteamAuthStubDllPath)')" Text="Steam authentication stub publish did not produce $(SteamAuthStubDllPath)." />
     <ItemGroup>
       <EmbeddedResource Include="$(SteamAuthStubDllPath)" LogicalName="NosGM.NosCoreGfStub" />
