@@ -106,7 +106,11 @@ namespace NosGm.Core
                 yield break;
             }
 
-            byte[] candidate;
+            byte[] customParameterFrame = null;
+            byte[] remainder = null;
+            bool waitingForTerminator = false;
+            bool frameTooLarge = false;
+
             lock (_initialCustomParameterSync)
             {
                 int pendingLength = _pendingInitialCustomParameterBytes.Length;
@@ -114,35 +118,47 @@ namespace NosGm.Core
                 if (pendingLength + incomingLength > MaximumInitialCustomParameterBytes)
                 {
                     _pendingInitialCustomParameterBytes = Array.Empty<byte>();
-                    Logger.Warn(
-                        $"Initial custom-parameter frame exceeded {MaximumInitialCustomParameterBytes} bytes for client {ClientId} ({RemoteEndPoint}).");
-                    Disconnect();
-                    yield break;
+                    frameTooLarge = true;
                 }
-
-                candidate = new byte[pendingLength + incomingLength];
-                if (pendingLength > 0)
+                else
                 {
-                    Buffer.BlockCopy(_pendingInitialCustomParameterBytes, 0, candidate, 0, pendingLength);
-                }
-                Buffer.BlockCopy(rawMessage.MessageData, 0, candidate, pendingLength, incomingLength);
+                    var candidate = new byte[pendingLength + incomingLength];
+                    if (pendingLength > 0)
+                    {
+                        Buffer.BlockCopy(_pendingInitialCustomParameterBytes, 0, candidate, 0, pendingLength);
+                    }
+                    Buffer.BlockCopy(rawMessage.MessageData, 0, candidate, pendingLength, incomingLength);
 
-                if (!TrySplitInitialCustomParameterFrame(candidate, out byte[] customParameterFrame, out byte[] remainder))
-                {
-                    _pendingInitialCustomParameterBytes = candidate;
-                    yield break;
+                    if (!TrySplitInitialCustomParameterFrame(candidate, out customParameterFrame, out remainder))
+                    {
+                        _pendingInitialCustomParameterBytes = candidate;
+                        waitingForTerminator = true;
+                    }
+                    else
+                    {
+                        _pendingInitialCustomParameterBytes = Array.Empty<byte>();
+                        Interlocked.Exchange(ref _initialCustomParameterFrameSplit, 1);
+                    }
                 }
-
-                _pendingInitialCustomParameterBytes = Array.Empty<byte>();
-                Interlocked.Exchange(ref _initialCustomParameterFrameSplit, 1);
-                candidate = customParameterFrame;
-                rawMessage = new ScsRawDataMessage(remainder);
             }
 
-            yield return new ScsRawDataMessage(candidate);
-            if (rawMessage.MessageData.Length > 0)
+            if (frameTooLarge)
             {
-                yield return rawMessage;
+                Logger.Warn(
+                    $"Initial custom-parameter frame exceeded {MaximumInitialCustomParameterBytes} bytes for client {ClientId} ({RemoteEndPoint}).");
+                Disconnect();
+                yield break;
+            }
+
+            if (waitingForTerminator)
+            {
+                yield break;
+            }
+
+            yield return new ScsRawDataMessage(customParameterFrame);
+            if (remainder.Length > 0)
+            {
+                yield return new ScsRawDataMessage(remainder);
             }
         }
 
