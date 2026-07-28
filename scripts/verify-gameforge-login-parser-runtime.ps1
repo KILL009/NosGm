@@ -69,9 +69,13 @@ if ($packet.Length -ne 139) {
 
 Assert-Accepted "Canonical NoS0577" $packet
 Assert-Accepted "NoS0577 with one terminal NUL" ($packet + [char]0)
+Assert-Accepted "NoS0577 with one terminal CR" ($packet + [char]13)
+Assert-Accepted "NoS0577 with one terminal LF" ($packet + [char]10)
 Assert-Rejected "NoS0577 with embedded NUL" ($packet.Insert(20, [string][char]0)) "UnexpectedControlCharacter"
+Assert-Rejected "NoS0577 with embedded CR" ($packet.Insert(20, [string][char]13)) "UnexpectedControlCharacter"
+Assert-Rejected "NoS0577 with embedded LF" ($packet.Insert(20, [string][char]10)) "UnexpectedControlCharacter"
 Assert-Rejected "NoS0577 with two terminal NULs" ($packet + [char]0 + [char]0) "UnexpectedControlCharacter"
-Assert-Rejected "NoS0577 with terminal CR" ($packet + [char]13) "UnexpectedControlCharacter"
-Assert-Rejected "NoS0577 with terminal LF" ($packet + [char]10) "UnexpectedControlCharacter"
+Assert-Rejected "NoS0577 with terminal CRLF" ($packet + [char]13 + [char]10) "UnexpectedControlCharacter"
+Assert-Rejected "NoS0577 with terminal LFCR" ($packet + [char]10 + [char]13) "UnexpectedControlCharacter"
 
-Write-Host "Gameforge NoS0577 runtime parser accepts exactly one protocol terminal NUL and rejects embedded control characters."
+Write-Host "Gameforge NoS0577 runtime parser accepts one terminal NUL, CR or LF framing delimiter and rejects embedded or repeated controls."
