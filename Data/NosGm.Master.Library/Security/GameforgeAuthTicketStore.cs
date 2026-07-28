@@ -5,6 +5,15 @@ using System.Text;
 
 namespace NosGm.Master.Library.Interface
 {
+    [Serializable]
+    public sealed class GameforgeAuthTicketConsumption
+    {
+        public string AccountName { get; set; }
+        public int ConsumptionNumber { get; set; }
+        public int SessionId { get; set; }
+        public bool IsFirstConsumption => ConsumptionNumber == 1;
+    }
+
     public sealed class GameforgeAuthTicketStore
     {
         public const int MaximumOutstandingTickets = 10000;
@@ -17,6 +26,7 @@ namespace NosGm.Master.Library.Interface
             public byte CountryId { get; set; }
             public DateTime ExpiresAtUtc { get; set; }
             public int RemainingConsumptions { get; set; }
+            public int SessionId { get; set; }
         }
 
         private readonly ConcurrentDictionary<string, Ticket> _tickets = new ConcurrentDictionary<string, Ticket>(StringComparer.Ordinal);
@@ -46,11 +56,17 @@ namespace NosGm.Master.Library.Interface
             });
         }
 
-        public bool TryConsume(string authToken, Guid installationId, byte countryId, out string accountName)
+        public bool TryConsume(
+            string authToken,
+            Guid installationId,
+            byte countryId,
+            int proposedSessionId,
+            out GameforgeAuthTicketConsumption consumption)
         {
-            accountName = null;
+            consumption = null;
             if (!GameforgeLoginPacketParser.TryNormalizeAuthToken(authToken, out string normalizedToken) ||
-                installationId == Guid.Empty || countryId > GameforgeLoginPacketParser.MaximumCountryId) return false;
+                installationId == Guid.Empty || countryId > GameforgeLoginPacketParser.MaximumCountryId ||
+                proposedSessionId <= 0) return false;
 
             string key = ComputeTokenKey(normalizedToken);
             while (true)
@@ -73,8 +89,15 @@ namespace NosGm.Master.Library.Interface
                         return false;
                     }
 
+                    if (ticket.SessionId <= 0) ticket.SessionId = proposedSessionId;
+                    int consumptionNumber = MaximumConsumptionsPerTicket - ticket.RemainingConsumptions + 1;
                     ticket.RemainingConsumptions--;
-                    accountName = ticket.AccountName;
+                    consumption = new GameforgeAuthTicketConsumption
+                    {
+                        AccountName = ticket.AccountName,
+                        ConsumptionNumber = consumptionNumber,
+                        SessionId = ticket.SessionId
+                    };
                     if (ticket.RemainingConsumptions == 0)
                     {
                         _tickets.TryRemove(key, out _);

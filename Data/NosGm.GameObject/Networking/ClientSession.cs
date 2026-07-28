@@ -596,13 +596,15 @@ namespace NosGm.GameObject
 
                 if (sessionParts.Length == 0)
                 {
+                    Logger.Warn(
+                        $"[WORLD_HANDSHAKE] Stage=REJECTED Code=EMPTY_SESSION_FRAME ClientId={ClientId}");
                     return false;
                 }
                 if (!ushort.TryParse(sessionParts[0], out ushort packetId))
                 {
                     Logger.Warn(
-                        $"[SESSION_PACKET_ID_REJECTED] SessionId={SessionId} ClientId={ClientId} " +
-                        $"Received={FormatPacketIdForLog(sessionParts[0])}");
+                        $"[WORLD_HANDSHAKE] Stage=REJECTED Code=INVALID_INITIAL_PACKET_ID ClientId={ClientId} " +
+                        $"TokenLength={sessionParts[0]?.Length ?? 0}");
                     Disconnect();
                     return false;
                 }
@@ -611,17 +613,30 @@ namespace NosGm.GameObject
                 // set the SessionId if Session Packet arrives
                 if (sessionParts.Length < 2)
                 {
+                    Logger.Warn(
+                        $"[WORLD_HANDSHAKE] Stage=REJECTED Code=MISSING_SESSION_TOKEN ClientId={ClientId} " +
+                        $"InitialPacketId={packetId}");
                     return false;
                 }
                 if (int.TryParse(sessionParts[1].Split('\\').FirstOrDefault(), out var sessid))
                 {
                     SessionId = sessid;
-                    //Logger.Info($"{SessionId} entered the World Server");
+                    Logger.Info(
+                        $"[WORLD_HANDSHAKE] Stage=SESSION_ESTABLISHED ClientId={ClientId} " +
+                        $"InitialPacketId={packetId}");
 
                     if (!_waitForPacketsAmount.HasValue)
                     {
                         TriggerHandler("NosGm.EntryPoint", string.Empty, false);
+                        Logger.Info(
+                            $"[WORLD_HANDSHAKE] Stage=ENTRY_PACKET_WAIT_STARTED ClientId={ClientId} " +
+                            $"BufferedParts={_waitForPacketList.Count} ExpectedParts={_waitForPacketsAmount ?? 0}");
                     }
+                }
+                else
+                {
+                    Logger.Warn(
+                        $"[WORLD_HANDSHAKE] Stage=REJECTED Code=INVALID_SESSION_TOKEN ClientId={ClientId}");
                 }
                 return false;
             }
@@ -658,6 +673,9 @@ namespace NosGm.GameObject
                     if (_waitForPacketsAmount.HasValue)
                     {
                         _waitForPacketList.Add(packetstring);
+                        Logger.Info(
+                            $"[WORLD_HANDSHAKE] Stage=ENTRY_PACKET_PART_BUFFERED ClientId={ClientId} " +
+                            $"BufferedParts={_waitForPacketList.Count} ExpectedParts={_waitForPacketsAmount.Value}");
 
                         var packetssplit = packetstring.Split(' ');
 
@@ -670,6 +688,9 @@ namespace NosGm.GameObject
                             _waitForPacketsAmount = null;
                             var queuedPackets = string.Join(" ", _waitForPacketList.ToArray());
                             var header = queuedPackets.Split(' ', '^')[1];
+                            Logger.Info(
+                                $"[WORLD_HANDSHAKE] Stage=ENTRY_PACKET_ASSEMBLED ClientId={ClientId} " +
+                                $"BufferedParts={_waitForPacketList.Count}");
                             TriggerHandler(header, queuedPackets, true);
                             _waitForPacketList.Clear();
                             return false;
@@ -715,6 +736,12 @@ namespace NosGm.GameObject
             var message = e.Message as ScsRawDataMessage;
             if (message?.MessageData == null || message.MessageData.Length <= 2)
             {
+                if (_isWorldServer && message?.MessageData != null)
+                {
+                    Logger.Warn(
+                        $"[WORLD_HANDSHAKE] Stage=FRAME_IGNORED Code=FRAME_TOO_SHORT ClientId={ClientId} " +
+                        $"Bytes={message.MessageData.Length} SessionEstablished={SessionId > 0}");
+                }
                 return;
             }
 

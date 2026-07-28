@@ -118,7 +118,7 @@ namespace NosGm.Handler.BasicPacket.Login
                     clientCulture,
                     ignoreUserName,
                     "password",
-                    false)
+                    null)
                 .ConfigureAwait(false);
         }
 
@@ -172,16 +172,19 @@ namespace NosGm.Handler.BasicPacket.Login
                 return;
             }
 
-            string accountName;
+            GameforgeAuthTicketConsumption ticketConsumption;
             try
             {
                 // The packet country is only accepted when Master can consume a
-                // one-use ticket that was issued for the same country and
-                // InstallationId. The ticket store is the regional authority.
-                accountName = AuthentificationServiceClient.Instance.ConsumeGameforgeAuthTicket(
+                // bounded ticket that was issued for the same country and
+                // InstallationId. Master binds all three modern client stages
+                // to the first proposed SessionId.
+                int proposedSessionId = SessionFactory.Instance.GenerateSessionId();
+                ticketConsumption = AuthentificationServiceClient.Instance.ConsumeGameforgeAuthTicket(
                     payload.AuthToken,
                     payload.InstallationId.ToString("D"),
-                    payload.CountryId);
+                    payload.CountryId,
+                    proposedSessionId);
             }
             catch (Exception ex)
             {
@@ -190,12 +193,17 @@ namespace NosGm.Handler.BasicPacket.Login
                 return;
             }
 
-            if (string.IsNullOrWhiteSpace(accountName))
+            if (ticketConsumption == null ||
+                string.IsNullOrWhiteSpace(ticketConsumption.AccountName) ||
+                ticketConsumption.SessionId <= 0 ||
+                ticketConsumption.ConsumptionNumber < 1 ||
+                ticketConsumption.ConsumptionNumber > GameforgeAuthTicketStore.MaximumConsumptionsPerTicket)
             {
                 Reject(LoginFailType.AccountOrPasswordWrong, "Session removed. Reason: Invalid or expired Gameforge ticket");
                 return;
             }
 
+            string accountName = ticketConsumption.AccountName;
             AccountDTO loadedAccount = DAOFactory.AccountDAO.LoadByName(accountName);
             if (loadedAccount == null)
             {
@@ -218,7 +226,7 @@ namespace NosGm.Handler.BasicPacket.Login
                     clientCulture,
                     false,
                     payload.Header,
-                    true)
+                    ticketConsumption)
                 .ConfigureAwait(false);
         }
 
@@ -229,7 +237,7 @@ namespace NosGm.Handler.BasicPacket.Login
             string culture,
             bool ignoreUserName,
             string authenticationMode,
-            bool requiresGameforgeWorldPermit)
+            GameforgeAuthTicketConsumption gameforgeTicket)
         {
             string ipAddress = NormalizeRemoteIp(_session.IpAddress);
             if (DAOFactory.PenaltyLogDAO.LoadByIp(ipAddress).Any())
@@ -238,23 +246,29 @@ namespace NosGm.Handler.BasicPacket.Login
                 return;
             }
 
-            if (await CheckIsConnectedAsync(loadedAccount.AccountId).ConfigureAwait(false))
+            int newSessionId = gameforgeTicket?.SessionId ?? SessionFactory.Instance.GenerateSessionId();
+            bool isModernContinuation = gameforgeTicket != null &&
+                CommunicationServiceClient.Instance.IsAccountSessionRegistered(loadedAccount.AccountId, newSessionId);
+            if (!isModernContinuation)
             {
-                Reject(LoginFailType.AlreadyConnected, "Session removed. Reason: Already connected");
-                return;
-            }
-
-            if (CommunicationServiceClient.Instance.IsAccountConnected(loadedAccount.AccountId))
-            {
-                _session.SendPacket($"failc {(byte)LoginFailType.AlreadyConnected}");
-                if (!_session.HasSelectedCharacter)
+                if (await CheckIsConnectedAsync(loadedAccount.AccountId).ConfigureAwait(false))
                 {
-                    _session.Disconnect();
-                    CommunicationServiceClient.Instance.DisconnectAccount(loadedAccount.AccountId);
-                    Logger.Info("Session removed. Reason: Already connected");
-                    DisposeLoginPolling();
+                    Reject(LoginFailType.AlreadyConnected, "Session removed. Reason: Already connected");
+                    return;
                 }
-                return;
+
+                if (CommunicationServiceClient.Instance.IsAccountConnected(loadedAccount.AccountId))
+                {
+                    _session.SendPacket($"failc {(byte)LoginFailType.AlreadyConnected}");
+                    if (!_session.HasSelectedCharacter)
+                    {
+                        _session.Disconnect();
+                        CommunicationServiceClient.Instance.DisconnectAccount(loadedAccount.AccountId);
+                        Logger.Info("Session removed. Reason: Already connected");
+                        DisposeLoginPolling();
+                    }
+                    return;
+                }
             }
 
             PenaltyLogDTO penalty = DAOFactory.PenaltyLogDAO.LoadByAccount(loadedAccount.AccountId)
@@ -271,8 +285,10 @@ namespace NosGm.Handler.BasicPacket.Login
                 return;
             }
 
-            int newSessionId = SessionFactory.Instance.GenerateSessionId();
-            Logger.Info($"{loadedAccount.Name} connected | SessionID={newSessionId} Auth={authenticationMode} RegionType={regionType} Culture={culture}");
+            bool ownsAccountRegistration = gameforgeTicket == null || gameforgeTicket.IsFirstConsumption;
+            bool issueGameforgeWorldPermit = gameforgeTicket?.IsFirstConsumption == true;
+            string modernStage = gameforgeTicket == null ? string.Empty : $" Stage={gameforgeTicket.ConsumptionNumber}/{GameforgeAuthTicketStore.MaximumConsumptionsPerTicket}";
+            Logger.Info($"{loadedAccount.Name} connected | SessionID={newSessionId} Auth={authenticationMode}{modernStage} RegionType={regionType} Culture={culture}");
 
             bool accountRegistered = false;
             bool worldPermitRegistered = false;
@@ -281,7 +297,7 @@ namespace NosGm.Handler.BasicPacket.Login
                 CommunicationServiceClient.Instance.RegisterAccountLogin(loadedAccount.AccountId, newSessionId, ipAddress);
                 accountRegistered = true;
 
-                if (requiresGameforgeWorldPermit)
+                if (issueGameforgeWorldPermit)
                 {
                     worldPermitRegistered = AuthentificationServiceClient.Instance.RegisterGameforgeWorldPermit(loadedAccount.AccountId, newSessionId, ipAddress);
                     if (!worldPermitRegistered) throw new InvalidOperationException("Master rejected the Gameforge World permit.");
@@ -300,7 +316,10 @@ namespace NosGm.Handler.BasicPacket.Login
                     {
                         AuthentificationServiceClient.Instance.RevokeGameforgeWorldPermit(loadedAccount.AccountId, newSessionId);
                     }
-                    CommunicationServiceClient.Instance.DisconnectAccount(loadedAccount.AccountId);
+                    if (ownsAccountRegistration)
+                    {
+                        CommunicationServiceClient.Instance.DisconnectAccount(loadedAccount.AccountId);
+                    }
                     DisposeLoginPolling();
                     return;
                 }
@@ -315,7 +334,7 @@ namespace NosGm.Handler.BasicPacket.Login
                 {
                     AuthentificationServiceClient.Instance.RevokeGameforgeWorldPermit(loadedAccount.AccountId, newSessionId);
                 }
-                if (accountRegistered)
+                if (accountRegistered && ownsAccountRegistration)
                 {
                     CommunicationServiceClient.Instance.DisconnectAccount(loadedAccount.AccountId);
                 }

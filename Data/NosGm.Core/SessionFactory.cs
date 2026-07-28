@@ -1,4 +1,6 @@
-﻿namespace NosGm.Core
+﻿using System.Threading;
+
+namespace NosGm.Core
 {
     public class SessionFactory
     {
@@ -20,8 +22,7 @@
 
         public int GenerateSessionId()
         {
-            _sessionCounter += 2;
-            return _sessionCounter;
+            return Interlocked.Add(ref _sessionCounter, 2);
         }
 
         #endregion

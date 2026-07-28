@@ -35,14 +35,16 @@ function Assert-Equal(
     Write-Host "[PASS] $Name"
 }
 
-$tail = "-99 0 -99 0 4242 HOST_A:1337:1:1.1.Sumeria -1:-1:-1:10000.10000.1"
+$characterSlots = "1 1 -99 0 -99 0 -99 0"
+$padding = ((1..56 | ForEach-Object { "-99 0" }) -join " ")
+$tail = "$characterSlots $padding 4242 HOST_A:1337:1:1.1.Sumeria -1:-1:-1:10000.10000.1"
 $legacy = "NsTeST 5 test1 $tail"
-$modern = "NsTeST  5 test1 2 0 0 0 0 0 0 $tail"
+$modern = "NsTeST  5 test1 2 $tail"
 
 Assert-Equal `
     (Invoke-Normalizer $legacy) `
     $modern `
-    "Legacy NsTeST receives the leading blank and seven-field preamble"
+    "Legacy NsTeST receives the leading blank and fixed modern mode field"
 
 Assert-Equal `
     (Invoke-Normalizer $modern) `
@@ -59,8 +61,17 @@ Assert-Equal `
     "NsTeST 5" `
     "Incomplete NsTeST remains unchanged"
 
-if (-not (Invoke-Normalizer $legacy).StartsWith("NsTeST  5 test1 2 0 0 0 0 0 0 ", [StringComparison]::Ordinal)) {
-    throw "The normalized packet does not preserve the literal double space after the NsTeST header."
+$normalized = Invoke-Normalizer $legacy
+if (-not $normalized.StartsWith("NsTeST  5 test1 2 1 1 ", [StringComparison]::Ordinal)) {
+    throw "The normalized packet does not preserve the double space, mode field and first character slot."
 }
 
-Write-Host "Modern NsTeST layout normalization is idempotent and preserves the required leading blank and preamble."
+$tokens = $normalized.Split(
+    [char[]]@(' '),
+    [StringSplitOptions]::RemoveEmptyEntries)
+if ($tokens.Length -le 124 -or $tokens[124] -ne "4242") {
+    throw "NsTeST SessionId moved from token 124 after the 4 character-slot and 56 padding pairs."
+}
+Write-Host "[PASS] NsTeST SessionId remains at token 124."
+
+Write-Host "Modern NsTeST layout normalization is idempotent and preserves the required mode, slots, padding and SessionId."

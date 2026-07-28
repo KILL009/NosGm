@@ -43,9 +43,17 @@ namespace NosGm.Master.Library.Client
             return _client.ServiceProxy.RegisterGameforgeAuthTicket(accountName, authToken, installationId, countryId);
         }
 
-        public string ConsumeGameforgeAuthTicket(string authToken, string installationId, byte countryId)
+        public GameforgeAuthTicketConsumption ConsumeGameforgeAuthTicket(
+            string authToken,
+            string installationId,
+            byte countryId,
+            int proposedSessionId)
         {
-            return _client.ServiceProxy.ConsumeGameforgeAuthTicket(authToken, installationId, countryId);
+            return _client.ServiceProxy.ConsumeGameforgeAuthTicket(
+                authToken,
+                installationId,
+                countryId,
+                proposedSessionId);
         }
 
         public bool RegisterGameforgeWorldPermit(long accountId, int sessionId, string ipAddress)

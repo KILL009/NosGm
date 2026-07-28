@@ -195,12 +195,24 @@ For production, expose only the exact ticket path through a maintained TLS rever
 4. Enter a valid NosGM account and password.
 5. Confirm Master logs one successful ticket issue without printing the token.
 6. Confirm Login accepts `NoS0576` or `NoS0577` on port `4005`.
-7. Confirm the server list appears.
-8. Enter a character and confirm World consumes the one-use permit.
-9. Disconnect and repeat with an invalid password to confirm the generic rejection.
-10. Attempt more than ten invalid passwords in sixty seconds to confirm HTTP `429`.
-11. Collect a sanitized bundle if any stage fails.
-12. Stop the stack with the shutdown script.
+7. Confirm Login reports stages `1/3`, `2/3` and `3/3` with the same `SessionID`.
+8. Confirm the server list appears.
+9. Enter a character and confirm World consumes the one-use permit.
+10. Disconnect and repeat with an invalid password to confirm the generic rejection.
+11. Attempt more than ten invalid passwords in sixty seconds to confirm HTTP `429`.
+12. Collect a sanitized bundle if any stage fails.
+13. Stop the stack with the shutdown script.
+
+For a channel-entry failure, inspect one `ClientId` through the bounded
+`[WORLD_HANDSHAKE]` and `[WORLD_ENTRY]` records. A healthy path ends in
+`GAMEFORGE_WORLD_PERMIT_ACCEPTED`, `ACCOUNT_INITIALIZED` and
+`CHARACTER_LIST_SENT`. Stable `Code=` values identify the exact rejection
+without writing account names, session identifiers, credentials, IP addresses
+or packet contents. These records are flushed immediately to the bounded
+`nosgm-world-handshake.log`; its first record identifies diagnostic revision
+`20260728.4`. The diagnostic ZIP also contains `binary-summary.json`
+with SHA-256 fingerprints for the executable and fixed NosGM module allowlist,
+so evidence can be matched to the deployed build.
 
 ## Automated contracts
 
@@ -211,6 +223,8 @@ Run:
 ./scripts/verify-modern-login-observability.ps1
 ./scripts/verify-launcher-auth-bridge.ps1
 ./scripts/verify-repaired-login.ps1
+./scripts/verify-gameforge-stable-session.ps1
+./scripts/verify-gameforge-ticket-store-runtime.ps1
 ```
 
 The Windows CI workflow also runs these checks after compiling the complete .NET Framework solution.

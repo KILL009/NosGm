@@ -92,9 +92,45 @@ The local defaults allow ten attempts per account and IP in sixty seconds. Do no
 | Client does not open | Client path or launcher process creation | `Client.Executable` check and launcher summary |
 | Client opens and immediately closes | Named-pipe session or `_TNT_*` environment mismatch | Launcher checks and sanitized evidence bundle |
 | Server list is empty | Login region, client version or `NoS0576/NoS0577` parsing | Spanish port `4005`, Login log tail and client version |
-| Server list appears but channel entry fails | Login session registration or server-list packet | Login and Master log tails |
+| Server list appears but channel entry fails | Initial World frame, Login session registration or World permit | `[WORLD_HANDSHAKE]` and `[WORLD_ENTRY]` milestones in the World log tail |
 | Character screen appears but entry disconnects | One-use World permit, account/session/IP binding | World and Master log tails |
 | First entry works but reconnect fails | stale state, reused permit or shutdown residue | stop script, process identity checks and a fresh readiness report |
+
+The World log emits only bounded metadata and stable reason codes; it never emits the raw handshake or entry packet. Follow one `ClientId` from `TCP_CONNECTED` through these milestones:
+
+| Last milestone or code | Meaning |
+| --- | --- |
+| `INITIAL_FRAME_BUFFERED` | World received bytes but has not found the initial `0x0E` terminator |
+| `INITIAL_FRAME_SPLIT` | The custom parameter and any coalesced encrypted tail were separated |
+| `FRAME_TOO_SHORT` | A one- or two-byte transport remainder reached the legacy ingress filter |
+| `SESSION_ESTABLISHED` | The initial World custom parameter produced a valid session identifier |
+| `ENTRY_PACKET_WAIT_STARTED` | World is waiting for the two encrypted entry-packet parts |
+| `ENTRY_PACKET_ASSEMBLED` | All entry parts reached the handler |
+| `LOGIN_NOT_PERMITTED` | Master has no matching account/session registration; if Login logged different SessionIDs for stages `1/3`, `2/3` and `3/3`, the deployed binaries predate the stable-session fix |
+| `GAMEFORGE_AUTH_SERVICE_UNAVAILABLE` | World could not authenticate its permit-consumer role |
+| `GAMEFORGE_WORLD_PERMIT_INVALID` | The one-use permit was missing, expired, already consumed or did not match |
+| `GAMEFORGE_WORLD_PERMIT_ACCEPTED` | The passwordless World permit was consumed successfully |
+| `CHARACTER_LIST_SENT` | World completed entry and returned the character list |
+
+The dedicated `nosgm-world-handshake.log` uses immediate flush so the collector
+can read these events while World is still running. Its first record must be
+`DIAGNOSTICS_READY Revision=20260728.4`; if that record is absent, the deployed
+`NosGm.Core.dll` does not contain this diagnostic revision.
+
+For one launcher ticket, Login must log three bounded stages with the same
+`SessionID`:
+
+```text
+Auth=NoS0577 Stage=1/3
+Auth=NoS0577 Stage=2/3
+Auth=NoS0577 Stage=3/3
+```
+
+Stage one owns the temporary one-use World permit. Stages two and three reuse
+the exact Master account/session registration and never replace an
+`AccountConnection` that World may already have attached. Different SessionIDs
+across those lines indicate that Master, Login or `NosGm.Master.Library.dll`
+was not rebuilt or copied consistently.
 
 ## 5. Collect a sanitized evidence bundle
 
@@ -115,6 +151,7 @@ The bundle includes:
 - readiness results;
 - sanitized PID and port metadata;
 - OS, PowerShell, .NET SDK and repository commit versions;
+- repository dirty state and SHA-256 fingerprints for the launched executable plus the fixed NosGM diagnostic module allowlist;
 - client presence and file version without the installation path;
 - bounded tails of process logs.
 
@@ -147,6 +184,7 @@ The modern Login acceptance test is successful only when all of these are true:
 - the server and channel list appears through Spanish region `5`;
 - character selection loads;
 - World accepts the character and keeps the session connected;
+- all three modern Login stages reuse one SessionID;
 - a second fresh login succeeds;
 - invalid credentials remain generic and rate-limited;
 - no credential material is persisted.

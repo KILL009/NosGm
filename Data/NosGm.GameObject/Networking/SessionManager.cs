@@ -40,13 +40,19 @@ namespace NosGm.GameObject
 
         public void AddSession(INetworkClient customClient)
         {
-            //Logger.Info(Language.Instance.GetMessageFromKey("NEW_CONNECT") + customClient.ClientId);
+            if (IsWorldServer)
+            {
+                Logger.Info(
+                    $"[WORLD_HANDSHAKE] Stage=TCP_CONNECTED ClientId={customClient.ClientId}");
+            }
 
             var session = IntializeNewSession(customClient);
             customClient.SetClientSession(session);
 
             if (session != null && !_sessions.TryAdd(customClient.ClientId, session) && IsWorldServer)
             {
+                Logger.Warn(
+                    $"[WORLD_HANDSHAKE] Stage=REJECTED Code=DUPLICATE_CLIENT_ID ClientId={customClient.ClientId}");
                 Logger.Warn(string.Format(Language.Instance.GetMessageFromKey("FORCED_DISCONNECT"),
                     customClient.ClientId));
                 customClient.Disconnect();
@@ -74,6 +80,14 @@ namespace NosGm.GameObject
             // check if session hasnt been already removed
             if (session != null)
             {
+                if (IsWorldServer)
+                {
+                    Logger.Info(
+                        $"[WORLD_HANDSHAKE] Stage=TCP_DISCONNECTED ClientId={client.ClientId} " +
+                        $"SessionEstablished={session.SessionId > 0} AccountInitialized={session.Account != null} " +
+                        $"Authenticated={session.IsAuthenticated} CharacterSelected={session.HasSelectedCharacter}");
+                }
+
                 session.IsDisposing = true;
                 session.Destroy();
 

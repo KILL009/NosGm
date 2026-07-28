@@ -64,11 +64,23 @@ namespace NosGm.Master.Server
             return GameforgeAuthTicketStore.Instance.TryIssue(account.Name, authToken, parsedInstallationId, countryId, TimeSpan.FromSeconds(ttlSeconds));
         }
 
-        public string ConsumeGameforgeAuthTicket(string authToken, string installationId, byte countryId)
+        public GameforgeAuthTicketConsumption ConsumeGameforgeAuthTicket(
+            string authToken,
+            string installationId,
+            byte countryId,
+            int proposedSessionId)
         {
             if (!ServerConfiguration.EnableGameforgeTokenLogin || !IsGameforgeConsumerClient() ||
-                !Guid.TryParse(installationId, out Guid parsedInstallationId)) return null;
-            return GameforgeAuthTicketStore.Instance.TryConsume(authToken, parsedInstallationId, countryId, out string accountName) ? accountName : null;
+                !Guid.TryParse(installationId, out Guid parsedInstallationId) ||
+                proposedSessionId <= 0) return null;
+            return GameforgeAuthTicketStore.Instance.TryConsume(
+                authToken,
+                parsedInstallationId,
+                countryId,
+                proposedSessionId,
+                out GameforgeAuthTicketConsumption consumption)
+                ? consumption
+                : null;
         }
 
         public bool RegisterGameforgeWorldPermit(long accountId, int sessionId, string ipAddress)

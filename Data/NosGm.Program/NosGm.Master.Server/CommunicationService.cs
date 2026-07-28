@@ -366,6 +366,14 @@ namespace NosGm.Master.Server
                 s.AccountId.Equals(accountId) && s.SessionId.Equals(sessionId) && s.ConnectedWorld == null);
         }
 
+        public bool IsAccountSessionRegistered(long accountId, int sessionId)
+        {
+            if (!MSManager.Instance.AuthentificatedClients.Any(s => s.Equals(CurrentClient.ClientId))) return false;
+
+            return MSManager.Instance.ConnectedAccounts.Any(s =>
+                s.AccountId.Equals(accountId) && s.SessionId.Equals(sessionId));
+        }
+
         public void KickSession(long? accountId, int? sessionId)
         {
             if (!MSManager.Instance.AuthentificatedClients.Any(s => s.Equals(CurrentClient.ClientId))) return;
@@ -399,8 +407,15 @@ namespace NosGm.Master.Server
         public void RegisterAccountLogin(long accountId, int sessionId, string ipAddress)
         {
             if (!MSManager.Instance.AuthentificatedClients.Any(s => s.Equals(CurrentClient.ClientId))) return;
-            MSManager.Instance.ConnectedAccounts.RemoveAll(a => a.AccountId.Equals(accountId));
-            MSManager.Instance.ConnectedAccounts.Add(new AccountConnection(accountId, sessionId, ipAddress));
+            lock (MSManager.Instance.ConnectedAccounts)
+            {
+                AccountConnection existing = MSManager.Instance.ConnectedAccounts.Find(a =>
+                    a.AccountId.Equals(accountId) && a.SessionId.Equals(sessionId));
+                if (existing != null) return;
+
+                MSManager.Instance.ConnectedAccounts.RemoveAll(a => a.AccountId.Equals(accountId));
+                MSManager.Instance.ConnectedAccounts.Add(new AccountConnection(accountId, sessionId, ipAddress));
+            }
         }
 
         public void RegisterCrossServerAccountLogin(long accountId, int sessionId)
@@ -521,20 +536,17 @@ namespace NosGm.Master.Server
                     International = "1 1 -99 1 -99 1 -99 1 ";
                     break;
             }
-            // Cliente 0.9.3.3254
-            // El padding del paquete NsTeST debe ser 56 pares "-99 0".
-            // Cambiar este valor desplaza el SessionId y rompe
-            // la selección del servidor.
-         
+            // NsTeST layout used by the modern client:
+            // region, account, four character-slot pairs, 56 padding pairs,
+            // SessionId and channel list. Login adds only the fixed mode field
+            // "2" and the required double space after the packet header.
+            // Extra fields before International shift the SessionId and make
+            // the client select a channel with the wrong session.
+            var otherServers = string.Concat(
+                Enumerable.Repeat("-99 0 ", NsTeSTPadding));
 
-        var OtherSv = string.Concat(
-            Enumerable.Repeat("-99 0 ", NsTeSTPadding));
-
-
-        //to access to chnanel
-        //var channelPacket = $"NsTeST {regionType} {username} {International}{OtherSv}{sessionId} ";
-        var channelPacket =
-    $"NsTeST {regionType} {username} {International}{OtherSv}{sessionId} ";
+            var channelPacket =
+                $"NsTeST {regionType} {username} {International}{otherServers}{sessionId} ";
 
 
             foreach (var world in visibleWorlds)

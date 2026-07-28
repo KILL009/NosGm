@@ -3,7 +3,7 @@ using NosGm.SCS.Communication.ScsServices.Service;
 
 namespace NosGm.Master.Library.Interface
 {
-    [ScsService(Version = "1.2.0.0")]
+    [ScsService(Version = "1.3.0.0")]
     public interface IAuthentificationService
     {
         bool Authenticate(string authKey);
@@ -11,7 +11,11 @@ namespace NosGm.Master.Library.Interface
         CharacterDTO ValidateAccountAndCharacter(string userName, string characterName, string passHash);
 
         bool RegisterGameforgeAuthTicket(string accountName, string authToken, string installationId, byte countryId);
-        string ConsumeGameforgeAuthTicket(string authToken, string installationId, byte countryId);
+        GameforgeAuthTicketConsumption ConsumeGameforgeAuthTicket(
+            string authToken,
+            string installationId,
+            byte countryId,
+            int proposedSessionId);
         bool RegisterGameforgeWorldPermit(long accountId, int sessionId, string ipAddress);
         bool ConsumeGameforgeWorldPermit(long accountId, int sessionId, string ipAddress);
         void RevokeGameforgeWorldPermit(long accountId, int sessionId);

@@ -126,6 +126,10 @@ jobs:
         shell: powershell
         run: ./scripts/verify-repaired-login.ps1
 
+      - name: Verify stable Gameforge session contracts
+        shell: powershell
+        run: ./scripts/verify-gameforge-stable-session.ps1
+
       - name: Verify Gameforge Login parser runtime behavior
         shell: powershell
         run: ./scripts/verify-gameforge-login-parser-runtime.ps1

@@ -34,13 +34,13 @@ namespace NosGm.Handler.BasicPacket.CharScreen
                 ? Array.Empty<string>()
                 : packet.PacketData.Split(' ');
             bool isCrossServerLogin = false;
+            LogEntryStage("ENTRY_PACKET_RECEIVED", $"Fields={loginPacketParts.Length}");
 
             if (Session.Account == null)
             {
                 if (loginPacketParts.Length <= 3)
                 {
-                    Logger.Debug($"Client {Session.ClientId} forced Disconnection, malformed character entry packet.");
-                    Session.Disconnect();
+                    RejectEntry("MALFORMED_ENTRY_PACKET");
                     return;
                 }
 
@@ -50,8 +50,7 @@ namespace NosGm.Handler.BasicPacket.CharScreen
                 {
                     if (loginPacketParts.Length <= 8 || !string.Equals(loginPacketParts[8], "CrossServerAuthenticate", StringComparison.Ordinal))
                     {
-                        Logger.Debug($"Client {Session.ClientId} forced Disconnection, malformed cross-server entry packet.");
-                        Session.Disconnect();
+                        RejectEntry("MALFORMED_CROSS_SERVER_ENTRY");
                         return;
                     }
                     isCrossServerLogin = true;
@@ -61,8 +60,7 @@ namespace NosGm.Handler.BasicPacket.CharScreen
                 {
                     if (loginPacketParts.Length <= 7)
                     {
-                        Logger.Debug($"Client {Session.ClientId} forced Disconnection, incomplete character entry packet.");
-                        Session.Disconnect();
+                        RejectEntry("INCOMPLETE_ENTRY_PACKET");
                         return;
                     }
                     account = LoadAccountByProtocolName(loginPacketParts[3]);
@@ -70,10 +68,10 @@ namespace NosGm.Handler.BasicPacket.CharScreen
 
                 if (account == null)
                 {
-                    Logger.Debug($"Client {Session.ClientId} forced Disconnection, invalid AccountName.");
-                    Session.Disconnect();
+                    RejectEntry("ACCOUNT_NOT_FOUND");
                     return;
                 }
+                LogEntryStage("ACCOUNT_RESOLVED", $"CrossServer={isCrossServerLogin}");
 
                 bool hasRegisteredAccountLogin;
                 try
@@ -84,26 +82,24 @@ namespace NosGm.Handler.BasicPacket.CharScreen
                 }
                 catch (Exception ex)
                 {
-                    Logger.Error($"Character entry validation failed | ClientId={Session.ClientId} AccountId={account.AccountId}", ex);
-                    Session.Disconnect();
+                    RejectEntry("LOGIN_PERMISSION_CHECK_FAILED", ex);
                     return;
                 }
 
-                Logger.Debug($"Character entry login check | ClientId={Session.ClientId} AccountId={account.AccountId} CrossServer={isCrossServerLogin} Permitted={hasRegisteredAccountLogin}");
                 if (!hasRegisteredAccountLogin)
                 {
-                    Logger.Debug($"Client {Session.ClientId} forced Disconnection, login has not been registered or Account is already logged in.");
-                    Session.Disconnect();
+                    RejectEntry("LOGIN_NOT_PERMITTED");
                     return;
                 }
+                LogEntryStage("LOGIN_PERMISSION_ACCEPTED", $"CrossServer={isCrossServerLogin}");
 
                 bool isGameforgePasswordlessLogin = !isCrossServerLogin && string.Equals(loginPacketParts[7], "thisisgfmode", StringComparison.Ordinal);
                 if (isGameforgePasswordlessLogin)
                 {
+                    LogEntryStage("GAMEFORGE_MODE_DETECTED");
                     if (!ServerConfiguration.EnableGameforgeTokenLogin || !EnsureAuthenticationServiceAuthenticated())
                     {
-                        Logger.Debug($"Client {Session.ClientId} forced Disconnection, Gameforge authentication service unavailable.");
-                        Session.Disconnect();
+                        RejectEntry("GAMEFORGE_AUTH_SERVICE_UNAVAILABLE");
                         return;
                     }
 
@@ -114,45 +110,48 @@ namespace NosGm.Handler.BasicPacket.CharScreen
                     }
                     catch (Exception ex)
                     {
-                        Logger.Error($"Gameforge World-entry validation failed | ClientId={Session.ClientId} AccountId={account.AccountId}", ex);
-                        Session.Disconnect();
+                        RejectEntry("GAMEFORGE_WORLD_PERMIT_CHECK_FAILED", ex);
                         return;
                     }
 
                     if (!permitValid)
                     {
-                        Logger.Debug($"Client {Session.ClientId} forced Disconnection, Gameforge World permit is invalid or expired.");
-                        Session.Disconnect();
+                        RejectEntry("GAMEFORGE_WORLD_PERMIT_INVALID");
                         return;
                     }
+                    LogEntryStage("GAMEFORGE_WORLD_PERMIT_ACCEPTED");
                 }
 
                 bool passwordValid = isCrossServerLogin || isGameforgePasswordlessLogin ||
                                      PasswordHashService.VerifyPassword(account.Password, loginPacketParts[7], true, out _);
                 if (!passwordValid)
                 {
-                    Logger.Debug($"Client {Session.ClientId} forced Disconnection, invalid Password.");
-                    Session.Disconnect();
+                    RejectEntry("PASSWORD_REJECTED");
                     return;
                 }
+                LogEntryStage(
+                    "CREDENTIALS_ACCEPTED",
+                    $"Mode={(isCrossServerLogin ? "CrossServer" : isGameforgePasswordlessLogin ? "Gameforge" : "Password")}");
 
                 Session.InitializeAccount(new Account(account), isCrossServerLogin);
                 ServerManager.Instance.CharacterScreenSessions[Session.Account.AccountId] = Session;
+                LogEntryStage("ACCOUNT_INITIALIZED", $"CrossServer={isCrossServerLogin}");
             }
 
             if (isCrossServerLogin)
             {
                 if (!byte.TryParse(loginPacketParts[6], out byte slot))
                 {
-                    Logger.Debug($"Client {Session.ClientId} forced Disconnection, invalid cross-server character slot.");
-                    Session.Disconnect();
+                    RejectEntry("INVALID_CROSS_SERVER_SLOT");
                     return;
                 }
                 new SelectCharacterPacketHandler(Session).SelectCharacter(new SelectPacket { Slot = slot });
+                LogEntryStage("CROSS_SERVER_CHARACTER_SELECTED");
             }
             else
             {
-                var characters = DAOFactory.CharacterDAO.LoadByAccount(Session.Account.AccountId);
+                var characters = DAOFactory.CharacterDAO.LoadByAccount(Session.Account.AccountId).ToList();
+                LogEntryStage("CHARACTER_LIST_LOADING", $"Characters={characters.Count}");
                 Session.SendPacket("clist_start 0");
 
                 foreach (CharacterDTO character in characters)
@@ -178,7 +177,24 @@ namespace NosGm.Handler.BasicPacket.CharScreen
                     Session.SendPacket($"clist {character.Slot} {character.Name} 0 {(byte)character.Gender} {(byte)character.HairStyle} {(byte)character.HairColor} 0 {(byte)character.Class} {character.Level} {character.HeroLevel} {equipment[(byte)EquipmentType.Hat]?.ItemVNum ?? -1}.{equipment[(byte)EquipmentType.Armor]?.ItemVNum ?? -1}.{equipment[(byte)EquipmentType.WeaponSkin]?.ItemVNum ?? (equipment[(byte)EquipmentType.MainWeapon]?.ItemVNum ?? -1)}.{equipment[(byte)EquipmentType.SecondaryWeapon]?.ItemVNum ?? -1}.{equipment[(byte)EquipmentType.Mask]?.ItemVNum ?? -1}.{equipment[(byte)EquipmentType.Fairy]?.ItemVNum ?? -1}.{equipment[(byte)EquipmentType.CostumeSuit]?.ItemVNum ?? -1}.{equipment[(byte)EquipmentType.CostumeHat]?.ItemVNum ?? -1} {character.JobLevel}  1 1 {petlist} {(equipment[(byte)EquipmentType.Hat]?.Item.IsColored == true ? equipment[(byte)EquipmentType.Hat].Design : 0)} 0");
                 }
                 Session.SendPacket("clist_end");
+                LogEntryStage("CHARACTER_LIST_SENT", $"Characters={characters.Count}");
             }
+        }
+
+        private void LogEntryStage(string stage, string detail = null)
+        {
+            string suffix = string.IsNullOrWhiteSpace(detail) ? string.Empty : " " + detail;
+            Logger.Info($"[WORLD_ENTRY] Stage={stage} ClientId={Session.ClientId}{suffix}");
+        }
+
+        private void RejectEntry(string code, Exception exception = null)
+        {
+            string exceptionDetail = exception == null
+                ? string.Empty
+                : $" ExceptionType={exception.GetType().Name}";
+            Logger.Warn(
+                $"[WORLD_ENTRY] Stage=REJECTED Code={code} ClientId={Session.ClientId}{exceptionDetail}");
+            Session.Disconnect();
         }
 
         private static bool EnsureAuthenticationServiceAuthenticated()

@@ -31,6 +31,7 @@ namespace NosGm.Core
         private readonly object _initialCustomParameterSync = new object();
         private byte[] _pendingInitialCustomParameterBytes = Array.Empty<byte>();
         private int _initialCustomParameterFrameSplit;
+        private int _initialCustomParameterFragments;
 
         #endregion
 
@@ -115,6 +116,7 @@ namespace NosGm.Core
             {
                 int pendingLength = _pendingInitialCustomParameterBytes.Length;
                 int incomingLength = rawMessage.MessageData.Length;
+                _initialCustomParameterFragments++;
                 if (pendingLength + incomingLength > MaximumInitialCustomParameterBytes)
                 {
                     _pendingInitialCustomParameterBytes = Array.Empty<byte>();
@@ -145,16 +147,24 @@ namespace NosGm.Core
             if (frameTooLarge)
             {
                 Logger.Warn(
-                    $"Initial custom-parameter frame exceeded {MaximumInitialCustomParameterBytes} bytes for client {ClientId} ({RemoteEndPoint}).");
+                    $"[WORLD_HANDSHAKE] Stage=REJECTED Code=INITIAL_FRAME_TOO_LARGE ClientId={ClientId} " +
+                    $"LimitBytes={MaximumInitialCustomParameterBytes} Fragments={_initialCustomParameterFragments}");
                 Disconnect();
                 yield break;
             }
 
             if (waitingForTerminator)
             {
+                Logger.Info(
+                    $"[WORLD_HANDSHAKE] Stage=INITIAL_FRAME_BUFFERED ClientId={ClientId} " +
+                    $"PendingBytes={_pendingInitialCustomParameterBytes.Length} Fragments={_initialCustomParameterFragments}");
                 yield break;
             }
 
+            Logger.Info(
+                $"[WORLD_HANDSHAKE] Stage=INITIAL_FRAME_SPLIT ClientId={ClientId} " +
+                $"CustomBytes={customParameterFrame.Length} TailBytes={remainder.Length} " +
+                $"Fragments={_initialCustomParameterFragments}");
             yield return new ScsRawDataMessage(customParameterFrame);
             if (remainder.Length > 0)
             {

@@ -140,6 +140,112 @@ function Write-SanitizedLogTail {
     Set-Content -LiteralPath $DestinationPath -Value $sanitizedText -Encoding UTF8
 }
 
+function Resolve-GitExecutable {
+    $command = Get-Command git.exe -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($null -eq $command) {
+        $command = Get-Command git -ErrorAction SilentlyContinue | Select-Object -First 1
+    }
+    if ($null -ne $command) {
+        return $command.Source
+    }
+
+    $candidates = @()
+    if (-not [string]::IsNullOrWhiteSpace([string]$env:ProgramW6432)) {
+        $candidates += Join-Path ([string]$env:ProgramW6432) "Git\cmd\git.exe"
+    }
+    $localApplicationData = [Environment]::GetFolderPath([Environment+SpecialFolder]::LocalApplicationData)
+    if (-not [string]::IsNullOrWhiteSpace($localApplicationData)) {
+        $candidates += Join-Path $localApplicationData "Programs\Git\cmd\git.exe"
+    }
+    foreach ($candidate in $candidates) {
+        if (-not [string]::IsNullOrWhiteSpace($candidate) -and
+            (Test-Path -LiteralPath $candidate -PathType Leaf)) {
+            return $candidate
+        }
+    }
+    return $null
+}
+
+function Resolve-GitHeadCommit {
+    param([Parameter(Mandatory = $true)][string]$RepositoryRoot)
+
+    try {
+        $gitDirectory = Join-Path $RepositoryRoot ".git"
+        $headPath = Join-Path $gitDirectory "HEAD"
+        if (-not (Test-Path -LiteralPath $headPath -PathType Leaf)) {
+            return $null
+        }
+
+        $head = (Get-Content -LiteralPath $headPath -Raw).Trim()
+        if ($head -match '^[0-9a-fA-F]{40}$') {
+            return $head.ToLowerInvariant()
+        }
+        if (-not $head.StartsWith("ref: ", [StringComparison]::Ordinal)) {
+            return $null
+        }
+
+        $referenceName = $head.Substring(5).Trim()
+        $looseReferencePath = Join-Path $gitDirectory ($referenceName.Replace('/', '\'))
+        if (Test-Path -LiteralPath $looseReferencePath -PathType Leaf) {
+            $looseReference = (Get-Content -LiteralPath $looseReferencePath -Raw).Trim()
+            if ($looseReference -match '^[0-9a-fA-F]{40}$') {
+                return $looseReference.ToLowerInvariant()
+            }
+        }
+
+        $packedReferencesPath = Join-Path $gitDirectory "packed-refs"
+        if (Test-Path -LiteralPath $packedReferencesPath -PathType Leaf) {
+            foreach ($line in Get-Content -LiteralPath $packedReferencesPath) {
+                if ($line.StartsWith("#", [StringComparison]::Ordinal) -or
+                    $line.StartsWith("^", [StringComparison]::Ordinal)) {
+                    continue
+                }
+                $parts = @($line -split ' ', 2)
+                if ($parts.Count -eq 2 -and
+                    $parts[1] -eq $referenceName -and
+                    $parts[0] -match '^[0-9a-fA-F]{40}$') {
+                    return $parts[0].ToLowerInvariant()
+                }
+            }
+        }
+    }
+    catch {
+        return $null
+    }
+    return $null
+}
+
+function Get-FileFingerprint {
+    param([Parameter(Mandatory = $true)][string]$Path)
+
+    if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
+        return $null
+    }
+
+    try {
+        $item = Get-Item -LiteralPath $Path
+        $hash = Get-FileHash -LiteralPath $Path -Algorithm SHA256
+        return [pscustomobject]@{
+            File = $item.Name
+            Status = "available"
+            Length = [long]$item.Length
+            LastWriteTimeUtc = $item.LastWriteTimeUtc.ToString("O")
+            FileVersion = [string]$item.VersionInfo.FileVersion
+            Sha256 = [string]$hash.Hash
+        }
+    }
+    catch {
+        return [pscustomobject]@{
+            File = Split-Path -Leaf $Path
+            Status = "unavailable"
+            Length = $null
+            LastWriteTimeUtc = $null
+            FileVersion = $null
+            Sha256 = $null
+        }
+    }
+}
+
 function Invoke-RedactionSelfTest {
     $testDirectory = Join-Path ([IO.Path]::GetTempPath()) ("NosGM-redaction-" + [Guid]::NewGuid().ToString("N"))
     $sourcePath = Join-Path $testDirectory "synthetic.log"
@@ -269,6 +375,51 @@ try {
             $sanitizedState | ConvertTo-Json -Depth 5 | Set-Content `
                 -LiteralPath (Join-Path $workingDirectory "runtime-state.sanitized.json") `
                 -Encoding UTF8
+
+            try {
+                $diagnosticModules = @(
+                    "NosGm.Core.dll",
+                    "NosGm.GameObject.dll",
+                    "NosGm.Handler.dll",
+                    "NosGm.Master.Library.dll"
+                )
+                $binaryProcesses = foreach ($record in @($state.Processes)) {
+                    $executable = [string]$record.Executable
+                    $processDirectory = Split-Path -Parent $executable
+                    $fingerprints = @()
+
+                    $executableFingerprint = Get-FileFingerprint -Path $executable
+                    if ($null -ne $executableFingerprint) {
+                        $fingerprints += $executableFingerprint
+                    }
+                    foreach ($moduleName in $diagnosticModules) {
+                        $moduleFingerprint = Get-FileFingerprint -Path (Join-Path $processDirectory $moduleName)
+                        if ($null -ne $moduleFingerprint) {
+                            $fingerprints += $moduleFingerprint
+                        }
+                    }
+
+                    [pscustomobject]@{
+                        Name = [string]$record.Name
+                        Files = @($fingerprints)
+                    }
+                }
+                [pscustomobject]@{
+                    SchemaVersion = 1
+                    GeneratedAtUtc = [DateTime]::UtcNow.ToString("O")
+                    Processes = @($binaryProcesses)
+                } | ConvertTo-Json -Depth 6 | Set-Content `
+                    -LiteralPath (Join-Path $workingDirectory "binary-summary.json") `
+                    -Encoding UTF8
+            }
+            catch {
+                [pscustomobject]@{
+                    Status = "unavailable"
+                    ErrorType = $_.Exception.GetType().Name
+                } | ConvertTo-Json -Depth 3 | Set-Content `
+                    -LiteralPath (Join-Path $workingDirectory "binary-summary-error.json") `
+                    -Encoding UTF8
+            }
         }
         catch {
             Set-Content -LiteralPath (Join-Path $workingDirectory "runtime-state-error.txt") `
@@ -288,12 +439,28 @@ try {
     }
 
     $gitCommit = "unavailable"
-    if (Get-Command git.exe -ErrorAction SilentlyContinue) {
+    $gitDirty = $null
+    $gitExecutable = Resolve-GitExecutable
+    if ($null -ne $gitExecutable) {
         try {
-            $gitCommit = (& git -C $root rev-parse HEAD 2>$null | Select-Object -First 1)
+            $resolvedCommit = (& $gitExecutable -C $root rev-parse HEAD 2>$null | Select-Object -First 1)
+            if ($LASTEXITCODE -eq 0 -and -not [string]::IsNullOrWhiteSpace([string]$resolvedCommit)) {
+                $gitCommit = [string]$resolvedCommit
+                $gitStatus = @(& $gitExecutable -C $root status --porcelain --untracked-files=no 2>$null)
+                if ($LASTEXITCODE -eq 0) {
+                    $gitDirty = $gitStatus.Count -gt 0
+                }
+            }
         }
         catch {
             $gitCommit = "unavailable"
+            $gitDirty = $null
+        }
+    }
+    if ($gitCommit -eq "unavailable") {
+        $resolvedHead = Resolve-GitHeadCommit -RepositoryRoot $root
+        if (-not [string]::IsNullOrWhiteSpace([string]$resolvedHead)) {
+            $gitCommit = [string]$resolvedHead
         }
     }
 
@@ -305,6 +472,7 @@ try {
         PowerShellVersion = $PSVersionTable.PSVersion.ToString()
         DotNetSdkVersion = [string]$dotnetVersion
         RepositoryCommit = [string]$gitCommit
+        RepositoryDirty = $gitDirty
     }
     $systemSummary | ConvertTo-Json -Depth 4 | Set-Content `
         -LiteralPath (Join-Path $workingDirectory "system-summary.json") `
@@ -398,6 +566,7 @@ Included:
 - readiness result
 - sanitized runtime process metadata
 - OS, PowerShell, .NET SDK and repository commit versions
+- SHA-256 fingerprints for the launched executables and the fixed NosGM diagnostic module allowlist
 - launcher/client presence summary without paths or account names
 - bounded tails of local process logs after redaction
 

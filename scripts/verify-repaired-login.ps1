@@ -3,8 +3,10 @@ param(
     [string]$EntryPath = "Data/NosGm.Handler/PacketHandler/CharScreen/EntryPointPacketHandler.cs",
     [string]$ProgramPath = "Data/NosGm.Program/NosGm.Login/Program.cs",
     [string]$ServicePath = "Data/NosGm.Program/NosGm.Master.Server/AuthentificationService.cs",
+    [string]$CommunicationServicePath = "Data/NosGm.Program/NosGm.Master.Server/CommunicationService.cs",
     [string]$InterfacePath = "Data/NosGm.Master.Library/Interface/IAuthentificationService.cs",
     [string]$ClientPath = "Data/NosGm.Master.Library/Client/AuthentificationServiceClient.cs",
+    [string]$CommunicationClientPath = "Data/NosGm.Master.Library/Client/CommunicationServiceClient.cs",
     [string]$ParserPath = "Data/NosGm.Master.Library/Security/GameforgeLoginPacketParser.cs",
     [string]$StorePath = "Data/NosGm.Master.Library/Security/GameforgeAuthTicketStore.cs",
     [string]$LanguagePath = "Data/NosGm.Core/Language.cs",
@@ -52,8 +54,10 @@ $login = Read-Source $LoginPath
 $entry = Read-Source $EntryPath
 $program = Read-Source $ProgramPath
 $service = Read-Source $ServicePath
+$communicationService = Read-Source $CommunicationServicePath
 $interface = Read-Source $InterfacePath
 $client = Read-Source $ClientPath
+$communicationClient = Read-Source $CommunicationClientPath
 $parser = Read-Source $ParserPath
 $store = Read-Source $StorePath
 $language = Read-Source $LanguagePath
@@ -83,7 +87,7 @@ Require-Ordered $login @(
     '_session.SendPacket(serversPacket);'
 ) 'The Gameforge Login flow is not ordered safely.'
 Require $login 'Gameforge region selected by ticket-bound packet' 'Modern Login does not record listener/packet region differences safely.'
-Require-Regex $login 'ConsumeGameforgeAuthTicket\(\s*payload\.AuthToken,\s*payload\.InstallationId\.ToString\("D"\),\s*payload\.CountryId\)' 'Modern tickets must be consumed against the packet country that Master cryptographically bound at issue time.'
+Require-Regex $login 'ConsumeGameforgeAuthTicket\(\s*payload\.AuthToken,\s*payload\.InstallationId\.ToString\("D"\),\s*payload\.CountryId,\s*proposedSessionId\s*\)' 'Modern tickets must be consumed against the packet country that Master cryptographically bound at issue time and propose a SessionId.'
 Forbid-Regex $login 'ConsumeGameforgeAuthTicket\(\s*payload\.AuthToken,\s*payload\.InstallationId\.ToString\("D"\),\s*resolvedRegionType\)' 'Modern Login must not derive the ticket region from a fixed listener port.'
 Require-Regex $login 'CompleteLoginAsync\(\s*loadedAccount,\s*loadedAccount\.Name,\s*payload\.CountryId,\s*clientCulture' 'The authenticated ticket country must drive the effective region and culture.'
 Forbid $login 'Gameforge CountryId overridden by trusted Login port' 'The obsolete trusted-port region model returned.'
@@ -91,6 +95,10 @@ Forbid $login 'Session removed. Reason: Gameforge country does not match the tru
 Require $login 'PasswordHashService.VerifyLoginPayload(' 'Legacy NoS0575 password verification was removed.'
 Require $login 'ClientRegionMap.TryResolveLoginPort(_session.ListeningPort' 'Login no longer validates that the accepted local port is configured.'
 Require $login 'CommunicationServiceClient.Instance.DisconnectAccount(loadedAccount.AccountId);' 'Failed Login registration no longer rolls Master back.'
+Require $login 'gameforgeTicket?.SessionId ?? SessionFactory.Instance.GenerateSessionId()' 'Modern Login no longer reuses the SessionId bound by Master.'
+Require $login 'IsAccountSessionRegistered(loadedAccount.AccountId, newSessionId)' 'Modern Login stages no longer recognize their existing account/session tuple.'
+Require $login 'gameforgeTicket?.IsFirstConsumption == true' 'World permits are no longer limited to the first modern Login stage.'
+Require $login 'accountRegistered && ownsAccountRegistration' 'Later modern Login stages could roll back a session they do not own.'
 
 Require-Ordered $entry @(
     'IsLoginPermitted(',
@@ -103,6 +111,7 @@ Require $entry 'PasswordHashService.VerifyPassword(account.Password, loginPacket
 
 Require $interface 'RegisterGameforgeAuthTicket' 'Ticket issuer contract is missing.'
 Require $interface 'ConsumeGameforgeAuthTicket' 'Ticket consumer contract is missing.'
+Require $interface 'GameforgeAuthTicketConsumption ConsumeGameforgeAuthTicket' 'Ticket consumption no longer returns the stable session context.'
 Require $interface 'RegisterGameforgeWorldPermit' 'World permit registration contract is missing.'
 Require $interface 'ConsumeGameforgeWorldPermit' 'World permit consumption contract is missing.'
 Forbid $interface '#endregion' 'Authentication interface still contains an orphaned preprocessor region.'
@@ -125,12 +134,20 @@ Require $store 'SHA256.Create()' 'Raw tickets are not reduced to SHA-256 lookup 
 Require $store 'public const int MaximumConsumptionsPerTicket = 3;' 'Modern Login tickets must allow exactly the client language-list, regional-selection and channel-selection stages.'
 Require $store 'RemainingConsumptions = MaximumConsumptionsPerTicket' 'Issued tickets do not initialize the bounded consumption count.'
 Require $store 'lock (ticket)' 'Ticket consumption is not serialized per credential.'
+Require $store 'if (ticket.SessionId <= 0) ticket.SessionId = proposedSessionId;' 'The first modern stage no longer binds the stable SessionId.'
+Require $store 'SessionId = ticket.SessionId' 'Later modern stages no longer receive the stable SessionId.'
+Require $store 'ConsumptionNumber = consumptionNumber' 'Ticket stage ownership is no longer returned to Login.'
 Require $store 'ticket.RemainingConsumptions--;' 'Ticket consumption no longer decrements the bounded use count.'
 Require $store 'if (ticket.RemainingConsumptions == 0)' 'Fully consumed tickets are not removed.'
 Require $store 'ticket.InstallationId != installationId' 'Tickets are no longer bound to InstallationId.'
 Require $store 'ticket.CountryId != countryId' 'Tickets are no longer bound to the region supplied at issue time.'
 Require $store '_permits.TryRemove(' 'World permits are not one-use.'
 Require $store 'string.Equals(permit.IpAddress, normalizedIp' 'World permits are not bound to IP.'
+Require-Regex $communicationService 'public bool IsAccountSessionRegistered\s*\(long accountId, int sessionId\).*?AccountId\.Equals\(accountId\).*?SessionId\.Equals\(sessionId\)' 'Master cannot recognize later stages of the same modern Login session.'
+Require-Regex $communicationService 'public void RegisterAccountLogin\s*\(long accountId, int sessionId, string ipAddress\).*?lock \(MSManager\.Instance\.ConnectedAccounts\).*?existing != null\) return;.*?RemoveAll.*?Add\(new AccountConnection' 'Master must preserve an existing exact account/session registration instead of replacing its World attachment.'
+Require $communicationService 'private const int NsTeSTPadding = 56;' 'The fixed NsTeST padding changed.'
+Require $communicationClient 'return $"{header}  {region} {account} 2 {remainder}";' 'Login does not normalize NsTeST with only the fixed modern mode field.'
+Forbid $communicationClient '2 0 0 0 0 0 0 {remainder}' 'The obsolete NsTeST zero fields shift the SessionId used for channel entry.'
 
 $profiles = @(
     'new ClientLanguageProfile(0, 4000, "EN", "UK", "en")',

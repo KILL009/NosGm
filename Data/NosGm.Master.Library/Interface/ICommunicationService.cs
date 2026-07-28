@@ -6,7 +6,7 @@ using System.Collections.Generic;
 
 namespace NosGm.Master.Library.Interface
 {
-    [ScsService(Version = "1.1.0.0")]
+    [ScsService(Version = "1.2.0.0")]
     public interface ICommunicationService
     {
         /*
@@ -18,6 +18,7 @@ namespace NosGm.Master.Library.Interface
         void PulseAccount(long accountId);
         void RegisterAccountLogin(long accountId, int sessionId, string ipAddress);
         bool IsLoginPermitted(long accountId, int sessionId);
+        bool IsAccountSessionRegistered(long accountId, int sessionId);
 
 
         /*

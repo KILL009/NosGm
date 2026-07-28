@@ -1,6 +1,7 @@
 ﻿using log4net;
 using log4net.Appender;
 using log4net.Core;
+using log4net.Filter;
 using log4net.Layout;
 using log4net.Repository.Hierarchy;
 using System;
@@ -176,6 +177,8 @@ namespace NosGm.Core
                 }
 
                 hierarchy.Root.Level = Level.Info;
+                string logPrefix = GetLogPrefix();
+                bool isWorldProcess = logPrefix.IndexOf("world", StringComparison.OrdinalIgnoreCase) >= 0;
 
                 RollingFileAppender mainFileAppender = hierarchy.GetAppenders()
                     .OfType<RollingFileAppender>()
@@ -183,7 +186,6 @@ namespace NosGm.Core
 
                 if (mainFileAppender != null)
                 {
-                    string logPrefix = GetLogPrefix();
                     PatternLayout layout = CreateProductionLayout();
 
                     mainFileAppender.File = $"{logPrefix}.log";
@@ -197,10 +199,18 @@ namespace NosGm.Core
                     mainFileAppender.ActivateOptions();
 
                     EnsureCriticalErrorAppender(hierarchy, logPrefix);
+                    if (isWorldProcess)
+                    {
+                        EnsureWorldHandshakeAppender(hierarchy, logPrefix);
+                    }
                 }
 
                 hierarchy.Configured = true;
                 log?.Info("[Logging] Production profile enabled: INFO level with bounded text-file rotation.");
+                if (isWorldProcess)
+                {
+                    log?.Info("[WORLD_HANDSHAKE] Stage=DIAGNOSTICS_READY Revision=20260728.4");
+                }
             }
             catch (Exception ex)
             {
@@ -232,6 +242,48 @@ namespace NosGm.Core
 
             errorAppender.ActivateOptions();
             hierarchy.Root.AddAppender(errorAppender);
+        }
+
+        private static void EnsureWorldHandshakeAppender(Hierarchy hierarchy, string logPrefix)
+        {
+            const string appenderName = "WorldHandshakeDiagnosticFileAppender";
+            if (hierarchy.GetAppenders().Any(appender => appender.Name == appenderName))
+            {
+                return;
+            }
+
+            var handshakeFilter = new StringMatchFilter
+            {
+                StringToMatch = "[WORLD_HANDSHAKE]",
+                AcceptOnMatch = true
+            };
+            handshakeFilter.ActivateOptions();
+
+            var entryFilter = new StringMatchFilter
+            {
+                StringToMatch = "[WORLD_ENTRY]",
+                AcceptOnMatch = true
+            };
+            entryFilter.ActivateOptions();
+
+            var handshakeAppender = new RollingFileAppender
+            {
+                Name = appenderName,
+                File = $"{logPrefix}-handshake.log",
+                AppendToFile = true,
+                RollingStyle = RollingFileAppender.RollingMode.Size,
+                MaxSizeRollBackups = 5,
+                MaxFileSize = 5L * 1024L * 1024L,
+                StaticLogFileName = true,
+                ImmediateFlush = true,
+                Threshold = Level.Info,
+                Layout = CreateProductionLayout()
+            };
+            handshakeAppender.AddFilter(handshakeFilter);
+            handshakeAppender.AddFilter(entryFilter);
+            handshakeAppender.AddFilter(new DenyAllFilter());
+            handshakeAppender.ActivateOptions();
+            hierarchy.Root.AddAppender(handshakeAppender);
         }
 
         private static PatternLayout CreateProductionLayout()
