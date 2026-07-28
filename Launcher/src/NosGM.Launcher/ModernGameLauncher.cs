@@ -25,6 +25,21 @@ internal static class ModernGameLauncher
             ["cn"] = 9
         };
 
+    private static readonly IReadOnlyDictionary<string, string> SteamLanguageByLauncherLanguage =
+        new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["en"] = "english",
+            ["de"] = "german",
+            ["fr"] = "french",
+            ["it"] = "italian",
+            ["pl"] = "polish",
+            ["es"] = "spanish",
+            ["cz"] = "czech",
+            ["ru"] = "russian",
+            ["jp"] = "japanese",
+            ["cn"] = "schinese"
+        };
+
     public static async Task<Process> LaunchAsync(
         LauncherSettings settings,
         string accountName,
@@ -38,10 +53,24 @@ internal static class ModernGameLauncher
         }
 
         var installRoot = Path.GetFullPath(settings.InstallRoot);
-        var gamePath = SafePaths.ResolveManagedPath(installRoot, settings.GameExecutable);
-        if (!File.Exists(gamePath))
+        var sourceGamePath = SafePaths.ResolveManagedPath(installRoot, settings.GameExecutable);
+        if (!File.Exists(sourceGamePath))
         {
-            throw new FileNotFoundException("The configured game executable is not installed.", gamePath);
+            throw new FileNotFoundException("The configured game executable is not installed.", sourceGamePath);
+        }
+
+        var transport = ResolveTransport(settings, installRoot);
+        var installationId = GameforgeInstallationId.Resolve();
+        var gamePath = sourceGamePath;
+
+        if (transport == ModernAuthenticationTransport.SteamStub)
+        {
+            GameforgeInstallationId.EnsureSteamClientIdentity(installationId);
+            var preparation = SteamClientPatcher.Prepare(
+                installRoot,
+                settings.GameExecutable,
+                settings.LoginServerAddress);
+            gamePath = preparation.ExecutablePath;
         }
 
         var authenticationClient = new LauncherAuthenticationClient();
@@ -50,8 +79,98 @@ internal static class ModernGameLauncher
             accountName,
             password,
             countryId,
+            installationId,
             cancellationToken);
 
+        return transport == ModernAuthenticationTransport.SteamStub
+            ? await LaunchWithSteamStubAsync(
+                gamePath,
+                installRoot,
+                settings.Language,
+                countryId,
+                installationId,
+                ticket,
+                cancellationToken)
+            : await LaunchWithGameforgePipeAsync(
+                gamePath,
+                installRoot,
+                countryId,
+                ticket,
+                cancellationToken);
+    }
+
+    private static ModernAuthenticationTransport ResolveTransport(
+        LauncherSettings settings,
+        string installRoot)
+    {
+        if (string.Equals(settings.AuthenticationTransport, "steam-stub", StringComparison.OrdinalIgnoreCase))
+        {
+            return ModernAuthenticationTransport.SteamStub;
+        }
+
+        if (string.Equals(settings.AuthenticationTransport, "gameforge-pipe", StringComparison.OrdinalIgnoreCase))
+        {
+            return ModernAuthenticationTransport.GameforgePipe;
+        }
+
+        return SteamClientPatcher.IsSteamInstallation(installRoot)
+            ? ModernAuthenticationTransport.SteamStub
+            : ModernAuthenticationTransport.GameforgePipe;
+    }
+
+    private static async Task<Process> LaunchWithSteamStubAsync(
+        string gamePath,
+        string installRoot,
+        string launcherLanguage,
+        byte countryId,
+        string installationId,
+        LauncherAuthorizationTicket ticket,
+        CancellationToken cancellationToken)
+    {
+        var startInfo = CreateStartInfo(gamePath, installRoot, countryId);
+        startInfo.Environment["_NC_AUTH_CODE"] = ticket.AuthorizationCode;
+        startInfo.Environment["_NC_INSTALLATION_ID"] = installationId;
+        startInfo.Environment["_NC_STEAM_LANGUAGE"] =
+            SteamLanguageByLauncherLanguage.TryGetValue(launcherLanguage, out var steamLanguage)
+                ? steamLanguage
+                : "english";
+
+        var process = new Process
+        {
+            StartInfo = startInfo,
+            EnableRaisingEvents = true
+        };
+
+        try
+        {
+            if (!process.Start())
+            {
+                throw new InvalidOperationException("Windows did not start the patched Steam game process.");
+            }
+
+            await Task.Delay(TimeSpan.FromSeconds(3), cancellationToken);
+            if (process.HasExited)
+            {
+                throw new InvalidOperationException(
+                    "The patched Steam game process exited before sending modern authentication.");
+            }
+
+            return process;
+        }
+        catch
+        {
+            TryTerminate(process);
+            throw;
+        }
+    }
+
+    private static async Task<Process> LaunchWithGameforgePipeAsync(
+        string gamePath,
+        string installRoot,
+        byte countryId,
+        LauncherAuthorizationTicket ticket,
+        CancellationToken cancellationToken)
+    {
         var sessionId = Guid.NewGuid();
         var pipeServer = new GameforgeJsonRpcPipeServer(
             ticket.AccountName,
@@ -60,14 +179,7 @@ internal static class ModernGameLauncher
         using var handshakeTimeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         handshakeTimeout.CancelAfter(TimeSpan.FromSeconds(Math.Min(45, ticket.ExpiresInSeconds)));
 
-        var startInfo = new ProcessStartInfo
-        {
-            FileName = gamePath,
-            WorkingDirectory = installRoot,
-            UseShellExecute = false
-        };
-        startInfo.ArgumentList.Add("gf");
-        startInfo.ArgumentList.Add(countryId.ToString(CultureInfo.InvariantCulture));
+        var startInfo = CreateStartInfo(gamePath, installRoot, countryId);
         startInfo.Environment["_TNT_CLIENT_APPLICATION_ID"] = ClientApplicationId;
         startInfo.Environment["_TNT_SESSION_ID"] = sessionId.ToString("D");
 
@@ -111,6 +223,22 @@ internal static class ModernGameLauncher
         }
     }
 
+    private static ProcessStartInfo CreateStartInfo(
+        string gamePath,
+        string installRoot,
+        byte countryId)
+    {
+        var startInfo = new ProcessStartInfo
+        {
+            FileName = gamePath,
+            WorkingDirectory = installRoot,
+            UseShellExecute = false
+        };
+        startInfo.ArgumentList.Add("gf");
+        startInfo.ArgumentList.Add(countryId.ToString(CultureInfo.InvariantCulture));
+        return startInfo;
+    }
+
     private static void TryTerminate(Process process)
     {
         try
@@ -124,5 +252,11 @@ internal static class ModernGameLauncher
         {
             // Best-effort cleanup after a failed handshake.
         }
+    }
+
+    private enum ModernAuthenticationTransport
+    {
+        GameforgePipe,
+        SteamStub
     }
 }
