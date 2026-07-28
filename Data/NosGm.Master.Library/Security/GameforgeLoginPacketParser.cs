@@ -20,19 +20,20 @@ namespace NosGm.Master.Library.Interface
                 return false;
             }
 
-            // Some authorized NosTale clients include the protocol's terminal NUL
-            // in the string delivered to the packet handler. Accept exactly one
-            // terminal delimiter, but never an embedded or repeated NUL.
-            if (rawPacket[rawPacket.Length - 1] == '\0')
+            // Depending on the authorized client build and transport boundary, the
+            // packet handler may receive exactly one terminal NUL, CR or LF. Remove
+            // that framing delimiter only at the end. Embedded, repeated or combined
+            // control characters remain invalid.
+            if (IsProtocolTerminalDelimiter(rawPacket[rawPacket.Length - 1]))
             {
                 rawPacket = rawPacket.Substring(0, rawPacket.Length - 1);
-                if (rawPacket.Length == 0 || rawPacket.IndexOf('\0') >= 0)
+                if (rawPacket.Length == 0 || ContainsRestrictedControlCharacter(rawPacket))
                 {
                     errorCode = "UnexpectedControlCharacter";
                     return false;
                 }
             }
-            else if (rawPacket.IndexOf('\0') >= 0)
+            else if (ContainsRestrictedControlCharacter(rawPacket))
             {
                 errorCode = "UnexpectedControlCharacter";
                 return false;
@@ -41,11 +42,6 @@ namespace NosGm.Master.Library.Interface
             if (rawPacket.Length > MaximumPacketLength)
             {
                 errorCode = "InvalidLength";
-                return false;
-            }
-            if (rawPacket.IndexOf('\r') >= 0 || rawPacket.IndexOf('\n') >= 0)
-            {
-                errorCode = "UnexpectedControlCharacter";
                 return false;
             }
 
@@ -195,6 +191,16 @@ namespace NosGm.Master.Library.Interface
                 case 9: culture = "zh"; return true;
                 default: culture = null; return false;
             }
+        }
+
+        private static bool ContainsRestrictedControlCharacter(string value)
+        {
+            return value.IndexOf('\0') >= 0 || value.IndexOf('\r') >= 0 || value.IndexOf('\n') >= 0;
+        }
+
+        private static bool IsProtocolTerminalDelimiter(char value)
+        {
+            return value == '\0' || value == '\r' || value == '\n';
         }
 
         private static bool IsHex(string value, int minimumLength, int maximumLength)
