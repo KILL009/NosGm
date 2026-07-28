@@ -4,6 +4,19 @@
 
 The launcher, updater core, manifest builder, WPF shell and synthetic tests in this directory were written for NosGM in 2026 and are distributed under the MIT License included beside this notice.
 
+## NosCore.DeveloperTools MIT adaptation
+
+The Steam-compatible modern authentication path adapts narrowly scoped code and binary-layout knowledge from:
+
+- Project: `NosCoreIO/NosCore.DeveloperTools`
+- Reviewed revision: `39e2cd2085ff7fc7250966d58893a95262157113`
+- Copyright: Copyright (c) 2026 NosCoreIO
+- License: MIT License
+
+NosGM adapts only the Delphi Login-address discovery, the equal-length `gf_wrapper.dll` import rewrite, and the NativeAOT x86 `Steam_*` authentication-stub contract. NosGM adds transactional output, ambiguity rejection, one resolved InstallationId, no credential logging, no remote download, and a synthetic PE/patch regression test.
+
+The NosCore packet logger, process injection, packet injection, NosMall tooling, HTTP authentication client, endpoints, binaries and user-interface code are not included. The complete MIT permission notice for the adapted component is preserved in the repository-level `THIRD_PARTY_NOTICES.md` that ships with launcher packages.
+
 ## Prior-art review
 
 The update-by-file and repair workflow was independently designed after reviewing:
