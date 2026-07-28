@@ -74,20 +74,22 @@ Forbid $login 'RegisterModernLoginSession' 'The superseded generic World permit 
 Forbid $login 'Logger.Info(rawPacket' 'Raw authentication packets must not be logged.'
 Require-Ordered $login @(
     'GameforgeLoginPacketParser.TryParse(',
-    'payload.CountryId != resolvedRegionType',
-    'GameforgeLoginPacketParser.TryGetCulture(resolvedRegionType',
+    'TryResolveClientRegion(out byte listenerRegionType',
+    'GameforgeLoginPacketParser.TryGetCulture(payload.CountryId',
     'ConsumeGameforgeAuthTicket(',
     'RegisterAccountLogin(',
     'RegisterGameforgeWorldPermit(',
     'string serversPacket = BuildServersPacket(',
     '_session.SendPacket(serversPacket);'
 ) 'The Gameforge Login flow is not ordered safely.'
-Require $login 'Gameforge CountryId overridden by trusted Login port' 'Modern Login does not record client/port region mismatches safely.'
-Require-Regex $login 'ConsumeGameforgeAuthTicket\(\s*payload\.AuthToken,\s*payload\.InstallationId\.ToString\("D"\),\s*resolvedRegionType\)' 'Modern tickets must be consumed against the region resolved from the accepted Login port.'
-Forbid-Regex $login 'ConsumeGameforgeAuthTicket\(\s*payload\.AuthToken,\s*payload\.InstallationId\.ToString\("D"\),\s*payload\.CountryId\)' 'The untrusted packet CountryId must not select the ticket region.'
-Forbid $login 'Session removed. Reason: Gameforge country does not match the trusted Login port' 'Steam-compatible CountryId mismatches must not be rejected before the region-bound ticket is checked.'
+Require $login 'Gameforge region selected by ticket-bound packet' 'Modern Login does not record listener/packet region differences safely.'
+Require-Regex $login 'ConsumeGameforgeAuthTicket\(\s*payload\.AuthToken,\s*payload\.InstallationId\.ToString\("D"\),\s*payload\.CountryId\)' 'Modern tickets must be consumed against the packet country that Master cryptographically bound at issue time.'
+Forbid-Regex $login 'ConsumeGameforgeAuthTicket\(\s*payload\.AuthToken,\s*payload\.InstallationId\.ToString\("D"\),\s*resolvedRegionType\)' 'Modern Login must not derive the ticket region from a fixed listener port.'
+Require-Regex $login 'CompleteLoginAsync\(\s*loadedAccount,\s*loadedAccount\.Name,\s*payload\.CountryId,\s*clientCulture' 'The authenticated ticket country must drive the effective region and culture.'
+Forbid $login 'Gameforge CountryId overridden by trusted Login port' 'The obsolete trusted-port region model returned.'
+Forbid $login 'Session removed. Reason: Gameforge country does not match the trusted Login port' 'Modern clients must not be rejected merely because they use the base Login listener.'
 Require $login 'PasswordHashService.VerifyLoginPayload(' 'Legacy NoS0575 password verification was removed.'
-Require $login 'ClientRegionMap.TryResolveLoginPort(_session.ListeningPort' 'Login no longer trusts the accepted local port.'
+Require $login 'ClientRegionMap.TryResolveLoginPort(_session.ListeningPort' 'Login no longer validates that the accepted local port is configured.'
 Require $login 'CommunicationServiceClient.Instance.DisconnectAccount(loadedAccount.AccountId);' 'Failed Login registration no longer rolls Master back.'
 
 Require-Ordered $entry @(
@@ -121,6 +123,7 @@ Require $parser 'case 8: culture = "ja";' 'Region 8 is not Japanese.'
 Require $parser 'case 9: culture = "zh";' 'Region 9 is not Chinese.'
 Require $store 'SHA256.Create()' 'Raw tickets are not reduced to SHA-256 lookup keys.'
 Require $store '_tickets.TryRemove(' 'Tickets are not one-use.'
+Require $store 'ticket.CountryId != countryId' 'Tickets are no longer bound to the region supplied at issue time.'
 Require $store '_permits.TryRemove(' 'World permits are not one-use.'
 Require $store 'string.Equals(permit.IpAddress, normalizedIp' 'World permits are not bound to IP.'
 
@@ -149,4 +152,4 @@ foreach ($item in @(
     @{ Name = 'AuthentificationServiceClient.cs'; Content = $client }
 )) { Require-BalancedRegions $item.Content $item.Name }
 
-Write-Host 'Repaired Login -> Master -> World, trusted-port region binding and ten-language contracts verified.'
+Write-Host 'Repaired Login -> Master -> World, ticket-bound modern region and ten-language contracts verified.'
