@@ -1,4 +1,4 @@
-﻿using NosGm.Configuration;
+using NosGm.Configuration;
 using NosGm.Core;
 using NosGm.Core.Handling;
 using NosGm.DAL;
@@ -145,15 +145,23 @@ namespace NosGm.Handler.BasicPacket.Login
 
             if (!TryResolveClientRegion(out byte resolvedRegionType, out string clientCulture)) return;
 
+            // The accepted local Login port and the one-use Master ticket are the
+            // trusted region boundary. Steam-derived clients may preserve a legacy
+            // CountryId inside NoS0577 even when they were launched for another
+            // regional port. Keep that value as telemetry, but never let it select
+            // the ticket region or account culture.
             if (payload.CountryId != resolvedRegionType)
             {
-                Reject(LoginFailType.CantConnect, "Session removed. Reason: Gameforge country does not match the trusted Login port");
-                return;
+                Logger.Warn(
+                    $"Gameforge CountryId overridden by trusted Login port | " +
+                    $"Port={_session.ListeningPort} PacketRegion={payload.CountryId} " +
+                    $"ResolvedRegion={resolvedRegionType} Culture={clientCulture}");
             }
 
-            if (!GameforgeLoginPacketParser.TryGetCulture(payload.CountryId, out string payloadCulture) || !string.Equals(payloadCulture, clientCulture, StringComparison.Ordinal))
+            if (!GameforgeLoginPacketParser.TryGetCulture(resolvedRegionType, out string resolvedCulture) ||
+                !string.Equals(resolvedCulture, clientCulture, StringComparison.Ordinal))
             {
-                Reject(LoginFailType.CantConnect, "Session removed. Reason: Unsupported Gameforge country");
+                Reject(LoginFailType.CantConnect, "Session removed. Reason: Unsupported trusted Login region");
                 return;
             }
 
@@ -172,7 +180,7 @@ namespace NosGm.Handler.BasicPacket.Login
                 accountName = AuthentificationServiceClient.Instance.ConsumeGameforgeAuthTicket(
                     payload.AuthToken,
                     payload.InstallationId.ToString("D"),
-                    payload.CountryId);
+                    resolvedRegionType);
             }
             catch (Exception ex)
             {
