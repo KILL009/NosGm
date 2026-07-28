@@ -8,7 +8,7 @@ namespace NosGm.Master.Library.Interface
     public sealed class GameforgeAuthTicketStore
     {
         public const int MaximumOutstandingTickets = 10000;
-        public const int MaximumConsumptionsPerTicket = 2;
+        public const int MaximumConsumptionsPerTicket = 3;
 
         private sealed class Ticket
         {
