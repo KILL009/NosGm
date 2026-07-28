@@ -8,6 +8,7 @@ namespace NosGm.Master.Library.Interface
     public sealed class GameforgeAuthTicketStore
     {
         public const int MaximumOutstandingTickets = 10000;
+        public const int MaximumConsumptionsPerTicket = 2;
 
         private sealed class Ticket
         {
@@ -15,6 +16,7 @@ namespace NosGm.Master.Library.Interface
             public Guid InstallationId { get; set; }
             public byte CountryId { get; set; }
             public DateTime ExpiresAtUtc { get; set; }
+            public int RemainingConsumptions { get; set; }
         }
 
         private readonly ConcurrentDictionary<string, Ticket> _tickets = new ConcurrentDictionary<string, Ticket>(StringComparer.Ordinal);
@@ -39,7 +41,8 @@ namespace NosGm.Master.Library.Interface
                 AccountName = accountName,
                 InstallationId = installationId,
                 CountryId = countryId,
-                ExpiresAtUtc = nowUtc.Add(lifetime)
+                ExpiresAtUtc = nowUtc.Add(lifetime),
+                RemainingConsumptions = MaximumConsumptionsPerTicket
             });
         }
 
@@ -50,10 +53,35 @@ namespace NosGm.Master.Library.Interface
                 installationId == Guid.Empty || countryId > GameforgeLoginPacketParser.MaximumCountryId) return false;
 
             string key = ComputeTokenKey(normalizedToken);
-            if (!_tickets.TryRemove(key, out Ticket ticket)) return false;
-            if (ticket.ExpiresAtUtc <= DateTime.UtcNow || ticket.InstallationId != installationId || ticket.CountryId != countryId) return false;
-            accountName = ticket.AccountName;
-            return true;
+            while (true)
+            {
+                if (!_tickets.TryGetValue(key, out Ticket ticket)) return false;
+
+                lock (ticket)
+                {
+                    if (!_tickets.TryGetValue(key, out Ticket currentTicket) || !ReferenceEquals(currentTicket, ticket))
+                    {
+                        continue;
+                    }
+
+                    if (ticket.ExpiresAtUtc <= DateTime.UtcNow ||
+                        ticket.InstallationId != installationId ||
+                        ticket.CountryId != countryId ||
+                        ticket.RemainingConsumptions <= 0)
+                    {
+                        _tickets.TryRemove(key, out _);
+                        return false;
+                    }
+
+                    ticket.RemainingConsumptions--;
+                    accountName = ticket.AccountName;
+                    if (ticket.RemainingConsumptions == 0)
+                    {
+                        _tickets.TryRemove(key, out _);
+                    }
+                    return true;
+                }
+            }
         }
 
         public void Clear() => _tickets.Clear();

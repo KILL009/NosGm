@@ -130,6 +130,10 @@ jobs:
         shell: powershell
         run: ./scripts/verify-gameforge-login-parser-runtime.ps1
 
+      - name: Verify bounded Gameforge ticket runtime behavior
+        shell: powershell
+        run: ./scripts/verify-gameforge-ticket-store-runtime.ps1
+
       - name: Verify launcher authentication bridge contracts
         shell: powershell
         run: ./scripts/verify-launcher-auth-bridge.ps1
