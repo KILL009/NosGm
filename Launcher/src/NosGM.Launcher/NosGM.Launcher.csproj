@@ -34,7 +34,7 @@
           BeforeTargets="BeforeBuild"
           Condition="'$(DesignTimeBuild)' != 'true' and '$(OS)' == 'Windows_NT'">
     <Message Importance="high" Text="Publishing NosGM Steam authentication stub (NativeAOT x86)..." />
-    <Exec Command="set &quot;PATH=$(MSBuildProgramFiles32)\Microsoft Visual Studio\Installer;%25PATH%25&quot; &amp;&amp; dotnet publish &quot;$(SteamAuthStubProjectPath)&quot; -c $(Configuration) -r win-x86 --nologo -v minimal" />
+    <Exec Command="set &quot;PATH=$(MSBuildProgramFiles32)\Microsoft Visual Studio\Installer;%PATH%&quot; &amp;&amp; dotnet publish &quot;$(SteamAuthStubProjectPath)&quot; -c $(Configuration) -r win-x86 --nologo -v minimal" />
     <Error Condition="!Exists('$(SteamAuthStubDllPath)')" Text="Steam authentication stub publish did not produce $(SteamAuthStubDllPath)." />
     <ItemGroup>
       <EmbeddedResource Include="$(SteamAuthStubDllPath)" LogicalName="NosGM.NosCoreGfStub" />
