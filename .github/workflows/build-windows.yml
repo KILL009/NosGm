@@ -134,6 +134,10 @@ jobs:
         shell: powershell
         run: ./scripts/verify-gameforge-ticket-store-runtime.ps1
 
+      - name: Verify modern NsTeST layout runtime behavior
+        shell: powershell
+        run: ./scripts/verify-nstest-modern-layout-runtime.ps1
+
       - name: Verify launcher authentication bridge contracts
         shell: powershell
         run: ./scripts/verify-launcher-auth-bridge.ps1
