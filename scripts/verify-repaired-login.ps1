@@ -122,7 +122,7 @@ Require $parser 'int verticalTabIndex = countryAndVersion.IndexOf' 'Parser lost 
 Require $parser 'case 8: culture = "ja";' 'Region 8 is not Japanese.'
 Require $parser 'case 9: culture = "zh";' 'Region 9 is not Chinese.'
 Require $store 'SHA256.Create()' 'Raw tickets are not reduced to SHA-256 lookup keys.'
-Require $store 'public const int MaximumConsumptionsPerTicket = 2;' 'Modern Login tickets must allow exactly the client language-list and regional-selection stages.'
+Require $store 'public const int MaximumConsumptionsPerTicket = 3;' 'Modern Login tickets must allow exactly the client language-list, regional-selection and channel-selection stages.'
 Require $store 'RemainingConsumptions = MaximumConsumptionsPerTicket' 'Issued tickets do not initialize the bounded consumption count.'
 Require $store 'lock (ticket)' 'Ticket consumption is not serialized per credential.'
 Require $store 'ticket.RemainingConsumptions--;' 'Ticket consumption no longer decrements the bounded use count.'
@@ -157,4 +157,4 @@ foreach ($item in @(
     @{ Name = 'AuthentificationServiceClient.cs'; Content = $client }
 )) { Require-BalancedRegions $item.Content $item.Name }
 
-Write-Host 'Repaired Login -> Master -> World, bounded two-stage tickets, ticket-bound modern region and ten-language contracts verified.'
+Write-Host 'Repaired Login -> Master -> World, bounded three-stage tickets, ticket-bound modern region and ten-language contracts verified.'
