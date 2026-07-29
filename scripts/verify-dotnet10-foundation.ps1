@@ -167,6 +167,9 @@ if ($legacyOnlyCount -ne 22) {
 
 & (Join-Path $PSScriptRoot "verify-scs-transport-contracts.ps1")
 & (Join-Path $PSScriptRoot "verify-authentication-grpc-runtime.ps1")
+& (Join-Path `
+    $PSScriptRoot `
+    "verify-authentication-grpc-local-acceptance.ps1")
 
 if ($InventoryOnly) {
     Write-Host "NosGM .NET 10 foundation inventory passed." -ForegroundColor Green

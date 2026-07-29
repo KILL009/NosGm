@@ -16,11 +16,18 @@ This runbook starts the complete NosGM modern authentication path on one Windows
 8. records only process IDs, process names, start times, ports and public loopback endpoints under the ignored `artifacts` directory;
 9. runs a non-destructive readiness inspection and writes a machine-readable report.
 
+SCS is the default internal authentication transport. An explicit
+`-AuthenticationTransport GRPC` additionally starts the .NET 10 authentication
+runtime and scopes a different mTLS client certificate to Master/AuthBridge,
+Login, and World.
+
 The account password is not accepted by this script. It is entered only in the launcher dialog and remains in memory for the HTTPS request.
 
 ## Requirements
 
-- Windows 10 or Windows 11
+- Windows 10 or Windows 11 for the default SCS path
+- Windows 11 or Windows Server 2019 or later for the explicit .NET Framework
+  gRPC/HTTP2 path
 - .NET Framework 4.8.1
 - Visual Studio Build Tools 2022 with MSBuild
 - .NET 10 SDK
@@ -57,6 +64,45 @@ To start only the server stack while debugging the launcher separately:
 ./scripts/start-modern-login-local.ps1 -SkipLauncher
 ```
 
+## First local gRPC acceptance
+
+Do this once per local certificate rotation, using the same Windows account
+that will run NosGM:
+
+```powershell
+./scripts/new-local-authentication-certificates.ps1 -TrustRootCertificate
+./scripts/test-authentication-grpc-local.ps1
+```
+
+The first command creates an ignored current-user-only certificate directory,
+one server identity and separate AuthBridge, Login, and World identities. The
+public development root is installed only because
+`-TrustRootCertificate` was supplied explicitly. PKCS#12 passwords are random
+and stored through Windows DPAPI, never in `manifest.json`.
+
+The second command performs the live mTLS/gRPC ticket and World-permit
+acceptance against the real Kestrel runtime. It stops its temporary runtime
+automatically. It validates the .NET 10 network contract; the complete stack
+start below is still required to validate the `net481` WinHTTP callers in
+Master, Login, and World.
+
+Only after that command passes, start the complete stack with gRPC:
+
+```powershell
+./scripts/start-modern-login-local.ps1 -AuthenticationTransport GRPC
+```
+
+To use a rotated or externally provisioned local bundle:
+
+```powershell
+./scripts/start-modern-login-local.ps1 `
+    -AuthenticationTransport GRPC `
+    -AuthenticationCertificateManifest "D:\NosGM-secrets\auth\manifest.json"
+```
+
+Without the explicit `GRPC` selector, the startup path remains on SCS. The
+presence of a certificate bundle does not change runtime behavior.
+
 ## Expected ready checks
 
 The script should report:
@@ -66,6 +112,12 @@ The script should report:
 [READY] Launcher AuthBridge on 127.0.0.1:8081
 [READY] World on 127.0.0.1:1337
 [READY] Spanish Login on 127.0.0.1:4005
+```
+
+An explicit gRPC start also reports:
+
+```text
+[READY] Authentication gRPC on 127.0.0.1:7443
 ```
 
 The loopback-only health endpoint is:
@@ -99,6 +151,7 @@ The inspector validates:
 - exactly one recorded Master, World and Login process;
 - PID, process name and original start time;
 - Master, World and Spanish Login TCP connectivity;
+- the authentication gRPC process and loopback port when `GRPC` is selected;
 - the loopback AuthBridge health response and all ten regions;
 - launcher settings without credential-shaped properties;
 - the configured authorized client executable and file version;
@@ -225,6 +278,7 @@ Run:
 ./scripts/verify-repaired-login.ps1
 ./scripts/verify-gameforge-stable-session.ps1
 ./scripts/verify-gameforge-ticket-store-runtime.ps1
+./scripts/verify-authentication-grpc-local-acceptance.ps1
 ```
 
 The Windows CI workflow also runs these checks after compiling the complete .NET Framework solution.

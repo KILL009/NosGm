@@ -26,9 +26,15 @@ on:
       - "tests/NosGm.Authentication.Runtime.SelfTest/**"
       - "docs/dotnet10-migration.md"
       - "docs/scs-transport-migration.md"
+      - "docs/modern-login-local-runbook.md"
+      - "scripts/new-local-authentication-certificates.ps1"
+      - "scripts/start-modern-login-local.ps1"
+      - "scripts/test-authentication-grpc-local.ps1"
+      - "scripts/test-modern-login-readiness.ps1"
       - "scripts/verify-dotnet10-foundation.ps1"
       - "scripts/verify-scs-transport-contracts.ps1"
       - "scripts/verify-authentication-grpc-runtime.ps1"
+      - "scripts/verify-authentication-grpc-local-acceptance.ps1"
   pull_request:
     branches:
       - main
@@ -54,9 +60,15 @@ on:
       - "tests/NosGm.Authentication.Runtime.SelfTest/**"
       - "docs/dotnet10-migration.md"
       - "docs/scs-transport-migration.md"
+      - "docs/modern-login-local-runbook.md"
+      - "scripts/new-local-authentication-certificates.ps1"
+      - "scripts/start-modern-login-local.ps1"
+      - "scripts/test-authentication-grpc-local.ps1"
+      - "scripts/test-modern-login-readiness.ps1"
       - "scripts/verify-dotnet10-foundation.ps1"
       - "scripts/verify-scs-transport-contracts.ps1"
       - "scripts/verify-authentication-grpc-runtime.ps1"
+      - "scripts/verify-authentication-grpc-local-acceptance.ps1"
   workflow_dispatch:
 
 permissions:
