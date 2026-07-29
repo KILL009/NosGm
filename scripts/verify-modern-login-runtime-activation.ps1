@@ -122,6 +122,21 @@ Require $startScript '/p:MSBuildEnableWorkloadResolver=false' 'Legacy restore an
 Require $startScript '$previousMSBuildEnableWorkloadResolver' 'The previous workload-resolver policy must be preserved.'
 Require $startScript '$env:MSBuildEnableWorkloadResolver = $previousMSBuildEnableWorkloadResolver' 'The temporary workload-resolver policy must be restored.'
 Forbid $startScript 'Set-Content -LiteralPath "global.json"' 'Local startup must never rewrite the repository SDK policy.'
+$legacySdkRestoreIndex = $startScript.IndexOf(
+    '$env:MSBuildSDKsPath = $previousMSBuildSdksPath',
+    [StringComparison]::Ordinal)
+$legacyWorkloadRestoreIndex = $startScript.IndexOf(
+    '$env:MSBuildEnableWorkloadResolver = $previousMSBuildEnableWorkloadResolver',
+    [StringComparison]::Ordinal)
+$launcherBuildIndex = $startScript.IndexOf(
+    '[BUILD] Building launcher Release',
+    [StringComparison]::Ordinal)
+if ($legacySdkRestoreIndex -lt 0 -or
+    $legacyWorkloadRestoreIndex -lt 0 -or
+    $launcherBuildIndex -le $legacySdkRestoreIndex -or
+    $launcherBuildIndex -le $legacyWorkloadRestoreIndex) {
+    throw 'Modern Login runtime activation contract failed: the .NET 9 MSBuild environment must be restored before the .NET 10 launcher build.'
+}
 Require $startScript '$loginExecutable = Join-Path $root "bin\Release\Login\NosGm.Login.exe"' 'The startup script must use the Release|AnyCPU Login output path.'
 Require $startScript '$requiredExecutables = @(' 'All required binaries must be preflighted before startup.'
 Require $startScript 'Missing $($requiredExecutable.Name) executable after build' 'Preflight failures must identify the missing component and path.'
