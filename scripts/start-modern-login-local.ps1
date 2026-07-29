@@ -381,6 +381,73 @@ function Resolve-DotNet10Executable {
     throw ".NET 10 SDK was not found in PATH, DOTNET_ROOT, Program Files, or the NosGM local SDK directories."
 }
 
+function Resolve-LegacyMSBuildSdk {
+    $candidatePaths =
+        New-Object System.Collections.Generic.List[string]
+    $command = Get-Command dotnet.exe -ErrorAction SilentlyContinue
+    if ($command) {
+        $candidatePaths.Add([string]$command.Source)
+    }
+
+    foreach ($directory in @(
+        $env:DOTNET_ROOT,
+        (Join-Path $env:LOCALAPPDATA "NosGM\dotnet10"),
+        (Join-Path $env:LOCALAPPDATA "NosGM\dotnet9"),
+        (Join-Path $env:ProgramFiles "dotnet"),
+        (Join-Path ${env:ProgramFiles(x86)} "dotnet")
+    )) {
+        if (-not [string]::IsNullOrWhiteSpace($directory)) {
+            $candidatePaths.Add((Join-Path $directory "dotnet.exe"))
+        }
+    }
+
+    $compatibleSdks =
+        New-Object System.Collections.Generic.List[object]
+    foreach ($candidatePath in @($candidatePaths | Select-Object -Unique)) {
+        if (-not (Test-Path -LiteralPath $candidatePath -PathType Leaf)) {
+            continue
+        }
+
+        $installedSdks = & $candidatePath --list-sdks 2>$null
+        if ($LASTEXITCODE -ne 0) {
+            continue
+        }
+
+        foreach ($installedSdk in $installedSdks) {
+            if ($installedSdk -notmatch '^(9\.0\.[0-9]+)\s+\[(.+)\]$') {
+                continue
+            }
+
+            $sdkVersion = [Version]$Matches[1]
+            $sdkBase = $Matches[2]
+            $sdkDirectory =
+                Join-Path (Join-Path $sdkBase $sdkVersion.ToString()) "Sdks"
+            if (-not (Test-Path `
+                    -LiteralPath (Join-Path $sdkDirectory "Microsoft.NET.Sdk\Sdk") `
+                    -PathType Container)) {
+                continue
+            }
+
+            $compatibleSdks.Add([pscustomobject]@{
+                Version = $sdkVersion
+                SdksPath = [System.IO.Path]::GetFullPath($sdkDirectory)
+                DotNetExecutable =
+                    [System.IO.Path]::GetFullPath($candidatePath)
+            })
+        }
+    }
+
+    $selectedSdk =
+        $compatibleSdks |
+        Sort-Object -Property Version -Descending |
+        Select-Object -First 1
+    if ($null -ne $selectedSdk) {
+        return $selectedSdk
+    }
+
+    throw ".NET 9 compatibility SDK was not found. Visual Studio 2022 MSBuild 17.x cannot load the .NET 10 SDK. Install it with 'winget install --id Microsoft.DotNet.SDK.9 --exact --source winget' and open a new PowerShell window."
+}
+
 function Resolve-MSBuild {
     $command = Get-Command msbuild.exe -ErrorAction SilentlyContinue
     if ($command) {
@@ -452,8 +519,16 @@ if ($ConfigureUrlAcl) {
 
 if (-not $SkipBuild) {
     $previousBuildDotNetRoot = $env:DOTNET_ROOT
+    $previousMSBuildSdksPath = $env:MSBuildSDKsPath
     try {
         $env:DOTNET_ROOT = $dotnetRoot
+        $legacyMSBuildSdk = Resolve-LegacyMSBuildSdk
+        $env:MSBuildSDKsPath = $legacyMSBuildSdk.SdksPath
+        Write-Host (
+            "[BUILD] Visual Studio 2022 compatibility SDK: .NET " +
+            $legacyMSBuildSdk.Version +
+            " | " +
+            $legacyMSBuildSdk.SdksPath)
         $msbuild = Resolve-MSBuild
         $solutionPath = Join-Path $root "NosGm.sln"
         $nuget = Get-Command nuget.exe -ErrorAction SilentlyContinue
@@ -505,6 +580,7 @@ if (-not $SkipBuild) {
         }
     }
     finally {
+        $env:MSBuildSDKsPath = $previousMSBuildSdksPath
         $env:DOTNET_ROOT = $previousBuildDotNetRoot
     }
 }
