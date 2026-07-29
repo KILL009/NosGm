@@ -79,7 +79,7 @@ namespace NosGm.Handler.BasicPacket.Login
             }
 
             bool accountNameMatches = string.Equals(loadedAccount.Name, protocolUsername, StringComparison.Ordinal) ||
-                                      ClientRegionMap.IsProtocolUsernameForAccount(protocolUsername, loadedAccount.Name, resolvedRegionType);
+                                       ClientRegionMap.IsProtocolUsernameForAccount(protocolUsername, loadedAccount.Name, resolvedRegionType);
             if (!accountNameMatches)
             {
                 Reject(LoginFailType.WrongCaps, "Session removed. Reason: Wrong account casing");
@@ -175,10 +175,10 @@ namespace NosGm.Handler.BasicPacket.Login
             GameforgeAuthTicketConsumption ticketConsumption;
             try
             {
-                // The packet country is only accepted when Master can consume a
-                // bounded ticket that was issued for the same country and
-                // InstallationId. Master binds all three modern client stages
-                // to the first proposed SessionId.
+                // The packet country is only accepted when Master can consume an
+                // active-session ticket issued for the same country and
+                // InstallationId. The first consumption binds the SessionId and
+                // every later character-selection entry must reuse it.
                 int proposedSessionId = SessionFactory.Instance.GenerateSessionId();
                 ticketConsumption = AuthentificationServiceClient.Instance.ConsumeGameforgeAuthTicket(
                     payload.AuthToken,
@@ -196,8 +196,7 @@ namespace NosGm.Handler.BasicPacket.Login
             if (ticketConsumption == null ||
                 string.IsNullOrWhiteSpace(ticketConsumption.AccountName) ||
                 ticketConsumption.SessionId <= 0 ||
-                ticketConsumption.ConsumptionNumber < 1 ||
-                ticketConsumption.ConsumptionNumber > GameforgeAuthTicketStore.MaximumConsumptionsPerTicket)
+                ticketConsumption.ConsumptionNumber < 1)
             {
                 Reject(LoginFailType.AccountOrPasswordWrong, "Session removed. Reason: Invalid or expired Gameforge ticket");
                 return;
@@ -247,8 +246,19 @@ namespace NosGm.Handler.BasicPacket.Login
             }
 
             int newSessionId = gameforgeTicket?.SessionId ?? SessionFactory.Instance.GenerateSessionId();
-            bool isModernContinuation = gameforgeTicket != null &&
+            bool hasRegisteredModernSession = gameforgeTicket != null &&
                 CommunicationServiceClient.Instance.IsAccountSessionRegistered(loadedAccount.AccountId, newSessionId);
+            if (gameforgeTicket != null &&
+                !gameforgeTicket.IsFirstConsumption &&
+                !hasRegisteredModernSession)
+            {
+                Reject(
+                    LoginFailType.AccountOrPasswordWrong,
+                    "Session removed. Reason: Gameforge session is no longer active");
+                return;
+            }
+
+            bool isModernContinuation = hasRegisteredModernSession;
             if (!isModernContinuation)
             {
                 if (await CheckIsConnectedAsync(loadedAccount.AccountId).ConfigureAwait(false))
@@ -286,13 +296,12 @@ namespace NosGm.Handler.BasicPacket.Login
             }
 
             bool ownsAccountRegistration = gameforgeTicket == null || gameforgeTicket.IsFirstConsumption;
-            // Every accepted modern Login stage sends a new server list and can
-            // therefore be followed by a new World connection. The account
-            // registration and SessionId remain owned by stage one, but the
-            // one-use World permit must be refreshed for every stage after the
-            // previous permit has been consumed.
+            // Every accepted modern Login entry sends a new server list and can
+            // therefore be followed by a new World connection. The active Master
+            // account/session tuple is preserved, while each World permit remains
+            // temporary, IP-bound and one-use.
             bool issueGameforgeWorldPermit = gameforgeTicket != null;
-            string modernStage = gameforgeTicket == null ? string.Empty : $" Stage={gameforgeTicket.ConsumptionNumber}/{GameforgeAuthTicketStore.MaximumConsumptionsPerTicket}";
+            string modernStage = gameforgeTicket == null ? string.Empty : $" Entry={gameforgeTicket.ConsumptionNumber}";
             Logger.Info($"{loadedAccount.Name} connected | SessionID={newSessionId} Auth={authenticationMode}{modernStage} RegionType={regionType} Culture={culture}");
 
             bool accountRegistered = false;
