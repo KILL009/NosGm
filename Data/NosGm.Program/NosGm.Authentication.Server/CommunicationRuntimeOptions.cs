@@ -51,7 +51,7 @@ public sealed class CommunicationRuntimeOptions
             ReadInteger(
                 configuration[MaximumAccountsVariable],
                 DefaultMaximumAccounts,
-                1000,
+                1,
                 1000000,
                 MaximumAccountsVariable),
             ReadInteger(
