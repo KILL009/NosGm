@@ -21,7 +21,7 @@ service ClusterCommunication {
       returns (CommunicationMutationResponse);
   rpc DisconnectAccount(DisconnectAccountRequest)
       returns (CommunicationMutationResponse);
-  rpc PulseAccount(AccountSessionRequest)
+  rpc PulseAccount(AccountRequest)
       returns (CommunicationMutationResponse);
   rpc ConnectCharacter(CharacterWorldRequest)
       returns (CommunicationMutationResponse);
@@ -90,9 +90,9 @@ message DisconnectAccountRequest {
 message CharacterWorldRequest {
   RequestContext context = 1;
   string world_id = 2;
-  int64 account_id = 3;
-  int32 session_id = 4;
-  int64 character_id = 5;
+  int64 character_id = 3;
+  int64 account_id = 4;
+  int32 session_id = 5;
 }
 
 message RegisterWorldServerRequest {
@@ -120,6 +120,9 @@ message WorldRequest {
 
 message ListWorldServersRequest {
   RequestContext context = 1;
+  // Kept during staged adapter migration. The runtime does not query account
+  // data and Login remains responsible for character-slot projection.
+  int64 account_id = 2 [deprecated = true];
 }
 
 message WorldChannelSnapshot {
@@ -134,5 +137,7 @@ message WorldChannelSnapshot {
 
 message ListWorldServersResponse {
   CommunicationResultCode result = 1;
-  repeated WorldChannelSnapshot worlds = 2;
+  // Kept during staged adapter migration. New callers calculate this locally.
+  uint32 character_count = 2 [deprecated = true];
+  repeated WorldChannelSnapshot worlds = 3;
 }
