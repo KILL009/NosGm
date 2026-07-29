@@ -11,24 +11,19 @@ namespace NosGm.Cluster.Contracts.Communication.V1
         public static CommunicationContractValidationError Validate(
             WireV1.RegisterAccountLoginRequest request)
         {
-            if (request == null)
-            {
-                return CommunicationContractValidationError.MissingRequest;
-            }
-
-            CommunicationContractValidationError contextError = ValidateContext(
-                request.Context,
+            CommunicationContractValidationError error = ValidateRequest(
+                request,
+                request?.Context,
                 ClusterNodeRole.Login);
-            if (contextError != CommunicationContractValidationError.None)
+            if (error != CommunicationContractValidationError.None)
             {
-                return contextError;
+                return error;
             }
 
-            CommunicationContractValidationError sessionError =
-                ValidateAccountSession(request.AccountId, request.SessionId);
-            return sessionError != CommunicationContractValidationError.None
-                ? sessionError
-                : ValidateIpAddress(request.IpAddress, false);
+            error = ValidateAccountSession(request.AccountId, request.SessionId);
+            return error != CommunicationContractValidationError.None
+                ? error
+                : ValidateIpAddress(request.IpAddress);
         }
 
         public static CommunicationContractValidationError
@@ -46,65 +41,51 @@ namespace NosGm.Cluster.Contracts.Communication.V1
         public static CommunicationContractValidationError
             ValidateAccountConnected(WireV1.AccountRequest request)
         {
-            if (request == null)
-            {
-                return CommunicationContractValidationError.MissingRequest;
-            }
-
-            CommunicationContractValidationError contextError = ValidateContext(
-                request.Context,
+            CommunicationContractValidationError error = ValidateRequest(
+                request,
+                request?.Context,
                 ClusterNodeRole.Login,
                 ClusterNodeRole.World);
-            return contextError != CommunicationContractValidationError.None
-                ? contextError
+            return error != CommunicationContractValidationError.None
+                ? error
                 : ValidateAccountId(request.AccountId);
         }
 
         public static CommunicationContractValidationError Validate(
             WireV1.ConnectAccountRequest request)
         {
-            if (request == null)
-            {
-                return CommunicationContractValidationError.MissingRequest;
-            }
-
-            CommunicationContractValidationError contextError = ValidateContext(
-                request.Context,
+            CommunicationContractValidationError error = ValidateRequest(
+                request,
+                request?.Context,
                 ClusterNodeRole.World);
-            if (contextError != CommunicationContractValidationError.None)
+            if (error != CommunicationContractValidationError.None)
             {
-                return contextError;
+                return error;
             }
 
-            CommunicationContractValidationError worldError =
-                ValidateWorldId(request.WorldId);
-            return worldError != CommunicationContractValidationError.None
-                ? worldError
+            error = ValidateWorldId(request.WorldId);
+            return error != CommunicationContractValidationError.None
+                ? error
                 : ValidateAccountSession(request.AccountId, request.SessionId);
         }
 
         public static CommunicationContractValidationError Validate(
             WireV1.DisconnectAccountRequest request)
         {
-            if (request == null)
-            {
-                return CommunicationContractValidationError.MissingRequest;
-            }
-
-            CommunicationContractValidationError contextError = ValidateContext(
-                request.Context,
+            CommunicationContractValidationError error = ValidateRequest(
+                request,
+                request?.Context,
                 ClusterNodeRole.Login,
                 ClusterNodeRole.World);
-            if (contextError != CommunicationContractValidationError.None)
+            if (error != CommunicationContractValidationError.None)
             {
-                return contextError;
+                return error;
             }
 
-            CommunicationContractValidationError accountError =
-                ValidateAccountId(request.AccountId);
-            if (accountError != CommunicationContractValidationError.None)
+            error = ValidateAccountId(request.AccountId);
+            if (error != CommunicationContractValidationError.None)
             {
-                return accountError;
+                return error;
             }
 
             if (request.SessionId < 0)
@@ -112,29 +93,28 @@ namespace NosGm.Cluster.Contracts.Communication.V1
                 return CommunicationContractValidationError.InvalidSessionId;
             }
 
-            if (request.PreserveSessionRegistration && request.SessionId <= 0)
-            {
-                return CommunicationContractValidationError
-                    .InvalidPreserveSessionRequest;
-            }
-
-            return CommunicationContractValidationError.None;
+            return request.PreserveSessionRegistration && request.SessionId <= 0
+                ? CommunicationContractValidationError
+                    .InvalidPreserveSessionRequest
+                : CommunicationContractValidationError.None;
         }
 
         public static CommunicationContractValidationError ValidatePulse(
             WireV1.AccountRequest request)
         {
-            if (request == null)
-            {
-                return CommunicationContractValidationError.MissingRequest;
-            }
-
-            CommunicationContractValidationError contextError = ValidateContext(
-                request.Context,
+            CommunicationContractValidationError error = ValidateRequest(
+                request,
+                request?.Context,
                 ClusterNodeRole.World);
-            return contextError != CommunicationContractValidationError.None
-                ? contextError
+            return error != CommunicationContractValidationError.None
+                ? error
                 : ValidateAccountId(request.AccountId);
+        }
+
+        public static CommunicationContractValidationError ValidatePulse(
+            WireV1.AccountSessionRequest request)
+        {
+            return ValidateAccountSessionRequest(request, ClusterNodeRole.World);
         }
 
         public static CommunicationContractValidationError ValidateConnectCharacter(
@@ -152,17 +132,13 @@ namespace NosGm.Cluster.Contracts.Communication.V1
         public static CommunicationContractValidationError Validate(
             WireV1.RegisterWorldServerRequest request)
         {
-            if (request == null)
-            {
-                return CommunicationContractValidationError.MissingRequest;
-            }
-
-            CommunicationContractValidationError contextError = ValidateContext(
-                request.Context,
+            CommunicationContractValidationError error = ValidateRequest(
+                request,
+                request?.Context,
                 ClusterNodeRole.World);
-            if (contextError != CommunicationContractValidationError.None)
+            if (error != CommunicationContractValidationError.None)
             {
-                return contextError;
+                return error;
             }
 
             if (request.World == null)
@@ -171,34 +147,30 @@ namespace NosGm.Cluster.Contracts.Communication.V1
                     .MissingWorldRegistration;
             }
 
-            CommunicationContractValidationError worldError =
-                ValidateWorldId(request.World.WorldId);
-            if (worldError != CommunicationContractValidationError.None)
+            error = ValidateWorldId(request.World.WorldId);
+            if (error != CommunicationContractValidationError.None)
             {
-                return worldError;
+                return error;
             }
 
-            CommunicationContractValidationError ipError =
-                ValidateIpAddress(request.World.EndpointIp, false);
-            if (ipError != CommunicationContractValidationError.None)
+            error = ValidateIpAddress(request.World.EndpointIp);
+            if (error != CommunicationContractValidationError.None)
             {
-                return ipError;
+                return error;
             }
 
             if (request.World.EndpointPort == 0 ||
                 request.World.EndpointPort >
                 CommunicationContractLimits.MaxEndpointPort)
             {
-                return CommunicationContractValidationError
-                    .InvalidEndpointPort;
+                return CommunicationContractValidationError.InvalidEndpointPort;
             }
 
             if (request.World.AccountLimit == 0 ||
                 request.World.AccountLimit >
                 CommunicationContractLimits.MaxAccountLimit)
             {
-                return CommunicationContractValidationError
-                    .InvalidAccountLimit;
+                return CommunicationContractValidationError.InvalidAccountLimit;
             }
 
             return IsBoundedText(
@@ -211,79 +183,84 @@ namespace NosGm.Cluster.Contracts.Communication.V1
         public static CommunicationContractValidationError Validate(
             WireV1.WorldRequest request)
         {
-            if (request == null)
-            {
-                return CommunicationContractValidationError.MissingRequest;
-            }
-
-            CommunicationContractValidationError contextError = ValidateContext(
-                request.Context,
+            CommunicationContractValidationError error = ValidateRequest(
+                request,
+                request?.Context,
                 ClusterNodeRole.World);
-            return contextError != CommunicationContractValidationError.None
-                ? contextError
+            return error != CommunicationContractValidationError.None
+                ? error
                 : ValidateWorldId(request.WorldId);
         }
 
         public static CommunicationContractValidationError Validate(
             WireV1.ListWorldServersRequest request)
         {
-            if (request == null)
-            {
-                return CommunicationContractValidationError.MissingRequest;
-            }
-
-            CommunicationContractValidationError contextError = ValidateContext(
-                request.Context,
+            return ValidateRequest(
+                request,
+                request?.Context,
                 ClusterNodeRole.Login);
-            return contextError != CommunicationContractValidationError.None
-                ? contextError
-                : ValidateAccountId(request.AccountId);
         }
 
         private static CommunicationContractValidationError
             ValidateAccountSessionRequest(
                 WireV1.AccountSessionRequest request,
-                ClusterNodeRole expectedRole)
+                ClusterNodeRole role)
         {
-            if (request == null)
-            {
-                return CommunicationContractValidationError.MissingRequest;
-            }
-
-            CommunicationContractValidationError contextError = ValidateContext(
-                request.Context,
-                expectedRole);
-            return contextError != CommunicationContractValidationError.None
-                ? contextError
+            CommunicationContractValidationError error = ValidateRequest(
+                request,
+                request?.Context,
+                role);
+            return error != CommunicationContractValidationError.None
+                ? error
                 : ValidateAccountSession(request.AccountId, request.SessionId);
         }
 
         private static CommunicationContractValidationError
             ValidateCharacterWorldRequest(WireV1.CharacterWorldRequest request)
         {
-            if (request == null)
-            {
-                return CommunicationContractValidationError.MissingRequest;
-            }
-
-            CommunicationContractValidationError contextError = ValidateContext(
-                request.Context,
+            CommunicationContractValidationError error = ValidateRequest(
+                request,
+                request?.Context,
                 ClusterNodeRole.World);
-            if (contextError != CommunicationContractValidationError.None)
+            if (error != CommunicationContractValidationError.None)
             {
-                return contextError;
+                return error;
             }
 
-            CommunicationContractValidationError worldError =
-                ValidateWorldId(request.WorldId);
-            if (worldError != CommunicationContractValidationError.None)
+            error = ValidateWorldId(request.WorldId);
+            if (error != CommunicationContractValidationError.None)
             {
-                return worldError;
+                return error;
+            }
+
+            // Account/session fields are mandatory for the new runtime adapters,
+            // but remain zero-compatible while the generated net481 callers are
+            // staged. The service rejects a zero tuple before state mutation.
+            if (request.AccountId < 0)
+            {
+                return CommunicationContractValidationError.InvalidAccountId;
+            }
+            if (request.SessionId < 0)
+            {
+                return CommunicationContractValidationError.InvalidSessionId;
             }
 
             return request.CharacterId > 0
                 ? CommunicationContractValidationError.None
                 : CommunicationContractValidationError.InvalidCharacterId;
+        }
+
+        private static CommunicationContractValidationError ValidateRequest(
+            object request,
+            WireV1.RequestContext context,
+            params ClusterNodeRole[] allowedRoles)
+        {
+            if (request == null)
+            {
+                return CommunicationContractValidationError.MissingRequest;
+            }
+
+            return ValidateContext(context, allowedRoles);
         }
 
         private static CommunicationContractValidationError ValidateContext(
@@ -317,26 +294,20 @@ namespace NosGm.Cluster.Contracts.Communication.V1
                 return CommunicationContractValidationError.InvalidContext;
             }
 
-            foreach (ClusterNodeRole allowedRole in allowedRoles)
-            {
-                if (contractContext.CallerRole == allowedRole)
-                {
-                    return CommunicationContractValidationError.None;
-                }
-            }
-
-            return CommunicationContractValidationError.InvalidCallerRole;
+            return allowedRoles.Contains(contractContext.CallerRole)
+                ? CommunicationContractValidationError.None
+                : CommunicationContractValidationError.InvalidCallerRole;
         }
 
         private static CommunicationContractValidationError ValidateAccountSession(
             long accountId,
             int sessionId)
         {
-            CommunicationContractValidationError accountError =
+            CommunicationContractValidationError error =
                 ValidateAccountId(accountId);
-            if (accountError != CommunicationContractValidationError.None)
+            if (error != CommunicationContractValidationError.None)
             {
-                return accountError;
+                return error;
             }
 
             return sessionId > 0
@@ -355,29 +326,19 @@ namespace NosGm.Cluster.Contracts.Communication.V1
         private static CommunicationContractValidationError ValidateWorldId(
             string worldId)
         {
-            if (worldId == null ||
-                worldId.Length != 36 ||
-                !Guid.TryParseExact(worldId, "D", out Guid parsedWorldId) ||
-                parsedWorldId == Guid.Empty)
-            {
-                return CommunicationContractValidationError.InvalidWorldId;
-            }
-
-            return CommunicationContractValidationError.None;
+            return worldId != null &&
+                   worldId.Length == 36 &&
+                   Guid.TryParseExact(worldId, "D", out Guid parsedWorldId) &&
+                   parsedWorldId != Guid.Empty
+                ? CommunicationContractValidationError.None
+                : CommunicationContractValidationError.InvalidWorldId;
         }
 
         private static CommunicationContractValidationError ValidateIpAddress(
-            string ipAddress,
-            bool allowEmpty)
+            string ipAddress)
         {
-            if (string.IsNullOrWhiteSpace(ipAddress))
-            {
-                return allowEmpty
-                    ? CommunicationContractValidationError.None
-                    : CommunicationContractValidationError.InvalidIpAddress;
-            }
-
-            if (ipAddress.Length > CommunicationContractLimits.MaxIpAddressLength ||
+            if (string.IsNullOrWhiteSpace(ipAddress) ||
+                ipAddress.Length > CommunicationContractLimits.MaxIpAddressLength ||
                 !IPAddress.TryParse(ipAddress, out IPAddress parsedAddress) ||
                 !string.Equals(
                     parsedAddress.ToString(),
@@ -399,16 +360,8 @@ namespace NosGm.Cluster.Contracts.Communication.V1
                 return false;
             }
 
-            foreach (char character in value)
-            {
-                if (char.GetUnicodeCategory(character) ==
-                    UnicodeCategory.Control)
-                {
-                    return false;
-                }
-            }
-
-            return true;
+            return value.All(character =>
+                char.GetUnicodeCategory(character) != UnicodeCategory.Control);
         }
     }
 }

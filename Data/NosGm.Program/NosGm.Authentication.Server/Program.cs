@@ -12,6 +12,8 @@ using NosGm.Cluster.Contracts.V1;
 WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
 AuthenticationServerOptions options =
     AuthenticationServerOptions.Load(builder.Configuration);
+CommunicationRuntimeOptions communicationOptions =
+    CommunicationRuntimeOptions.Load(builder.Configuration);
 var roleMap = new ClientCertificateRoleMap(options);
 var serverCertificate = options.LoadServerCertificate();
 var trustedRootCertificate = options.LoadTrustedRootCertificate();
@@ -43,9 +45,11 @@ builder.WebHost.ConfigureKestrel(kestrel =>
 });
 
 builder.Services.AddSingleton(options);
+builder.Services.AddSingleton(communicationOptions);
 builder.Services.AddSingleton(roleMap);
 builder.Services.AddSingleton<TimeProvider>(TimeProvider.System);
 builder.Services.AddSingleton<GameforgeAuthenticationState>();
+builder.Services.AddSingleton<ClusterCommunicationState>();
 builder.Services.AddSingleton<AuthenticationRequestReplayGuard>();
 builder.Services.AddSingleton<AuthenticationDispatchGate>();
 builder.Services.AddGrpc(grpc =>
@@ -60,6 +64,7 @@ builder.Services.AddGrpc(grpc =>
 WebApplication app = builder.Build();
 app.UseGrpcWeb();
 app.MapGrpcService<GameforgeAuthenticationService>().EnableGrpcWeb();
+app.MapGrpcService<ClusterCommunicationService>().EnableGrpcWeb();
 app.Lifetime.ApplicationStopped.Register(serverCertificate.Dispose);
 if (trustedRootCertificate != null)
 {
@@ -68,7 +73,7 @@ if (trustedRootCertificate != null)
 }
 
 app.Logger.LogInformation(
-    "NosGM authentication runtime {InstanceId} listening on loopback port {Port}.",
+    "NosGM internal cluster runtime {InstanceId} listening on loopback port {Port}; authentication and communication services enabled.",
     options.InstanceId,
     options.Port);
 app.Run();
