@@ -61,6 +61,7 @@
     <Compile Include="CommunicationService.cs" />
     <Compile Include="AuthentificationService.cs" />
     <Compile Include="LauncherAuthBridge.cs" />
+    <Compile Include="LegacyGameforgeAuthenticationStateTransport.cs" />
     <Compile Include="MailService.cs" />
     <Compile Include="ConfigurationService.cs" />
     <Compile Include="MallService.cs" />
@@ -158,6 +159,13 @@
     <Content Include="nosgm-emulator-icon.ico" />
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="..\..\NosGm.Authentication.Client\NosGm.Authentication.Client.csproj">
+      <Project>{691E0594-F6AA-4A25-9BB7-493D4F6CE059}</Project>
+      <Name>NosGm.Authentication.Client</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\..\NosGm.Cluster.Contracts\NosGm.Cluster.Contracts.csproj">
+      <Name>NosGm.Cluster.Contracts</Name>
+    </ProjectReference>
     <ProjectReference Include="..\..\..\NosGm.SCS\NosGm.SCS.csproj">
       <Project>{F030D498-8F64-479F-B68B-7B2A6288552A}</Project>
       <Name>NosGm.SCS</Name>

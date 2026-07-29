@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Configuration;
+using NosGm.Authentication.Client;
 using NosGm.Authentication.Server;
 using NosGm.Authentication.Server.Security;
 using NosGm.Authentication.Server.State;
@@ -45,6 +46,59 @@ AssertEqual(
 AssertThrows<InvalidOperationException>(
     () => AuthenticationTransportModeParser.ParseOrDefault("automatic"),
     "Unknown transport values fail closed");
+AssertEqual(
+    "NOSGM_AUTH_TRANSPORT",
+    AuthenticationTransportModeParser.EnvironmentVariableName,
+    "All authentication callers share one explicit transport selector");
+
+string absoluteClientCertificate =
+    Path.GetFullPath("authentication-client-self-test.pfx");
+var clientValues = new Dictionary<string, string>
+{
+    [AuthenticationGrpcClientOptions.CertificatePathVariable] =
+        absoluteClientCertificate,
+    [AuthenticationGrpcClientOptions.CallerInstanceIdVariable] =
+        "login-self-test-1"
+};
+AuthenticationGrpcClientOptions clientOptions =
+    AuthenticationGrpcClientOptions.Load(
+        ClusterNodeRole.Login,
+        name => clientValues.TryGetValue(name, out string value)
+            ? value
+            : null);
+AssertEqual(
+    new Uri(AuthenticationGrpcClientOptions.DefaultAddress),
+    clientOptions.Address,
+    "The gRPC caller defaults to the loopback HTTPS origin");
+AssertEqual(
+    ClusterNodeRole.Login,
+    clientOptions.CallerRole,
+    "The caller role is fixed by process code");
+AssertEqual(
+    ClusterProtocolLimits.DefaultDeadlineMilliseconds,
+    clientOptions.DeadlineMilliseconds,
+    "Every gRPC caller gets a bounded default deadline");
+
+var remoteClientValues =
+    new Dictionary<string, string>(clientValues)
+    {
+        [AuthenticationGrpcClientOptions.AddressVariable] =
+            "https://authentication.example.invalid:7443"
+    };
+AssertThrows<InvalidOperationException>(
+    () => AuthenticationGrpcClientOptions.Load(
+        ClusterNodeRole.Login,
+        name => remoteClientValues.TryGetValue(name, out string value)
+            ? value
+            : null),
+    "Authentication gRPC callers cannot leave loopback");
+AssertThrows<InvalidOperationException>(
+    () => AuthenticationGrpcClientOptions.Load(
+        ClusterNodeRole.Master,
+        name => clientValues.TryGetValue(name, out string value)
+            ? value
+            : null),
+    "A Master certificate cannot impersonate an allowed caller role");
 
 var scs = new RecordingTransport();
 var grpc = new RecordingTransport();

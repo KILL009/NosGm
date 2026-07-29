@@ -73,6 +73,18 @@ $router = Read-RepositoryFile `
     "Data\NosGm.Cluster.Contracts\Authentication\Runtime\AuthenticationTransportRouter.cs"
 $mode = Read-RepositoryFile `
     "Data\NosGm.Cluster.Contracts\Authentication\Runtime\AuthenticationTransportMode.cs"
+$clientProject = Read-RepositoryFile `
+    "Data\NosGm.Authentication.Client\NosGm.Authentication.Client.csproj"
+$clientOptions = Read-RepositoryFile `
+    "Data\NosGm.Authentication.Client\AuthenticationGrpcClientOptions.cs"
+$clientTransport = Read-RepositoryFile `
+    "Data\NosGm.Authentication.Client\GrpcGameforgeAuthenticationTransport.cs"
+$legacyClient = Read-RepositoryFile `
+    "Data\NosGm.Master.Library\Client\AuthentificationServiceClient.cs"
+$launcherBridge = Read-RepositoryFile `
+    "Data\NosGm.Program\NosGm.Master.Server\LauncherAuthBridge.cs"
+$legacyService = Read-RepositoryFile `
+    "Data\NosGm.Program\NosGm.Master.Server\AuthentificationService.cs"
 
 Assert-Contains $project "<TargetFramework>net10.0</TargetFramework>" `
     "Authentication runtime targets .NET 10"
@@ -128,6 +140,33 @@ Assert-NotContains $router "catch (" `
     "Stateful transport failures are never automatically retried"
 Assert-NotContains $router "Task.WhenAll" `
     "Stateful operations are never mirrored"
+
+Assert-Contains $clientProject "System.Net.Http.WinHttpHandler" `
+    ".NET Framework callers use the supported Windows HTTP/2 handler"
+Assert-Contains $clientOptions "Uri.UriSchemeHttps" `
+    "Authentication callers require HTTPS"
+Assert-Contains $clientOptions "address.IsLoopback" `
+    "Authentication callers remain loopback-only"
+Assert-Contains $clientOptions "NOSGM_AUTH_GRPC_CLIENT_CERT_PATH" `
+    "Authentication callers require an explicit client identity"
+Assert-Contains $clientTransport "ClientCertificates" `
+    "Authentication callers present their mTLS certificate"
+Assert-Contains $clientTransport "deadline: deadline" `
+    "Authentication callers enforce a transport deadline"
+Assert-NotContains $clientTransport `
+    "DangerousAcceptAnyServerCertificateValidator" `
+    "Authentication callers retain OS server-certificate validation"
+Assert-Contains $legacyClient "new AuthenticationTransportRouter" `
+    "Login and World use the single shared transport selector"
+Assert-NotContains $legacyClient "Task.WhenAll" `
+    "Login and World never mirror a selected stateful call"
+Assert-Contains $launcherBridge "IssueAuthTicketAsync" `
+    "Launcher ticket issue uses the selected transport"
+Assert-NotContains $launcherBridge `
+    "GameforgeAuthTicketStore.Instance.TryIssue" `
+    "Launcher no longer bypasses the selected transport"
+Assert-Contains $legacyService "IsScsStateAuthoritative" `
+    "Legacy SCS state rejects calls after explicit gRPC cutover"
 
 $authenticationSourceRoot = Join-Path `
     $repositoryRoot `

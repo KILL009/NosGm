@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework Condition="'$(NosGmLegacyBuild)' == 'true'">net481</TargetFramework>
+    <TargetFrameworks Condition="'$(NosGmLegacyBuild)' != 'true'">net481;net10.0</TargetFrameworks>
+    <AssemblyName>NosGm.Authentication.Client</AssemblyName>
+    <RootNamespace>NosGm.Authentication.Client</RootNamespace>
+    <ProjectGuid>{691E0594-F6AA-4A25-9BB7-493D4F6CE059}</ProjectGuid>
+    <LangVersion>latest</LangVersion>
+    <Nullable>disable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Grpc.Net.Client" Version="2.80.0" />
+    <PackageReference Include="System.Net.Http.WinHttpHandler"
+                      Version="6.0.1"
+                      Condition="'$(TargetFramework)' == 'net481'" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\NosGm.Cluster.Contracts\NosGm.Cluster.Contracts.csproj" />
+  </ItemGroup>
+</Project>

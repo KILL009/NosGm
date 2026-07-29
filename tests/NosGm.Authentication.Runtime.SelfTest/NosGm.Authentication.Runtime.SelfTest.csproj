@@ -10,6 +10,8 @@
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
     <ProjectReference Include="..\..\Data\NosGm.Cluster.Contracts\NosGm.Cluster.Contracts.csproj"
                       AdditionalProperties="NosGmLegacyBuild=false" />
+    <ProjectReference Include="..\..\Data\NosGm.Authentication.Client\NosGm.Authentication.Client.csproj"
+                      AdditionalProperties="NosGmLegacyBuild=false" />
     <ProjectReference Include="..\..\Data\NosGm.Program\NosGm.Authentication.Server\NosGm.Authentication.Server.csproj" />
   </ItemGroup>
 </Project>

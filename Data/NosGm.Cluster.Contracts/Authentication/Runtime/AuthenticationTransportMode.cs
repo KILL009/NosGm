@@ -10,6 +10,15 @@ namespace NosGm.Cluster.Contracts.Authentication.Runtime
 
     public static class AuthenticationTransportModeParser
     {
+        public const string EnvironmentVariableName =
+            "NOSGM_AUTH_TRANSPORT";
+
+        public static AuthenticationTransportMode ParseEnvironment()
+        {
+            return ParseOrDefault(
+                Environment.GetEnvironmentVariable(EnvironmentVariableName));
+        }
+
         public static AuthenticationTransportMode ParseOrDefault(
             string configuredValue)
         {
