@@ -1,6 +1,6 @@
 # NosGM.TimeSpaceParser
 
-`NosGM.TimeSpaceParser` is a standalone .NET 9 maintenance tool that converts a NosTale Time-Space packet capture into XML shaped for the `NosGm.XMLModel` scripted-instance loader.
+`NosGM.TimeSpaceParser` is a standalone .NET 10 maintenance tool that converts a NosTale Time-Space packet capture into XML shaped for the `NosGm.XMLModel` scripted-instance loader.
 
 It is deliberately kept outside the login, master and world-server runtime. A malformed capture or parser regression must never prevent the game services from starting.
 
@@ -12,7 +12,7 @@ The adapted tool is distributed under `GPL-3.0-only`.
 
 ## Requirements
 
-- .NET 9 SDK
+- .NET 10 SDK
 - a plain-text packet capture supplied by the operator
 - no proprietary client archive is bundled or downloaded
 - no database or running NosGM server is required

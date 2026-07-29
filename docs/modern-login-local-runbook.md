@@ -23,7 +23,7 @@ The account password is not accepted by this script. It is entered only in the l
 - Windows 10 or Windows 11
 - .NET Framework 4.8.1
 - Visual Studio Build Tools 2022 with MSBuild
-- .NET 9 SDK
+- .NET 10 SDK
 - SQL Server and a working NosGM database
 - an authorized NosTale client installation configured in NosGM Launcher
 

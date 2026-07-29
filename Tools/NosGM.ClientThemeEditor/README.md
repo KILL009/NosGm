@@ -1,6 +1,6 @@
 # NosGM.ClientThemeEditor
 
-`NosGM.ClientThemeEditor` is a standalone .NET 9 command-line tool for safely planning and applying color-only client themes to an authorized local x86 NosTale executable.
+`NosGM.ClientThemeEditor` is a standalone .NET 10 command-line tool for safely planning and applying color-only client themes to an authorized local x86 NosTale executable.
 
 It is deliberately kept outside `NosGm.sln` and outside the login, master and world-server runtime.
 

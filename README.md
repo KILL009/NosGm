@@ -18,7 +18,7 @@ Before sharing a build, record the exact source commit and preserve the correspo
 
 ## Data maintenance tooling
 
-`Tools/NosGM.DataUpdater` is an external .NET 9 utility that downloads or reads NosTale resources, extracts `BCard.dat`, generates multilingual BCard catalogs, reports changes and opens a pull request only when the data changed.
+`Tools/NosGM.DataUpdater` is an external .NET 10 utility that downloads or reads NosTale resources, extracts `BCard.dat`, generates multilingual BCard catalogs, reports changes and opens a pull request only when the data changed.
 
 It is intentionally separated from the login, master and world-server runtime. The tool is adapted from `noszanou/BCardGistUpdater` commit `53153c990ae5b65a603d223eeda504df2a67d5fb` and remains under GPL-3.0-only. See its [README](Tools/NosGM.DataUpdater/README.md) and [attribution notice](Tools/NosGM.DataUpdater/NOTICE.md).
 
@@ -26,19 +26,19 @@ Generated catalogs belong under `Data/Generated/BCards`. Proprietary client arch
 
 ## Time-Space tooling
 
-`Tools/NosGM.TimeSpaceParser` is an external .NET 9 command-line tool that converts operator-supplied Time-Space packet captures into deterministic XML and validation reports for the current NosGM scripted-instance model.
+`Tools/NosGM.TimeSpaceParser` is an external .NET 10 command-line tool that converts operator-supplied Time-Space packet captures into deterministic XML and validation reports for the current NosGM scripted-instance model.
 
 It is adapted from `noszanou/OpennosTimeSpaceParser@36bd96a51c4b4a1e55e8827ca7eb375cc189ad9e`, remains under GPL-3.0-only and preserves the recorded credits to Elendan, SEOVA and OpenNos XML-model contributors. See its [README](Tools/NosGM.TimeSpaceParser/README.md) and [notice](Tools/NosGM.TimeSpaceParser/NOTICE.md).
 
 ## Resource exploration tooling
 
-`Tools/NosGM.ResourceExplorer` is an external, package-free .NET 9 command-line tool for read-only inspection, hashing, comparison and sandboxed extraction of supported `.NOS` resource archives.
+`Tools/NosGM.ResourceExplorer` is an external, package-free .NET 10 command-line tool for read-only inspection, hashing, comparison and sandboxed extraction of supported `.NOS` resource archives.
 
 The first release supports reviewed compressed archive and DAT/LST text-container layouts, but deliberately excludes repacking, patching and source-archive overwrite. It is adapted from `Pumba98/OnexExplorer@eaee2aa9f0e71b9960da586f425f79e628013021` under the Boost Software License 1.0. See its [README](Tools/NosGM.ResourceExplorer/README.md) and [notice](Tools/NosGM.ResourceExplorer/NOTICE.md).
 
 ## Packet catalog tooling
 
-`Tools/NosGM.PacketCatalog` is an external .NET 9 source-analysis tool that generates deterministic JSON and Markdown documentation for packet definitions, indexed fields, typed handlers and legacy raw-header handlers without loading or executing server assemblies.
+`Tools/NosGM.PacketCatalog` is an external .NET 10 source-analysis tool that generates deterministic JSON and Markdown documentation for packet definitions, indexed fields, typed handlers and legacy raw-header handlers without loading or executing server assemblies.
 
 It validates duplicate headers, duplicate indexes, unreachable `SerializeToEnd` fields and handler registration conflicts. The design adapts packet-documentation concepts from `BlowaXD/SaltyEmu@2588cfdc64789a7952c781faaafdf1026ac73e9d`, including the earlier packet-documentator work at `7f849171da82feee1b9fae851a45b3eef9a9cd68`, and remains GPL-3.0-only. See its [README](Tools/NosGM.PacketCatalog/README.md) and [notice](Tools/NosGM.PacketCatalog/NOTICE.md).
 
@@ -50,7 +50,7 @@ The component is adapted from concepts in `ImNotAVirus/NostaleWidget@fc1b6dda5d7
 
 ## Client theme tooling
 
-`Tools/NosGM.ClientThemeEditor` is a standalone, package-free .NET 9 tool for planning and applying color-only themes to an authorized exact x86 client executable. It validates file name, architecture, version, length, SHA-256, signature count and original bytes before writing.
+`Tools/NosGM.ClientThemeEditor` is a standalone, package-free .NET 10 tool for planning and applying color-only themes to an authorized exact x86 client executable. It validates file name, architecture, version, length, SHA-256, signature count and original bytes before writing.
 
 The default mode creates a separate copy. Guarded in-place mode creates a hash-verified backup, writes through a temporary file, records a restoration manifest and refuses restoration when either file has changed unexpectedly. The first release ships without active signatures for client `0.9.3.3255`.
 

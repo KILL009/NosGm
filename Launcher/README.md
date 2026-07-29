@@ -116,7 +116,7 @@ The local `.nosgm/update.lock` file is opened with exclusive sharing during impo
 
 ## Build
 
-Building from source requires the .NET 9 SDK, .NET 10 SDK and the Windows native C++ toolchain used by NativeAOT win-x86.
+Building from source requires the .NET 10 SDK and the Windows native C++ toolchain used by NativeAOT win-x86.
 
 ```powershell
 dotnet restore Launcher/NosGM.Launcher.sln

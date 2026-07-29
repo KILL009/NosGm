@@ -17,7 +17,7 @@ The NosGM tool adapts documented archive layouts, compressed-entry handling and 
 
 ## NosGM safety changes
 
-- package-free .NET 9 command-line implementation;
+- package-free .NET 10 command-line implementation;
 - read-only access to source archives;
 - strict bounds for counts, offsets, sizes, names and decompression;
 - SHA-256 for source files and decoded entries;

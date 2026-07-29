@@ -53,7 +53,7 @@ The machine-wide 32-bit registry location may require one elevated launcher run.
 
 Running a published NosGM Launcher does not require an installed SDK. Building the launcher from source requires:
 
-- .NET 9 SDK for the WPF launcher;
+- .NET 10 SDK for the WPF launcher;
 - .NET 10 SDK for NativeAOT win-x86;
 - Visual Studio Build Tools with the native C++ toolchain required by NativeAOT on Windows.
 

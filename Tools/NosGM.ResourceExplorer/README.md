@@ -1,6 +1,6 @@
 # NosGM.ResourceExplorer
 
-A conservative, package-free .NET 9 command-line tool for inspecting and safely extracting supported NosTale `.NOS` resource archives. It remains outside `NosGm.sln` and outside the server runtime.
+A conservative, package-free .NET 10 command-line tool for inspecting and safely extracting supported NosTale `.NOS` resource archives. It remains outside `NosGm.sln` and outside the server runtime.
 
 ## Supported in the first release
 
