@@ -21,7 +21,7 @@ service ClusterCommunication {
       returns (CommunicationMutationResponse);
   rpc DisconnectAccount(DisconnectAccountRequest)
       returns (CommunicationMutationResponse);
-  rpc PulseAccount(AccountRequest)
+  rpc PulseAccount(AccountSessionRequest)
       returns (CommunicationMutationResponse);
   rpc ConnectCharacter(CharacterWorldRequest)
       returns (CommunicationMutationResponse);
@@ -90,7 +90,9 @@ message DisconnectAccountRequest {
 message CharacterWorldRequest {
   RequestContext context = 1;
   string world_id = 2;
-  int64 character_id = 3;
+  int64 account_id = 3;
+  int32 session_id = 4;
+  int64 character_id = 5;
 }
 
 message RegisterWorldServerRequest {
@@ -118,7 +120,6 @@ message WorldRequest {
 
 message ListWorldServersRequest {
   RequestContext context = 1;
-  int64 account_id = 2;
 }
 
 message WorldChannelSnapshot {
@@ -133,6 +134,5 @@ message WorldChannelSnapshot {
 
 message ListWorldServersResponse {
   CommunicationResultCode result = 1;
-  uint32 character_count = 2;
-  repeated WorldChannelSnapshot worlds = 3;
+  repeated WorldChannelSnapshot worlds = 2;
 }
