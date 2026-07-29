@@ -160,10 +160,8 @@ namespace NosGm.Handler.BasicPacket.CharScreen
                         {
                             Owner = Session.Character
                         };
-
                         mate.GenerateMateTransportId();
                         mate.Monster = ServerManager.GetNpcMonster(s.NpcMonsterVNum);
-
                         Session.Character.Mates.Add(mate);
                     });
                 }
@@ -204,7 +202,6 @@ namespace NosGm.Handler.BasicPacket.CharScreen
                     }
 
                     var amulet = Session.Character.Inventory.LoadBySlotAndType((byte)EquipmentType.Amulet, InventoryType.Wear);
-
                     if (amulet?.ItemDeleteTime != null || amulet?.DurabilityPoint > 0)
                     {
                         Session.Character.AddBuff(new Buff(62, Session.Character.Level), Session.Character.BattleEntity);
@@ -240,8 +237,11 @@ namespace NosGm.Handler.BasicPacket.CharScreen
 
                 Session.SendPacket("OK");
 
-
-                CommunicationServiceClient.Instance.ConnectCharacter(ServerManager.Instance.WorldId, character.CharacterId);
+                CommunicationServiceClient.Instance.ConnectCharacter(
+                    ServerManager.Instance.WorldId,
+                    Session.Account.AccountId,
+                    Session.SessionId,
+                    character.CharacterId);
 
                 character.Channel = ServerManager.Instance;
 
