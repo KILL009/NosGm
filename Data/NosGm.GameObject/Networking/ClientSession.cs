@@ -184,6 +184,8 @@ namespace NosGm.GameObject
 
         public bool IsOnMap => CurrentMapInstance != null;
 
+        public bool PreserveAccountRegistrationOnDisconnect { get; private set; }
+
         public DateTime RegisterTime { get; internal set; }
 
         public int SessionId { get; private set; }
@@ -270,7 +272,10 @@ namespace NosGm.GameObject
 
             if (Account != null)
             {
-                CommunicationServiceClient.Instance.DisconnectAccount(Account.AccountId);
+                CommunicationServiceClient.Instance.DisconnectAccount(
+                    Account.AccountId,
+                    SessionId,
+                    PreserveAccountRegistrationOnDisconnect);
             }
         }
 
@@ -343,9 +348,13 @@ namespace NosGm.GameObject
             GenerateHandlerReferences(packetHandler, isWorldServer);
         }
 
-        public void InitializeAccount(Account account, bool crossServer = false)
+        public void InitializeAccount(
+            Account account,
+            bool crossServer = false,
+            bool preserveAccountRegistrationOnDisconnect = false)
         {
             Account = account;
+            PreserveAccountRegistrationOnDisconnect = preserveAccountRegistrationOnDisconnect;
             if (crossServer)
             {
                 CommunicationServiceClient.Instance.ConnectAccountCrossServer(ServerManager.Instance.WorldId, account.AccountId, SessionId);
@@ -747,7 +756,6 @@ namespace NosGm.GameObject
 
             _lastPacketReceive = e.ReceivedTimestamp.Ticks;
             bool overflow = false;
-
             lock (_receiveIngressSync)
             {
                 if (Volatile.Read(ref _receiveIngressStopped) != 0 || IsDisposing)
