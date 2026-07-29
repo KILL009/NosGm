@@ -182,7 +182,7 @@ static async Task RunLiveGrpcAcceptanceAsync()
             countryId,
             61003,
             timeout.Token);
-    AuthenticationTicketConsumptionResult exhausted =
+    AuthenticationTicketConsumptionResult fourth =
         await login.ConsumeAuthTicketAsync(
             authorizationCode,
             installationId,
@@ -193,7 +193,7 @@ static async Task RunLiveGrpcAcceptanceAsync()
     AssertEqual(
         AuthenticationTransportResultCode.Success,
         first.Result,
-        "Live Login certificate consumes the first ticket stage");
+        "Live Login certificate consumes the first ticket entry");
     AssertEqual(
         first.SessionId,
         second.SessionId,
@@ -203,9 +203,17 @@ static async Task RunLiveGrpcAcceptanceAsync()
         third.SessionId,
         "Live third Login stage preserves the SessionID");
     AssertEqual(
-        AuthenticationTransportResultCode.NotFoundOrExpired,
-        exhausted.Result,
-        "Live ticket is exhausted after exactly three consumptions");
+        AuthenticationTransportResultCode.Success,
+        fourth.Result,
+        "Live fourth Login entry remains inside the active-session lease");
+    AssertEqual(
+        first.SessionId,
+        fourth.SessionId,
+        "Live fourth Login entry preserves the SessionID");
+    AssertEqual(
+        4,
+        fourth.ConsumptionNumber,
+        "Live fourth Login entry advances the active-session counter");
 
     const long accountId = 9100001;
     AssertEqual(
@@ -522,6 +530,12 @@ AuthenticationTicketConsumptionResult third =
         installationId,
         5,
         77777);
+AuthenticationTicketConsumptionResult fourth =
+    state.TryConsumeTicket(
+        authorizationCode,
+        installationId,
+        5,
+        60000);
 AssertEqual(
     AuthenticationTransportResultCode.Success,
     first.Result,
@@ -536,13 +550,44 @@ AssertEqual(
     third.SessionId,
     "Third consumption preserves the first stable SessionID");
 AssertEqual(
+    AuthenticationTransportResultCode.Success,
+    fourth.Result,
+    "Fourth consumption remains valid inside the active-session lease");
+AssertEqual(
+    first.SessionId,
+    fourth.SessionId,
+    "Fourth consumption preserves the first stable SessionID");
+AssertEqual(
+    4,
+    fourth.ConsumptionNumber,
+    "Fourth consumption advances the session entry counter");
+
+time.Advance(TimeSpan.FromHours(23));
+AuthenticationTicketConsumptionResult fifth =
+    state.TryConsumeTicket(
+        authorizationCode,
+        installationId,
+        5,
+        61000);
+AssertEqual(
+    AuthenticationTransportResultCode.Success,
+    fifth.Result,
+    "Active-session ticket remains valid before its bounded lease expires");
+AssertEqual(
+    first.SessionId,
+    fifth.SessionId,
+    "Late active-session consumption preserves the stable SessionID");
+AssertEqual(5, fifth.ConsumptionNumber, "Late consumption is numbered");
+
+time.Advance(TimeSpan.FromHours(2));
+AssertEqual(
     AuthenticationTransportResultCode.NotFoundOrExpired,
     state.TryConsumeTicket(
         authorizationCode,
         installationId,
         5,
-        50219).Result,
-    "Ticket is removed after exactly three consumptions");
+        62000).Result,
+    "Active-session ticket expires after its bounded lease");
 
 const string mismatchedAuthorizationCode =
     "22222222-3333-4444-5555-666666666666";
@@ -632,7 +677,7 @@ AssertEqual(
         installationId,
         0,
         50221).Result,
-    "Expired tickets fail closed");
+    "Expired unused tickets fail closed");
 
 var replayGuard = new AuthenticationRequestReplayGuard();
 long now = time.GetUtcNow().ToUnixTimeMilliseconds();
