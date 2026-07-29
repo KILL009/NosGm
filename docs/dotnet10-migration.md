@@ -33,8 +33,9 @@ as migrated if the real client can no longer reach the same state.
 | Group | Projects | Current state |
 | --- | ---: | --- |
 | Web, launcher, launcher tests, and tools | 15 | Target or inherit .NET 10 in wave 0 |
+| Foundation bridge libraries | 4 | SDK style; target both `net481` and `net10.0` in wave 1 |
 | Modern game modules | 2 | Temporarily remain on .NET 7 because they reference the legacy server graph |
-| Classic server and libraries | 28 | .NET Framework 4.8.1; migrate in dependency order |
+| Remaining classic server and libraries | 24 | .NET Framework 4.8.1 only; migrate in dependency order |
 | Total | 45 | Migration tracked by waves below |
 
 Of the 15 wave-0 projects, 14 moved from .NET 9 to .NET 10 and the
@@ -45,8 +46,8 @@ Of the 15 wave-0 projects, 14 moved from .NET 9 to .NET 10 and the
 | Wave | Scope | Exit condition |
 | --- | --- | --- |
 | 0 | Web, launcher, launcher self-tests, updater, manifest builder, and tools | Restore, build, and self-tests pass on the stable .NET 10 SDK |
-| 1 | Domain, Algorithm, PathFinder, XMLModel, and ChickenAPI leaf libraries | SDK-style projects build on .NET 10 without compatibility packages |
-| 2 | Configuration, Packets, Data, Core, and SCS transport | No `BinaryFormatter` or .NET Remoting dependency remains |
+| 1 | Domain, Algorithm, XMLModel, and ChickenAPI.DAL leaf libraries | SDK-style projects build for both `net481` rollback and `net10.0` migration targets |
+| 2 | Configuration, Data, Packets, PathFinder, Core, and SCS transport | No `BinaryFormatter` or .NET Remoting dependency remains |
 | 3 | DAL Interface, Mapper, DAO, EF6, and Extension | SQL Server CRUD and migrations pass against a test database |
 | 4 | GameObject, Handler, plugins, Bazaar, and modules | Module loading, commands, inventory, combat, SP, and packet tests pass |
 | 5 | Logger, Parser, ServiceManager, Master, Login, and World | Full regional login and real-client acceptance suite passes |
@@ -55,6 +56,13 @@ Of the 15 wave-0 projects, 14 moved from .NET 9 to .NET 10 and the
 Login, Master, and World are intentionally last. Moving executable projects
 before their libraries would hide compatibility problems and put the working
 server at unnecessary risk.
+
+Wave 1 deliberately keeps a dual-target bridge. The legacy solution passes
+`NosGmLegacyBuild=true` and receives the `net481` assemblies, while the .NET 10
+foundation workflow compiles the same sources as `net10.0`. This preserves the
+known-good server while proving that the migrated leaf libraries are ready for
+the modern dependency graph. `PathFinder` moved to wave 2 after the inventory
+confirmed that it directly references `NosGm.Core` and is not a leaf library.
 
 ## Known blockers
 
@@ -123,4 +131,3 @@ building.
 7. Verify channel selection, character list, in-game entry, inventory, maps,
    combat, SP behavior, GM Bridge, and clean disconnect.
 8. Preserve the prior runnable binaries until the wave is accepted.
-

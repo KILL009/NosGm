@@ -96,6 +96,7 @@ jobs:
             /nr:false `
             /v:minimal `
             /p:RestorePackagesConfig=true `
+            /p:NosGmLegacyBuild=true `
             /p:Configuration="$env:CONFIGURATION" `
             /p:Platform="$env:PLATFORM"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
@@ -118,6 +119,7 @@ jobs:
             /nologo `
             /nr:false `
             /v:minimal `
+            /p:NosGmLegacyBuild=true `
             /p:Configuration="$env:CONFIGURATION" `
             /p:Platform=AnyCPU `
             /bl:"$env:ARTIFACTS\resx.binlog" `
@@ -136,6 +138,7 @@ jobs:
             /nologo `
             /nr:false `
             /v:minimal `
+            /p:NosGmLegacyBuild=true `
             /p:Configuration="$env:CONFIGURATION" `
             /p:Platform="$env:PLATFORM" `
             /bl:"$env:ARTIFACTS\build.binlog" `

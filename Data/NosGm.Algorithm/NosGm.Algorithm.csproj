@@ -1,86 +1,22 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
-<Project ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
-  <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
+<Project Sdk="Microsoft.NET.Sdk">
+
   <PropertyGroup>
-    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
-    <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
-    <ProjectGuid>{6681EB59-1773-45BE-9F10-099524882836}</ProjectGuid>
-    <OutputType>Library</OutputType>
-    <AppDesignerFolder>Properties</AppDesignerFolder>
+    <TargetFramework Condition="'$(NosGmLegacyBuild)' == 'true'">net481</TargetFramework>
+    <TargetFrameworks Condition="'$(NosGmLegacyBuild)' != 'true'">net481;net10.0</TargetFrameworks>
     <RootNamespace>NosGm.Algorithm</RootNamespace>
     <AssemblyName>NosGm.Algorithm</AssemblyName>
-    <TargetFrameworkVersion>v4.8.1</TargetFrameworkVersion>
-    <FileAlignment>512</FileAlignment>
+    <ApplicationIcon>nosgm-emulator-icon.ico</ApplicationIcon>
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
     <Deterministic>true</Deterministic>
     <LangVersion>8.0</LangVersion>
-    <TargetFrameworkProfile />
   </PropertyGroup>
-  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
-    <DebugSymbols>true</DebugSymbols>
-    <DebugType>full</DebugType>
-    <Optimize>false</Optimize>
-    <OutputPath>bin\Debug\</OutputPath>
-    <DefineConstants>DEBUG;TRACE</DefineConstants>
-    <ErrorReport>prompt</ErrorReport>
-    <WarningLevel>4</WarningLevel>
-  </PropertyGroup>
-  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
-    <DebugType>pdbonly</DebugType>
-    <Optimize>true</Optimize>
-    <OutputPath>bin\Release\</OutputPath>
-    <DefineConstants>TRACE</DefineConstants>
-    <ErrorReport>prompt</ErrorReport>
-    <WarningLevel>4</WarningLevel>
-  </PropertyGroup>
-  <PropertyGroup>
-    <ApplicationIcon>nosgm-emulator-icon.ico</ApplicationIcon>
-  </PropertyGroup>
+
   <ItemGroup>
-    <Reference Include="System" />
-    <Reference Include="System.Core" />
-    <Reference Include="System.Xml.Linq" />
-    <Reference Include="System.Data.DataSetExtensions" />
-    <Reference Include="Microsoft.CSharp" />
-    <Reference Include="System.Data" />
-    <Reference Include="System.Net.Http" />
-    <Reference Include="System.Xml" />
-  </ItemGroup>
-  <ItemGroup>
-    <Compile Include="CloseDefenceService\CloseDefenceService.cs" />
-    <Compile Include="CloseDefenceService\ICloseDefenceService.cs" />
-    <Compile Include="Constants.cs" />
-    <Compile Include="DamageService\DamageService.cs" />
-    <Compile Include="DamageService\IDamageService.cs" />
-    <Compile Include="DistanceDefenceService\DistanceDefenceService.cs" />
-    <Compile Include="DistanceDefenceService\IDistanceDefenceService.cs" />
-    <Compile Include="DistanceDodgeService\DistanceDodgeService.cs" />
-    <Compile Include="DistanceDodgeService\IDistanceDodgeService.cs" />
-    <Compile Include="DodgeService\HitDodgeService.cs" />
-    <Compile Include="DodgeService\IHitDodgeService.cs" />
-    <Compile Include="HitRateService\HitRateService.cs" />
-    <Compile Include="HitRateService\IHitRateService.cs" />
-    <Compile Include="HpService\HpService.cs" />
-    <Compile Include="HpService\IHpService.cs" />
-    <Compile Include="MagicDefenceService\IMagicDefenceService.cs" />
-    <Compile Include="MagicDefenceService\MagicDefenceService.cs" />
-    <Compile Include="Monsters\MonsterAlgs.cs" />
-    <Compile Include="MpService\IMpService.cs" />
-    <Compile Include="MpService\MpService.cs" />
-    <Compile Include="Properties\AssemblyInfo.cs" />
-    <Compile Include="SecondaryDamageService\ISecondaryDamageService.cs" />
-    <Compile Include="SecondaryDamageService\SecondaryDamageService.cs" />
-    <Compile Include="SecondaryHitRateService\ISecondaryHitRateService.cs" />
-    <Compile Include="SecondaryHitRateService\SecondaryHitRateService.cs" />
-  </ItemGroup>
-  <ItemGroup>
-    <Content Include="favicon.ico" />
     <Content Include="nosgm-emulator-icon.ico" />
   </ItemGroup>
+
   <ItemGroup>
-    <ProjectReference Include="..\NosGm.Domain\NosGm.Domain.csproj">
-      <Project>{20addddd-dad9-44f3-9beb-026c73090660}</Project>
-      <Name>NosGm.Domain</Name>
-    </ProjectReference>
+    <ProjectReference Include="..\NosGm.Domain\NosGm.Domain.csproj" />
   </ItemGroup>
-  <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
+
 </Project>
