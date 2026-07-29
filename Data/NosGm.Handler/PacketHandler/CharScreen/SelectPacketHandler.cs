@@ -251,7 +251,11 @@ namespace NosGm.Handler.Packets.CharScreenPackets
 
                 Session.SendPacket("OK");
 
-                CommunicationServiceClient.Instance.ConnectCharacter(ServerManager.Instance.WorldId, character.CharacterId);
+                CommunicationServiceClient.Instance.ConnectCharacter(
+                    ServerManager.Instance.WorldId,
+                    Session.Account.AccountId,
+                    Session.SessionId,
+                    character.CharacterId);
 
                 character.Channel = ServerManager.Instance;
 

@@ -79,8 +79,10 @@ $legacyClient = Read-RepositoryFile `
     "Data\NosGm.Master.Library\Client\CommunicationServiceClient.cs"
 $pulseHandler = Read-RepositoryFile `
     "Data\NosGm.Handler\PacketHandler\Basic\PulsePacketHandler.cs"
-$selectHandler = Read-RepositoryFile `
+$selectCharacterHandler = Read-RepositoryFile `
     "Data\NosGm.Handler\PacketHandler\CharScreen\SelectCharacterPacketHandler.cs"
+$selectPacketHandler = Read-RepositoryFile `
+    "Data\NosGm.Handler\PacketHandler\CharScreen\SelectPacketHandler.cs"
 
 Assert-Contains $project `
     '<TargetFrameworks Condition="''$(NosGmLegacyBuild)'' != ''true''">net481;net10.0</TargetFrameworks>' `
@@ -132,6 +134,18 @@ Assert-NotContains $router 'Task.WhenAll' `
     "Communication side effects are never mirrored"
 Assert-NotContains $router 'ContinueWith' `
     "Communication dispatch has no hidden fallback continuation"
+Assert-Contains $router 'ConcurrentDictionary<long, CharacterSessionBinding>' `
+    "The compatibility bridge keeps bounded character tuple bindings"
+Assert-Contains $router '_characterBindings[characterId]' `
+    "Successful character connection records its exact tuple"
+Assert-Contains $router '_characterBindings.TryGetValue(' `
+    "Legacy teardown resolves the tuple before dispatch"
+Assert-Contains $router 'binding.WorldId != worldId' `
+    "Legacy teardown cannot cross World identities"
+Assert-Contains $router '_characterBindings.TryRemove(characterId, out _);' `
+    "Successful teardown removes the temporary binding"
+Assert-Contains $router 'ValidateCharacterTuple(' `
+    "Character mutations reject incomplete identities before transport dispatch"
 
 Assert-Contains $grpc 'WireV1.ClusterCommunication' `
     "The client uses generated typed communication stubs"
@@ -186,6 +200,12 @@ Assert-Contains $selfTest `
 Assert-Contains $selfTest `
     'The selected failing transport is called exactly once' `
     "The self-test proves one stateful dispatch"
+Assert-Contains $selfTest `
+    'Legacy teardown resolves the exact stored character tuple' `
+    "The self-test covers compatibility teardown tuple recovery"
+Assert-Contains $selfTest `
+    'Rejected unbound teardown never reaches the selected transport' `
+    "The self-test proves incomplete teardown fails before dispatch"
 
 Assert-Contains $legacyClient 'CommunicationTransportModeParser.ParseEnvironment()' `
     "Production callers parse one communication selector before connecting"
@@ -207,11 +227,16 @@ Assert-Contains $legacyClient 'NormalizeNsTeSTPacketLayout' `
 
 Assert-Contains $pulseHandler 'Session.SessionId' `
     "World pulses preserve the stable SessionID"
-Assert-Contains $selectHandler 'Session.Account.AccountId' `
-    "Character selection carries its authenticated account identity"
-Assert-Contains $selectHandler 'Session.SessionId' `
-    "Character selection carries its stable SessionID"
+foreach ($handler in @($selectCharacterHandler, $selectPacketHandler)) {
+    Assert-Contains $handler 'Session.Account.AccountId' `
+        "Every character selector carries its authenticated account identity"
+    Assert-Contains $handler 'Session.SessionId' `
+        "Every character selector carries its stable SessionID"
+}
+Assert-NotContains $selectPacketHandler `
+    'ConnectCharacter(ServerManager.Instance.WorldId, character.CharacterId)' `
+    "The legacy character selector no longer drops its account/session tuple"
 
 Write-Host `
-    "NosGM communication transport abstraction, guarded SCS integration and split-brain prevention contract passed." `
+    "NosGM communication transport abstraction, complete character tuple propagation and split-brain prevention contract passed." `
     -ForegroundColor Green

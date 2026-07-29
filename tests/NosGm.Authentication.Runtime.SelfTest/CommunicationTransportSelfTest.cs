@@ -92,6 +92,66 @@ internal static class CommunicationTransportSelfTest
                 null),
             "A missing selected communication transport fails before dispatch");
 
+        Guid worldId =
+            Guid.Parse("11111111-2222-3333-4444-555555555555");
+        var bindingTransport = new RecordingCommunicationTransport();
+        var bindingRouter = new CommunicationTransportRouter(
+            CommunicationTransportMode.Scs,
+            bindingTransport,
+            null);
+        AssertEqual(
+            CommunicationTransportResultCode.Success,
+            bindingRouter.ConnectCharacterAsync(
+                    worldId,
+                    42,
+                    50219,
+                    10004,
+                    CancellationToken.None)
+                .GetAwaiter()
+                .GetResult(),
+            "Character connection stores the exact tuple binding");
+        AssertEqual(
+            CommunicationTransportResultCode.Success,
+            bindingRouter.DisconnectCharacterAsync(
+                    worldId,
+                    0,
+                    0,
+                    10004,
+                    CancellationToken.None)
+                .GetAwaiter()
+                .GetResult(),
+            "Legacy teardown resolves the exact stored character tuple");
+        AssertEqual(
+            42L,
+            bindingTransport.LastAccountId,
+            "Character teardown preserves AccountId");
+        AssertEqual(
+            50219,
+            bindingTransport.LastSessionId,
+            "Character teardown preserves SessionID");
+        AssertEqual(
+            10004L,
+            bindingTransport.LastCharacterId,
+            "Character teardown preserves CharacterId");
+        AssertEqual(
+            2,
+            bindingTransport.Calls,
+            "Character connect and teardown each dispatch exactly once");
+        AssertThrows<InvalidOperationException>(
+            () => bindingRouter.DisconnectCharacterAsync(
+                    worldId,
+                    0,
+                    0,
+                    10005,
+                    CancellationToken.None)
+                .GetAwaiter()
+                .GetResult(),
+            "Unbound legacy character teardown fails before transport dispatch");
+        AssertEqual(
+            2,
+            bindingTransport.Calls,
+            "Rejected unbound teardown never reaches the selected transport");
+
         Console.WriteLine(
             "[PASS] Communication transport router self-test");
     }
@@ -130,6 +190,12 @@ internal static class CommunicationTransportSelfTest
         public int Calls { get; private set; }
 
         public Exception Failure { get; init; }
+
+        public long LastAccountId { get; private set; }
+
+        public int LastSessionId { get; private set; }
+
+        public long LastCharacterId { get; private set; }
 
         public Task<CommunicationTransportResultCode> RegisterAccountLoginAsync(
             long accountId,
@@ -212,6 +278,9 @@ internal static class CommunicationTransportSelfTest
             long characterId,
             CancellationToken cancellationToken)
         {
+            LastAccountId = accountId;
+            LastSessionId = sessionId;
+            LastCharacterId = characterId;
             return RecordResult();
         }
 
@@ -222,6 +291,9 @@ internal static class CommunicationTransportSelfTest
             long characterId,
             CancellationToken cancellationToken)
         {
+            LastAccountId = accountId;
+            LastSessionId = sessionId;
+            LastCharacterId = characterId;
             return RecordResult();
         }
 
