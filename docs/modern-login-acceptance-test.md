@@ -126,11 +126,13 @@ Auth=NoS0577 Stage=2/3
 Auth=NoS0577 Stage=3/3
 ```
 
-Stage one owns the temporary one-use World permit. Stages two and three reuse
-the exact Master account/session registration and never replace an
-`AccountConnection` that World may already have attached. Different SessionIDs
-across those lines indicate that Master, Login or `NosGm.Master.Library.dll`
-was not rebuilt or copied consistently.
+Stage one owns the Master account/session registration. Stages two and three
+reuse that exact registration and never replace an `AccountConnection` that
+World may already have attached. Every accepted stage issues its own temporary,
+one-use World permit because returning to character selection creates a new
+World connection after the previous permit has already been consumed.
+Different SessionIDs across those lines indicate that Master, Login or
+`NosGm.Master.Library.dll` was not rebuilt or copied consistently.
 
 ## 5. Collect a sanitized evidence bundle
 
