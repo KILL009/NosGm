@@ -20,7 +20,8 @@ namespace NosGm.Cluster.Contracts.Authentication.V1
 
             if (!IsBoundedText(
                     request.AccountName,
-                    AuthenticationContractLimits.MaxAccountNameLength))
+                    AuthenticationContractLimits.MaxAccountNameLength) ||
+                ContainsWhitespace(request.AccountName))
             {
                 return AuthenticationContractValidationError.InvalidAccountName;
             }
@@ -255,6 +256,19 @@ namespace NosGm.Cluster.Contracts.Authentication.V1
             }
 
             return true;
+        }
+
+        private static bool ContainsWhitespace(string value)
+        {
+            foreach (char character in value)
+            {
+                if (char.IsWhiteSpace(character))
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
     }
 }

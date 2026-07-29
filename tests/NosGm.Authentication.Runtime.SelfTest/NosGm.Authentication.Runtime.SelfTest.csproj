@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>disable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <ProjectReference Include="..\..\Data\NosGm.Cluster.Contracts\NosGm.Cluster.Contracts.csproj"
+                      AdditionalProperties="NosGmLegacyBuild=false" />
+    <ProjectReference Include="..\..\Data\NosGm.Program\NosGm.Authentication.Server\NosGm.Authentication.Server.csproj" />
+  </ItemGroup>
+</Project>

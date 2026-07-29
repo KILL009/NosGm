@@ -35,9 +35,10 @@ as migrated if the real client can no longer reach the same state.
 | Web, launcher, launcher tests, and tools | 15 | Target or inherit .NET 10 in wave 0 |
 | Foundation bridge libraries | 6 | SDK style; target both `net481` and `net10.0` through wave 2A |
 | Cluster contract bridge and self-test | 2 | Versioned SCS replacement foundation in wave 2B |
+| Authentication gRPC runtime and self-test | 2 | Isolated .NET 10 host with mTLS, deadlines, replay protection, and SCS rollback |
 | Modern game modules | 2 | Temporarily remain on .NET 7 because they reference the legacy server graph |
 | Remaining classic server and libraries | 22 | .NET Framework 4.8.1 only; migrate in dependency order |
-| Total | 47 | Migration tracked by waves below |
+| Total | 49 | Migration tracked by waves below |
 
 Of the 15 wave-0 projects, 14 moved from .NET 9 to .NET 10 and the
 `NosGM.SteamAuthStub` project was already on .NET 10.
@@ -84,9 +85,13 @@ runtime traffic or alter any Login, World, or client-facing packet. See
 The authentication contract is the first service slice in wave 2B. It adds
 five explicit Gameforge ticket and one-use World permit RPCs, per-operation
 caller-role policy, input validation, and a machine-checked disposition for all
-eight legacy authentication methods. Runtime still uses SCS; this contract
-foundation intentionally does not dual-execute stateful operations or expose
-password hashes, shared authentication keys, or DTO object graphs.
+eight legacy authentication methods. An isolated .NET 10 runtime now hosts
+those RPCs on loopback HTTP/2 with mandatory mTLS, per-role certificate
+allow-lists, deadlines, replay protection, bounded dispatch, and compatibility
+self-tests. Production callers still select SCS by default: the runtime is not
+authoritative until AuthBridge, Login, and World adapters are all present and a
+single explicit switch selects gRPC. Stateful calls are never dual-executed or
+automatically retried through another transport.
 
 ## Known blockers
 
