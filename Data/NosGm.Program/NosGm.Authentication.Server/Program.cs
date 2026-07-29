@@ -23,7 +23,7 @@ builder.WebHost.ConfigureKestrel(kestrel =>
         options.Port,
         listen =>
         {
-            listen.Protocols = HttpProtocols.Http2;
+            listen.Protocols = HttpProtocols.Http1AndHttp2;
             listen.UseHttps(https =>
             {
                 https.ServerCertificate = serverCertificate;
@@ -53,7 +53,8 @@ builder.Services.AddGrpc(grpc =>
 });
 
 WebApplication app = builder.Build();
-app.MapGrpcService<GameforgeAuthenticationService>();
+app.UseGrpcWeb();
+app.MapGrpcService<GameforgeAuthenticationService>().EnableGrpcWeb();
 app.Lifetime.ApplicationStopped.Register(serverCertificate.Dispose);
 
 app.Logger.LogInformation(

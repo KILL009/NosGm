@@ -77,7 +77,8 @@ an operation begins; it never shadow-executes, retries blindly, or compares
 these operations by running both.
 
 The isolated .NET 10 authentication runtime now implements these five RPCs. It
-binds only to loopback HTTP/2, requires an OS-valid mTLS client certificate,
+binds only to loopback TLS over HTTP/1.1 or HTTP/2, requires an OS-valid mTLS
+client certificate,
 maps distinct certificate SHA-256 allow-lists to AuthBridge, Login, and World
 roles, enforces bounded request and transport deadlines, rejects replayed
 request IDs, and applies bounded dispatch. It preserves stable SessionID reuse
@@ -123,14 +124,15 @@ from its own environment:
 | `NOSGM_AUTH_GRPC_CLIENT_CERT_PASSWORD` | Optional PKCS#12 password; never logged |
 | `NOSGM_AUTH_GRPC_CALLER_INSTANCE_ID` | Required bounded identity for request correlation |
 | `NOSGM_AUTH_GRPC_DEADLINE_MILLISECONDS` | Per-call deadline from 1,000 to 60,000 ms; default 10,000 |
+| `NOSGM_AUTH_GRPC_WIRE_MODE` | `HTTP2` or `GRPCWEB`; selected before the first call and never changed as a retry |
 
 The AuthBridge, Login, and World certificates must be different and must match
 the corresponding server fingerprint allow-list. The URL is deliberately
 restricted to loopback, and the server certificate must be trusted by Windows
 and contain the selected loopback name or IP in its SAN. The .NET Framework
-4.8.1 callers use `Grpc.Net.Client` with `WinHttpHandler`; this path requires
-Windows 11 or Windows Server 2019 or later. No certificate-validation bypass is
-available.
+4.8.1 callers use `WinHttpHandler` for native `HTTP2` on supported systems and
+the official `GrpcWebHandler` over HTTP/1.1 on Windows 10. No
+certificate-validation bypass is available.
 
 A failed stateful call is returned to its caller without cross-transport
 fallback because the remote side may already have committed the mutation.
@@ -148,10 +150,14 @@ bundle and explicitly trust its public development root:
 ./scripts/new-local-authentication-certificates.ps1 -TrustRootCertificate
 ```
 
-The complete legacy-caller acceptance requires Windows 11 or Windows Server
-2019 or later because Microsoft supports .NET Framework gRPC over HTTP/2
-through `WinHttpHandler` only on those systems. See
-[Microsoft's .NET Standard 2.0 gRPC client requirements](https://learn.microsoft.com/aspnet/core/grpc/netstandard?view=aspnetcore-10.0).
+The logical `GRPC` transport supports two explicit wire modes. `HTTP2` uses
+`WinHttpHandler` for the legacy callers and therefore requires Windows 11 or
+Windows Server 2019 or later. `GRPCWEB` uses binary gRPC-Web over TLS and
+supports the legacy callers on Windows 10. `AUTO` selects one of those modes
+from the OS version before any stateful call starts. See
+[Microsoft's .NET Standard 2.0 gRPC client requirements](https://learn.microsoft.com/aspnet/core/grpc/netstandard?view=aspnetcore-10.0)
+and
+[Microsoft's ASP.NET Core gRPC-Web guidance](https://learn.microsoft.com/aspnet/core/grpc/grpcweb?view=aspnetcore-10.0).
 
 The command creates one server certificate and three different client
 certificates for AuthBridge, Login, and World. Their private keys are exported
@@ -173,7 +179,8 @@ acceptance:
 ```
 
 This publishes and starts the real .NET 10 Kestrel runtime, performs mTLS with
-all three role certificates, and verifies over gRPC:
+all three role certificates, and verifies the same contract over native HTTP/2
+and `GRPCWEB`:
 
 - AuthBridge-only ticket issue and rejection of an unauthorized role;
 - three Login ticket consumptions with one stable `SessionID`;
@@ -185,9 +192,9 @@ The temporary runtime is stopped and every plaintext process environment value
 is restored when the test succeeds or fails. Run with `-SkipBuild` only after
 the Release acceptance binaries already exist.
 
-This automated test validates the certificate policy and network contract with
-the .NET 10 client target. The following complete stack start remains mandatory
-because it is the step that exercises the `net481` WinHTTP adapters inside
+This automated test validates the certificate policy and both supported wire
+protocols with the .NET 10 client target. The following complete stack start
+remains mandatory because it exercises the actual `net481` adapters inside
 Master, Login, and World with the real NosTale Login and World flow.
 
 After that acceptance passes, start the complete real-client stack explicitly
@@ -196,6 +203,14 @@ on gRPC:
 ```powershell
 ./scripts/start-modern-login-local.ps1 -AuthenticationTransport GRPC
 ```
+
+On Windows 10 the command records and uses `GRPCWEB`. On Windows 11 or a
+supported Windows Server it records and uses `HTTP2`. Operators may override
+`AUTO` with `-AuthenticationGrpcWireMode GRPCWEB` or `HTTP2`; an unsupported
+forced HTTP/2 selection fails before startup. Both modes use the same
+loopback-only HTTPS endpoint, certificate allow-list, per-role mTLS identities,
+deadlines, replay protection, and bounded dispatch. A failed stateful call is
+never retried through the other wire mode or through SCS.
 
 The startup script launches the authentication runtime first. It gives the
 server certificate only to that runtime, the AuthBridge certificate only to

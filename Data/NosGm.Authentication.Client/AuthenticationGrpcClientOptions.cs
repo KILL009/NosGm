@@ -16,6 +16,8 @@ namespace NosGm.Authentication.Client
             "NOSGM_AUTH_GRPC_CALLER_INSTANCE_ID";
         public const string DeadlineVariable =
             "NOSGM_AUTH_GRPC_DEADLINE_MILLISECONDS";
+        public const string WireModeVariable =
+            "NOSGM_AUTH_GRPC_WIRE_MODE";
 
         public const string DefaultAddress = "https://127.0.0.1:7443";
         public const int MinimumDeadlineMilliseconds = 1000;
@@ -26,7 +28,8 @@ namespace NosGm.Authentication.Client
             string certificatePassword,
             string callerInstanceId,
             int deadlineMilliseconds,
-            ClusterNodeRole callerRole)
+            ClusterNodeRole callerRole,
+            AuthenticationGrpcWireMode wireMode)
         {
             Address = address;
             CertificatePath = certificatePath;
@@ -34,6 +37,7 @@ namespace NosGm.Authentication.Client
             CallerInstanceId = callerInstanceId;
             DeadlineMilliseconds = deadlineMilliseconds;
             CallerRole = callerRole;
+            WireMode = wireMode;
         }
 
         public Uri Address { get; }
@@ -47,6 +51,8 @@ namespace NosGm.Authentication.Client
         public int DeadlineMilliseconds { get; }
 
         public ClusterNodeRole CallerRole { get; }
+
+        public AuthenticationGrpcWireMode WireMode { get; }
 
         public static AuthenticationGrpcClientOptions Load(
             ClusterNodeRole callerRole,
@@ -109,6 +115,8 @@ namespace NosGm.Authentication.Client
                 required: true);
             int deadlineMilliseconds = ReadDeadline(
                 readVariable(DeadlineVariable));
+            AuthenticationGrpcWireMode wireMode = ReadWireMode(
+                readVariable(WireModeVariable));
 
             return new AuthenticationGrpcClientOptions(
                 address,
@@ -116,7 +124,31 @@ namespace NosGm.Authentication.Client
                 certificatePassword,
                 callerInstanceId,
                 deadlineMilliseconds,
-                callerRole);
+                callerRole,
+                wireMode);
+        }
+
+        private static AuthenticationGrpcWireMode ReadWireMode(string value)
+        {
+            if (string.IsNullOrEmpty(value) ||
+                string.Equals(
+                    value,
+                    "HTTP2",
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                return AuthenticationGrpcWireMode.Http2;
+            }
+
+            if (string.Equals(
+                    value,
+                    "GRPCWEB",
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                return AuthenticationGrpcWireMode.GrpcWeb;
+            }
+
+            throw new InvalidOperationException(
+                WireModeVariable + " must be HTTP2 or GRPCWEB.");
         }
 
         private static int ReadDeadline(string value)

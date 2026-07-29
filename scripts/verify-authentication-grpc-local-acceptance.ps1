@@ -111,14 +111,22 @@ Require $startup '[ValidateSet("SCS", "GRPC")]' `
     "Local startup keeps one explicit authentication selector"
 Require $startup '[string]$AuthenticationTransport = "SCS"' `
     "SCS remains the local startup default"
+Require $startup '[ValidateSet("AUTO", "HTTP2", "GRPCWEB")]' `
+    "Local startup exposes one explicit gRPC wire-mode selector"
+Require $startup 'return "GRPCWEB"' `
+    "Windows 10 selects gRPC-Web before any stateful call begins"
 Require $startup "Windows 11 or Windows Server 2019 or later" `
-    "Explicit gRPC startup fails early on unsupported Windows versions"
+    "An unsupported forced HTTP/2 selection fails early"
+Require $startup "Resolve-DotNet10Executable" `
+    "Local startup resolves PATH, global, and NosGM-local .NET 10 installations"
 Require $startup "AuthenticationGrpc" `
     "Explicit gRPC startup records the authentication runtime"
 Require $startup "ProcessEnvironment" `
     "Each child receives a separately scoped environment"
 Require $startup "NOSGM_AUTH_GRPC_CLIENT_CERT_PATH" `
     "Caller certificate path is passed only through process memory"
+Require $startup "NOSGM_AUTH_GRPC_WIRE_MODE" `
+    "Caller wire mode is scoped to each selected gRPC process"
 Require $startup "authbridge-local-1" `
     "Master AuthBridge gets its own caller identity"
 Require $startup "login-local-1" `
@@ -138,8 +146,16 @@ Require $acceptance "Wait-AuthenticationRuntime" `
     "Live acceptance waits for the real Kestrel listener"
 Require $acceptance "Import-Clixml" `
     "Live acceptance uses the protected credential bundle"
-Require $acceptance "& dotnet `$selfTestAssembly --live" `
+Require $acceptance "Resolve-DotNet10Executable" `
+    "Live acceptance discovers the NosGM-local .NET 10 SDK"
+Require $acceptance "& `$dotnetExecutable `$selfTestAssembly --live" `
     "Live acceptance executes the networked self-test mode"
+Require $acceptance '"HTTP2"' `
+    "Live acceptance exercises native HTTP/2"
+Require $acceptance '"GRPCWEB"' `
+    "Live acceptance exercises the Windows 10 gRPC-Web path"
+Forbid $acceptance "complete NosGM gRPC path requires" `
+    "The isolated .NET 10 acceptance is not blocked on Windows 10"
 Require $acceptance "Restore-ProcessEnvironment" `
     "Live acceptance restores all temporary environment values"
 
@@ -154,10 +170,14 @@ Require $selfTest "StatusCode.PermissionDenied" `
 
 Require $readiness "Port.AuthenticationGrpc" `
     "Readiness verifies the optional gRPC runtime port"
+Require $readiness "Authentication.GrpcWireMode" `
+    "Readiness validates the preselected gRPC wire mode"
 Require $documentation "new-local-authentication-certificates.ps1" `
     "Migration documentation explains local certificate provisioning"
 Require $documentation "test-authentication-grpc-local.ps1" `
     "Migration documentation exposes the live mTLS acceptance command"
+Require $documentation "GRPCWEB" `
+    "Migration documentation explains Windows 10 compatibility"
 
 Write-Host `
     "NosGM local gRPC certificate, process-isolation and live-acceptance contracts passed." `

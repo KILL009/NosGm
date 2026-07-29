@@ -90,8 +90,14 @@ Assert-Contains $project "<TargetFramework>net10.0</TargetFramework>" `
     "Authentication runtime targets .NET 10"
 Assert-Contains $program "IPAddress.Loopback" `
     "Authentication runtime binds only to loopback"
-Assert-Contains $program "HttpProtocols.Http2" `
-    "Authentication runtime accepts only HTTP/2"
+Assert-Contains $program "HttpProtocols.Http1AndHttp2" `
+    "Authentication runtime supports native gRPC and Windows 10 gRPC-Web"
+Assert-Contains $project "Grpc.AspNetCore.Web" `
+    "Authentication runtime includes the official gRPC-Web middleware"
+Assert-Contains $program "UseGrpcWeb" `
+    "Authentication runtime enables gRPC-Web before mapping services"
+Assert-Contains $program "EnableGrpcWeb" `
+    "Authentication service explicitly accepts gRPC-Web calls"
 Assert-Contains $program "ClientCertificateMode.RequireCertificate" `
     "Authentication runtime requires mTLS client certificates"
 Assert-Contains $program "errors == SslPolicyErrors.None" `
@@ -142,13 +148,19 @@ Assert-NotContains $router "Task.WhenAll" `
     "Stateful operations are never mirrored"
 
 Assert-Contains $clientProject "System.Net.Http.WinHttpHandler" `
-    ".NET Framework callers use the supported Windows HTTP/2 handler"
+    ".NET Framework callers retain native HTTP/2 on supported Windows versions"
+Assert-Contains $clientProject "Grpc.Net.Client.Web" `
+    ".NET Framework callers include the Windows 10 gRPC-Web transport"
 Assert-Contains $clientOptions "Uri.UriSchemeHttps" `
     "Authentication callers require HTTPS"
 Assert-Contains $clientOptions "address.IsLoopback" `
     "Authentication callers remain loopback-only"
 Assert-Contains $clientOptions "NOSGM_AUTH_GRPC_CLIENT_CERT_PATH" `
     "Authentication callers require an explicit client identity"
+Assert-Contains $clientOptions "NOSGM_AUTH_GRPC_WIRE_MODE" `
+    "Authentication callers select one wire mode before issuing calls"
+Assert-Contains $clientTransport "GrpcWebMode.GrpcWeb" `
+    "Windows 10 callers use binary gRPC-Web rather than an unsupported HTTP/2 handler"
 Assert-Contains $clientTransport "ClientCertificates" `
     "Authentication callers present their mTLS certificate"
 Assert-Contains $clientTransport "deadline: deadline" `

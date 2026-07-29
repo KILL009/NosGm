@@ -14,18 +14,43 @@ Set-StrictMode -Version Latest
 if ($env:OS -ne "Windows_NT") {
     throw "The live NosGM authentication gRPC acceptance test requires Windows."
 }
-if (-not (Get-Command dotnet.exe -ErrorAction SilentlyContinue)) {
-    throw ".NET 10 SDK was not found."
+
+function Resolve-DotNet10Executable {
+    $candidatePaths =
+        New-Object System.Collections.Generic.List[string]
+    $command = Get-Command dotnet.exe -ErrorAction SilentlyContinue
+    if ($command) {
+        $candidatePaths.Add([string]$command.Source)
+    }
+
+    foreach ($directory in @(
+        $env:DOTNET_ROOT,
+        (Join-Path $env:LOCALAPPDATA "NosGM\dotnet10"),
+        (Join-Path $env:LOCALAPPDATA "NosGM\dotnet9"),
+        (Join-Path $env:ProgramFiles "dotnet"),
+        (Join-Path ${env:ProgramFiles(x86)} "dotnet")
+    )) {
+        if (-not [string]::IsNullOrWhiteSpace($directory)) {
+            $candidatePaths.Add((Join-Path $directory "dotnet.exe"))
+        }
+    }
+
+    foreach ($candidatePath in @($candidatePaths | Select-Object -Unique)) {
+        if (-not (Test-Path -LiteralPath $candidatePath -PathType Leaf)) {
+            continue
+        }
+
+        $installedSdks = & $candidatePath --list-sdks 2>$null
+        if ($LASTEXITCODE -eq 0 -and
+            @($installedSdks | Where-Object { $_ -match "^10\." }).Count -gt 0) {
+            return [System.IO.Path]::GetFullPath($candidatePath)
+        }
+    }
+
+    throw ".NET 10 SDK was not found in PATH, DOTNET_ROOT, Program Files, or the NosGM local SDK directories."
 }
 
-$operatingSystem = Get-CimInstance -ClassName Win32_OperatingSystem
-$operatingSystemVersion = [Version]$operatingSystem.Version
-$isWorkstation = [int]$operatingSystem.ProductType -eq 1
-if (($isWorkstation -and $operatingSystemVersion.Build -lt 22000) -or
-    (-not $isWorkstation -and
-        $operatingSystemVersion.Build -lt 17763)) {
-    throw "The complete NosGM gRPC path requires Windows 11 or Windows Server 2019 or later."
-}
+$dotnetExecutable = Resolve-DotNet10Executable
 
 $root = Split-Path -Parent $PSScriptRoot
 if ([string]::IsNullOrWhiteSpace($CertificateManifest)) {
@@ -90,7 +115,8 @@ $environmentVariableNames = @(
     "NOSGM_AUTH_GRPC_LIVE_LOGIN_CERT_PATH",
     "NOSGM_AUTH_GRPC_LIVE_LOGIN_CERT_PASSWORD",
     "NOSGM_AUTH_GRPC_LIVE_WORLD_CERT_PATH",
-    "NOSGM_AUTH_GRPC_LIVE_WORLD_CERT_PASSWORD"
+    "NOSGM_AUTH_GRPC_LIVE_WORLD_CERT_PASSWORD",
+    "NOSGM_AUTH_GRPC_WIRE_MODE"
 )
 $previousEnvironment = @{}
 foreach ($variableName in $environmentVariableNames) {
@@ -207,7 +233,7 @@ $selfTestAssembly = Join-Path `
     "tests\NosGm.Authentication.Runtime.SelfTest\bin\Release\net10.0\NosGm.Authentication.Runtime.SelfTest.dll"
 
 if (-not $SkipBuild) {
-    & dotnet publish `
+    & $dotnetExecutable publish `
         $authenticationProject `
         --configuration Release `
         --output $authenticationOutput `
@@ -216,7 +242,7 @@ if (-not $SkipBuild) {
         throw "Authentication runtime publish failed."
     }
 
-    & dotnet build `
+    & $dotnetExecutable build `
         $selfTestProject `
         --configuration Release `
         --nologo
@@ -225,10 +251,10 @@ if (-not $SkipBuild) {
     }
 }
 
-$authenticationExecutable =
-    Join-Path $authenticationOutput "NosGm.Authentication.Server.exe"
+$authenticationAssembly =
+    Join-Path $authenticationOutput "NosGm.Authentication.Server.dll"
 foreach ($requiredFile in @(
-    $authenticationExecutable,
+    $authenticationAssembly,
     $selfTestAssembly
 )) {
     if (-not (Test-Path -LiteralPath $requiredFile -PathType Leaf)) {
@@ -255,7 +281,8 @@ try {
         NOSGM_AUTH_GRPC_INSTANCE_ID = "authentication-acceptance-1"
     }
     $runtimeProcess = Start-Process `
-        -FilePath $authenticationExecutable `
+        -FilePath $dotnetExecutable `
+        -ArgumentList @($authenticationAssembly) `
         -WorkingDirectory $authenticationOutput `
         -NoNewWindow `
         -PassThru
@@ -278,14 +305,29 @@ try {
             ConvertFrom-SecureStringInMemory $credentials.World
     }
 
-    & dotnet $selfTestAssembly --live
+    [Environment]::SetEnvironmentVariable(
+        "NOSGM_AUTH_GRPC_WIRE_MODE",
+        "HTTP2",
+        "Process")
+    Write-Host "[TEST] Native HTTP/2 authentication acceptance"
+    & $dotnetExecutable $selfTestAssembly --live
     if ($LASTEXITCODE -ne 0) {
-        throw "Live authentication gRPC acceptance failed."
+        throw "Native HTTP/2 authentication acceptance failed."
+    }
+
+    [Environment]::SetEnvironmentVariable(
+        "NOSGM_AUTH_GRPC_WIRE_MODE",
+        "GRPCWEB",
+        "Process")
+    Write-Host "[TEST] Windows 10 gRPC-Web authentication acceptance"
+    & $dotnetExecutable $selfTestAssembly --live
+    if ($LASTEXITCODE -ne 0) {
+        throw "Windows 10 gRPC-Web authentication acceptance failed."
     }
 
     Write-Host ""
     Write-Host `
-        "NosGM authentication gRPC mTLS acceptance passed." `
+        "NosGM authentication gRPC and gRPC-Web mTLS acceptance passed." `
         -ForegroundColor Green
 }
 finally {
