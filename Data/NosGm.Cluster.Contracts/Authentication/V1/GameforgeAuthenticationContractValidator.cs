@@ -2,14 +2,14 @@ using System;
 using System.Globalization;
 using System.Net;
 using NosGm.Cluster.Contracts.V1;
-using Wire = NosGm.Cluster.Wire.V1;
+using WireV1 = global::NosGm.Cluster.Wire.V1;
 
 namespace NosGm.Cluster.Contracts.Authentication.V1
 {
     public static class GameforgeAuthenticationContractValidator
     {
         public static AuthenticationContractValidationError Validate(
-            Wire.IssueAuthTicketRequest request)
+            WireV1.IssueAuthTicketRequest request)
         {
             AuthenticationContractValidationError contextError =
                 ValidateContext(request?.Context, ClusterNodeRole.AuthBridge);
@@ -34,7 +34,7 @@ namespace NosGm.Cluster.Contracts.Authentication.V1
         }
 
         public static AuthenticationContractValidationError Validate(
-            Wire.ConsumeAuthTicketRequest request)
+            WireV1.ConsumeAuthTicketRequest request)
         {
             AuthenticationContractValidationError contextError =
                 ValidateContext(request?.Context, ClusterNodeRole.Login);
@@ -59,7 +59,7 @@ namespace NosGm.Cluster.Contracts.Authentication.V1
         }
 
         public static AuthenticationContractValidationError Validate(
-            Wire.IssueWorldPermitRequest request)
+            WireV1.IssueWorldPermitRequest request)
         {
             AuthenticationContractValidationError contextError =
                 ValidateContext(request?.Context, ClusterNodeRole.Login);
@@ -72,7 +72,7 @@ namespace NosGm.Cluster.Contracts.Authentication.V1
         }
 
         public static AuthenticationContractValidationError Validate(
-            Wire.ConsumeWorldPermitRequest request)
+            WireV1.ConsumeWorldPermitRequest request)
         {
             AuthenticationContractValidationError contextError =
                 ValidateContext(request?.Context, ClusterNodeRole.World);
@@ -85,7 +85,7 @@ namespace NosGm.Cluster.Contracts.Authentication.V1
         }
 
         public static AuthenticationContractValidationError Validate(
-            Wire.RevokeWorldPermitRequest request)
+            WireV1.RevokeWorldPermitRequest request)
         {
             AuthenticationContractValidationError contextError =
                 ValidateContext(request?.Context, ClusterNodeRole.Login);
@@ -105,7 +105,7 @@ namespace NosGm.Cluster.Contracts.Authentication.V1
         }
 
         private static AuthenticationContractValidationError ValidateContext(
-            Wire.RequestContext context,
+            WireV1.RequestContext context,
             ClusterNodeRole expectedRole)
         {
             if (context?.Version == null ||
