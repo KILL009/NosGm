@@ -232,6 +232,30 @@ static async Task RunLiveGrpcAcceptanceAsync()
             "127.0.0.1",
             timeout.Token),
         "Live World permit cannot be replayed");
+    AssertEqual(
+        AuthenticationTransportResultCode.Success,
+        await login.IssueWorldPermitAsync(
+            accountId,
+            first.SessionId,
+            "127.0.0.1",
+            timeout.Token),
+        "Live Login issues a fresh character-reselection permit");
+    AssertEqual(
+        AuthenticationTransportResultCode.Success,
+        await world.ConsumeWorldPermitAsync(
+            accountId,
+            first.SessionId,
+            "127.0.0.1",
+            timeout.Token),
+        "Live World consumes the fresh character-reselection permit");
+    AssertEqual(
+        AuthenticationTransportResultCode.NotFoundOrExpired,
+        await world.ConsumeWorldPermitAsync(
+            accountId,
+            first.SessionId,
+            "127.0.0.1",
+            timeout.Token),
+        "Live character-reselection permit cannot be replayed");
 
     AssertEqual(
         AuthenticationTransportResultCode.Success,
@@ -575,6 +599,22 @@ AssertEqual(
     AuthenticationTransportResultCode.NotFoundOrExpired,
     state.TryConsumePermit(43, 50220, "203.0.113.10"),
     "World permits are consumed exactly once");
+AssertEqual(
+    AuthenticationTransportResultCode.Success,
+    state.TryIssuePermit(
+        43,
+        50220,
+        string.Empty,
+        TimeSpan.FromMinutes(2)),
+    "Login can issue a fresh permit for character reselection");
+AssertEqual(
+    AuthenticationTransportResultCode.Success,
+    state.TryConsumePermit(43, 50220, "203.0.113.10"),
+    "World consumes the fresh character-reselection permit");
+AssertEqual(
+    AuthenticationTransportResultCode.NotFoundOrExpired,
+    state.TryConsumePermit(43, 50220, "203.0.113.10"),
+    "The character-reselection permit also remains one-use");
 
 const string expiringAuthorizationCode =
     "33333333-4444-5555-6666-777777777777";
