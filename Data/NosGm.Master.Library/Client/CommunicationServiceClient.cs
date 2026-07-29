@@ -138,9 +138,9 @@ namespace NosGm.Master.Library.Client
             return _client.ServiceProxy.ConnectCharacter(worldId, characterId);
         }
 
-        public void DisconnectAccount(long accountId)
+        public void DisconnectAccount(long accountId, int sessionId = 0, bool preserveSessionRegistration = false)
         {
-            _client.ServiceProxy.DisconnectAccount(accountId);
+            _client.ServiceProxy.DisconnectAccount(accountId, sessionId, preserveSessionRegistration);
         }
 
         public void DisconnectCharacter(Guid worldId, long characterId)

@@ -108,8 +108,9 @@ Require-Ordered $entry @(
     'IsLoginPermitted(',
     'string.Equals(loginPacketParts[7], "thisisgfmode", StringComparison.Ordinal);',
     'ConsumeGameforgeWorldPermit(',
-    'Session.InitializeAccount(new Account(account), isCrossServerLogin);'
+    'Session.InitializeAccount('
 ) 'World entry does not consume the one-use permit after normal session authorization.'
+Require-Regex $entry 'Session\.InitializeAccount\(\s*new Account\(account\),\s*isCrossServerLogin,\s*isGameforgePasswordlessLogin\s*\)' 'World does not mark validated Gameforge sessions for registration preservation.'
 Require $entry 'isGameforgePasswordlessLogin ||' 'World password bypass is not restricted to validated Gameforge entry.'
 Require $entry 'PasswordHashService.VerifyPassword(account.Password, loginPacketParts[7], true, out _)' 'Normal World password verification disappeared.'
 
@@ -151,6 +152,8 @@ Require $store '_permits.TryRemove(' 'World permits are not one-use.'
 Require $store 'string.Equals(permit.IpAddress, normalizedIp' 'World permits are not bound to IP.'
 Require-Regex $communicationService 'public bool IsAccountSessionRegistered\s*\(long accountId, int sessionId\).*?AccountId\.Equals\(accountId\).*?SessionId\.Equals\(sessionId\)' 'Master cannot recognize later entries of the same modern Login session.'
 Require-Regex $communicationService 'public void RegisterAccountLogin\s*\(long accountId, int sessionId, string ipAddress\).*?lock \(MSManager\.Instance\.ConnectedAccounts\).*?existing != null\) return;.*?RemoveAll.*?Add\(new AccountConnection' 'Master must preserve an existing exact account/session registration instead of replacing its World attachment.'
+Require-Regex $communicationService 'public void DisconnectAccount\s*\(\s*long accountId,\s*int sessionId = 0,\s*bool preserveSessionRegistration = false\s*\).*?preserveSessionRegistration && sessionId > 0.*?AccountId\.Equals\(accountId\).*?SessionId\.Equals\(sessionId\).*?CharacterId = 0;.*?ConnectedWorld = null;.*?LastPulse = DateTime\.Now;.*?return;' 'Master must detach World while preserving only the exact active Gameforge account/session tuple.'
+Require $communicationClient '_client.ServiceProxy.DisconnectAccount(accountId, sessionId, preserveSessionRegistration);' 'World cannot forward the Gameforge session-preservation intent to Master.'
 Require $communicationService 'private const int NsTeSTPadding = 56;' 'The fixed NsTeST padding changed.'
 Require $communicationClient 'return $"{header}  {region} {account} 2 {remainder}";' 'Login does not normalize NsTeST with only the fixed modern mode field.'
 Forbid $communicationClient '2 0 0 0 0 0 0 {remainder}' 'The obsolete NsTeST zero fields shift the SessionId used for channel entry.'

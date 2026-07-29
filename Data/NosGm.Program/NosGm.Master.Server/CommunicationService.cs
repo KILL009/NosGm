@@ -159,14 +159,35 @@ namespace NosGm.Master.Server
             return false;
         }
 
-        public void DisconnectAccount(long accountId)
+        public void DisconnectAccount(
+            long accountId,
+            int sessionId = 0,
+            bool preserveSessionRegistration = false)
         {
             if (!MSManager.Instance.AuthentificatedClients.Any(s => s.Equals(CurrentClient.ClientId))) return;
-            if (MSManager.Instance.ConnectedAccounts.Any(s => s.AccountId.Equals(accountId) && s.CanLoginCrossServer))
+
+            lock (MSManager.Instance.ConnectedAccounts)
             {
-            }
-            else
-            {
+                if (preserveSessionRegistration && sessionId > 0)
+                {
+                    AccountConnection existing = MSManager.Instance.ConnectedAccounts.Find(account =>
+                        account.AccountId.Equals(accountId) &&
+                        account.SessionId.Equals(sessionId));
+                    if (existing != null)
+                    {
+                        existing.CharacterId = 0;
+                        existing.ConnectedWorld = null;
+                        existing.LastPulse = DateTime.Now;
+                    }
+                    return;
+                }
+
+                if (MSManager.Instance.ConnectedAccounts.Any(s =>
+                    s.AccountId.Equals(accountId) && s.CanLoginCrossServer))
+                {
+                    return;
+                }
+
                 MSManager.Instance.ConnectedAccounts.RemoveAll(c => c.AccountId.Equals(accountId));
             }
         }

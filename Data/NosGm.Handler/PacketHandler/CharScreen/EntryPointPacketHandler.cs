@@ -123,7 +123,7 @@ namespace NosGm.Handler.BasicPacket.CharScreen
                 }
 
                 bool passwordValid = isCrossServerLogin || isGameforgePasswordlessLogin ||
-                                     PasswordHashService.VerifyPassword(account.Password, loginPacketParts[7], true, out _);
+                                      PasswordHashService.VerifyPassword(account.Password, loginPacketParts[7], true, out _);
                 if (!passwordValid)
                 {
                     RejectEntry("PASSWORD_REJECTED");
@@ -133,7 +133,10 @@ namespace NosGm.Handler.BasicPacket.CharScreen
                     "CREDENTIALS_ACCEPTED",
                     $"Mode={(isCrossServerLogin ? "CrossServer" : isGameforgePasswordlessLogin ? "Gameforge" : "Password")}");
 
-                Session.InitializeAccount(new Account(account), isCrossServerLogin);
+                Session.InitializeAccount(
+                    new Account(account),
+                    isCrossServerLogin,
+                    isGameforgePasswordlessLogin);
                 ServerManager.Instance.CharacterScreenSessions[Session.Account.AccountId] = Session;
                 LogEntryStage("ACCOUNT_INITIALIZED", $"CrossServer={isCrossServerLogin}");
             }
