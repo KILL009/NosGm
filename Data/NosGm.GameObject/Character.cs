@@ -3183,7 +3183,7 @@ namespace NosGm.GameObject
                 $"{(GetDignityIco() == 1 ? GetReputationIco() : -GetDignityIco())} {Compliment} " +
                 $"{morph} {(Invisible ? 1 : 0)} " +
                 $"{Family?.FamilyLevel ?? 0} {(UseSp ? MorphUpgrade : 0)} " +
-                $"{ArenaWinner} 0 0";
+                $"{ArenaWinner} 0 -1";
 
             Logger.Info($"C_INFO: {packet}");
 
@@ -5489,7 +5489,9 @@ namespace NosGm.GameObject
             isPvpSecondary |= weapon2?.Item.Name.Contains(": ") == true;
             isPvpArmor |= armor?.Item.Name.Contains(": ") == true;
 
-            int RiftScore = 0;
+            string biography = string.IsNullOrWhiteSpace(Biography)
+                ? Language.Instance.GetMessageFromKey("NO_PREZ_MESSAGE")
+                : Biography.Replace('\r', ' ').Replace('\n', ' ');
 
             return $"tc_info {Level} {Name} {fairy?.Item.Element ?? 0} {ElementRate} {(byte)Class} " +
                    $"{(byte)Gender} {(Family != null ? $"{Family.FamilyId}.{CharacterExtension.GetFamilyNameType(Session)} {Family.Name}" : "-1 -")} " +
@@ -5499,9 +5501,9 @@ namespace NosGm.GameObject
                    $"{armor?.Rare ?? 0} " +
                    $"{armor?.Upgrade ?? 0} " +
                    $"{Act4Kill} {Act4Dead} " +
-                   $"{Reputation} 0 0 0 {(UseSp ? Morph : 0)} {TalentWin} {TalentLose} {TalentSurrender} {Stage} {RiftScore} 0 {Act4Points} " +
+                   $"{Reputation} 0 0 0 {(UseSp ? Morph : -1)} {TalentWin} {TalentLose} {TalentSurrender} 0 {MasterPoints} {Compliment} {Act4Points} " +
                    $"{(isPvpPrimary ? 1 : 0)} {(isPvpSecondary ? 1 : 0)} {(isPvpArmor ? 1 : 0)} {HeroLevel} {(fairy != null ? fairy.FairyLevel : 0)} " +
-                   $"Duel Won: {Session.Character.DuelWon}\nDuel Lost: {Session.Character.DuelLost}\n\nRaid Count: {Session.Character.RaidCount}\nMonster Count: {Session.Character.MonsterCount}\n\n{Biography}";
+                   biography;
         }
 
         public string GenerateRest() => $"rest 1 {CharacterId} {(IsSitting ? 1 : 0)}";
@@ -6368,7 +6370,7 @@ namespace NosGm.GameObject
         }
 
         public string GenerateStatInfo() =>
-            $"st 1 {CharacterId} {Level} {HeroLevel} {(int)(Hp / (float)HPLoad() * 100)} {(int)(Mp / (float)MPLoad() * 100)} {Hp} {Mp} {BattleEntity.HpMax} {BattleEntity.MpMax}{Buff.GetAllItems().Where(s => !s.StaticBuff || new short[] { 339, 340 }.Contains(s.Card.CardId)).Aggregate("", (current, buff) => current + $" {buff.Card.CardId}.{buff.Level}")}";
+            $"st 1 {CharacterId} {Level} {HeroLevel} {(int)(Hp / (float)HPLoad() * 100)} {(int)(Mp / (float)MPLoad() * 100)} {Hp} {Mp} {BattleEntity.HpMax} {BattleEntity.MpMax} 0{Buff.GetAllItems().Where(s => !s.StaticBuff || new short[] { 339, 340 }.Contains(s.Card.CardId)).Aggregate("", (current, buff) => current + $" {buff.Card.CardId}.{buff.Level}")}";
 
         public string GenerateTaF(byte victoriousteam)
         {

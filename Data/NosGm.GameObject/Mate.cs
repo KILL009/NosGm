@@ -1088,7 +1088,7 @@ namespace NosGm.GameObject
         public string GenerateStatInfo()
         {
             return
-                $"st 2 {MateTransportId} {Level} {TrainerLevel} {(int)(Hp / MaxHp * 100)} {(int)(Mp / MaxMp * 100)} {Hp} {Mp} {MaxHp} {MaxMp}{Buff.GetAllItems().Aggregate("", (current, buff) => current + $" {buff.Card.CardId}.{buff.Level}")}";
+                $"st 2 {MateTransportId} {Level} {TrainerLevel} {(int)(Hp / MaxHp * 100)} {(int)(Mp / MaxMp * 100)} {Hp} {Mp} {MaxHp} {MaxMp} 0{Buff.GetAllItems().Aggregate("", (current, buff) => current + $" {buff.Card.CardId}.{buff.Level}")}";
         }
 
         public string GenerateTp()

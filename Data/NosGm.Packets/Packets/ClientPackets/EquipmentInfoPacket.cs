@@ -4,7 +4,7 @@ using NosGm.Core;
 
 namespace NosGm.Packets.Packets.ClientPackets
 {
-    [PacketHeader("eqinfo")]
+    [PacketHeader("eqinfo", "eginfo")]
     public class EquipmentInfoPacket : PacketDefinition
     {
         #region Properties
