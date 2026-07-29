@@ -34,9 +34,10 @@ as migrated if the real client can no longer reach the same state.
 | --- | ---: | --- |
 | Web, launcher, launcher tests, and tools | 15 | Target or inherit .NET 10 in wave 0 |
 | Foundation bridge libraries | 6 | SDK style; target both `net481` and `net10.0` through wave 2A |
+| Cluster contract bridge and self-test | 2 | Versioned SCS replacement foundation in wave 2B |
 | Modern game modules | 2 | Temporarily remain on .NET 7 because they reference the legacy server graph |
 | Remaining classic server and libraries | 22 | .NET Framework 4.8.1 only; migrate in dependency order |
-| Total | 45 | Migration tracked by waves below |
+| Total | 47 | Migration tracked by waves below |
 
 Of the 15 wave-0 projects, 14 moved from .NET 9 to .NET 10 and the
 `NosGM.SteamAuthStub` project was already on .NET 10.
@@ -48,7 +49,7 @@ Of the 15 wave-0 projects, 14 moved from .NET 9 to .NET 10 and the
 | 0 | Web, launcher, launcher self-tests, updater, manifest builder, and tools | Restore, build, and self-tests pass on the stable .NET 10 SDK |
 | 1 | Domain, Algorithm, XMLModel, and ChickenAPI.DAL leaf libraries | SDK-style projects build for both `net481` rollback and `net10.0` migration targets |
 | 2A | Configuration and Data DTO libraries | SDK-style projects build for both `net481` rollback and `net10.0` migration targets |
-| 2B | Packets, PathFinder, Core, and SCS transport | No `BinaryFormatter` or .NET Remoting dependency remains |
+| 2B | Cluster contracts, Packets, PathFinder, Core, and SCS transport | Typed gRPC/Protobuf adapters replace `BinaryFormatter` and .NET Remoting |
 | 3 | DAL Interface, Mapper, DAO, EF6, and Extension | SQL Server CRUD and migrations pass against a test database |
 | 4 | GameObject, Handler, plugins, Bazaar, and modules | Module loading, commands, inventory, combat, SP, and packet tests pass |
 | 5 | Logger, Parser, ServiceManager, Master, Login, and World | Full regional login and real-client acceptance suite passes |
@@ -72,6 +73,13 @@ explicitly exclude `ServerConfiguration.local-backup.cs` and
 two stale sources. `Packets` and `PathFinder` remain in wave 2B because they
 depend on `NosGm.Core`; Core still contains the SCS serialization and dynamic
 proxy blockers described below.
+
+Wave 2B begins with a separate `NosGm.Cluster.Contracts` bridge and a .NET 10
+self-test. It establishes protocol version 1, typed negotiation and health
+contracts, caller/request validation, a 4 MiB message limit, bounded dispatch
+policy, and a frozen inventory of all 99 legacy SCS methods. It does not route
+runtime traffic or alter any Login, World, or client-facing packet. See
+`docs/scs-transport-migration.md` for the vertical-slice rollout.
 
 ## Known blockers
 

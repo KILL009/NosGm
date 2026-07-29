@@ -1,0 +1,178 @@
+{
+  "schemaVersion": 1,
+  "sourceTransport": "SCS",
+  "targetTransport": "gRPC + Protobuf",
+  "services": [
+    {
+      "interface": "IAdminToolService",
+      "source": "Data/NosGm.Master.Library/Interface/IAdminToolService.cs",
+      "legacyVersion": "1.1.0.0",
+      "direction": "server",
+      "methods": [
+        "AddPenalty",
+        "Authenticate",
+        "GetAccountDetails",
+        "GetAllBazaarItems",
+        "GetAllCharacters",
+        "GetAllInventoryItems",
+        "GetAllMapInstances",
+        "GetCharacterDetails",
+        "GetPenalties",
+        "Kick",
+        "SaveCharacter",
+        "SendItem",
+        "SendItemToMap",
+        "SendPacket",
+        "SendPacketToMap",
+        "Shout",
+        "Shutdown",
+        "SummonNPCMonster",
+        "Teleport",
+        "TeleportToPlayer"
+      ]
+    },
+    {
+      "interface": "IAuthentificationService",
+      "source": "Data/NosGm.Master.Library/Interface/IAuthentificationService.cs",
+      "legacyVersion": "1.3.0.0",
+      "direction": "server",
+      "methods": [
+        "Authenticate",
+        "ConsumeGameforgeAuthTicket",
+        "ConsumeGameforgeWorldPermit",
+        "RegisterGameforgeAuthTicket",
+        "RegisterGameforgeWorldPermit",
+        "RevokeGameforgeWorldPermit",
+        "ValidateAccount",
+        "ValidateAccountAndCharacter"
+      ]
+    },
+    {
+      "interface": "ICommunicationClient",
+      "source": "Data/NosGm.Master.Library/Interface/ICommunicationClient.cs",
+      "legacyVersion": null,
+      "direction": "callback",
+      "methods": [
+        "CharacterConnected",
+        "CharacterDisconnected",
+        "KickSession",
+        "Restart",
+        "RunGlobalEvent",
+        "SendMessageToCharacter",
+        "Shutdown",
+        "UpdateBazaar",
+        "UpdateFamily",
+        "UpdatePenaltyLog",
+        "UpdateRelation",
+        "UpdateStaticBonus"
+      ]
+    },
+    {
+      "interface": "ICommunicationService",
+      "source": "Data/NosGm.Master.Library/Interface/ICommunicationService.cs",
+      "legacyVersion": "1.2.0.0",
+      "direction": "server",
+      "methods": [
+        "AddOrRemoveSavingCharacters",
+        "Authenticate",
+        "CheckForStuckAccountsAtSaving",
+        "Cleanup",
+        "CleanupOutdatedSession",
+        "ConnectAccount",
+        "ConnectAccountCrossServer",
+        "ConnectCharacter",
+        "DisconnectAccount",
+        "DisconnectCharacter",
+        "GetChannelIdByWorldId",
+        "GetChannelStat",
+        "GetOnlineCharacters",
+        "GetPorts",
+        "GetServerStat",
+        "IsAccountConnected",
+        "IsAccountSessionRegistered",
+        "IsAct4Online",
+        "IsChannel1Online",
+        "IsChannel2Online",
+        "IsChannel3Online",
+        "IsChannel4Online",
+        "IsChannel5Online",
+        "IsChannel6Online",
+        "IsChannel7Online",
+        "IsCharacterConnected",
+        "IsCharacterSaving",
+        "IsCrossServerLoginPermitted",
+        "IsLoginPermitted",
+        "KickSession",
+        "PulseAccount",
+        "RefreshPenalty",
+        "RegisterAccountLogin",
+        "RegisterCrossServerAccountLogin",
+        "RegisterWorldServer",
+        "Restart",
+        "RetrieveOnlineCharacters",
+        "RetrieveOriginWorld",
+        "RetrieveRegisteredWorldServers",
+        "RetrieveServerStatistics",
+        "RunGlobalEvent",
+        "SendMessageToCharacter",
+        "Shutdown",
+        "UnregisterWorldServer",
+        "UpdateBazaar",
+        "UpdateFamily",
+        "UpdateRelation"
+      ]
+    },
+    {
+      "interface": "IConfigurationClient",
+      "source": "Data/NosGm.Master.Library/Interface/IConfigurationClient.cs",
+      "legacyVersion": null,
+      "direction": "callback",
+      "methods": [
+        "ConfigurationUpdated"
+      ]
+    },
+    {
+      "interface": "IConfigurationService",
+      "source": "Data/NosGm.Master.Library/Interface/IConfigurationService.cs",
+      "legacyVersion": "1.1.0.0",
+      "direction": "server",
+      "methods": [
+        "Authenticate",
+        "GetConfigurationObject",
+        "UpdateConfigurationObject"
+      ]
+    },
+    {
+      "interface": "IMailClient",
+      "source": "Data/NosGm.Master.Library/Interface/IMailClient.cs",
+      "legacyVersion": null,
+      "direction": "callback",
+      "methods": [
+        "MailSent"
+      ]
+    },
+    {
+      "interface": "IMailService",
+      "source": "Data/NosGm.Master.Library/Interface/IMailService.cs",
+      "legacyVersion": "1.1.0.0",
+      "direction": "server",
+      "methods": [
+        "Authenticate",
+        "SendMail"
+      ]
+    },
+    {
+      "interface": "IMallService",
+      "source": "Data/NosGm.Master.Library/Interface/IMallService.cs",
+      "legacyVersion": "1.1.0.0",
+      "direction": "server",
+      "methods": [
+        "Authenticate",
+        "GetCharacters",
+        "SendItem",
+        "SendStaticBonus",
+        "ValidateAccount"
+      ]
+    }
+  ]
+}
