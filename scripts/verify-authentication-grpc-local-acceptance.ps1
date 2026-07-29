@@ -43,6 +43,36 @@ function Forbid {
     Write-Host "[PASS] $Name" -ForegroundColor Green
 }
 
+function Assert-PowerShellSyntax {
+    param([Parameter(Mandatory = $true)][string]$RelativePath)
+
+    $tokens = $null
+    $parseErrors = $null
+    $fullPath = Join-Path $repositoryRoot $RelativePath
+    [System.Management.Automation.Language.Parser]::ParseFile(
+        $fullPath,
+        [ref]$tokens,
+        [ref]$parseErrors) | Out-Null
+    if ($null -ne $parseErrors -and $parseErrors.Count -gt 0) {
+        $messages = @($parseErrors | ForEach-Object {
+            "$($_.Extent.StartLineNumber):$($_.Extent.StartColumnNumber) $($_.Message)"
+        })
+        throw "PowerShell syntax failed for $RelativePath`: $($messages -join '; ')"
+    }
+
+    Write-Host "[PASS] PowerShell syntax: $RelativePath" `
+        -ForegroundColor Green
+}
+
+foreach ($scriptPath in @(
+    "scripts\new-local-authentication-certificates.ps1",
+    "scripts\start-modern-login-local.ps1",
+    "scripts\test-authentication-grpc-local.ps1",
+    "scripts\test-modern-login-readiness.ps1"
+)) {
+    Assert-PowerShellSyntax -RelativePath $scriptPath
+}
+
 $generator = Read-RepositoryFile `
     "scripts\new-local-authentication-certificates.ps1"
 $acceptance = Read-RepositoryFile `
