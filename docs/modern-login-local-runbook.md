@@ -45,7 +45,11 @@ Visual Studio 2022 contains MSBuild 17.x, which cannot load the repository-wide
 .NET 9 compatibility SDK, temporarily assigns its `Sdks` directory to
 `MSBuildSDKsPath` for the legacy `NosGm.sln` restore/build, then restores the
 previous environment before building the .NET 10 launcher and authentication
-runtime. It never rewrites `global.json`.
+runtime. The legacy server projects do not use .NET workloads, so that scoped
+build also sets `MSBuildEnableWorkloadResolver=false`. This prevents Visual
+Studio 2022 from consulting the repository-wide .NET 10 workload resolver
+after the .NET 9 SDK has already been selected. Both environment values are
+restored afterward, and the script never rewrites `global.json`.
 
 If .NET 9 is missing, install it side by side without removing .NET 10:
 
