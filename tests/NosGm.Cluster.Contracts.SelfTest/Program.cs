@@ -146,6 +146,13 @@ AssertEqual(
     "World cannot issue Gameforge tickets");
 issueTicket.Context.CallerRole = WireClusterNodeRole.AuthBridge;
 
+issueTicket.AccountName = "contract test";
+AssertEqual(
+    AuthenticationContractValidationError.InvalidAccountName,
+    GameforgeAuthenticationContractValidator.Validate(issueTicket),
+    "Account names with whitespace fail closed");
+issueTicket.AccountName = "contract-test";
+
 issueTicket.AuthorizationCode = "not-an-authorized-shape";
 AssertEqual(
     AuthenticationContractValidationError.InvalidAuthorizationCode,

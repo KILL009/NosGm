@@ -17,12 +17,15 @@ on:
       - "Data/NosGm.Configuration/**"
       - "Data/NosGm.DAL/NosGm.Data/**"
       - "Data/NosGm.Cluster.Contracts/**"
+      - "Data/NosGm.Program/NosGm.Authentication.Server/**"
       - "contracts/cluster/**"
       - "tests/NosGm.Cluster.Contracts.SelfTest/**"
+      - "tests/NosGm.Authentication.Runtime.SelfTest/**"
       - "docs/dotnet10-migration.md"
       - "docs/scs-transport-migration.md"
       - "scripts/verify-dotnet10-foundation.ps1"
       - "scripts/verify-scs-transport-contracts.ps1"
+      - "scripts/verify-authentication-grpc-runtime.ps1"
   pull_request:
     branches:
       - main
@@ -39,12 +42,15 @@ on:
       - "Data/NosGm.Configuration/**"
       - "Data/NosGm.DAL/NosGm.Data/**"
       - "Data/NosGm.Cluster.Contracts/**"
+      - "Data/NosGm.Program/NosGm.Authentication.Server/**"
       - "contracts/cluster/**"
       - "tests/NosGm.Cluster.Contracts.SelfTest/**"
+      - "tests/NosGm.Authentication.Runtime.SelfTest/**"
       - "docs/dotnet10-migration.md"
       - "docs/scs-transport-migration.md"
       - "scripts/verify-dotnet10-foundation.ps1"
       - "scripts/verify-scs-transport-contracts.ps1"
+      - "scripts/verify-authentication-grpc-runtime.ps1"
   workflow_dispatch:
 
 permissions:

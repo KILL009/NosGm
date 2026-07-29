@@ -95,7 +95,9 @@ $explicitNet10Projects = @(
     "Tools\NosGM.PacketCatalog\NosGM.PacketCatalog.csproj",
     "Tools\NosGM.ResourceExplorer\NosGM.ResourceExplorer.csproj",
     "Tools\NosGM.TimeSpaceParser\NosGM.TimeSpaceParser.csproj",
-    "tests\NosGm.Cluster.Contracts.SelfTest\NosGm.Cluster.Contracts.SelfTest.csproj"
+    "tests\NosGm.Cluster.Contracts.SelfTest\NosGm.Cluster.Contracts.SelfTest.csproj",
+    "Data\NosGm.Program\NosGm.Authentication.Server\NosGm.Authentication.Server.csproj",
+    "tests\NosGm.Authentication.Runtime.SelfTest\NosGm.Authentication.Runtime.SelfTest.csproj"
 )
 
 $bridgeProjects = @(
@@ -150,8 +152,8 @@ foreach ($project in $deferredModern) {
     Write-Host "[DEFERRED] $project" -ForegroundColor Yellow
 }
 
-if ($allProjects.Count -ne 47) {
-    throw "Project inventory changed: expected 47 projects but found $($allProjects.Count). Review the migration matrix."
+if ($allProjects.Count -ne 49) {
+    throw "Project inventory changed: expected 49 projects but found $($allProjects.Count). Review the migration matrix."
 }
 
 if ($bridgeCount -ne 7) {
@@ -163,6 +165,7 @@ if ($legacyOnlyCount -ne 22) {
 }
 
 & (Join-Path $PSScriptRoot "verify-scs-transport-contracts.ps1")
+& (Join-Path $PSScriptRoot "verify-authentication-grpc-runtime.ps1")
 
 if ($InventoryOnly) {
     Write-Host "NosGM .NET 10 foundation inventory passed." -ForegroundColor Green
@@ -188,6 +191,20 @@ try {
         "run",
         "--project",
         "tests\NosGm.Cluster.Contracts.SelfTest\NosGm.Cluster.Contracts.SelfTest.csproj",
+        "-c",
+        "Release")
+
+    Invoke-DotNet -Arguments @(
+        "build",
+        "Data\NosGm.Program\NosGm.Authentication.Server\NosGm.Authentication.Server.csproj",
+        "-c",
+        "Release",
+        "--nologo")
+
+    Invoke-DotNet -Arguments @(
+        "run",
+        "--project",
+        "tests\NosGm.Authentication.Runtime.SelfTest\NosGm.Authentication.Runtime.SelfTest.csproj",
         "-c",
         "Release")
 

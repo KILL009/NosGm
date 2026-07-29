@@ -76,11 +76,43 @@ handled by exactly one transport. The future adapter may select gRPC or SCS for
 an operation, but it must never shadow-execute, retry blindly, or compare these
 operations by running both.
 
-This slice generates typed client/server stubs and validates the wire boundary;
-it deliberately does not start a gRPC listener or change Login, Master, World,
-or AuthBridge traffic. SCS remains active until the .NET 10 authentication
-host, TLS identity, deadlines, sanitized audit logging, compatibility tests,
-and immediate rollback switch are present.
+The isolated .NET 10 authentication runtime now implements these five RPCs. It
+binds only to loopback HTTP/2, requires an OS-valid mTLS client certificate,
+maps distinct certificate SHA-256 allow-lists to AuthBridge, Login, and World
+roles, enforces bounded request and transport deadlines, rejects replayed
+request IDs, and applies bounded dispatch. It preserves stable SessionID reuse
+for exactly three ticket consumptions and one-use World permit behavior.
+
+This runtime is not yet selected by AuthBridge, Login, or World. SCS remains
+the default transport and authoritative state owner. The shared transport
+router selects exactly one implementation before a side effect begins; it
+never mirrors an operation or retries a failed gRPC call through SCS.
+
+## Authentication runtime configuration
+
+The runtime refuses to start unless its TLS identity and all three caller
+allow-lists are configured:
+
+| Variable | Purpose |
+| --- | --- |
+| `NOSGM_AUTH_GRPC_SERVER_CERT_PATH` | Absolute path to the server PKCS#12 certificate |
+| `NOSGM_AUTH_GRPC_SERVER_CERT_PASSWORD` | Optional PKCS#12 password; never logged |
+| `NOSGM_AUTH_GRPC_AUTHBRIDGE_CERT_SHA256` | Allowed AuthBridge client certificate fingerprint(s) |
+| `NOSGM_AUTH_GRPC_LOGIN_CERT_SHA256` | Allowed Login client certificate fingerprint(s) |
+| `NOSGM_AUTH_GRPC_WORLD_CERT_SHA256` | Allowed World client certificate fingerprint(s) |
+| `NOSGM_AUTH_GRPC_PORT` | Loopback port; default `7443` |
+| `NOSGM_AUTH_GRPC_TICKET_TTL_SECONDS` | Ticket lifetime from 15 to 600 seconds; default `120` |
+| `NOSGM_AUTH_GRPC_PERMIT_TTL_SECONDS` | World permit lifetime from 15 to 600 seconds; default `120` |
+| `NOSGM_AUTH_GRPC_INSTANCE_ID` | Bounded runtime identity used only in safe operational logs |
+
+Fingerprints may be comma-separated but cannot be reused across roles.
+Certificate chain validation remains enabled; no “accept any certificate”
+escape hatch exists.
+
+The future adapters use a single `SCS` or `GRPC` transport value. Missing or
+unknown values fail closed, and an absent value intentionally resolves to
+`SCS`. A failed stateful call is returned to its caller without cross-transport
+fallback because the remote side may already have committed the mutation.
 
 ## Frozen legacy surface
 
@@ -99,9 +131,9 @@ service will receive explicit request and response messages.
 2. **Authentication contract** — add the five typed ticket/permit RPCs, caller
    policies, strict validators, and a complete legacy-method disposition map.
    No runtime traffic changes.
-3. **Authentication runtime** — host the typed service in .NET 10 behind an
-   adapter and rollback switch. Route each side effect through exactly one
-   transport.
+3. **Authentication runtime** — the isolated mTLS host and safe selector are
+   present. Next add the three caller adapters, then route each side effect
+   through exactly one explicitly selected transport.
 4. **Communication slice** — migrate account/session and World registration
    calls while preserving the verified Login → Master → World sequence.
 5. **Supporting services** — configuration, mail, mall, callbacks, and
