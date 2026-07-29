@@ -186,7 +186,8 @@ legacy `net481` callers can use it:
 - AuthBridge-only ticket issue and rejection of an unauthorized role;
 - three Login ticket consumptions with one stable `SessionID`;
 - rejection of a fourth ticket consumption;
-- Login-issued and World-consumed one-use permits;
+- Login-issued and World-consumed one-use permits, including a fresh permit
+  for a later character-selection return on the same stable SessionID;
 - replay rejection and explicit permit revocation.
 
 The temporary runtime is stopped and every plaintext process environment value
