@@ -111,6 +111,12 @@ namespace NosGm.Cluster.Contracts.Communication.V1
                 : ValidateAccountId(request.AccountId);
         }
 
+        public static CommunicationContractValidationError ValidatePulse(
+            WireV1.AccountSessionRequest request)
+        {
+            return ValidateAccountSessionRequest(request, ClusterNodeRole.World);
+        }
+
         public static CommunicationContractValidationError ValidateConnectCharacter(
             WireV1.CharacterWorldRequest request)
         {
