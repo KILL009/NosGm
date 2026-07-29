@@ -167,6 +167,7 @@ if ($legacyOnlyCount -ne 22) {
 
 & (Join-Path $PSScriptRoot "verify-scs-transport-contracts.ps1")
 & (Join-Path $PSScriptRoot "verify-authentication-grpc-runtime.ps1")
+& (Join-Path $PSScriptRoot "verify-communication-grpc-client.ps1")
 & (Join-Path `
     $PSScriptRoot `
     "verify-authentication-grpc-local-acceptance.ps1")
