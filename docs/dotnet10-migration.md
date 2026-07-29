@@ -33,9 +33,9 @@ as migrated if the real client can no longer reach the same state.
 | Group | Projects | Current state |
 | --- | ---: | --- |
 | Web, launcher, launcher tests, and tools | 15 | Target or inherit .NET 10 in wave 0 |
-| Foundation bridge libraries | 4 | SDK style; target both `net481` and `net10.0` in wave 1 |
+| Foundation bridge libraries | 6 | SDK style; target both `net481` and `net10.0` through wave 2A |
 | Modern game modules | 2 | Temporarily remain on .NET 7 because they reference the legacy server graph |
-| Remaining classic server and libraries | 24 | .NET Framework 4.8.1 only; migrate in dependency order |
+| Remaining classic server and libraries | 22 | .NET Framework 4.8.1 only; migrate in dependency order |
 | Total | 45 | Migration tracked by waves below |
 
 Of the 15 wave-0 projects, 14 moved from .NET 9 to .NET 10 and the
@@ -47,7 +47,8 @@ Of the 15 wave-0 projects, 14 moved from .NET 9 to .NET 10 and the
 | --- | --- | --- |
 | 0 | Web, launcher, launcher self-tests, updater, manifest builder, and tools | Restore, build, and self-tests pass on the stable .NET 10 SDK |
 | 1 | Domain, Algorithm, XMLModel, and ChickenAPI.DAL leaf libraries | SDK-style projects build for both `net481` rollback and `net10.0` migration targets |
-| 2 | Configuration, Data, Packets, PathFinder, Core, and SCS transport | No `BinaryFormatter` or .NET Remoting dependency remains |
+| 2A | Configuration and Data DTO libraries | SDK-style projects build for both `net481` rollback and `net10.0` migration targets |
+| 2B | Packets, PathFinder, Core, and SCS transport | No `BinaryFormatter` or .NET Remoting dependency remains |
 | 3 | DAL Interface, Mapper, DAO, EF6, and Extension | SQL Server CRUD and migrations pass against a test database |
 | 4 | GameObject, Handler, plugins, Bazaar, and modules | Module loading, commands, inventory, combat, SP, and packet tests pass |
 | 5 | Logger, Parser, ServiceManager, Master, Login, and World | Full regional login and real-client acceptance suite passes |
@@ -63,6 +64,14 @@ foundation workflow compiles the same sources as `net10.0`. This preserves the
 known-good server while proving that the migrated leaf libraries are ready for
 the modern dependency graph. `PathFinder` moved to wave 2 after the inventory
 confirmed that it directly references `NosGm.Core` and is not a leaf library.
+
+Wave 2A extends that bridge to `NosGm.Configuration` and `NosGm.Data`. Both
+depend only on the already migrated Domain library. Their SDK conversions
+explicitly exclude `ServerConfiguration.local-backup.cs` and
+`Base/MappingBaseDTO.cs`, because the legacy project files never compiled those
+two stale sources. `Packets` and `PathFinder` remain in wave 2B because they
+depend on `NosGm.Core`; Core still contains the SCS serialization and dynamic
+proxy blockers described below.
 
 ## Known blockers
 

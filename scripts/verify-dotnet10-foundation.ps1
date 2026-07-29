@@ -97,11 +97,13 @@ $explicitNet10Projects = @(
     "Tools\NosGM.TimeSpaceParser\NosGM.TimeSpaceParser.csproj"
 )
 
-$wave1BridgeProjects = @(
+$bridgeProjects = @(
     "Data\NosGm.Domain\NosGm.Domain.csproj",
     "Data\NosGm.ChickenAPI\ChickenAPI.DAL\ChickenAPI.DAL.csproj",
     "Data\NosGm.Algorithm\NosGm.Algorithm.csproj",
-    "Data\NosGm.XMLModel\NosGm.XMLModel.csproj"
+    "Data\NosGm.XMLModel\NosGm.XMLModel.csproj",
+    "Data\NosGm.Configuration\NosGm.Configuration.csproj",
+    "Data\NosGm.DAL\NosGm.Data\NosGm.Data.csproj"
 )
 
 foreach ($project in $explicitNet10Projects) {
@@ -109,7 +111,7 @@ foreach ($project in $explicitNet10Projects) {
     Write-Host "[PASS] $project targets .NET 10." -ForegroundColor Green
 }
 
-foreach ($project in $wave1BridgeProjects) {
+foreach ($project in $bridgeProjects) {
     Assert-FileContains -RelativePath $project -ExpectedText '<TargetFramework Condition="''$(NosGmLegacyBuild)'' == ''true''">net481</TargetFramework>'
     Assert-FileContains -RelativePath $project -ExpectedText '<TargetFrameworks Condition="''$(NosGmLegacyBuild)'' != ''true''">net481;net10.0</TargetFrameworks>'
     Write-Host "[PASS] $project exposes the net481 rollback and .NET 10 migration targets." -ForegroundColor Green
@@ -150,12 +152,12 @@ if ($allProjects.Count -ne 45) {
     throw "Project inventory changed: expected 45 projects but found $($allProjects.Count). Review the migration matrix."
 }
 
-if ($bridgeCount -ne 4) {
-    throw "Wave-1 bridge inventory changed: expected 4 projects but found $bridgeCount."
+if ($bridgeCount -ne 6) {
+    throw "Bridge inventory changed: expected 6 projects but found $bridgeCount."
 }
 
-if ($legacyOnlyCount -ne 24) {
-    throw "Legacy-only inventory changed: expected 24 .NET Framework 4.8.1 projects but found $legacyOnlyCount."
+if ($legacyOnlyCount -ne 22) {
+    throw "Legacy-only inventory changed: expected 22 .NET Framework 4.8.1 projects but found $legacyOnlyCount."
 }
 
 if ($InventoryOnly) {
@@ -173,7 +175,7 @@ try {
         Invoke-DotNet -Arguments @("build", $toolProject.FullName, "-c", "Release", "--nologo")
     }
 
-    foreach ($bridgeProject in $wave1BridgeProjects) {
+    foreach ($bridgeProject in $bridgeProjects) {
         Invoke-DotNet -Arguments @("build", $bridgeProject, "-c", "Release", "-f", "net481", "--nologo", "-m:1", "-nodeReuse:false")
         Invoke-DotNet -Arguments @("build", $bridgeProject, "-c", "Release", "-f", "net10.0", "--nologo", "-m:1", "-nodeReuse:false")
     }
@@ -189,4 +191,4 @@ finally {
     Pop-Location
 }
 
-Write-Host "NosGM .NET 10 foundation and wave-1 bridge build passed." -ForegroundColor Green
+Write-Host "NosGM .NET 10 foundation and waves 1-2A bridge build passed." -ForegroundColor Green

@@ -1,89 +1,37 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
-<Project ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
-  <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
+<Project Sdk="Microsoft.NET.Sdk">
+
   <PropertyGroup>
-    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
-    <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
-    <ProjectGuid>{011EE023-E1B8-4645-BBE9-94AC35B55390}</ProjectGuid>
-    <OutputType>Library</OutputType>
-    <AppDesignerFolder>Properties</AppDesignerFolder>
+    <TargetFramework Condition="'$(NosGmLegacyBuild)' == 'true'">net481</TargetFramework>
+    <TargetFrameworks Condition="'$(NosGmLegacyBuild)' != 'true'">net481;net10.0</TargetFrameworks>
     <RootNamespace>NosGm.Configuration</RootNamespace>
     <AssemblyName>NosGm.Configuration</AssemblyName>
-    <TargetFrameworkVersion>v4.8.1</TargetFrameworkVersion>
-    <FileAlignment>512</FileAlignment>
-    <Deterministic>true</Deterministic>
-    <LangVersion>8</LangVersion>
-    <TargetFrameworkProfile />
-  </PropertyGroup>
-  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
-    <DebugSymbols>true</DebugSymbols>
-    <DebugType>full</DebugType>
-    <Optimize>false</Optimize>
-    <OutputPath>bin\Debug\</OutputPath>
-    <DefineConstants>DEBUG;TRACE</DefineConstants>
-    <ErrorReport>prompt</ErrorReport>
-    <WarningLevel>4</WarningLevel>
-  </PropertyGroup>
-  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
-    <DebugType>pdbonly</DebugType>
-    <Optimize>true</Optimize>
-    <OutputPath>bin\Release\</OutputPath>
-    <DefineConstants>TRACE</DefineConstants>
-    <ErrorReport>prompt</ErrorReport>
-    <WarningLevel>4</WarningLevel>
-  </PropertyGroup>
-  <PropertyGroup>
     <ApplicationIcon>nosgm-emulator-icon.ico</ApplicationIcon>
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <Deterministic>true</Deterministic>
+    <LangVersion>8.0</LangVersion>
   </PropertyGroup>
-  <ItemGroup>
-    <Reference Include="System" />
-    <Reference Include="System.Core" />
+
+  <ItemGroup Condition="'$(TargetFramework)' == 'net481'">
     <Reference Include="System.Runtime.Caching" />
+    <PackageReference Include="System.ValueTuple" Version="4.6.2" />
   </ItemGroup>
+
   <ItemGroup>
-    <Compile Include="APIConfiguration.cs" />
-    <Compile Include="CharacterCreationConfiguration.cs" />
-    <Compile Include="Data\JsonGameConfiguration.cs" />
-    <Compile Include="Data\JsonItemConfiguration.cs" />
-    <Compile Include="Data\JsonServerConfiguration.cs" />
-    <Compile Include="Data\UserDataModel.cs" />
-    <Compile Include="Enum\ConfigurationType.cs" />
-    <Compile Include="EventConfiguration.cs" />
-    <Compile Include="FamilySystemConfiguration.cs" />
-    <Compile Include="GameConfiguration.cs" />
-    <Compile Include="GameEvent\InstantBattleConfiguration.cs" />
-    <Compile Include="Helper\ConfigurationHelper.cs" />
-    <Compile Include="ItemConfiguration.cs" />
-    <Compile Include="LogConfiguration.cs" />
-    <Compile Include="ModulesConfiguration.cs" />
-    <Compile Include="Properties\AssemblyInfo.cs" />
-    <Compile Include="ServerConfiguration.cs" />
-    <Compile Include="WorldPolicyConfiguration.cs" />
-    <Compile Include="StaticAPIData.cs" />
-    <Compile Include="Utilities\DependencyContainer.cs" />
+    <PackageReference Include="Autofac" Version="9.3.1" />
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
   </ItemGroup>
+
   <ItemGroup>
-    <None Include="app.config" />
+    <!-- Preserve the legacy compile surface; this local backup was never compiled. -->
+    <Compile Remove="ServerConfiguration.local-backup.cs" />
   </ItemGroup>
-  <ItemGroup>
-    <PackageReference Include="Autofac">
-      <Version>9.3.1</Version>
-    </PackageReference>
-    <PackageReference Include="Newtonsoft.Json">
-      <Version>13.0.4</Version>
-    </PackageReference>
-    <PackageReference Include="System.ValueTuple">
-      <Version>4.6.2</Version>
-    </PackageReference>
-  </ItemGroup>
+
   <ItemGroup>
     <Content Include="nosgm-emulator-icon.ico" />
   </ItemGroup>
+
   <ItemGroup>
-    <ProjectReference Include="..\NosGm.Domain\NosGm.Domain.csproj">
-      <Project>{20addddd-dad9-44f3-9beb-026c73090660}</Project>
-      <Name>NosGm.Domain</Name>
-    </ProjectReference>
+    <ProjectReference Include="..\NosGm.Domain\NosGm.Domain.csproj" />
   </ItemGroup>
-  <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
+
 </Project>
