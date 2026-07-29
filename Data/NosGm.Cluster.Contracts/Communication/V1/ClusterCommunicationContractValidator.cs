@@ -122,19 +122,9 @@ namespace NosGm.Cluster.Contracts.Communication.V1
         }
 
         public static CommunicationContractValidationError ValidatePulse(
-            WireV1.AccountRequest request)
+            WireV1.AccountSessionRequest request)
         {
-            if (request == null)
-            {
-                return CommunicationContractValidationError.MissingRequest;
-            }
-
-            CommunicationContractValidationError contextError = ValidateContext(
-                request.Context,
-                ClusterNodeRole.World);
-            return contextError != CommunicationContractValidationError.None
-                ? contextError
-                : ValidateAccountId(request.AccountId);
+            return ValidateAccountSessionRequest(request, ClusterNodeRole.World);
         }
 
         public static CommunicationContractValidationError ValidateConnectCharacter(
@@ -232,12 +222,7 @@ namespace NosGm.Cluster.Contracts.Communication.V1
                 return CommunicationContractValidationError.MissingRequest;
             }
 
-            CommunicationContractValidationError contextError = ValidateContext(
-                request.Context,
-                ClusterNodeRole.Login);
-            return contextError != CommunicationContractValidationError.None
-                ? contextError
-                : ValidateAccountId(request.AccountId);
+            return ValidateContext(request.Context, ClusterNodeRole.Login);
         }
 
         private static CommunicationContractValidationError
@@ -279,6 +264,13 @@ namespace NosGm.Cluster.Contracts.Communication.V1
             if (worldError != CommunicationContractValidationError.None)
             {
                 return worldError;
+            }
+
+            CommunicationContractValidationError sessionError =
+                ValidateAccountSession(request.AccountId, request.SessionId);
+            if (sessionError != CommunicationContractValidationError.None)
+            {
+                return sessionError;
             }
 
             return request.CharacterId > 0
