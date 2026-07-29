@@ -1,3 +1,4 @@
+using NosGm.Communication.Client;
 using NosGm.Configuration;
 using NosGm.Core;
 using NosGm.DAL;
@@ -11,6 +12,7 @@ using System;
 using System.Collections.Generic;
 using System.Configuration;
 using System.Threading;
+using System.Threading.Tasks;
 
 namespace NosGm.Master.Library.Client
 {
@@ -20,6 +22,14 @@ namespace NosGm.Master.Library.Client
 
         public CommunicationServiceClient()
         {
+            _communicationMode =
+                CommunicationTransportModeParser.ParseEnvironment();
+            if (_communicationMode == CommunicationTransportMode.Grpc)
+            {
+                throw new InvalidOperationException(
+                    "Communication gRPC cutover is blocked until callback, cross-server, and administrative state slices are migrated together.");
+            }
+
             string ip = ServerConfiguration.IPAddress;
             int port = Convert.ToInt32(ServerConfiguration.MasterServerPort);
             _commClient = new CommunicationClient();
@@ -37,6 +47,13 @@ namespace NosGm.Master.Library.Client
                         memberName: nameof(CommunicationServiceClient));
                     Thread.Sleep(1000);
                 }
+
+            var scsTransport = new ScsClusterCommunicationTransport(
+                () => _client.ServiceProxy);
+            _communicationTransport = new CommunicationTransportRouter(
+                _communicationMode,
+                scsTransport,
+                null);
         }
 
         #endregion
@@ -47,6 +64,8 @@ namespace NosGm.Master.Library.Client
 
         private readonly IScsServiceClient<ICommunicationService> _client;
         private readonly CommunicationClient _commClient;
+        private readonly CommunicationTransportMode _communicationMode;
+        private readonly IClusterCommunicationTransport _communicationTransport;
 
         #endregion
 
@@ -84,6 +103,8 @@ namespace NosGm.Master.Library.Client
             _instance ?? (_instance = new CommunicationServiceClient());
 
         public CommunicationStates CommunicationState => _client.CommunicationState;
+
+        public CommunicationTransportMode TransportMode => _communicationMode;
 
         #endregion
 
@@ -125,7 +146,13 @@ namespace NosGm.Master.Library.Client
 
         public bool ConnectAccount(Guid worldId, long accountId, int sessionId)
         {
-            return _client.ServiceProxy.ConnectAccount(worldId, accountId, sessionId);
+            CommunicationTransportResultCode result = Await(
+                _communicationTransport.ConnectAccountAsync(
+                    worldId,
+                    accountId,
+                    sessionId,
+                    CancellationToken.None));
+            return ToMutationBoolean(result, nameof(ConnectAccount));
         }
 
         public bool ConnectAccountCrossServer(Guid worldId, long accountId, int sessionId)
@@ -135,17 +162,72 @@ namespace NosGm.Master.Library.Client
 
         public bool ConnectCharacter(Guid worldId, long characterId)
         {
-            return _client.ServiceProxy.ConnectCharacter(worldId, characterId);
+            CommunicationTransportResultCode result = Await(
+                _communicationTransport.ConnectCharacterAsync(
+                    worldId,
+                    0,
+                    0,
+                    characterId,
+                    CancellationToken.None));
+            return ToMutationBoolean(result, nameof(ConnectCharacter));
+        }
+
+        public bool ConnectCharacter(
+            Guid worldId,
+            long accountId,
+            int sessionId,
+            long characterId)
+        {
+            CommunicationTransportResultCode result = Await(
+                _communicationTransport.ConnectCharacterAsync(
+                    worldId,
+                    accountId,
+                    sessionId,
+                    characterId,
+                    CancellationToken.None));
+            return ToMutationBoolean(result, nameof(ConnectCharacter));
         }
 
         public void DisconnectAccount(long accountId, int sessionId = 0, bool preserveSessionRegistration = false)
         {
-            _client.ServiceProxy.DisconnectAccount(accountId, sessionId, preserveSessionRegistration);
+            RequireSuccess(
+                Await(
+                    _communicationTransport.DisconnectAccountAsync(
+                        accountId,
+                        sessionId,
+                        preserveSessionRegistration,
+                        CancellationToken.None)),
+                nameof(DisconnectAccount));
         }
 
         public void DisconnectCharacter(Guid worldId, long characterId)
         {
-            _client.ServiceProxy.DisconnectCharacter(worldId, characterId);
+            RequireSuccess(
+                Await(
+                    _communicationTransport.DisconnectCharacterAsync(
+                        worldId,
+                        0,
+                        0,
+                        characterId,
+                        CancellationToken.None)),
+                nameof(DisconnectCharacter));
+        }
+
+        public void DisconnectCharacter(
+            Guid worldId,
+            long accountId,
+            int sessionId,
+            long characterId)
+        {
+            RequireSuccess(
+                Await(
+                    _communicationTransport.DisconnectCharacterAsync(
+                        worldId,
+                        accountId,
+                        sessionId,
+                        characterId,
+                        CancellationToken.None)),
+                nameof(DisconnectCharacter));
         }
 
         public int? GetChannelIdByWorldId(Guid worldId)
@@ -170,7 +252,11 @@ namespace NosGm.Master.Library.Client
 
         public bool IsAccountConnected(long accountId)
         {
-            return _client.ServiceProxy.IsAccountConnected(accountId);
+            CommunicationBooleanResult result = Await(
+                _communicationTransport.IsAccountConnectedAsync(
+                    accountId,
+                    CancellationToken.None));
+            return RequireBoolean(result, nameof(IsAccountConnected));
         }
 
         public bool IsAct4Online()
@@ -219,12 +305,24 @@ namespace NosGm.Master.Library.Client
 
         public bool IsLoginPermitted(long accountId, int sessionId)
         {
-            return _client.ServiceProxy.IsLoginPermitted(accountId, sessionId);
+            CommunicationBooleanResult result = Await(
+                _communicationTransport.IsLoginPermittedAsync(
+                    accountId,
+                    sessionId,
+                    CancellationToken.None));
+            return RequireBoolean(result, nameof(IsLoginPermitted));
         }
 
         public bool IsAccountSessionRegistered(long accountId, int sessionId)
         {
-            return _client.ServiceProxy.IsAccountSessionRegistered(accountId, sessionId);
+            CommunicationBooleanResult result = Await(
+                _communicationTransport.IsAccountSessionRegisteredAsync(
+                    accountId,
+                    sessionId,
+                    CancellationToken.None));
+            return RequireBoolean(
+                result,
+                nameof(IsAccountSessionRegistered));
         }
 
         public void KickSession(long? accountId, int? sessionId)
@@ -234,7 +332,18 @@ namespace NosGm.Master.Library.Client
 
         public void PulseAccount(long accountId)
         {
-            _client.ServiceProxy.PulseAccount(accountId);
+            PulseAccount(accountId, 0);
+        }
+
+        public void PulseAccount(long accountId, int sessionId)
+        {
+            RequireSuccess(
+                Await(
+                    _communicationTransport.PulseAccountAsync(
+                        accountId,
+                        sessionId,
+                        CancellationToken.None)),
+                nameof(PulseAccount));
         }
 
         public void RefreshPenalty(int penaltyId)
@@ -244,7 +353,14 @@ namespace NosGm.Master.Library.Client
 
         public void RegisterAccountLogin(long accountId, int sessionId, string ipAddress)
         {
-            _client.ServiceProxy.RegisterAccountLogin(accountId, sessionId, ipAddress);
+            RequireSuccess(
+                Await(
+                    _communicationTransport.RegisterAccountLoginAsync(
+                        accountId,
+                        sessionId,
+                        ipAddress,
+                        CancellationToken.None)),
+                nameof(RegisterAccountLogin));
         }
 
         public void RegisterCrossServerAccountLogin(long accountId, int sessionId)
@@ -254,7 +370,33 @@ namespace NosGm.Master.Library.Client
 
         public int? RegisterWorldServer(SerializableWorldServer worldServer)
         {
-            return _client.ServiceProxy.RegisterWorldServer(worldServer);
+            if (worldServer == null)
+            {
+                return null;
+            }
+
+            CommunicationWorldRegistrationResult result = Await(
+                _communicationTransport.RegisterWorldServerAsync(
+                    worldServer.Id,
+                    worldServer.EndPointIP,
+                    worldServer.EndPointPort,
+                    worldServer.AccountLimit,
+                    worldServer.WorldGroup,
+                    CancellationToken.None));
+            if (result.Result == CommunicationTransportResultCode.Success)
+            {
+                return result.ChannelId;
+            }
+            if (result.Result == CommunicationTransportResultCode.NotFound ||
+                result.Result == CommunicationTransportResultCode.Unavailable ||
+                result.Result == CommunicationTransportResultCode.CapacityExceeded)
+            {
+                return null;
+            }
+
+            throw CreateTransportException(
+                nameof(RegisterWorldServer),
+                result.Result);
         }
 
         public void Restart(string worldGroup, int time = 5)
@@ -343,11 +485,17 @@ namespace NosGm.Master.Library.Client
 
         public void UnregisterWorldServer(Guid worldId)
         {
-            if (worldId == null)
+            if (worldId == Guid.Empty)
             {
                 return;
             }
-            _client.ServiceProxy.UnregisterWorldServer(worldId);
+
+            RequireSuccess(
+                Await(
+                    _communicationTransport.UnregisterWorldServerAsync(
+                        worldId,
+                        CancellationToken.None)),
+                nameof(UnregisterWorldServer));
         }
 
         public void UpdateBazaar(string worldGroup, long bazaarItemId)
@@ -363,6 +511,61 @@ namespace NosGm.Master.Library.Client
         public void UpdateRelation(string worldGroup, long relationId)
         {
             _client.ServiceProxy.UpdateRelation(worldGroup, relationId);
+        }
+
+        private static T Await<T>(Task<T> operation)
+        {
+            return operation.ConfigureAwait(false).GetAwaiter().GetResult();
+        }
+
+        private static bool RequireBoolean(
+            CommunicationBooleanResult result,
+            string operation)
+        {
+            if (result == null)
+            {
+                throw new InvalidOperationException(
+                    operation + " returned no communication result.");
+            }
+
+            RequireSuccess(result.Result, operation);
+            return result.Value;
+        }
+
+        private static bool ToMutationBoolean(
+            CommunicationTransportResultCode result,
+            string operation)
+        {
+            if (result == CommunicationTransportResultCode.Success)
+            {
+                return true;
+            }
+            if (result == CommunicationTransportResultCode.NotFound ||
+                result == CommunicationTransportResultCode.Conflict)
+            {
+                return false;
+            }
+
+            throw CreateTransportException(operation, result);
+        }
+
+        private static void RequireSuccess(
+            CommunicationTransportResultCode result,
+            string operation)
+        {
+            if (result != CommunicationTransportResultCode.Success)
+            {
+                throw CreateTransportException(operation, result);
+            }
+        }
+
+        private static InvalidOperationException CreateTransportException(
+            string operation,
+            CommunicationTransportResultCode result)
+        {
+            return new InvalidOperationException(
+                "Communication operation " + operation +
+                " failed with " + result + ".");
         }
 
         internal void OnCharacterConnected(long characterId)
