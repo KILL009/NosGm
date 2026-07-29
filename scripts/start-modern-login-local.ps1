@@ -519,42 +519,48 @@ if ($ConfigureUrlAcl) {
 
 if (-not $SkipBuild) {
     $previousBuildDotNetRoot = $env:DOTNET_ROOT
-    $previousMSBuildSdksPath = $env:MSBuildSDKsPath
-    $previousMSBuildEnableWorkloadResolver =
-        $env:MSBuildEnableWorkloadResolver
     try {
         $env:DOTNET_ROOT = $dotnetRoot
-        $legacyMSBuildSdk = Resolve-LegacyMSBuildSdk
-        $env:MSBuildSDKsPath = $legacyMSBuildSdk.SdksPath
-        $env:MSBuildEnableWorkloadResolver = "false"
-        Write-Host (
-            "[BUILD] Visual Studio 2022 compatibility SDK: .NET " +
-            $legacyMSBuildSdk.Version +
-            " | " +
-            $legacyMSBuildSdk.SdksPath)
-        $msbuild = Resolve-MSBuild
-        $solutionPath = Join-Path $root "NosGm.sln"
-        $nuget = Get-Command nuget.exe -ErrorAction SilentlyContinue
+        $previousMSBuildSdksPath = $env:MSBuildSDKsPath
+        $previousMSBuildEnableWorkloadResolver =
+            $env:MSBuildEnableWorkloadResolver
+        try {
+            $legacyMSBuildSdk = Resolve-LegacyMSBuildSdk
+            $env:MSBuildSDKsPath = $legacyMSBuildSdk.SdksPath
+            $env:MSBuildEnableWorkloadResolver = "false"
+            Write-Host (
+                "[BUILD] Visual Studio 2022 compatibility SDK: .NET " +
+                $legacyMSBuildSdk.Version +
+                " | " +
+                $legacyMSBuildSdk.SdksPath)
+            $msbuild = Resolve-MSBuild
+            $solutionPath = Join-Path $root "NosGm.sln"
+            $nuget = Get-Command nuget.exe -ErrorAction SilentlyContinue
 
-        if ($nuget) {
-            Write-Host "[BUILD] Restoring NosGm.sln with NuGet CLI"
-            & $nuget.Source restore $solutionPath -NonInteractive
+            if ($nuget) {
+                Write-Host "[BUILD] Restoring NosGm.sln with NuGet CLI"
+                & $nuget.Source restore $solutionPath -NonInteractive
+                if ($LASTEXITCODE -ne 0) {
+                    throw "NuGet restore failed."
+                }
+            }
+            else {
+                Write-Host "[BUILD] nuget.exe not found; restoring packages.config with MSBuild"
+                & $msbuild $solutionPath /t:Restore /m /nologo /nr:false /v:minimal /p:RestorePackagesConfig=true /p:MSBuildEnableWorkloadResolver=false /p:NosGmLegacyBuild=true /p:Configuration=Release "/p:Platform=Any CPU"
+                if ($LASTEXITCODE -ne 0) {
+                    throw "MSBuild package restore failed. Install Visual Studio Build Tools 2022 with NuGet targets, or install NuGet CLI."
+                }
+            }
+
+            Write-Host "[BUILD] Building server Release / Any CPU"
+            & $msbuild $solutionPath /t:Build /m /nologo /nr:false /v:minimal /p:MSBuildEnableWorkloadResolver=false /p:NosGmLegacyBuild=true /p:Configuration=Release "/p:Platform=Any CPU"
             if ($LASTEXITCODE -ne 0) {
-                throw "NuGet restore failed."
+                throw "Server build failed."
             }
         }
-        else {
-            Write-Host "[BUILD] nuget.exe not found; restoring packages.config with MSBuild"
-            & $msbuild $solutionPath /t:Restore /m /nologo /nr:false /v:minimal /p:RestorePackagesConfig=true /p:MSBuildEnableWorkloadResolver=false /p:NosGmLegacyBuild=true /p:Configuration=Release "/p:Platform=Any CPU"
-            if ($LASTEXITCODE -ne 0) {
-                throw "MSBuild package restore failed. Install Visual Studio Build Tools 2022 with NuGet targets, or install NuGet CLI."
-            }
-        }
-
-        Write-Host "[BUILD] Building server Release / Any CPU"
-        & $msbuild $solutionPath /t:Build /m /nologo /nr:false /v:minimal /p:MSBuildEnableWorkloadResolver=false /p:NosGmLegacyBuild=true /p:Configuration=Release "/p:Platform=Any CPU"
-        if ($LASTEXITCODE -ne 0) {
-            throw "Server build failed."
+        finally {
+            $env:MSBuildEnableWorkloadResolver = $previousMSBuildEnableWorkloadResolver
+            $env:MSBuildSDKsPath = $previousMSBuildSdksPath
         }
 
         Write-Host "[BUILD] Building launcher Release"
@@ -583,8 +589,6 @@ if (-not $SkipBuild) {
         }
     }
     finally {
-        $env:MSBuildEnableWorkloadResolver = $previousMSBuildEnableWorkloadResolver
-        $env:MSBuildSDKsPath = $previousMSBuildSdksPath
         $env:DOTNET_ROOT = $previousBuildDotNetRoot
     }
 }
