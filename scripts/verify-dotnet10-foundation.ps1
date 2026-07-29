@@ -189,8 +189,7 @@ try {
         "--project",
         "tests\NosGm.Cluster.Contracts.SelfTest\NosGm.Cluster.Contracts.SelfTest.csproj",
         "-c",
-        "Release",
-        "--no-restore")
+        "Release")
 
     if ($env:OS -eq "Windows_NT") {
         Invoke-DotNet -Arguments @("build", "Launcher\NosGM.Launcher.sln", "-c", "Release", "--nologo")
