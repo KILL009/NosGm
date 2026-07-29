@@ -1,3 +1,6 @@
+using NosGm.Authentication.Client;
+using NosGm.Cluster.Contracts.Authentication.Runtime;
+using NosGm.Cluster.Contracts.V1;
 using NosGm.Configuration;
 using NosGm.Core;
 using NosGm.DAL;
@@ -106,8 +109,38 @@ namespace NosGm.Master.Server
             new ConcurrentDictionary<string, AttemptWindow>(StringComparer.Ordinal);
         private readonly CancellationTokenSource _cancellation = new CancellationTokenSource();
         private readonly HttpListener _listener = new HttpListener();
+        private readonly IGameforgeAuthenticationTransport
+            _authenticationTransport;
+        private readonly IDisposable _authenticationTransportLifetime;
         private Task _acceptLoop;
         private bool _disposed;
+
+        public LauncherAuthBridge()
+        {
+            AuthenticationTransportMode mode =
+                AuthenticationTransportModeParser.ParseEnvironment();
+            IGameforgeAuthenticationTransport scsTransport = null;
+            IGameforgeAuthenticationTransport grpcTransport = null;
+            if (mode == AuthenticationTransportMode.Scs)
+            {
+                scsTransport =
+                    new LegacyGameforgeAuthenticationStateTransport();
+            }
+            else
+            {
+                var grpc =
+                    new GrpcGameforgeAuthenticationTransport(
+                        AuthenticationGrpcClientOptions.Load(
+                            ClusterNodeRole.AuthBridge));
+                grpcTransport = grpc;
+                _authenticationTransportLifetime = grpc;
+            }
+
+            _authenticationTransport = new AuthenticationTransportRouter(
+                mode,
+                scsTransport,
+                grpcTransport);
+        }
 
         public void Start()
         {
@@ -258,12 +291,16 @@ namespace NosGm.Master.Server
 
                 int ttlSeconds = GetTicketTtlSeconds();
                 string authorizationCode = Guid.NewGuid().ToString("D");
-                if (!GameforgeAuthTicketStore.Instance.TryIssue(
-                        account.Name,
-                        authorizationCode,
-                        installationId,
-                        request.CountryId,
-                        TimeSpan.FromSeconds(ttlSeconds)))
+                AuthenticationTransportResultCode issueResult =
+                    await _authenticationTransport.IssueAuthTicketAsync(
+                            account.Name,
+                            authorizationCode,
+                            installationId.ToString("D"),
+                            request.CountryId,
+                            _cancellation.Token)
+                        .ConfigureAwait(false);
+                if (issueResult !=
+                    AuthenticationTransportResultCode.Success)
                 {
                     await WriteErrorAsync(context.Response, 503, "ticket_unavailable").ConfigureAwait(false);
                     return;
@@ -507,6 +544,7 @@ namespace NosGm.Master.Server
             }
             finally
             {
+                _authenticationTransportLifetime?.Dispose();
                 _cancellation.Dispose();
             }
         }

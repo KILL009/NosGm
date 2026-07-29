@@ -1,4 +1,5 @@
-﻿using NosGm.Configuration;
+﻿using NosGm.Cluster.Contracts.Authentication.Runtime;
+using NosGm.Configuration;
 using NosGm.Core;
 using NosGm.DAL;
 using NosGm.Data;
@@ -54,7 +55,9 @@ namespace NosGm.Master.Server
 
         public bool RegisterGameforgeAuthTicket(string accountName, string authToken, string installationId, byte countryId)
         {
-            if (!ServerConfiguration.EnableGameforgeTokenLogin || !IsGameforgeIssuerClient() ||
+            if (!IsScsStateAuthoritative() ||
+                !ServerConfiguration.EnableGameforgeTokenLogin ||
+                !IsGameforgeIssuerClient() ||
                 !Guid.TryParse(installationId, out Guid parsedInstallationId) ||
                 !GameforgeLoginPacketParser.TryGetCulture(countryId, out _)) return false;
 
@@ -70,7 +73,9 @@ namespace NosGm.Master.Server
             byte countryId,
             int proposedSessionId)
         {
-            if (!ServerConfiguration.EnableGameforgeTokenLogin || !IsGameforgeConsumerClient() ||
+            if (!IsScsStateAuthoritative() ||
+                !ServerConfiguration.EnableGameforgeTokenLogin ||
+                !IsGameforgeConsumerClient() ||
                 !Guid.TryParse(installationId, out Guid parsedInstallationId) ||
                 proposedSessionId <= 0) return null;
             return GameforgeAuthTicketStore.Instance.TryConsume(
@@ -85,20 +90,28 @@ namespace NosGm.Master.Server
 
         public bool RegisterGameforgeWorldPermit(long accountId, int sessionId, string ipAddress)
         {
-            if (!ServerConfiguration.EnableGameforgeTokenLogin || !IsGameforgeConsumerClient()) return false;
+            if (!IsScsStateAuthoritative() ||
+                !ServerConfiguration.EnableGameforgeTokenLogin ||
+                !IsGameforgeConsumerClient()) return false;
             int ttlSeconds = Math.Max(15, Math.Min(600, ServerConfiguration.GameforgeWorldPermitTtlSeconds));
             return GameforgeWorldPermitStore.Instance.TryIssue(accountId, sessionId, ipAddress, TimeSpan.FromSeconds(ttlSeconds));
         }
 
         public bool ConsumeGameforgeWorldPermit(long accountId, int sessionId, string ipAddress)
         {
-            return ServerConfiguration.EnableGameforgeTokenLogin && IsLegacyAuthClient() &&
+            return IsScsStateAuthoritative() &&
+                   ServerConfiguration.EnableGameforgeTokenLogin &&
+                   IsLegacyAuthClient() &&
                    GameforgeWorldPermitStore.Instance.TryConsume(accountId, sessionId, ipAddress);
         }
 
         public void RevokeGameforgeWorldPermit(long accountId, int sessionId)
         {
-            if (IsGameforgeConsumerClient()) GameforgeWorldPermitStore.Instance.Revoke(accountId, sessionId);
+            if (IsScsStateAuthoritative() &&
+                IsGameforgeConsumerClient())
+            {
+                GameforgeWorldPermitStore.Instance.Revoke(accountId, sessionId);
+            }
         }
 
         private static void AddClientOnce(ThreadSafeGenericLockedList<long> clients, long clientId)
@@ -117,6 +130,9 @@ namespace NosGm.Master.Server
         }
 
         private static bool IsSecureGameforgeKey(string configuredKey) => !string.IsNullOrWhiteSpace(configuredKey) && configuredKey.Length >= MinimumGameforgeKeyLength;
+        private static bool IsScsStateAuthoritative() =>
+            AuthenticationTransportModeParser.ParseEnvironment() ==
+            AuthenticationTransportMode.Scs;
         private bool IsLegacyAuthClient() => MSManager.Instance.AuthentificatedClients.Any(clientId => clientId.Equals(CurrentClient.ClientId));
         private bool IsGameforgeIssuerClient() => MSManager.Instance.GameforgeTicketIssuerClients.Any(clientId => clientId.Equals(CurrentClient.ClientId));
         private bool IsGameforgeConsumerClient() => MSManager.Instance.GameforgeTicketConsumerClients.Any(clientId => clientId.Equals(CurrentClient.ClientId));

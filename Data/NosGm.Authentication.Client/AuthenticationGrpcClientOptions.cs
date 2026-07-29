@@ -1,0 +1,180 @@
+using System;
+using System.Globalization;
+using System.IO;
+using NosGm.Cluster.Contracts.V1;
+
+namespace NosGm.Authentication.Client
+{
+    public sealed class AuthenticationGrpcClientOptions
+    {
+        public const string AddressVariable = "NOSGM_AUTH_GRPC_URL";
+        public const string CertificatePathVariable =
+            "NOSGM_AUTH_GRPC_CLIENT_CERT_PATH";
+        public const string CertificatePasswordVariable =
+            "NOSGM_AUTH_GRPC_CLIENT_CERT_PASSWORD";
+        public const string CallerInstanceIdVariable =
+            "NOSGM_AUTH_GRPC_CALLER_INSTANCE_ID";
+        public const string DeadlineVariable =
+            "NOSGM_AUTH_GRPC_DEADLINE_MILLISECONDS";
+
+        public const string DefaultAddress = "https://127.0.0.1:7443";
+        public const int MinimumDeadlineMilliseconds = 1000;
+
+        private AuthenticationGrpcClientOptions(
+            Uri address,
+            string certificatePath,
+            string certificatePassword,
+            string callerInstanceId,
+            int deadlineMilliseconds,
+            ClusterNodeRole callerRole)
+        {
+            Address = address;
+            CertificatePath = certificatePath;
+            CertificatePassword = certificatePassword;
+            CallerInstanceId = callerInstanceId;
+            DeadlineMilliseconds = deadlineMilliseconds;
+            CallerRole = callerRole;
+        }
+
+        public Uri Address { get; }
+
+        public string CertificatePath { get; }
+
+        public string CertificatePassword { get; }
+
+        public string CallerInstanceId { get; }
+
+        public int DeadlineMilliseconds { get; }
+
+        public ClusterNodeRole CallerRole { get; }
+
+        public static AuthenticationGrpcClientOptions Load(
+            ClusterNodeRole callerRole,
+            Func<string, string> readVariable = null)
+        {
+            if (callerRole != ClusterNodeRole.AuthBridge &&
+                callerRole != ClusterNodeRole.Login &&
+                callerRole != ClusterNodeRole.World)
+            {
+                throw new InvalidOperationException(
+                    "The authentication gRPC client role must be AuthBridge, Login, or World.");
+            }
+
+            readVariable = readVariable ?? Environment.GetEnvironmentVariable;
+            string configuredAddress = readVariable(AddressVariable);
+            if (string.IsNullOrEmpty(configuredAddress))
+            {
+                configuredAddress = DefaultAddress;
+            }
+
+            if (!Uri.TryCreate(
+                    configuredAddress,
+                    UriKind.Absolute,
+                    out Uri address) ||
+                !string.Equals(
+                    address.Scheme,
+                    Uri.UriSchemeHttps,
+                    StringComparison.OrdinalIgnoreCase) ||
+                !address.IsLoopback ||
+                !string.IsNullOrEmpty(address.UserInfo) ||
+                !string.IsNullOrEmpty(address.Query) ||
+                !string.IsNullOrEmpty(address.Fragment) ||
+                !string.Equals(address.AbsolutePath, "/", StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException(
+                    AddressVariable +
+                    " must be an HTTPS loopback origin without credentials, path, query, or fragment.");
+            }
+
+            string certificatePath = ReadBoundedValue(
+                readVariable(CertificatePathVariable),
+                CertificatePathVariable,
+                1024,
+                required: true);
+            if (!Path.IsPathRooted(certificatePath))
+            {
+                throw new InvalidOperationException(
+                    CertificatePathVariable + " must be an absolute path.");
+            }
+
+            string certificatePassword = ReadBoundedValue(
+                readVariable(CertificatePasswordVariable),
+                CertificatePasswordVariable,
+                4096,
+                required: false);
+            string callerInstanceId = ReadBoundedValue(
+                readVariable(CallerInstanceIdVariable),
+                CallerInstanceIdVariable,
+                ClusterProtocolLimits.MaxCallerInstanceIdLength,
+                required: true);
+            int deadlineMilliseconds = ReadDeadline(
+                readVariable(DeadlineVariable));
+
+            return new AuthenticationGrpcClientOptions(
+                address,
+                certificatePath,
+                certificatePassword,
+                callerInstanceId,
+                deadlineMilliseconds,
+                callerRole);
+        }
+
+        private static int ReadDeadline(string value)
+        {
+            if (string.IsNullOrEmpty(value))
+            {
+                return ClusterProtocolLimits.DefaultDeadlineMilliseconds;
+            }
+
+            if (!int.TryParse(
+                    value,
+                    NumberStyles.None,
+                    CultureInfo.InvariantCulture,
+                    out int parsed) ||
+                parsed < MinimumDeadlineMilliseconds ||
+                parsed > ClusterProtocolLimits.MaxDeadlineMilliseconds)
+            {
+                throw new InvalidOperationException(
+                    DeadlineVariable +
+                    " must be an integer between " +
+                    MinimumDeadlineMilliseconds +
+                    " and " +
+                    ClusterProtocolLimits.MaxDeadlineMilliseconds +
+                    ".");
+            }
+
+            return parsed;
+        }
+
+        private static string ReadBoundedValue(
+            string value,
+            string variableName,
+            int maximumLength,
+            bool required)
+        {
+            if (!required && string.IsNullOrEmpty(value))
+            {
+                return string.Empty;
+            }
+
+            if (string.IsNullOrWhiteSpace(value) ||
+                value.Length > maximumLength ||
+                !string.Equals(value, value.Trim(), StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException(
+                    variableName + " contains an invalid value.");
+            }
+
+            foreach (char character in value)
+            {
+                if (char.IsControl(character))
+                {
+                    throw new InvalidOperationException(
+                        variableName + " contains an invalid value.");
+                }
+            }
+
+            return value;
+        }
+    }
+}

@@ -107,7 +107,8 @@ $bridgeProjects = @(
     "Data\NosGm.XMLModel\NosGm.XMLModel.csproj",
     "Data\NosGm.Configuration\NosGm.Configuration.csproj",
     "Data\NosGm.DAL\NosGm.Data\NosGm.Data.csproj",
-    "Data\NosGm.Cluster.Contracts\NosGm.Cluster.Contracts.csproj"
+    "Data\NosGm.Cluster.Contracts\NosGm.Cluster.Contracts.csproj",
+    "Data\NosGm.Authentication.Client\NosGm.Authentication.Client.csproj"
 )
 
 foreach ($project in $explicitNet10Projects) {
@@ -152,12 +153,12 @@ foreach ($project in $deferredModern) {
     Write-Host "[DEFERRED] $project" -ForegroundColor Yellow
 }
 
-if ($allProjects.Count -ne 49) {
-    throw "Project inventory changed: expected 49 projects but found $($allProjects.Count). Review the migration matrix."
+if ($allProjects.Count -ne 50) {
+    throw "Project inventory changed: expected 50 projects but found $($allProjects.Count). Review the migration matrix."
 }
 
-if ($bridgeCount -ne 7) {
-    throw "Bridge inventory changed: expected 7 projects but found $bridgeCount."
+if ($bridgeCount -ne 8) {
+    throw "Bridge inventory changed: expected 8 projects but found $bridgeCount."
 }
 
 if ($legacyOnlyCount -ne 22) {

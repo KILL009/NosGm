@@ -72,9 +72,9 @@ arbitrary DTO graphs, generic method names, and untyped byte payloads are not
 part of this contract.
 
 All five RPCs are side-effecting. A ticket or one-use World permit must be
-handled by exactly one transport. The future adapter may select gRPC or SCS for
-an operation, but it must never shadow-execute, retry blindly, or compare these
-operations by running both.
+handled by exactly one transport. The caller adapter selects gRPC or SCS before
+an operation begins; it never shadow-executes, retries blindly, or compares
+these operations by running both.
 
 The isolated .NET 10 authentication runtime now implements these five RPCs. It
 binds only to loopback HTTP/2, requires an OS-valid mTLS client certificate,
@@ -83,10 +83,13 @@ roles, enforces bounded request and transport deadlines, rejects replayed
 request IDs, and applies bounded dispatch. It preserves stable SessionID reuse
 for exactly three ticket consumptions and one-use World permit behavior.
 
-This runtime is not yet selected by AuthBridge, Login, or World. SCS remains
-the default transport and authoritative state owner. The shared transport
-router selects exactly one implementation before a side effect begins; it
-never mirrors an operation or retries a failed gRPC call through SCS.
+AuthBridge, Login, and World now use the shared caller bridge. SCS remains the
+default transport and authoritative state owner when the selector is absent.
+An explicit `GRPC` value makes the isolated runtime authoritative, and the
+legacy SCS authentication service then rejects ticket and permit mutations.
+The shared transport router selects exactly one implementation before a side
+effect begins; it never mirrors an operation or retries a failed gRPC call
+through SCS.
 
 ## Authentication runtime configuration
 
@@ -109,10 +112,48 @@ Fingerprints may be comma-separated but cannot be reused across roles.
 Certificate chain validation remains enabled; no “accept any certificate”
 escape hatch exists.
 
-The future adapters use a single `SCS` or `GRPC` transport value. Missing or
-unknown values fail closed, and an absent value intentionally resolves to
-`SCS`. A failed stateful call is returned to its caller without cross-transport
+Each Master/AuthBridge, Login, and World process reads these caller settings
+from its own environment:
+
+| Variable | Purpose |
+| --- | --- |
+| `NOSGM_AUTH_TRANSPORT` | `SCS` or `GRPC`; absent means `SCS`, every other value is rejected |
+| `NOSGM_AUTH_GRPC_URL` | HTTPS loopback origin; default `https://127.0.0.1:7443` |
+| `NOSGM_AUTH_GRPC_CLIENT_CERT_PATH` | Absolute path to that process role's PKCS#12 certificate |
+| `NOSGM_AUTH_GRPC_CLIENT_CERT_PASSWORD` | Optional PKCS#12 password; never logged |
+| `NOSGM_AUTH_GRPC_CALLER_INSTANCE_ID` | Required bounded identity for request correlation |
+| `NOSGM_AUTH_GRPC_DEADLINE_MILLISECONDS` | Per-call deadline from 1,000 to 60,000 ms; default 10,000 |
+
+The AuthBridge, Login, and World certificates must be different and must match
+the corresponding server fingerprint allow-list. The URL is deliberately
+restricted to loopback, and the server certificate must be trusted by Windows
+and contain the selected loopback name or IP in its SAN. The .NET Framework
+4.8.1 callers use `Grpc.Net.Client` with `WinHttpHandler`; this path requires
+Windows 11 or Windows Server 2019 or later. No certificate-validation bypass is
+available.
+
+A failed stateful call is returned to its caller without cross-transport
 fallback because the remote side may already have committed the mutation.
+
+## Authentication cutover and rollback
+
+1. Keep `NOSGM_AUTH_TRANSPORT` absent or set to `SCS` while issuing the server
+   and three role-specific client certificates.
+2. Start the .NET 10 authentication runtime and verify that its server
+   certificate chain and all three client fingerprints are correct.
+3. Stop Master, Login, and World together. Do not perform a rolling mixed-mode
+   switch because SCS and gRPC do not share ticket state.
+4. Set `NOSGM_AUTH_TRANSPORT=GRPC` plus the caller certificate variables in
+   each process environment, then start the authentication runtime, Master,
+   Login, and World.
+5. Run the existing real-client acceptance flow through NoS0575, NoS0576,
+   NoS0577, channel selection, character list, and World entry.
+
+Rollback is also coordinated: stop all callers, restore `SCS`, and restart
+Master, Login, and World. Tickets created by the previous authoritative
+runtime are intentionally not copied across transports, so connected users
+may need to authenticate again. Never change the selector while calls are in
+flight.
 
 ## Frozen legacy surface
 
@@ -131,9 +172,10 @@ service will receive explicit request and response messages.
 2. **Authentication contract** — add the five typed ticket/permit RPCs, caller
    policies, strict validators, and a complete legacy-method disposition map.
    No runtime traffic changes.
-3. **Authentication runtime** — the isolated mTLS host and safe selector are
-   present. Next add the three caller adapters, then route each side effect
-   through exactly one explicitly selected transport.
+3. **Authentication runtime** — the isolated mTLS host, three caller adapters,
+   safe selector, and coordinated rollback path are present. Every ticket and
+   permit side effect routes through exactly one explicitly selected
+   transport.
 4. **Communication slice** — migrate account/session and World registration
    calls while preserving the verified Login → Master → World sequence.
 5. **Supporting services** — configuration, mail, mall, callbacks, and

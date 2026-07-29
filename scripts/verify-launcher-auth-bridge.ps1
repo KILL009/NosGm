@@ -82,7 +82,7 @@ Require-Ordered $bridge @(
     'DAOFactory.AccountDAO.LoadByName(request.AccountName)',
     'PasswordHashService.VerifyPassword(',
     'PasswordHashService.TryHashPassword(',
-    'GameforgeAuthTicketStore.Instance.TryIssue('
+    '_authenticationTransport.IssueAuthTicketAsync('
 ) 'The bridge must verify and optionally upgrade the password before issuing the ticket.'
 Require $bridge 'Guid.NewGuid().ToString("D")' 'Authorization codes must be generated cryptographically through Guid.NewGuid.'
 Require $bridge 'Cache-Control"] = "no-store"' 'Authentication responses must not be cached.'
