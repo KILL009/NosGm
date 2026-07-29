@@ -19,15 +19,18 @@ This runbook starts the complete NosGM modern authentication path on one Windows
 SCS is the default internal authentication transport. An explicit
 `-AuthenticationTransport GRPC` additionally starts the .NET 10 authentication
 runtime and scopes a different mTLS client certificate to Master/AuthBridge,
-Login, and World.
+Login, and World. The default `AUTO` wire selection uses `GRPCWEB` for the
+legacy `net481` callers on Windows 10 and native `HTTP2` on Windows 11 or
+supported Windows Server versions. That choice is made before any stateful
+authentication call and never changes as a failure fallback.
 
 The account password is not accepted by this script. It is entered only in the launcher dialog and remains in memory for the HTTPS request.
 
 ## Requirements
 
-- Windows 10 or Windows 11 for the default SCS path
-- Windows 11 or Windows Server 2019 or later for the explicit .NET Framework
-  gRPC/HTTP2 path
+- Windows 10 or Windows 11 for SCS and the explicit gRPC path
+- Windows 11 or Windows Server 2019 or later only when forcing the legacy
+  callers to use native gRPC/HTTP2 instead of gRPC-Web
 - .NET Framework 4.8.1
 - Visual Studio Build Tools 2022 with MSBuild
 - .NET 10 SDK
@@ -80,17 +83,32 @@ public development root is installed only because
 `-TrustRootCertificate` was supplied explicitly. PKCS#12 passwords are random
 and stored through Windows DPAPI, never in `manifest.json`.
 
-The second command performs the live mTLS/gRPC ticket and World-permit
-acceptance against the real Kestrel runtime. It stops its temporary runtime
-automatically. It validates the .NET 10 network contract; the complete stack
-start below is still required to validate the `net481` WinHTTP callers in
-Master, Login, and World.
+The second command performs the live mTLS ticket and World-permit acceptance
+against the real Kestrel runtime over both native HTTP/2 and binary gRPC-Web.
+It stops its temporary runtime automatically. The complete stack start below
+is still required to validate the `net481` callers inside Master, Login, and
+World.
 
 Only after that command passes, start the complete stack with gRPC:
 
 ```powershell
 ./scripts/start-modern-login-local.ps1 -AuthenticationTransport GRPC
 ```
+
+On Windows 10, `AUTO` resolves to `GRPCWEB`. On Windows 11 and supported
+Windows Server versions it resolves to `HTTP2`. An operator can request a mode
+explicitly:
+
+```powershell
+./scripts/start-modern-login-local.ps1 `
+    -AuthenticationTransport GRPC `
+    -AuthenticationGrpcWireMode GRPCWEB
+```
+
+Forcing `HTTP2` on Windows 10 fails before any process is started. gRPC-Web
+still uses HTTPS, the same Protobuf messages, deadlines, bounded payloads, and
+the same role-specific mTLS certificates. It never falls back to SCS after a
+call begins.
 
 To use a rotated or externally provisioned local bundle:
 
@@ -118,6 +136,7 @@ An explicit gRPC start also reports:
 
 ```text
 [READY] Authentication gRPC on 127.0.0.1:7443
+Authentication wire mode: GRPCWEB
 ```
 
 The loopback-only health endpoint is:

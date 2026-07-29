@@ -153,6 +153,27 @@ if ($null -ne $state) {
             -Detail "Exactly one authentication gRPC runtime must be recorded."
     }
 
+    if ($authenticationTransport -eq "GRPC") {
+        $wireMode = $null
+        if ($null -ne $state.PSObject.Properties[
+                "AuthenticationGrpcWireMode"]) {
+            $wireMode =
+                [string]$state.AuthenticationGrpcWireMode
+        }
+        if ($wireMode -notin @("HTTP2", "GRPCWEB")) {
+            Add-Check `
+                -Name "Authentication.GrpcWireMode" `
+                -Status "failed" `
+                -Detail "The recorded gRPC wire mode is invalid."
+        }
+        else {
+            Add-Check `
+                -Name "Authentication.GrpcWireMode" `
+                -Status "passed" `
+                -Detail "The stack selected $wireMode before starting stateful authentication calls."
+        }
+    }
+
     foreach ($record in $records) {
         Test-RecordedProcess -Record $record
     }

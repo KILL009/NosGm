@@ -5,6 +5,8 @@ param(
     [switch]$ConfigureUrlAcl,
     [ValidateSet("SCS", "GRPC")]
     [string]$AuthenticationTransport = "SCS",
+    [ValidateSet("AUTO", "HTTP2", "GRPCWEB")]
+    [string]$AuthenticationGrpcWireMode = "AUTO",
     [string]$AuthenticationCertificateManifest,
     [ValidateRange(1024, 65535)]
     [int]$AuthenticationGrpcPort = 7443,
@@ -49,6 +51,7 @@ $environmentVariableNames = @(
     "NOSGM_AUTH_GRPC_CLIENT_CERT_PASSWORD",
     "NOSGM_AUTH_GRPC_CALLER_INSTANCE_ID",
     "NOSGM_AUTH_GRPC_DEADLINE_MILLISECONDS",
+    "NOSGM_AUTH_GRPC_WIRE_MODE",
     "NOSGM_AUTH_GRPC_SERVER_CERT_PATH",
     "NOSGM_AUTH_GRPC_SERVER_CERT_PASSWORD",
     "NOSGM_AUTH_GRPC_AUTHBRIDGE_CERT_SHA256",
@@ -57,7 +60,8 @@ $environmentVariableNames = @(
     "NOSGM_AUTH_GRPC_PORT",
     "NOSGM_AUTH_GRPC_TICKET_TTL_SECONDS",
     "NOSGM_AUTH_GRPC_PERMIT_TTL_SECONDS",
-    "NOSGM_AUTH_GRPC_INSTANCE_ID"
+    "NOSGM_AUTH_GRPC_INSTANCE_ID",
+    "DOTNET_ROOT"
 )
 $previousEnvironment = @{}
 foreach ($name in $environmentVariableNames) {
@@ -190,16 +194,30 @@ function Test-IsAdministrator {
     }
 }
 
-function Assert-GrpcOperatingSystem {
+function Resolve-AuthenticationGrpcWireMode {
+    param([Parameter(Mandatory = $true)][string]$RequestedMode)
+
     $operatingSystem =
         Get-CimInstance -ClassName Win32_OperatingSystem
     $version = [Version]$operatingSystem.Version
     $isWorkstation = [int]$operatingSystem.ProductType -eq 1
+    $supportsNetFrameworkHttp2 =
+        ($isWorkstation -and $version.Build -ge 22000) -or
+        (-not $isWorkstation -and $version.Build -ge 17763)
 
-    if (($isWorkstation -and $version.Build -lt 22000) -or
-        (-not $isWorkstation -and $version.Build -lt 17763)) {
-        throw "The .NET Framework gRPC callers require Windows 11 or Windows Server 2019 or later."
+    if ($RequestedMode -eq "AUTO") {
+        if ($supportsNetFrameworkHttp2) {
+            return "HTTP2"
+        }
+        return "GRPCWEB"
     }
+
+    if ($RequestedMode -eq "HTTP2" -and
+        -not $supportsNetFrameworkHttp2) {
+        throw "HTTP2 for the .NET Framework callers requires Windows 11 or Windows Server 2019 or later. Use AUTO or GRPCWEB on Windows 10."
+    }
+
+    return $RequestedMode
 }
 
 function Wait-TcpPort {
@@ -241,6 +259,7 @@ function Start-TrackedProcess {
         [Parameter(Mandatory = $true)][string]$Name,
         [Parameter(Mandatory = $true)][string]$Executable,
         [string[]]$Arguments = @(),
+        [string]$WorkingDirectory,
         [Collections.IDictionary]$ProcessEnvironment = @{}
     )
 
@@ -248,9 +267,13 @@ function Start-TrackedProcess {
         throw "Missing $Name executable: $Executable"
     }
 
+    if ([string]::IsNullOrWhiteSpace($WorkingDirectory)) {
+        $WorkingDirectory = Split-Path -Parent $Executable
+    }
+
     $startParameters = @{
         FilePath = $Executable
-        WorkingDirectory = (Split-Path -Parent $Executable)
+        WorkingDirectory = $WorkingDirectory
         PassThru = $true
     }
     if ($Arguments.Count -gt 0) {
@@ -323,6 +346,41 @@ function Stop-StartedProcesses {
     }
 }
 
+function Resolve-DotNet10Executable {
+    $candidatePaths =
+        New-Object System.Collections.Generic.List[string]
+    $command = Get-Command dotnet.exe -ErrorAction SilentlyContinue
+    if ($command) {
+        $candidatePaths.Add([string]$command.Source)
+    }
+
+    foreach ($directory in @(
+        $env:DOTNET_ROOT,
+        (Join-Path $env:LOCALAPPDATA "NosGM\dotnet10"),
+        (Join-Path $env:LOCALAPPDATA "NosGM\dotnet9"),
+        (Join-Path $env:ProgramFiles "dotnet"),
+        (Join-Path ${env:ProgramFiles(x86)} "dotnet")
+    )) {
+        if (-not [string]::IsNullOrWhiteSpace($directory)) {
+            $candidatePaths.Add((Join-Path $directory "dotnet.exe"))
+        }
+    }
+
+    foreach ($candidatePath in @($candidatePaths | Select-Object -Unique)) {
+        if (-not (Test-Path -LiteralPath $candidatePath -PathType Leaf)) {
+            continue
+        }
+
+        $installedSdks = & $candidatePath --list-sdks 2>$null
+        if ($LASTEXITCODE -eq 0 -and
+            @($installedSdks | Where-Object { $_ -match "^10\." }).Count -gt 0) {
+            return [System.IO.Path]::GetFullPath($candidatePath)
+        }
+    }
+
+    throw ".NET 10 SDK was not found in PATH, DOTNET_ROOT, Program Files, or the NosGM local SDK directories."
+}
+
 function Resolve-MSBuild {
     $command = Get-Command msbuild.exe -ErrorAction SilentlyContinue
     if ($command) {
@@ -351,9 +409,12 @@ $healthEndpoint = $bridgePrefix + "api/v1/launcher/health"
 $authenticationGrpcEndpoint =
     "https://127.0.0.1:$AuthenticationGrpcPort"
 $authenticationBundle = $null
+$resolvedAuthenticationGrpcWireMode = $null
 
 if ($AuthenticationTransport -eq "GRPC") {
-    Assert-GrpcOperatingSystem
+    $resolvedAuthenticationGrpcWireMode =
+        Resolve-AuthenticationGrpcWireMode `
+            -RequestedMode $AuthenticationGrpcWireMode
     if ([string]::IsNullOrWhiteSpace(
             $AuthenticationCertificateManifest)) {
         $AuthenticationCertificateManifest = Join-Path `
@@ -363,6 +424,18 @@ if ($AuthenticationTransport -eq "GRPC") {
 
     $authenticationBundle = Import-LocalAuthenticationBundle `
         -ManifestPath $AuthenticationCertificateManifest
+}
+elseif ($AuthenticationGrpcWireMode -ne "AUTO") {
+    throw "-AuthenticationGrpcWireMode applies only when -AuthenticationTransport GRPC is selected."
+}
+
+$dotnetExecutable = $null
+$dotnetRoot = $null
+if (-not $SkipBuild -or
+    -not $SkipLauncher -or
+    $AuthenticationTransport -eq "GRPC") {
+    $dotnetExecutable = Resolve-DotNet10Executable
+    $dotnetRoot = Split-Path -Parent $dotnetExecutable
 }
 
 if ($ConfigureUrlAcl) {
@@ -378,56 +451,61 @@ if ($ConfigureUrlAcl) {
 }
 
 if (-not $SkipBuild) {
-    if (-not (Get-Command dotnet.exe -ErrorAction SilentlyContinue)) {
-        throw ".NET 10 SDK was not found. Install it or run with -SkipBuild after building the launcher."
-    }
+    $previousBuildDotNetRoot = $env:DOTNET_ROOT
+    try {
+        $env:DOTNET_ROOT = $dotnetRoot
+        $msbuild = Resolve-MSBuild
+        $solutionPath = Join-Path $root "NosGm.sln"
+        $nuget = Get-Command nuget.exe -ErrorAction SilentlyContinue
 
-    $msbuild = Resolve-MSBuild
-    $solutionPath = Join-Path $root "NosGm.sln"
-    $nuget = Get-Command nuget.exe -ErrorAction SilentlyContinue
+        if ($nuget) {
+            Write-Host "[BUILD] Restoring NosGm.sln with NuGet CLI"
+            & $nuget.Source restore $solutionPath -NonInteractive
+            if ($LASTEXITCODE -ne 0) {
+                throw "NuGet restore failed."
+            }
+        }
+        else {
+            Write-Host "[BUILD] nuget.exe not found; restoring packages.config with MSBuild"
+            & $msbuild $solutionPath /t:Restore /m /nologo /nr:false /v:minimal /p:RestorePackagesConfig=true /p:NosGmLegacyBuild=true /p:Configuration=Release "/p:Platform=Any CPU"
+            if ($LASTEXITCODE -ne 0) {
+                throw "MSBuild package restore failed. Install Visual Studio Build Tools 2022 with NuGet targets, or install NuGet CLI."
+            }
+        }
 
-    if ($nuget) {
-        Write-Host "[BUILD] Restoring NosGm.sln with NuGet CLI"
-        & $nuget.Source restore $solutionPath -NonInteractive
+        Write-Host "[BUILD] Building server Release / Any CPU"
+        & $msbuild $solutionPath /t:Build /m /nologo /nr:false /v:minimal /p:NosGmLegacyBuild=true /p:Configuration=Release "/p:Platform=Any CPU"
         if ($LASTEXITCODE -ne 0) {
-            throw "NuGet restore failed."
+            throw "Server build failed."
+        }
+
+        Write-Host "[BUILD] Building launcher Release"
+        & $dotnetExecutable build `
+            (Join-Path $root "Launcher\NosGM.Launcher.sln") `
+            --configuration Release
+        if ($LASTEXITCODE -ne 0) {
+            throw "Launcher build failed."
+        }
+
+        if ($AuthenticationTransport -eq "GRPC") {
+            $authenticationProject = Join-Path `
+                $root `
+                "Data\NosGm.Program\NosGm.Authentication.Server\NosGm.Authentication.Server.csproj"
+            $authenticationOutput =
+                Join-Path $root "bin\Release\Authentication"
+            Write-Host "[BUILD] Publishing the .NET 10 authentication runtime"
+            & $dotnetExecutable publish `
+                $authenticationProject `
+                --configuration Release `
+                --output $authenticationOutput `
+                --nologo
+            if ($LASTEXITCODE -ne 0) {
+                throw "Authentication runtime build failed."
+            }
         }
     }
-    else {
-        Write-Host "[BUILD] nuget.exe not found; restoring packages.config with MSBuild"
-        & $msbuild $solutionPath /t:Restore /m /nologo /nr:false /v:minimal /p:RestorePackagesConfig=true /p:NosGmLegacyBuild=true /p:Configuration=Release "/p:Platform=Any CPU"
-        if ($LASTEXITCODE -ne 0) {
-            throw "MSBuild package restore failed. Install Visual Studio Build Tools 2022 with NuGet targets, or install NuGet CLI."
-        }
-    }
-
-    Write-Host "[BUILD] Building server Release / Any CPU"
-    & $msbuild $solutionPath /t:Build /m /nologo /nr:false /v:minimal /p:NosGmLegacyBuild=true /p:Configuration=Release "/p:Platform=Any CPU"
-    if ($LASTEXITCODE -ne 0) {
-        throw "Server build failed."
-    }
-
-    Write-Host "[BUILD] Building launcher Release"
-    & dotnet build (Join-Path $root "Launcher\NosGM.Launcher.sln") --configuration Release
-    if ($LASTEXITCODE -ne 0) {
-        throw "Launcher build failed."
-    }
-
-    if ($AuthenticationTransport -eq "GRPC") {
-        $authenticationProject = Join-Path `
-            $root `
-            "Data\NosGm.Program\NosGm.Authentication.Server\NosGm.Authentication.Server.csproj"
-        $authenticationOutput =
-            Join-Path $root "bin\Release\Authentication"
-        Write-Host "[BUILD] Publishing the .NET 10 authentication runtime"
-        & dotnet publish `
-            $authenticationProject `
-            --configuration Release `
-            --output $authenticationOutput `
-            --nologo
-        if ($LASTEXITCODE -ne 0) {
-            throw "Authentication runtime build failed."
-        }
+    finally {
+        $env:DOTNET_ROOT = $previousBuildDotNetRoot
     }
 }
 
@@ -435,10 +513,14 @@ $masterExecutable = Join-Path $root "bin\Release\Master\NosGm.Master.Server.exe"
 $worldExecutable = Join-Path $root "bin\Release\World\NosGm.World.exe"
 $loginExecutable = Join-Path $root "bin\Release\Login\NosGm.Login.exe"
 $launcherExecutable = Join-Path $root "Launcher\src\NosGM.Launcher\bin\Release\net10.0-windows\NosGM.Launcher.exe"
-$authenticationExecutable =
+$authenticationDirectory =
     Join-Path `
         $root `
-        "bin\Release\Authentication\NosGm.Authentication.Server.exe"
+        "bin\Release\Authentication"
+$authenticationAssembly =
+    Join-Path `
+        $authenticationDirectory `
+        "NosGm.Authentication.Server.dll"
 
 $requiredExecutables = @(
     [pscustomobject]@{ Name = "Master"; Path = $masterExecutable },
@@ -451,7 +533,7 @@ if (-not $SkipLauncher) {
 if ($AuthenticationTransport -eq "GRPC") {
     $requiredExecutables += [pscustomobject]@{
         Name = "Authentication gRPC runtime"
-        Path = $authenticationExecutable
+        Path = $authenticationAssembly
     }
 }
 
@@ -512,6 +594,8 @@ if ($AuthenticationTransport -eq "GRPC") {
                 ConvertFrom-SecureStringInMemory $credentials.AuthBridge
             NOSGM_AUTH_GRPC_CALLER_INSTANCE_ID = "authbridge-local-1"
             NOSGM_AUTH_GRPC_DEADLINE_MILLISECONDS = "10000"
+            NOSGM_AUTH_GRPC_WIRE_MODE =
+                $resolvedAuthenticationGrpcWireMode
         }
     $loginEnvironment = Merge-ProcessEnvironment `
         -Base $sharedServerEnvironment `
@@ -523,6 +607,8 @@ if ($AuthenticationTransport -eq "GRPC") {
                 ConvertFrom-SecureStringInMemory $credentials.Login
             NOSGM_AUTH_GRPC_CALLER_INSTANCE_ID = "login-local-1"
             NOSGM_AUTH_GRPC_DEADLINE_MILLISECONDS = "10000"
+            NOSGM_AUTH_GRPC_WIRE_MODE =
+                $resolvedAuthenticationGrpcWireMode
         }
     $worldEnvironment = Merge-ProcessEnvironment `
         -Base $sharedServerEnvironment `
@@ -534,6 +620,8 @@ if ($AuthenticationTransport -eq "GRPC") {
                 ConvertFrom-SecureStringInMemory $credentials.World
             NOSGM_AUTH_GRPC_CALLER_INSTANCE_ID = "world-local-1"
             NOSGM_AUTH_GRPC_DEADLINE_MILLISECONDS = "10000"
+            NOSGM_AUTH_GRPC_WIRE_MODE =
+                $resolvedAuthenticationGrpcWireMode
         }
 }
 
@@ -543,7 +631,9 @@ try {
     if ($AuthenticationTransport -eq "GRPC") {
         Start-TrackedProcess `
             -Name "AuthenticationGrpc" `
-            -Executable $authenticationExecutable `
+            -Executable $dotnetExecutable `
+            -Arguments @($authenticationAssembly) `
+            -WorkingDirectory $authenticationDirectory `
             -ProcessEnvironment $authenticationRuntimeEnvironment |
             Out-Null
         $authenticationRuntimeEnvironment.Clear()
@@ -593,6 +683,7 @@ try {
             -Executable $launcherExecutable `
             -ProcessEnvironment @{
                 NOSGM_AUTH_ENDPOINT = $launcherEndpoint
+                DOTNET_ROOT = $dotnetRoot
             } |
             Out-Null
     }
@@ -601,6 +692,13 @@ try {
         SchemaVersion = 1
         CreatedAtUtc = [DateTime]::UtcNow.ToString("O")
         AuthenticationTransport = $AuthenticationTransport
+        AuthenticationGrpcWireMode =
+            if ($AuthenticationTransport -eq "GRPC") {
+                $resolvedAuthenticationGrpcWireMode
+            }
+            else {
+                $null
+            }
         AuthenticationEndpoint = $launcherEndpoint
         AuthenticationGrpcEndpoint =
             if ($AuthenticationTransport -eq "GRPC") {
@@ -642,6 +740,7 @@ try {
     Write-Host "Internal authentication transport: $AuthenticationTransport"
     if ($AuthenticationTransport -eq "GRPC") {
         Write-Host "Authentication gRPC endpoint: $authenticationGrpcEndpoint"
+        Write-Host "Authentication wire mode: $resolvedAuthenticationGrpcWireMode"
     }
     Write-Host "Health endpoint: $healthEndpoint"
     Write-Host "Launcher language: Español (region 5 / Login $spanishLoginPort)"

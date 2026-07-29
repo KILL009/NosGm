@@ -86,14 +86,15 @@ The authentication contract is the first service slice in wave 2B. It adds
 five explicit Gameforge ticket and one-use World permit RPCs, per-operation
 caller-role policy, input validation, and a machine-checked disposition for all
 eight legacy authentication methods. An isolated .NET 10 runtime now hosts
-those RPCs on loopback HTTP/2 with mandatory mTLS, per-role certificate
-allow-lists, deadlines, replay protection, bounded dispatch, and compatibility
-self-tests. The dual-target authentication caller bridge now routes AuthBridge,
-Login, and World through one explicit `SCS` or `GRPC` selector. Production
-still selects SCS by default; gRPC becomes authoritative only after a
-coordinated restart of all three callers with the explicit switch and their
-role-bound certificates. Stateful calls are never dual-executed or
-automatically retried through another transport.
+those RPCs on loopback TLS with mandatory mTLS, native HTTP/2 plus Windows 10
+gRPC-Web support, per-role certificate allow-lists, deadlines, replay
+protection, bounded dispatch, and compatibility self-tests. The dual-target
+authentication caller bridge now routes AuthBridge, Login, and World through
+one explicit `SCS` or `GRPC` selector. Production still selects SCS by default;
+gRPC becomes authoritative only after a coordinated restart of all three
+callers with the explicit switch and their role-bound certificates. Stateful
+calls are never dual-executed or automatically retried through another
+transport or wire mode.
 
 ## Known blockers
 

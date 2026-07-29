@@ -6,6 +6,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Grpc.Core;
 using Grpc.Net.Client;
+using Grpc.Net.Client.Web;
 using NosGm.Cluster.Contracts.Authentication.Runtime;
 using NosGm.Cluster.Contracts.V1;
 using WireV1 = global::NosGm.Cluster.Wire.V1;
@@ -31,7 +32,9 @@ namespace NosGm.Authentication.Client
             _clientCertificate = LoadClientCertificate(options);
             try
             {
-                _httpHandler = CreateHttpHandler(_clientCertificate);
+                _httpHandler = CreateHttpHandler(
+                    options,
+                    _clientCertificate);
                 _channel = GrpcChannel.ForAddress(
                     options.Address,
                     new GrpcChannelOptions
@@ -265,8 +268,23 @@ namespace NosGm.Authentication.Client
         }
 
         private static HttpMessageHandler CreateHttpHandler(
+            AuthenticationGrpcClientOptions options,
             X509Certificate2 certificate)
         {
+            if (options.WireMode == AuthenticationGrpcWireMode.GrpcWeb)
+            {
+                var primaryHandler = new HttpClientHandler
+                {
+                    ClientCertificateOptions =
+                        ClientCertificateOption.Manual,
+                    SslProtocols = SslProtocols.Tls12
+                };
+                primaryHandler.ClientCertificates.Add(certificate);
+                return new GrpcWebHandler(
+                    GrpcWebMode.GrpcWeb,
+                    primaryHandler);
+            }
+
 #if NET10_0_OR_GREATER
             var handler = new SocketsHttpHandler
             {

@@ -69,6 +69,9 @@ static AuthenticationGrpcClientOptions LoadLiveClientOptions(
             AuthenticationGrpcClientOptions.CallerInstanceIdVariable =>
                 "acceptance-" + roleName.ToLowerInvariant() + "-1",
             AuthenticationGrpcClientOptions.DeadlineVariable => "10000",
+            AuthenticationGrpcClientOptions.WireModeVariable =>
+                Environment.GetEnvironmentVariable(
+                    AuthenticationGrpcClientOptions.WireModeVariable),
             _ => null
         });
 }
@@ -276,6 +279,33 @@ AssertEqual(
     ClusterProtocolLimits.DefaultDeadlineMilliseconds,
     clientOptions.DeadlineMilliseconds,
     "Every gRPC caller gets a bounded default deadline");
+AssertEqual(
+    AuthenticationGrpcWireMode.Http2,
+    clientOptions.WireMode,
+    "Native HTTP/2 remains the default gRPC wire mode");
+
+var grpcWebClientValues =
+    new Dictionary<string, string>(clientValues)
+    {
+        [AuthenticationGrpcClientOptions.WireModeVariable] = "GRPCWEB"
+    };
+AssertEqual(
+    AuthenticationGrpcWireMode.GrpcWeb,
+    AuthenticationGrpcClientOptions.Load(
+        ClusterNodeRole.Login,
+        name => grpcWebClientValues.TryGetValue(name, out string value)
+            ? value
+            : null).WireMode,
+    "gRPC-Web requires an explicit wire-mode selection");
+grpcWebClientValues[AuthenticationGrpcClientOptions.WireModeVariable] =
+    "automatic";
+AssertThrows<InvalidOperationException>(
+    () => AuthenticationGrpcClientOptions.Load(
+        ClusterNodeRole.Login,
+        name => grpcWebClientValues.TryGetValue(name, out string value)
+            ? value
+            : null),
+    "Unknown gRPC wire modes fail closed");
 
 var remoteClientValues =
     new Dictionary<string, string>(clientValues)
