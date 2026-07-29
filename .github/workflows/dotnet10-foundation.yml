@@ -10,6 +10,11 @@ on:
       - "Web/**"
       - "Launcher/**"
       - "Tools/**"
+      - "Data/NosGm.Domain/**"
+      - "Data/NosGm.Algorithm/**"
+      - "Data/NosGm.XMLModel/**"
+      - "Data/NosGm.ChickenAPI/ChickenAPI.DAL/**"
+      - "docs/dotnet10-migration.md"
       - "scripts/verify-dotnet10-foundation.ps1"
   pull_request:
     branches:
@@ -20,6 +25,11 @@ on:
       - "Web/**"
       - "Launcher/**"
       - "Tools/**"
+      - "Data/NosGm.Domain/**"
+      - "Data/NosGm.Algorithm/**"
+      - "Data/NosGm.XMLModel/**"
+      - "Data/NosGm.ChickenAPI/ChickenAPI.DAL/**"
+      - "docs/dotnet10-migration.md"
       - "scripts/verify-dotnet10-foundation.ps1"
   workflow_dispatch:
 
@@ -32,7 +42,7 @@ concurrency:
 
 jobs:
   build:
-    name: Build .NET 10 islands
+    name: Build .NET 10 islands and bridge libraries
     runs-on: windows-2022
     timeout-minutes: 45
 
@@ -51,6 +61,6 @@ jobs:
           dotnet --version
           dotnet --info
 
-      - name: Verify inventory and build wave 0
+      - name: Verify inventory and build waves 0-1
         shell: powershell
         run: ./scripts/verify-dotnet10-foundation.ps1

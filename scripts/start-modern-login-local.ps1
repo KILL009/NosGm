@@ -211,14 +211,14 @@ if (-not $SkipBuild) {
     }
     else {
         Write-Host "[BUILD] nuget.exe not found; restoring packages.config with MSBuild"
-        & $msbuild $solutionPath /t:Restore /m /nologo /nr:false /v:minimal /p:RestorePackagesConfig=true /p:Configuration=Release "/p:Platform=Any CPU"
+        & $msbuild $solutionPath /t:Restore /m /nologo /nr:false /v:minimal /p:RestorePackagesConfig=true /p:NosGmLegacyBuild=true /p:Configuration=Release "/p:Platform=Any CPU"
         if ($LASTEXITCODE -ne 0) {
             throw "MSBuild package restore failed. Install Visual Studio Build Tools 2022 with NuGet targets, or install NuGet CLI."
         }
     }
 
     Write-Host "[BUILD] Building server Release / Any CPU"
-    & $msbuild $solutionPath /t:Build /m /nologo /nr:false /v:minimal /p:Configuration=Release "/p:Platform=Any CPU"
+    & $msbuild $solutionPath /t:Build /m /nologo /nr:false /v:minimal /p:NosGmLegacyBuild=true /p:Configuration=Release "/p:Platform=Any CPU"
     if ($LASTEXITCODE -ne 0) {
         throw "Server build failed."
     }
