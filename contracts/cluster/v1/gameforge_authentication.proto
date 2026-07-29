@@ -1,0 +1,94 @@
+syntax = "proto3";
+
+package nosgm.cluster.v1;
+
+option csharp_namespace = "NosGm.Cluster.Wire.V1";
+
+import "cluster_control.proto";
+
+// Internal authentication transport only. This service does not alter the
+// client-facing NoS0575/NoS0576/NoS0577 packets or the World handshake.
+service GameforgeAuthentication {
+  rpc IssueAuthTicket(IssueAuthTicketRequest)
+      returns (IssueAuthTicketResponse);
+  rpc ConsumeAuthTicket(ConsumeAuthTicketRequest)
+      returns (ConsumeAuthTicketResponse);
+  rpc IssueWorldPermit(IssueWorldPermitRequest)
+      returns (IssueWorldPermitResponse);
+  rpc ConsumeWorldPermit(ConsumeWorldPermitRequest)
+      returns (ConsumeWorldPermitResponse);
+  rpc RevokeWorldPermit(RevokeWorldPermitRequest)
+      returns (RevokeWorldPermitResponse);
+}
+
+enum AuthenticationResultCode {
+  AUTHENTICATION_RESULT_CODE_UNSPECIFIED = 0;
+  AUTHENTICATION_RESULT_CODE_SUCCESS = 1;
+  AUTHENTICATION_RESULT_CODE_INVALID_REQUEST = 2;
+  AUTHENTICATION_RESULT_CODE_UNAUTHORIZED = 3;
+  AUTHENTICATION_RESULT_CODE_DISABLED = 4;
+  AUTHENTICATION_RESULT_CODE_NOT_FOUND_OR_EXPIRED = 5;
+  AUTHENTICATION_RESULT_CODE_CONFLICT = 6;
+  AUTHENTICATION_RESULT_CODE_CAPACITY_EXCEEDED = 7;
+}
+
+message IssueAuthTicketRequest {
+  RequestContext context = 1;
+  string account_name = 2;
+  // Sensitive authorization material. Implementations must never log it.
+  string authorization_code = 3;
+  string installation_id = 4;
+  uint32 country_id = 5;
+}
+
+message IssueAuthTicketResponse {
+  AuthenticationResultCode result = 1;
+}
+
+message ConsumeAuthTicketRequest {
+  RequestContext context = 1;
+  // Sensitive authorization material. Implementations must never log it.
+  string authorization_code = 2;
+  string installation_id = 3;
+  uint32 country_id = 4;
+  int32 proposed_session_id = 5;
+}
+
+message ConsumeAuthTicketResponse {
+  AuthenticationResultCode result = 1;
+  string account_name = 2;
+  int32 consumption_number = 3;
+  int32 session_id = 4;
+}
+
+message IssueWorldPermitRequest {
+  RequestContext context = 1;
+  int64 account_id = 2;
+  int32 session_id = 3;
+  string ip_address = 4;
+}
+
+message IssueWorldPermitResponse {
+  AuthenticationResultCode result = 1;
+}
+
+message ConsumeWorldPermitRequest {
+  RequestContext context = 1;
+  int64 account_id = 2;
+  int32 session_id = 3;
+  string ip_address = 4;
+}
+
+message ConsumeWorldPermitResponse {
+  AuthenticationResultCode result = 1;
+}
+
+message RevokeWorldPermitRequest {
+  RequestContext context = 1;
+  int64 account_id = 2;
+  int32 session_id = 3;
+}
+
+message RevokeWorldPermitResponse {
+  AuthenticationResultCode result = 1;
+}
