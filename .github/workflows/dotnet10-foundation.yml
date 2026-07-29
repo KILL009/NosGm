@@ -102,3 +102,11 @@ jobs:
       - name: Verify inventory and build waves 0-2B
         shell: powershell
         run: ./scripts/verify-dotnet10-foundation.ps1
+
+      - name: Create isolated authentication acceptance certificates
+        shell: powershell
+        run: ./scripts/new-local-authentication-certificates.ps1 -ManagedCertificateGenerator -KeyLength 2048
+
+      - name: Verify live HTTP2 and gRPC-Web mTLS authentication
+        shell: powershell
+        run: ./scripts/test-authentication-grpc-local.ps1 -UseFileScopedRootTrust

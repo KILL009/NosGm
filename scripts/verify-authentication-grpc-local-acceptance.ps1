@@ -83,17 +83,25 @@ $readiness = Read-RepositoryFile `
     "scripts\test-modern-login-readiness.ps1"
 $selfTest = Read-RepositoryFile `
     "tests\NosGm.Authentication.Runtime.SelfTest\Program.cs"
+$managedGenerator = Read-RepositoryFile `
+    "tests\NosGm.Authentication.Runtime.SelfTest\LocalAuthenticationCertificateGenerator.cs"
+$workflow = Read-RepositoryFile `
+    ".github\workflows\dotnet10-foundation.yml"
 $documentation = Read-RepositoryFile `
     "docs\scs-transport-migration.md"
 
 Require $generator "New-SecureRandomPassword" `
     "Local PKCS#12 passwords use cryptographic randomness"
+Require $generator '[int]$KeyLength = 3072' `
+    "Operator certificates retain the stronger 3072-bit RSA default"
 Require $generator "Export-Clixml" `
     "Local PKCS#12 passwords are persisted only through current-user DPAPI"
 Require $generator "SetAccessRuleProtection(`$true, `$false)" `
     "Local certificate directory disables inherited ACLs"
 Require $generator "Cert:\CurrentUser\Root" `
     "Development root trust is scoped to the current Windows user"
+Require $generator "Install-CurrentUserTrustedRoot" `
+    "Root installation uses the non-interactive current-user certificate-store API"
 Require $generator "if (`$TrustRootCertificate)" `
     "Development root installation requires an explicit switch"
 Require $generator "1.3.6.1.5.5.7.3.1" `
@@ -106,6 +114,28 @@ Require $generator "foreach (`$role in @(`"AuthBridge`", `"Login`", `"World`"))"
     "Three distinct role certificates are generated"
 Forbid $generator "PfxPassword =" `
     "The public manifest never contains a plaintext PKCS#12 password"
+Require $generator '$env:GITHUB_ACTIONS -ne "true"' `
+    "Managed certificate generation is restricted to isolated GitHub Actions"
+Require $generator "--generate-ci-certificate-bundle" `
+    "The CI path uses the managed .NET certificate generator"
+Require $managedGenerator "RandomNumberGenerator.GetBytes" `
+    "Managed CI PKCS#12 passwords and serials use cryptographic randomness"
+Require $managedGenerator "SubjectAlternativeNameBuilder" `
+    "Managed CI server identity contains an explicit SAN"
+Require $managedGenerator "ServerAuthenticationOid" `
+    "Managed CI server identity is restricted to server authentication"
+Require $managedGenerator "ClientAuthenticationOid" `
+    "Managed CI role identities are restricted to client authentication"
+Require $managedGenerator "X509Certificate2Collection" `
+    "Managed CI PFX files carry the issuing chain for Schannel selection"
+Require $managedGenerator "File.WriteAllText(" `
+    "Managed CI certificate manifest is written independently of transient output"
+Forbid $managedGenerator "PfxPassword =" `
+    "Managed CI certificate manifest has no plaintext password field"
+Require $workflow "-ManagedCertificateGenerator -KeyLength 2048" `
+    "Live CI acceptance avoids the blocking Windows PKI provider"
+Require $workflow "-UseFileScopedRootTrust" `
+    "Live CI acceptance never changes the runner trust store"
 
 Require $startup '[ValidateSet("SCS", "GRPC")]' `
     "Local startup keeps one explicit authentication selector"
@@ -154,6 +184,16 @@ Require $acceptance '"HTTP2"' `
     "Live acceptance exercises native HTTP/2"
 Require $acceptance '"GRPCWEB"' `
     "Live acceptance exercises the Windows 10 gRPC-Web path"
+Require $acceptance "Test-NetFrameworkGrpcHttp2Support" `
+    "Live acceptance selects the same OS-compatible wire mode as the complete stack"
+Require $acceptance "UseFileScopedRootTrust" `
+    "Isolated acceptance supports explicit private-root pinning"
+Require $acceptance "NOSGM_AUTH_GRPC_TRUSTED_ROOT_CERT_PATH" `
+    "The isolated server and callers share one absolute root path"
+Require $acceptance "Microsoft.AspNetCore.Server.Kestrel.Https" `
+    "Isolated acceptance captures bounded TLS handshake diagnostics"
+Require $acceptance "[SKIP] Native HTTP/2 is unavailable" `
+    "Windows 10 acceptance does not fail before exercising its supported wire mode"
 Forbid $acceptance "complete NosGM gRPC path requires" `
     "The isolated .NET 10 acceptance is not blocked on Windows 10"
 Require $acceptance "Restore-ProcessEnvironment" `

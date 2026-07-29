@@ -102,6 +102,8 @@ Assert-Contains $program "ClientCertificateMode.RequireCertificate" `
     "Authentication runtime requires mTLS client certificates"
 Assert-Contains $program "errors == SslPolicyErrors.None" `
     "Authentication runtime requires an OS-valid certificate chain"
+Assert-Contains $program "X509ChainTrustMode.CustomRootTrust" `
+    "Isolated acceptance pins its private root without changing machine trust"
 Assert-Contains $program "MaxReceiveMessageSize" `
     "Authentication runtime bounds inbound gRPC messages"
 Assert-Contains $program "MaxStreamsPerConnection" `
@@ -113,8 +115,14 @@ Assert-Contains $options "NOSGM_AUTH_GRPC_LOGIN_CERT_SHA256" `
     "Login has an explicit certificate allow-list"
 Assert-Contains $options "NOSGM_AUTH_GRPC_WORLD_CERT_SHA256" `
     "World has an explicit certificate allow-list"
+Assert-Contains $options "NOSGM_AUTH_GRPC_TRUSTED_ROOT_CERT_PATH" `
+    "Authentication runtime exposes explicit file-scoped root trust"
 Assert-Contains $options "RejectCrossRoleCertificateReuse" `
     "A certificate fingerprint cannot own multiple roles"
+Assert-Contains $options "X509KeyStorageFlags.UserKeySet" `
+    "Schannel receives a supported current-user server private key"
+Assert-NotContains $options "X509KeyStorageFlags.PersistKeySet" `
+    "Authentication server private keys are not intentionally persisted"
 
 Assert-Contains $service "StatusCode.PermissionDenied" `
     "Unauthorized certificate roles fail closed"
@@ -159,10 +167,20 @@ Assert-Contains $clientOptions "NOSGM_AUTH_GRPC_CLIENT_CERT_PATH" `
     "Authentication callers require an explicit client identity"
 Assert-Contains $clientOptions "NOSGM_AUTH_GRPC_WIRE_MODE" `
     "Authentication callers select one wire mode before issuing calls"
+Assert-Contains $clientOptions "NOSGM_AUTH_GRPC_TRUSTED_ROOT_CERT_PATH" `
+    "The isolated .NET 10 caller can select file-scoped root trust"
 Assert-Contains $clientTransport "GrpcWebMode.GrpcWeb" `
     "Windows 10 callers use binary gRPC-Web rather than an unsupported HTTP/2 handler"
+Assert-Contains $clientTransport "X509ChainTrustMode.CustomRootTrust" `
+    "File-scoped caller trust still builds the complete certificate chain"
 Assert-Contains $clientTransport "ClientCertificates" `
     "Authentication callers present their mTLS certificate"
+Assert-Contains $clientTransport "X509KeyStorageFlags.UserKeySet" `
+    "Windows Schannel receives a supported current-user client private key"
+Assert-Contains $clientTransport "X509KeyStorageFlags.EphemeralKeySet" `
+    "Non-Windows callers retain ephemeral client private keys"
+Assert-NotContains $clientTransport "X509KeyStorageFlags.PersistKeySet" `
+    "Authentication client private keys are not intentionally persisted"
 Assert-Contains $clientTransport "deadline: deadline" `
     "Authentication callers enforce a transport deadline"
 Assert-NotContains $clientTransport `

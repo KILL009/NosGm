@@ -1,5 +1,6 @@
 using System;
 using System.Net.Http;
+using System.Net.Security;
 using System.Security.Authentication;
 using System.Security.Cryptography.X509Certificates;
 using System.Threading;
@@ -245,17 +246,21 @@ namespace NosGm.Authentication.Client
                     "The authentication gRPC client certificate file does not exist.");
             }
 
+            X509KeyStorageFlags keyStorageFlags =
+                Environment.OSVersion.Platform == PlatformID.Win32NT
+                    ? X509KeyStorageFlags.UserKeySet
+                    : X509KeyStorageFlags.EphemeralKeySet;
 #if NET10_0_OR_GREATER
             X509Certificate2 certificate =
                 X509CertificateLoader.LoadPkcs12FromFile(
                     options.CertificatePath,
                     options.CertificatePassword,
-                    X509KeyStorageFlags.EphemeralKeySet);
+                    keyStorageFlags);
 #else
             var certificate = new X509Certificate2(
                 options.CertificatePath,
                 options.CertificatePassword,
-                X509KeyStorageFlags.EphemeralKeySet);
+                keyStorageFlags);
 #endif
             if (!certificate.HasPrivateKey)
             {
@@ -280,6 +285,18 @@ namespace NosGm.Authentication.Client
                     SslProtocols = SslProtocols.Tls12
                 };
                 primaryHandler.ClientCertificates.Add(certificate);
+#if NET10_0_OR_GREATER
+                if (!string.IsNullOrEmpty(
+                        options.TrustedRootCertificatePath))
+                {
+                    primaryHandler.ServerCertificateCustomValidationCallback =
+                        (_, serverCertificate, _, errors) =>
+                            ValidatePinnedServerCertificate(
+                                options,
+                                serverCertificate,
+                                errors);
+                }
+#endif
                 return new GrpcWebHandler(
                     GrpcWebMode.GrpcWeb,
                     primaryHandler);
@@ -299,6 +316,24 @@ namespace NosGm.Authentication.Client
                     }
                 }
             };
+            if (!string.IsNullOrEmpty(options.TrustedRootCertificatePath))
+            {
+                handler.SslOptions.RemoteCertificateValidationCallback =
+                    (_, serverCertificate, _, errors) =>
+                    {
+                        if (serverCertificate == null)
+                        {
+                            return false;
+                        }
+
+                        using var certificateCopy =
+                            new X509Certificate2(serverCertificate);
+                        return ValidatePinnedServerCertificate(
+                            options,
+                            certificateCopy,
+                            errors);
+                    };
+            }
             return handler;
 #else
             var handler = new WinHttpHandler
@@ -309,6 +344,42 @@ namespace NosGm.Authentication.Client
             return handler;
 #endif
         }
+
+#if NET10_0_OR_GREATER
+        private static bool ValidatePinnedServerCertificate(
+            AuthenticationGrpcClientOptions options,
+            X509Certificate2 serverCertificate,
+            SslPolicyErrors errors)
+        {
+            if (serverCertificate == null ||
+                (errors & ~SslPolicyErrors.RemoteCertificateChainErrors) !=
+                SslPolicyErrors.None)
+            {
+                return false;
+            }
+
+            using X509Certificate2 trustedRoot =
+                X509CertificateLoader.LoadCertificateFromFile(
+                    options.TrustedRootCertificatePath);
+            using var chain = new X509Chain();
+            chain.ChainPolicy.TrustMode = X509ChainTrustMode.CustomRootTrust;
+            chain.ChainPolicy.CustomTrustStore.Add(trustedRoot);
+            chain.ChainPolicy.RevocationMode = X509RevocationMode.NoCheck;
+            chain.ChainPolicy.DisableCertificateDownloads = true;
+            bool trusted = chain.Build(serverCertificate);
+            if (!trusted)
+            {
+                Console.Error.WriteLine(
+                    "[TLS] Server certificate chain rejected: " +
+                    string.Join(
+                        ",",
+                        Array.ConvertAll(
+                            chain.ChainStatus,
+                            status => status.Status.ToString())));
+            }
+            return trusted;
+        }
+#endif
 
         private void ThrowIfDisposed()
         {
