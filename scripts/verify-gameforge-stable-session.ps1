@@ -45,19 +45,24 @@ $communicationClient = Read-RequiredText $CommunicationClientPath
 
 Assert-Contains $store "[Serializable]" "The remote ticket consumption result must be serializable."
 Assert-Contains $store "public sealed class GameforgeAuthTicketConsumption" "The stable ticket consumption DTO is missing."
-Assert-Contains $store "public int ConsumptionNumber" "The bounded modern stage number is missing."
+Assert-Contains $store "public int ConsumptionNumber" "The active-session entry number is missing."
 Assert-Contains $store "public int SessionId" "The stable modern SessionId is missing."
-Assert-Contains $store "if (ticket.SessionId <= 0) ticket.SessionId = proposedSessionId;" "The first valid ticket stage must bind its proposed SessionId exactly once."
-Assert-Contains $store "SessionId = ticket.SessionId" "Every ticket stage must return the bound SessionId."
-Assert-Contains $store "if (ticket.RemainingConsumptions == 0)" "The ticket must still disappear after the third stage."
-Assert-Contains $sessionFactory "Interlocked.Add(ref _sessionCounter, 2)" "Concurrent Login stages could generate duplicate proposed SessionIds."
+Assert-Regex $store 'if \(ticket\.SessionId <= 0\).*?ticket\.SessionId = proposedSessionId;.*?ticket\.ExpiresAtUtc = nowUtc\.Add\(MaximumActiveSessionLifetime\);' "The first valid ticket entry must bind its proposed SessionId and convert the short ticket into a bounded active-session lease."
+Assert-Contains $store "SessionId = ticket.SessionId" "Every ticket entry must return the bound SessionId."
+Assert-Contains $store "public static readonly TimeSpan MaximumActiveSessionLifetime = TimeSpan.FromHours(24);" "The active-session lease must remain explicitly bounded."
+Assert-Contains $store "ticket.ConsumptionCount++" "Repeated character-selection entries must advance the session entry counter."
+if ($store.IndexOf("MaximumConsumptionsPerTicket", [StringComparison]::Ordinal) -ge 0 -or
+    $store.IndexOf("RemainingConsumptions", [StringComparison]::Ordinal) -ge 0) {
+    throw "The obsolete three-entry ticket cap returned."
+}
+Assert-Contains $sessionFactory "Interlocked.Add(ref _sessionCounter, 2)" "Concurrent Login entries could generate duplicate proposed SessionIds."
 
 Assert-Regex $authInterface 'ConsumeGameforgeAuthTicket\s*\(\s*string authToken,\s*string installationId,\s*byte countryId,\s*int proposedSessionId\s*\)' "The authentication contract does not carry the proposed SessionId."
 Assert-Regex $authService 'TryConsume\s*\(\s*authToken,\s*parsedInstallationId,\s*countryId,\s*proposedSessionId,\s*out GameforgeAuthTicketConsumption consumption\s*\)' "Master does not atomically bind and return the modern SessionId."
 
 Assert-Contains $communicationInterface "bool IsAccountSessionRegistered(long accountId, int sessionId);" "The exact account/session query is missing."
 Assert-Regex $communicationService 'IsAccountSessionRegistered\s*\(long accountId, int sessionId\).*?AccountId\.Equals\(accountId\).*?SessionId\.Equals\(sessionId\)' "The exact account/session query is not tuple-bound."
-Assert-Regex $communicationService 'RegisterAccountLogin\s*\(long accountId, int sessionId, string ipAddress\).*?lock \(MSManager\.Instance\.ConnectedAccounts\).*?existing != null\) return;' "Repeated modern stages could replace an AccountConnection that World already attached."
+Assert-Regex $communicationService 'RegisterAccountLogin\s*\(long accountId, int sessionId, string ipAddress\).*?lock \(MSManager\.Instance\.ConnectedAccounts\).*?existing != null\) return;' "Repeated modern entries could replace an AccountConnection that World already attached."
 Assert-Contains $communicationService "private const int NsTeSTPadding = 56;" "The fixed NsTeST padding changed and would move the client SessionId."
 Assert-Contains $communicationClient 'return $"{header}  {region} {account} 2 {remainder}";' "Login does not add the required modern NsTeST header and single mode field."
 Assert-Regex $communicationClient 'NormalizeNsTeSTPacketLayout.*?return \$"\{header\}\s\s\{region\} \{account\} 2 \{remainder\}";' "The NsTeST normalizer can no longer prove the modern packet layout."
@@ -68,14 +73,16 @@ if ($communicationClient.IndexOf(
 }
 
 Assert-Contains $login "gameforgeTicket?.SessionId ?? SessionFactory.Instance.GenerateSessionId()" "Login does not distinguish stable modern sessions from generated legacy sessions."
-Assert-Contains $login "IsAccountSessionRegistered(loadedAccount.AccountId, newSessionId)" "A later modern stage cannot recognize its already registered session."
-Assert-Contains $login "bool issueGameforgeWorldPermit = gameforgeTicket != null;" "Every accepted modern Login stage must issue a fresh one-use World permit."
+Assert-Contains $login "IsAccountSessionRegistered(loadedAccount.AccountId, newSessionId)" "A later modern entry cannot recognize its already registered session."
+Assert-Contains $login "!gameforgeTicket.IsFirstConsumption" "Login no longer distinguishes the initial ticket entry from active-session continuations."
+Assert-Contains $login "Gameforge session is no longer active" "A stale ticket could resurrect a disconnected Master session."
+Assert-Contains $login "bool issueGameforgeWorldPermit = gameforgeTicket != null;" "Every accepted modern Login entry must issue a fresh one-use World permit."
 if ($login.IndexOf(
         'bool issueGameforgeWorldPermit = gameforgeTicket?.IsFirstConsumption == true;',
         [StringComparison]::Ordinal) -ge 0) {
     throw "Character reselection would reuse an already consumed stage-one World permit."
 }
-Assert-Contains $login "if (accountRegistered && ownsAccountRegistration)" "A later modern stage could disconnect the shared account during rollback."
+Assert-Contains $login "if (accountRegistered && ownsAccountRegistration)" "A later modern entry could disconnect the shared account during rollback."
 Assert-Regex $login 'RegisterGameforgeWorldPermit\(loadedAccount\.AccountId, newSessionId, ipAddress\).*?BuildServersPacket\(' "A fresh one-use World permit must exist before every modern server list is sent."
 
-Write-Host "[PASS] Modern NoS0577 stages share one stable SessionId, preserve the account registration and issue a fresh one-use World permit for character reselection."
+Write-Host "[PASS] Modern NoS0577 entries reuse one bounded active SessionId, reject stale continuations and issue a fresh one-use World permit for every character reselection."

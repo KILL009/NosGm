@@ -65,7 +65,8 @@ A missing `InstallationId` before the first press of **Play** is only a warning.
 7. Confirm that the character selection screen appears.
 8. Enter one character.
 9. Confirm that the map loads and the character remains connected.
-10. Disconnect normally and repeat once to prove that a new ticket and World permit are issued for the next session.
+10. Return to character selection and enter another character at least three more times without closing the client.
+11. Disconnect normally, launch again and confirm that a new authorization ticket and active session are created.
 
 Do not run the launcher or client as administrator. The named pipe is restricted to the current Windows user, and elevation would create a different security boundary.
 
@@ -77,7 +78,7 @@ After one successful login:
 2. retry invalid credentials until the configured rate limit returns HTTP `429`;
 3. confirm that launcher settings remember only the account name when requested;
 4. confirm that no password, authorization code or ticket appears in `settings.json`;
-5. stop and restart the stack, then confirm that old one-use tickets cannot be reused.
+5. stop and restart the stack, then confirm that the old active-session authorization cannot recreate a disconnected Master session.
 
 The local defaults allow ten attempts per account and IP in sixty seconds. Do not perform the rate-limit test against a production endpoint.
 
@@ -94,7 +95,7 @@ The local defaults allow ten attempts per account and IP in sixty seconds. Do no
 | Server list is empty | Login region, client version or `NoS0576/NoS0577` parsing | Spanish port `4005`, Login log tail and client version |
 | Server list appears but channel entry fails | Initial World frame, Login session registration or World permit | `[WORLD_HANDSHAKE]` and `[WORLD_ENTRY]` milestones in the World log tail |
 | Character screen appears but entry disconnects | One-use World permit, account/session/IP binding | World and Master log tails |
-| First entry works but reconnect fails | stale state, reused permit or shutdown residue | stop script, process identity checks and a fresh readiness report |
+| First entries work but a later reselection fails | stale Master registration, expired active-session lease or permit issuance | Login entry counter, Master account/session tuple and authentication log tail |
 
 The World log emits only bounded metadata and stable reason codes; it never emits the raw handshake or entry packet. Follow one `ClientId` from `TCP_CONNECTED` through these milestones:
 
@@ -106,7 +107,7 @@ The World log emits only bounded metadata and stable reason codes; it never emit
 | `SESSION_ESTABLISHED` | The initial World custom parameter produced a valid session identifier |
 | `ENTRY_PACKET_WAIT_STARTED` | World is waiting for the two encrypted entry-packet parts |
 | `ENTRY_PACKET_ASSEMBLED` | All entry parts reached the handler |
-| `LOGIN_NOT_PERMITTED` | Master has no matching account/session registration; if Login logged different SessionIDs for stages `1/3`, `2/3` and `3/3`, the deployed binaries predate the stable-session fix |
+| `LOGIN_NOT_PERMITTED` | Master has no matching account/session registration; if Login records different SessionIDs for consecutive `Entry=` values, the deployed binaries predate the stable-session fix |
 | `GAMEFORGE_AUTH_SERVICE_UNAVAILABLE` | World could not authenticate its permit-consumer role |
 | `GAMEFORGE_WORLD_PERMIT_INVALID` | The one-use permit was missing, expired, already consumed or did not match |
 | `GAMEFORGE_WORLD_PERMIT_ACCEPTED` | The passwordless World permit was consumed successfully |
@@ -117,22 +118,26 @@ can read these events while World is still running. Its first record must be
 `DIAGNOSTICS_READY Revision=20260728.4`; if that record is absent, the deployed
 `NosGm.Core.dll` does not contain this diagnostic revision.
 
-For one launcher ticket, Login must log three bounded stages with the same
-`SessionID`:
+For one launcher authorization, Login must log a growing entry counter with the
+same `SessionID`:
 
 ```text
-Auth=NoS0577 Stage=1/3
-Auth=NoS0577 Stage=2/3
-Auth=NoS0577 Stage=3/3
+Auth=NoS0577 Entry=1
+Auth=NoS0577 Entry=2
+Auth=NoS0577 Entry=3
+Auth=NoS0577 Entry=4
+Auth=NoS0577 Entry=5
 ```
 
-Stage one owns the Master account/session registration. Stages two and three
-reuse that exact registration and never replace an `AccountConnection` that
-World may already have attached. Every accepted stage issues its own temporary,
-one-use World permit because returning to character selection creates a new
-World connection after the previous permit has already been consumed.
-Different SessionIDs across those lines indicate that Master, Login or
-`NosGm.Master.Library.dll` was not rebuilt or copied consistently.
+Entry one owns the Master account/session registration and converts the short
+launcher authorization into a bounded 24-hour active-session lease. Every later
+entry must find that exact account/session tuple already registered; otherwise
+Login rejects the stale continuation instead of recreating a disconnected
+session. Each accepted entry issues its own temporary, IP-bound, one-use World
+permit because returning to character selection creates a new World connection
+after the previous permit has already been consumed. Different SessionIDs across
+those lines indicate that Master, Login or `NosGm.Master.Library.dll` was not
+rebuilt or copied consistently.
 
 ## 5. Collect a sanitized evidence bundle
 
@@ -186,7 +191,9 @@ The modern Login acceptance test is successful only when all of these are true:
 - the server and channel list appears through Spanish region `5`;
 - character selection loads;
 - World accepts the character and keeps the session connected;
-- all three modern Login stages reuse one SessionID;
-- a second fresh login succeeds;
+- at least five modern Login entries reuse one SessionID;
+- each entry receives a fresh one-use World permit;
+- stopping the session prevents the old authorization from recreating it;
+- a new launcher login succeeds;
 - invalid credentials remain generic and rate-limited;
 - no credential material is persisted.

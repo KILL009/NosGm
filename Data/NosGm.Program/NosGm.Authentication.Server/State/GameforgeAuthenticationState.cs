@@ -9,7 +9,8 @@ namespace NosGm.Authentication.Server.State;
 public sealed class GameforgeAuthenticationState
 {
     public const int MaximumOutstandingTickets = 10000;
-    public const int MaximumConsumptionsPerTicket = 3;
+    public static readonly TimeSpan MaximumActiveSessionLifetime =
+        TimeSpan.FromHours(24);
     public const int MaximumOutstandingPermits = 10000;
 
     private sealed class Ticket
@@ -20,10 +21,9 @@ public sealed class GameforgeAuthenticationState
 
         public required uint CountryId { get; init; }
 
-        public required DateTimeOffset ExpiresAt { get; init; }
+        public required DateTimeOffset ExpiresAt { get; set; }
 
-        public int RemainingConsumptions { get; set; } =
-            MaximumConsumptionsPerTicket;
+        public int ConsumptionCount { get; set; }
 
         public int SessionId { get; set; }
     }
@@ -137,10 +137,10 @@ public sealed class GameforgeAuthenticationState
                     continue;
                 }
 
-                if (ticket.ExpiresAt <= _timeProvider.GetUtcNow() ||
+                DateTimeOffset now = _timeProvider.GetUtcNow();
+                if (ticket.ExpiresAt <= now ||
                     ticket.InstallationId != installationId ||
-                    ticket.CountryId != countryId ||
-                    ticket.RemainingConsumptions <= 0)
+                    ticket.CountryId != countryId)
                 {
                     _tickets.TryRemove(key, out _);
                     return FailedConsumption(
@@ -150,26 +150,21 @@ public sealed class GameforgeAuthenticationState
                 if (ticket.SessionId <= 0)
                 {
                     ticket.SessionId = proposedSessionId;
+                    ticket.ExpiresAt = now.Add(MaximumActiveSessionLifetime);
                 }
 
-                int consumptionNumber =
-                    MaximumConsumptionsPerTicket -
-                    ticket.RemainingConsumptions +
-                    1;
-                ticket.RemainingConsumptions--;
-                var result = new AuthenticationTicketConsumptionResult
+                if (ticket.ConsumptionCount < int.MaxValue)
+                {
+                    ticket.ConsumptionCount++;
+                }
+
+                return new AuthenticationTicketConsumptionResult
                 {
                     Result = AuthenticationTransportResultCode.Success,
                     AccountName = ticket.AccountName,
-                    ConsumptionNumber = consumptionNumber,
+                    ConsumptionNumber = ticket.ConsumptionCount,
                     SessionId = ticket.SessionId
                 };
-                if (ticket.RemainingConsumptions == 0)
-                {
-                    _tickets.TryRemove(key, out _);
-                }
-
-                return result;
             }
         }
     }

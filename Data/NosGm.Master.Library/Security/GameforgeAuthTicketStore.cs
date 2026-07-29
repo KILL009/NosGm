@@ -17,7 +17,7 @@ namespace NosGm.Master.Library.Interface
     public sealed class GameforgeAuthTicketStore
     {
         public const int MaximumOutstandingTickets = 10000;
-        public const int MaximumConsumptionsPerTicket = 3;
+        public static readonly TimeSpan MaximumActiveSessionLifetime = TimeSpan.FromHours(24);
 
         private sealed class Ticket
         {
@@ -25,7 +25,7 @@ namespace NosGm.Master.Library.Interface
             public Guid InstallationId { get; set; }
             public byte CountryId { get; set; }
             public DateTime ExpiresAtUtc { get; set; }
-            public int RemainingConsumptions { get; set; }
+            public int ConsumptionCount { get; set; }
             public int SessionId { get; set; }
         }
 
@@ -51,8 +51,7 @@ namespace NosGm.Master.Library.Interface
                 AccountName = accountName,
                 InstallationId = installationId,
                 CountryId = countryId,
-                ExpiresAtUtc = nowUtc.Add(lifetime),
-                RemainingConsumptions = MaximumConsumptionsPerTicket
+                ExpiresAtUtc = nowUtc.Add(lifetime)
             });
         }
 
@@ -80,28 +79,32 @@ namespace NosGm.Master.Library.Interface
                         continue;
                     }
 
-                    if (ticket.ExpiresAtUtc <= DateTime.UtcNow ||
+                    DateTime nowUtc = DateTime.UtcNow;
+                    if (ticket.ExpiresAtUtc <= nowUtc ||
                         ticket.InstallationId != installationId ||
-                        ticket.CountryId != countryId ||
-                        ticket.RemainingConsumptions <= 0)
+                        ticket.CountryId != countryId)
                     {
                         _tickets.TryRemove(key, out _);
                         return false;
                     }
 
-                    if (ticket.SessionId <= 0) ticket.SessionId = proposedSessionId;
-                    int consumptionNumber = MaximumConsumptionsPerTicket - ticket.RemainingConsumptions + 1;
-                    ticket.RemainingConsumptions--;
+                    if (ticket.SessionId <= 0)
+                    {
+                        ticket.SessionId = proposedSessionId;
+                        ticket.ExpiresAtUtc = nowUtc.Add(MaximumActiveSessionLifetime);
+                    }
+
+                    if (ticket.ConsumptionCount < int.MaxValue)
+                    {
+                        ticket.ConsumptionCount++;
+                    }
+
                     consumption = new GameforgeAuthTicketConsumption
                     {
                         AccountName = ticket.AccountName,
-                        ConsumptionNumber = consumptionNumber,
+                        ConsumptionNumber = ticket.ConsumptionCount,
                         SessionId = ticket.SessionId
                     };
-                    if (ticket.RemainingConsumptions == 0)
-                    {
-                        _tickets.TryRemove(key, out _);
-                    }
                     return true;
                 }
             }
