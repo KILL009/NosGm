@@ -1,21 +1,39 @@
 using NosGm.Cluster.Contracts.V1;
 using NosGm.Cluster.Contracts.Authentication.V1;
+using NosGm.Cluster.Contracts.Communication.V1;
 using WireAuthenticationResultCode =
     NosGm.Cluster.Wire.V1.AuthenticationResultCode;
+using WireCommunicationResultCode =
+    NosGm.Cluster.Wire.V1.CommunicationResultCode;
 using WireClusterNodeRole = NosGm.Cluster.Wire.V1.ClusterNodeRole;
 using WireClusterService = NosGm.Cluster.Wire.V1.ClusterService;
+using WireAccountRequest = NosGm.Cluster.Wire.V1.AccountRequest;
+using WireAccountSessionRequest = NosGm.Cluster.Wire.V1.AccountSessionRequest;
+using WireCharacterWorldRequest = NosGm.Cluster.Wire.V1.CharacterWorldRequest;
+using WireConnectAccountRequest = NosGm.Cluster.Wire.V1.ConnectAccountRequest;
 using WireConsumeAuthTicketRequest =
     NosGm.Cluster.Wire.V1.ConsumeAuthTicketRequest;
 using WireConsumeWorldPermitRequest =
     NosGm.Cluster.Wire.V1.ConsumeWorldPermitRequest;
+using WireDisconnectAccountRequest =
+    NosGm.Cluster.Wire.V1.DisconnectAccountRequest;
 using WireIssueAuthTicketRequest =
     NosGm.Cluster.Wire.V1.IssueAuthTicketRequest;
 using WireIssueWorldPermitRequest =
     NosGm.Cluster.Wire.V1.IssueWorldPermitRequest;
+using WireListWorldServersRequest =
+    NosGm.Cluster.Wire.V1.ListWorldServersRequest;
 using WireProtocolVersion = NosGm.Cluster.Wire.V1.ProtocolVersion;
+using WireRegisterAccountLoginRequest =
+    NosGm.Cluster.Wire.V1.RegisterAccountLoginRequest;
+using WireRegisterWorldServerRequest =
+    NosGm.Cluster.Wire.V1.RegisterWorldServerRequest;
 using WireRequestContext = NosGm.Cluster.Wire.V1.RequestContext;
 using WireRevokeWorldPermitRequest =
     NosGm.Cluster.Wire.V1.RevokeWorldPermitRequest;
+using WireWorldRequest = NosGm.Cluster.Wire.V1.WorldRequest;
+using WireWorldServerRegistration =
+    NosGm.Cluster.Wire.V1.WorldServerRegistration;
 
 static void AssertEqual<T>(T expected, T actual, string name)
 {
@@ -28,7 +46,9 @@ static void AssertEqual<T>(T expected, T actual, string name)
     Console.WriteLine($"[PASS] {name}");
 }
 
-static WireRequestContext CreateWireContext(WireClusterNodeRole role) =>
+static WireRequestContext CreateWireContext(
+    WireClusterNodeRole role,
+    WireClusterService service = WireClusterService.Authentication) =>
     new()
     {
         Version = new WireProtocolVersion
@@ -42,7 +62,7 @@ static WireRequestContext CreateWireContext(WireClusterNodeRole role) =>
             1_800_000_000_000 +
             ClusterProtocolLimits.DefaultDeadlineMilliseconds,
         CallerRole = role,
-        RequestedService = WireClusterService.Authentication,
+        RequestedService = service,
         CallerInstanceId = "self-test"
     };
 
@@ -248,6 +268,203 @@ AssertEqual(
     WireAuthenticationResultCode.Success,
     WireAuthenticationResultCode.Success,
     "Authentication result enum code generation");
+
+var registerLogin = new WireRegisterAccountLoginRequest
+{
+    Context = CreateWireContext(
+        WireClusterNodeRole.Login,
+        WireClusterService.Communication),
+    AccountId = 42,
+    SessionId = 50219,
+    IpAddress = "127.0.0.1"
+};
+AssertEqual(
+    CommunicationContractValidationError.None,
+    ClusterCommunicationContractValidator.Validate(registerLogin),
+    "Login may register a typed account session");
+registerLogin.Context.CallerRole = WireClusterNodeRole.World;
+AssertEqual(
+    CommunicationContractValidationError.InvalidCallerRole,
+    ClusterCommunicationContractValidator.Validate(registerLogin),
+    "World cannot create Login account registrations");
+registerLogin.Context.CallerRole = WireClusterNodeRole.Login;
+registerLogin.IpAddress = "not-an-ip";
+AssertEqual(
+    CommunicationContractValidationError.InvalidIpAddress,
+    ClusterCommunicationContractValidator.Validate(registerLogin),
+    "Account registrations require a canonical IP address");
+registerLogin.IpAddress = "127.0.0.1";
+
+var accountSession = new WireAccountSessionRequest
+{
+    Context = CreateWireContext(
+        WireClusterNodeRole.Login,
+        WireClusterService.Communication),
+    AccountId = 42,
+    SessionId = 50219
+};
+AssertEqual(
+    CommunicationContractValidationError.None,
+    ClusterCommunicationContractValidator.ValidateAccountSessionRegistered(
+        accountSession),
+    "Login may query its exact account/session registration");
+accountSession.Context.CallerRole = WireClusterNodeRole.World;
+AssertEqual(
+    CommunicationContractValidationError.None,
+    ClusterCommunicationContractValidator.ValidateLoginPermitted(accountSession),
+    "World may verify a login handoff");
+accountSession.Context.CallerRole = WireClusterNodeRole.Login;
+AssertEqual(
+    CommunicationContractValidationError.InvalidCallerRole,
+    ClusterCommunicationContractValidator.ValidateLoginPermitted(accountSession),
+    "Login cannot impersonate World login-permission checks");
+
+var accountRequest = new WireAccountRequest
+{
+    Context = CreateWireContext(
+        WireClusterNodeRole.Login,
+        WireClusterService.Communication),
+    AccountId = 42
+};
+AssertEqual(
+    CommunicationContractValidationError.None,
+    ClusterCommunicationContractValidator.ValidateAccountConnected(accountRequest),
+    "Login may query whether an account is attached to World");
+accountRequest.Context.CallerRole = WireClusterNodeRole.World;
+AssertEqual(
+    CommunicationContractValidationError.None,
+    ClusterCommunicationContractValidator.ValidatePulse(accountRequest),
+    "World may pulse an active account");
+
+var connectAccount = new WireConnectAccountRequest
+{
+    Context = CreateWireContext(
+        WireClusterNodeRole.World,
+        WireClusterService.Communication),
+    WorldId = "11111111-2222-3333-4444-555555555555",
+    AccountId = 42,
+    SessionId = 50219
+};
+AssertEqual(
+    CommunicationContractValidationError.None,
+    ClusterCommunicationContractValidator.Validate(connectAccount),
+    "World may atomically attach an exact account/session tuple");
+connectAccount.WorldId = Guid.Empty.ToString("D");
+AssertEqual(
+    CommunicationContractValidationError.InvalidWorldId,
+    ClusterCommunicationContractValidator.Validate(connectAccount),
+    "Empty World IDs fail closed");
+
+var disconnectAccount = new WireDisconnectAccountRequest
+{
+    Context = CreateWireContext(
+        WireClusterNodeRole.World,
+        WireClusterService.Communication),
+    AccountId = 42,
+    SessionId = 50219,
+    PreserveSessionRegistration = true
+};
+AssertEqual(
+    CommunicationContractValidationError.None,
+    ClusterCommunicationContractValidator.Validate(disconnectAccount),
+    "World may preserve an exact Gameforge session during reselection");
+disconnectAccount.SessionId = 0;
+AssertEqual(
+    CommunicationContractValidationError.InvalidPreserveSessionRequest,
+    ClusterCommunicationContractValidator.Validate(disconnectAccount),
+    "Preservation cannot operate without an exact session ID");
+
+var characterWorld = new WireCharacterWorldRequest
+{
+    Context = CreateWireContext(
+        WireClusterNodeRole.World,
+        WireClusterService.Communication),
+    WorldId = "11111111-2222-3333-4444-555555555555",
+    CharacterId = 10004
+};
+AssertEqual(
+    CommunicationContractValidationError.None,
+    ClusterCommunicationContractValidator.ValidateConnectCharacter(characterWorld),
+    "World may attach a character through a typed request");
+AssertEqual(
+    CommunicationContractValidationError.None,
+    ClusterCommunicationContractValidator.ValidateDisconnectCharacter(characterWorld),
+    "World may detach a character through a typed request");
+characterWorld.CharacterId = 0;
+AssertEqual(
+    CommunicationContractValidationError.InvalidCharacterId,
+    ClusterCommunicationContractValidator.ValidateConnectCharacter(characterWorld),
+    "Character coordination requires a positive character ID");
+
+var registerWorld = new WireRegisterWorldServerRequest
+{
+    Context = CreateWireContext(
+        WireClusterNodeRole.World,
+        WireClusterService.Communication),
+    World = new WireWorldServerRegistration
+    {
+        WorldId = "11111111-2222-3333-4444-555555555555",
+        EndpointIp = "127.0.0.1",
+        EndpointPort = 1337,
+        AccountLimit = 100,
+        WorldGroup = "S2-Sumeria"
+    }
+};
+AssertEqual(
+    CommunicationContractValidationError.None,
+    ClusterCommunicationContractValidator.Validate(registerWorld),
+    "World may register a bounded typed endpoint");
+registerWorld.World.EndpointPort = 0;
+AssertEqual(
+    CommunicationContractValidationError.InvalidEndpointPort,
+    ClusterCommunicationContractValidator.Validate(registerWorld),
+    "World endpoint ports are range-checked");
+registerWorld.World.EndpointPort = 1337;
+registerWorld.World.WorldGroup = " S2-Sumeria";
+AssertEqual(
+    CommunicationContractValidationError.InvalidWorldGroup,
+    ClusterCommunicationContractValidator.Validate(registerWorld),
+    "World groups must be trimmed bounded text");
+
+var unregisterWorld = new WireWorldRequest
+{
+    Context = CreateWireContext(
+        WireClusterNodeRole.World,
+        WireClusterService.Communication),
+    WorldId = "11111111-2222-3333-4444-555555555555"
+};
+AssertEqual(
+    CommunicationContractValidationError.None,
+    ClusterCommunicationContractValidator.Validate(unregisterWorld),
+    "World may unregister only its canonical identity");
+
+var listWorlds = new WireListWorldServersRequest
+{
+    Context = CreateWireContext(
+        WireClusterNodeRole.Login,
+        WireClusterService.Communication),
+    AccountId = 42
+};
+AssertEqual(
+    CommunicationContractValidationError.None,
+    ClusterCommunicationContractValidator.Validate(listWorlds),
+    "Login may request typed world/channel state");
+listWorlds.Context.CallerRole = WireClusterNodeRole.World;
+AssertEqual(
+    CommunicationContractValidationError.InvalidCallerRole,
+    ClusterCommunicationContractValidator.Validate(listWorlds),
+    "World cannot request Login's server-list projection");
+
+AssertEqual(
+    WireCommunicationResultCode.Success,
+    WireCommunicationResultCode.Success,
+    "Communication result enum code generation");
+
+if (CommunicationContractLimits.MaxWorldsPerResponse > 1024)
+{
+    throw new InvalidOperationException(
+        "The world-list contract must remain explicitly bounded.");
+}
 
 if (ClusterProtocolLimits.MaxInboundMessageBytes >= 128 * 1024 * 1024)
 {
