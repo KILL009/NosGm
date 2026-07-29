@@ -1,0 +1,81 @@
+syntax = "proto3";
+
+package nosgm.cluster.v1;
+
+option csharp_namespace = "NosGm.Cluster.Wire.V1";
+
+// This is the first typed surface of the SCS replacement. Gameplay and
+// client-facing NosTale packets are deliberately outside this protocol.
+service ClusterControl {
+  rpc Negotiate(NegotiateRequest) returns (NegotiateResponse);
+  rpc CheckHealth(HealthRequest) returns (HealthResponse);
+}
+
+message ProtocolVersion {
+  uint32 major = 1;
+  uint32 minor = 2;
+}
+
+enum ClusterNodeRole {
+  CLUSTER_NODE_ROLE_UNSPECIFIED = 0;
+  CLUSTER_NODE_ROLE_MASTER = 1;
+  CLUSTER_NODE_ROLE_LOGIN = 2;
+  CLUSTER_NODE_ROLE_WORLD = 3;
+  CLUSTER_NODE_ROLE_AUTH_BRIDGE = 4;
+  CLUSTER_NODE_ROLE_WEB = 5;
+  CLUSTER_NODE_ROLE_ADMIN_TOOL = 6;
+  CLUSTER_NODE_ROLE_WORKER = 7;
+}
+
+enum ClusterService {
+  CLUSTER_SERVICE_UNSPECIFIED = 0;
+  CLUSTER_SERVICE_CONTROL = 1;
+  CLUSTER_SERVICE_AUTHENTICATION = 2;
+  CLUSTER_SERVICE_COMMUNICATION = 3;
+  CLUSTER_SERVICE_CONFIGURATION = 4;
+  CLUSTER_SERVICE_MAIL = 5;
+  CLUSTER_SERVICE_MALL = 6;
+  CLUSTER_SERVICE_ADMIN_TOOL = 7;
+  CLUSTER_SERVICE_COMMUNICATION_CALLBACK = 8;
+  CLUSTER_SERVICE_CONFIGURATION_CALLBACK = 9;
+  CLUSTER_SERVICE_MAIL_CALLBACK = 10;
+}
+
+message RequestContext {
+  ProtocolVersion version = 1;
+  string request_id = 2;
+  int64 issued_at_unix_time_ms = 3;
+  int64 deadline_unix_time_ms = 4;
+  ClusterNodeRole caller_role = 5;
+  ClusterService requested_service = 6;
+  string caller_instance_id = 7;
+}
+
+message NegotiateRequest {
+  RequestContext context = 1;
+  repeated ProtocolVersion supported_versions = 2;
+  repeated ClusterService requested_services = 3;
+}
+
+message NegotiateResponse {
+  ProtocolVersion selected_version = 1;
+  repeated ClusterService accepted_services = 2;
+  string server_instance_id = 3;
+}
+
+message HealthRequest {
+  RequestContext context = 1;
+}
+
+message HealthResponse {
+  enum ServingStatus {
+    SERVING_STATUS_UNSPECIFIED = 0;
+    SERVING_STATUS_SERVING = 1;
+    SERVING_STATUS_DEGRADED = 2;
+    SERVING_STATUS_NOT_SERVING = 3;
+  }
+
+  ServingStatus status = 1;
+  string node_instance_id = 2;
+  int64 observed_at_unix_time_ms = 3;
+}

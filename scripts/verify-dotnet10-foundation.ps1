@@ -94,7 +94,8 @@ $explicitNet10Projects = @(
     "Tools\NosGM.DataUpdater\NosGM.DataUpdater.csproj",
     "Tools\NosGM.PacketCatalog\NosGM.PacketCatalog.csproj",
     "Tools\NosGM.ResourceExplorer\NosGM.ResourceExplorer.csproj",
-    "Tools\NosGM.TimeSpaceParser\NosGM.TimeSpaceParser.csproj"
+    "Tools\NosGM.TimeSpaceParser\NosGM.TimeSpaceParser.csproj",
+    "tests\NosGm.Cluster.Contracts.SelfTest\NosGm.Cluster.Contracts.SelfTest.csproj"
 )
 
 $bridgeProjects = @(
@@ -103,7 +104,8 @@ $bridgeProjects = @(
     "Data\NosGm.Algorithm\NosGm.Algorithm.csproj",
     "Data\NosGm.XMLModel\NosGm.XMLModel.csproj",
     "Data\NosGm.Configuration\NosGm.Configuration.csproj",
-    "Data\NosGm.DAL\NosGm.Data\NosGm.Data.csproj"
+    "Data\NosGm.DAL\NosGm.Data\NosGm.Data.csproj",
+    "Data\NosGm.Cluster.Contracts\NosGm.Cluster.Contracts.csproj"
 )
 
 foreach ($project in $explicitNet10Projects) {
@@ -148,17 +150,19 @@ foreach ($project in $deferredModern) {
     Write-Host "[DEFERRED] $project" -ForegroundColor Yellow
 }
 
-if ($allProjects.Count -ne 45) {
-    throw "Project inventory changed: expected 45 projects but found $($allProjects.Count). Review the migration matrix."
+if ($allProjects.Count -ne 47) {
+    throw "Project inventory changed: expected 47 projects but found $($allProjects.Count). Review the migration matrix."
 }
 
-if ($bridgeCount -ne 6) {
-    throw "Bridge inventory changed: expected 6 projects but found $bridgeCount."
+if ($bridgeCount -ne 7) {
+    throw "Bridge inventory changed: expected 7 projects but found $bridgeCount."
 }
 
 if ($legacyOnlyCount -ne 22) {
     throw "Legacy-only inventory changed: expected 22 .NET Framework 4.8.1 projects but found $legacyOnlyCount."
 }
+
+& (Join-Path $PSScriptRoot "verify-scs-transport-contracts.ps1")
 
 if ($InventoryOnly) {
     Write-Host "NosGM .NET 10 foundation inventory passed." -ForegroundColor Green
@@ -180,6 +184,14 @@ try {
         Invoke-DotNet -Arguments @("build", $bridgeProject, "-c", "Release", "-f", "net10.0", "--nologo", "-m:1", "-nodeReuse:false")
     }
 
+    Invoke-DotNet -Arguments @(
+        "run",
+        "--project",
+        "tests\NosGm.Cluster.Contracts.SelfTest\NosGm.Cluster.Contracts.SelfTest.csproj",
+        "-c",
+        "Release",
+        "--no-restore")
+
     if ($env:OS -eq "Windows_NT") {
         Invoke-DotNet -Arguments @("build", "Launcher\NosGM.Launcher.sln", "-c", "Release", "--nologo")
     }
@@ -191,4 +203,4 @@ finally {
     Pop-Location
 }
 
-Write-Host "NosGM .NET 10 foundation and waves 1-2A bridge build passed." -ForegroundColor Green
+Write-Host "NosGM .NET 10 foundation and waves 1-2B contract bridge build passed." -ForegroundColor Green
