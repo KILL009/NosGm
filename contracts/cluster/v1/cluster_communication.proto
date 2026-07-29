@@ -21,7 +21,7 @@ service ClusterCommunication {
       returns (CommunicationMutationResponse);
   rpc DisconnectAccount(DisconnectAccountRequest)
       returns (CommunicationMutationResponse);
-  rpc PulseAccount(AccountRequest)
+  rpc PulseAccount(AccountSessionRequest)
       returns (CommunicationMutationResponse);
   rpc ConnectCharacter(CharacterWorldRequest)
       returns (CommunicationMutationResponse);
