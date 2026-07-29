@@ -286,7 +286,12 @@ namespace NosGm.Handler.BasicPacket.Login
             }
 
             bool ownsAccountRegistration = gameforgeTicket == null || gameforgeTicket.IsFirstConsumption;
-            bool issueGameforgeWorldPermit = gameforgeTicket?.IsFirstConsumption == true;
+            // Every accepted modern Login stage sends a new server list and can
+            // therefore be followed by a new World connection. The account
+            // registration and SessionId remain owned by stage one, but the
+            // one-use World permit must be refreshed for every stage after the
+            // previous permit has been consumed.
+            bool issueGameforgeWorldPermit = gameforgeTicket != null;
             string modernStage = gameforgeTicket == null ? string.Empty : $" Stage={gameforgeTicket.ConsumptionNumber}/{GameforgeAuthTicketStore.MaximumConsumptionsPerTicket}";
             Logger.Info($"{loadedAccount.Name} connected | SessionID={newSessionId} Auth={authenticationMode}{modernStage} RegionType={regionType} Culture={culture}");
 
