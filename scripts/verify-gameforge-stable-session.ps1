@@ -8,7 +8,8 @@ param(
     [string]$AuthServicePath = "Data/NosGm.Program/NosGm.Master.Server/AuthentificationService.cs",
     [string]$CommunicationInterfacePath = "Data/NosGm.Master.Library/Interface/ICommunicationService.cs",
     [string]$CommunicationServicePath = "Data/NosGm.Program/NosGm.Master.Server/CommunicationService.cs",
-    [string]$CommunicationClientPath = "Data/NosGm.Master.Library/Client/CommunicationServiceClient.cs"
+    [string]$CommunicationClientPath = "Data/NosGm.Master.Library/Client/CommunicationServiceClient.cs",
+    [string]$ScsCommunicationAdapterPath = "Data/NosGm.Master.Library/Client/ScsClusterCommunicationTransport.cs"
 )
 
 $ErrorActionPreference = "Stop"
@@ -52,6 +53,7 @@ $authService = Read-RequiredText $AuthServicePath
 $communicationInterface = Read-RequiredText $CommunicationInterfacePath
 $communicationService = Read-RequiredText $CommunicationServicePath
 $communicationClient = Read-RequiredText $CommunicationClientPath
+$scsCommunicationAdapter = Read-RequiredText $ScsCommunicationAdapterPath
 
 Assert-Contains $store "[Serializable]" "The remote ticket consumption result must be serializable."
 Assert-Contains $store "public sealed class GameforgeAuthTicketConsumption" "The stable ticket consumption DTO is missing."
@@ -73,7 +75,8 @@ Assert-Contains $communicationInterface "void DisconnectAccount(long accountId, 
 Assert-Regex $communicationService 'IsAccountSessionRegistered\s*\(long accountId, int sessionId\).*?AccountId\.Equals\(accountId\).*?SessionId\.Equals\(sessionId\)' "The exact account/session query is not tuple-bound."
 Assert-Regex $communicationService 'RegisterAccountLogin\s*\(long accountId, int sessionId, string ipAddress\).*?lock \(MSManager\.Instance\.ConnectedAccounts\).*?existing != null\) return;' "Repeated modern entries could replace an AccountConnection that World already attached."
 Assert-Regex $communicationService 'DisconnectAccount\s*\(\s*long accountId,\s*int sessionId = 0,\s*bool preserveSessionRegistration = false\s*\).*?preserveSessionRegistration && sessionId > 0.*?AccountId\.Equals\(accountId\).*?SessionId\.Equals\(sessionId\).*?CharacterId = 0;.*?ConnectedWorld = null;.*?LastPulse = DateTime\.Now;.*?return;' "World disconnect does not preserve and detach only the exact Gameforge account/session tuple."
-Assert-Contains $communicationClient "_client.ServiceProxy.DisconnectAccount(accountId, sessionId, preserveSessionRegistration);" "The communication client drops the Gameforge preservation flag."
+Assert-Contains $communicationClient "_communicationTransport.DisconnectAccountAsync(" "The communication client drops the Gameforge preservation flag before transport dispatch."
+Assert-Regex $scsCommunicationAdapter '_serviceProxy\(\)\.DisconnectAccount\(\s*accountId,\s*sessionId,\s*preserveSessionRegistration\s*\)' "The selected SCS transport drops the Gameforge preservation flag."
 Assert-Contains $communicationService "private const int NsTeSTPadding = 56;" "The fixed NsTeST padding changed."
 Assert-Contains $communicationClient 'return $"{header}  {region} {account} 2 {remainder}";' "Login does not add the required modern NsTeST header and single mode field."
 Assert-Regex $communicationClient 'NormalizeNsTeSTPacketLayout.*?return \$"\{header\}\s\s\{region\} \{account\} 2 \{remainder\}";' "The NsTeST normalizer can no longer prove the modern packet layout."

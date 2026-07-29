@@ -40,7 +40,9 @@ namespace NosGm.Handler.PacketHandler.Basic
 
             Session.Character.MuteMessage();
             Session.Character.DeleteTimeout();
-            CommunicationServiceClient.Instance.PulseAccount(Session.Account.AccountId);
+            CommunicationServiceClient.Instance.PulseAccount(
+                Session.Account.AccountId,
+                Session.SessionId);
         }
 
         #endregion
