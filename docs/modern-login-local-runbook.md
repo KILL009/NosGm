@@ -34,10 +34,24 @@ The account password is not accepted by this script. It is entered only in the l
 - .NET Framework 4.8.1
 - Visual Studio Build Tools 2022 with MSBuild
 - .NET 10 SDK
+- .NET 9 compatibility SDK installed side by side for the legacy server build
 - SQL Server and a working NosGM database
 - an authorized NosTale client installation configured in NosGM Launcher
 
 NuGet CLI is optional. When `nuget.exe` is available, the startup script uses it. Otherwise, Visual Studio Build Tools 2022 restores the legacy `packages.config` dependencies through MSBuild with `RestorePackagesConfig=true`.
+
+Visual Studio 2022 contains MSBuild 17.x, which cannot load the repository-wide
+.NET 10 SDK directly. The startup script automatically finds the newest stable
+.NET 9 compatibility SDK, temporarily assigns its `Sdks` directory to
+`MSBuildSDKsPath` for the legacy `NosGm.sln` restore/build, then restores the
+previous environment before building the .NET 10 launcher and authentication
+runtime. It never rewrites `global.json`.
+
+If .NET 9 is missing, install it side by side without removing .NET 10:
+
+```powershell
+winget install --id Microsoft.DotNet.SDK.9 --exact --source winget
+```
 
 ## First local start
 
