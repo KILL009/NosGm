@@ -3,6 +3,11 @@ param(
     [switch]$SkipBuild,
     [switch]$SkipLauncher,
     [switch]$ConfigureUrlAcl,
+    [ValidateSet("SCS", "GRPC")]
+    [string]$AuthenticationTransport = "SCS",
+    [string]$AuthenticationCertificateManifest,
+    [ValidateRange(1024, 65535)]
+    [int]$AuthenticationGrpcPort = 7443,
     [ValidateRange(10, 180)]
     [int]$StartupTimeoutSeconds = 60,
     [ValidateRange(1, 65535)]
@@ -37,7 +42,22 @@ $environmentVariableNames = @(
     "NOSGM_GAMEFORGE_WORLD_PERMIT_TTL_SECONDS",
     "NOSGM_LAUNCHER_AUTH_ATTEMPT_WINDOW_SECONDS",
     "NOSGM_LAUNCHER_AUTH_MAX_ATTEMPTS_PER_WINDOW",
-    "NOSGM_AUTH_ENDPOINT"
+    "NOSGM_AUTH_ENDPOINT",
+    "NOSGM_AUTH_TRANSPORT",
+    "NOSGM_AUTH_GRPC_URL",
+    "NOSGM_AUTH_GRPC_CLIENT_CERT_PATH",
+    "NOSGM_AUTH_GRPC_CLIENT_CERT_PASSWORD",
+    "NOSGM_AUTH_GRPC_CALLER_INSTANCE_ID",
+    "NOSGM_AUTH_GRPC_DEADLINE_MILLISECONDS",
+    "NOSGM_AUTH_GRPC_SERVER_CERT_PATH",
+    "NOSGM_AUTH_GRPC_SERVER_CERT_PASSWORD",
+    "NOSGM_AUTH_GRPC_AUTHBRIDGE_CERT_SHA256",
+    "NOSGM_AUTH_GRPC_LOGIN_CERT_SHA256",
+    "NOSGM_AUTH_GRPC_WORLD_CERT_SHA256",
+    "NOSGM_AUTH_GRPC_PORT",
+    "NOSGM_AUTH_GRPC_TICKET_TTL_SECONDS",
+    "NOSGM_AUTH_GRPC_PERMIT_TTL_SECONDS",
+    "NOSGM_AUTH_GRPC_INSTANCE_ID"
 )
 $previousEnvironment = @{}
 foreach ($name in $environmentVariableNames) {
@@ -63,6 +83,102 @@ function Restore-ProcessEnvironment {
     }
 }
 
+function ConvertFrom-SecureStringInMemory {
+    param(
+        [Parameter(Mandatory = $true)]
+        [Security.SecureString]$Value
+    )
+
+    $pointer = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($Value)
+    try {
+        return [Runtime.InteropServices.Marshal]::PtrToStringBSTR($pointer)
+    }
+    finally {
+        [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($pointer)
+    }
+}
+
+function Import-LocalAuthenticationBundle {
+    param([Parameter(Mandatory = $true)][string]$ManifestPath)
+
+    $resolvedManifestPath = [System.IO.Path]::GetFullPath($ManifestPath)
+    if (-not (Test-Path -LiteralPath $resolvedManifestPath -PathType Leaf)) {
+        throw "The local authentication certificate manifest does not exist: $resolvedManifestPath"
+    }
+
+    $manifest =
+        Get-Content -LiteralPath $resolvedManifestPath -Raw |
+        ConvertFrom-Json
+    if ($manifest.SchemaVersion -ne 1 -or
+        $null -eq $manifest.Clients -or
+        [string]::IsNullOrWhiteSpace([string]$manifest.CredentialsPath)) {
+        throw "The local authentication certificate manifest is invalid."
+    }
+
+    $credentialsPath =
+        [System.IO.Path]::GetFullPath([string]$manifest.CredentialsPath)
+    if (-not (Test-Path -LiteralPath $credentialsPath -PathType Leaf)) {
+        throw "The DPAPI-protected authentication credential bundle does not exist."
+    }
+    $credentials = Import-Clixml -LiteralPath $credentialsPath
+    if ($credentials.SchemaVersion -ne 1) {
+        throw "The DPAPI-protected authentication credential bundle is invalid."
+    }
+
+    foreach ($certificatePath in @(
+        [string]$manifest.RootCertificatePath,
+        [string]$manifest.ServerCertificatePath,
+        [string]$manifest.Clients.AuthBridge.CertificatePath,
+        [string]$manifest.Clients.Login.CertificatePath,
+        [string]$manifest.Clients.World.CertificatePath
+    )) {
+        if (-not [System.IO.Path]::IsPathRooted($certificatePath) -or
+            -not (Test-Path -LiteralPath $certificatePath -PathType Leaf)) {
+            throw "The local authentication certificate bundle contains a missing or non-absolute certificate path."
+        }
+    }
+
+    foreach ($fingerprint in @(
+        [string]$manifest.Clients.AuthBridge.Sha256,
+        [string]$manifest.Clients.Login.Sha256,
+        [string]$manifest.Clients.World.Sha256
+    )) {
+        if ($fingerprint -notmatch '^[A-Fa-f0-9]{64}$') {
+            throw "The local authentication certificate bundle contains an invalid SHA-256 fingerprint."
+        }
+    }
+
+    $trustedRootPath =
+        "Cert:\CurrentUser\Root\" +
+        [string]$manifest.RootCertificateThumbprint
+    if (-not (Test-Path -LiteralPath $trustedRootPath)) {
+        throw "The NosGM local authentication root is not trusted for the current Windows user. Import '$($manifest.RootCertificatePath)' into Cert:\CurrentUser\Root first."
+    }
+
+    return [pscustomobject]@{
+        ManifestPath = $resolvedManifestPath
+        Manifest = $manifest
+        Credentials = $credentials
+    }
+}
+
+function Merge-ProcessEnvironment {
+    param(
+        [Parameter(Mandatory = $true)]
+        [Collections.IDictionary]$Base,
+        [Collections.IDictionary]$Additional = @{}
+    )
+
+    $result = @{}
+    foreach ($entry in $Base.GetEnumerator()) {
+        $result[[string]$entry.Key] = [string]$entry.Value
+    }
+    foreach ($entry in $Additional.GetEnumerator()) {
+        $result[[string]$entry.Key] = [string]$entry.Value
+    }
+    return $result
+}
+
 function Test-IsAdministrator {
     $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
     try {
@@ -71,6 +187,18 @@ function Test-IsAdministrator {
     }
     finally {
         $identity.Dispose()
+    }
+}
+
+function Assert-GrpcOperatingSystem {
+    $operatingSystem =
+        Get-CimInstance -ClassName Win32_OperatingSystem
+    $version = [Version]$operatingSystem.Version
+    $isWorkstation = [int]$operatingSystem.ProductType -eq 1
+
+    if (($isWorkstation -and $version.Build -lt 22000) -or
+        (-not $isWorkstation -and $version.Build -lt 17763)) {
+        throw "The .NET Framework gRPC callers require Windows 11 or Windows Server 2019 or later."
     }
 }
 
@@ -112,7 +240,8 @@ function Start-TrackedProcess {
     param(
         [Parameter(Mandatory = $true)][string]$Name,
         [Parameter(Mandatory = $true)][string]$Executable,
-        [string[]]$Arguments = @()
+        [string[]]$Arguments = @(),
+        [Collections.IDictionary]$ProcessEnvironment = @{}
     )
 
     if (-not (Test-Path -LiteralPath $Executable -PathType Leaf)) {
@@ -128,7 +257,46 @@ function Start-TrackedProcess {
         $startParameters["ArgumentList"] = $Arguments
     }
 
-    $process = Start-Process @startParameters
+    $temporaryEnvironment = @{}
+    $process = $null
+    try {
+        foreach ($entry in $ProcessEnvironment.GetEnumerator()) {
+            $variableName = [string]$entry.Key
+            if ($environmentVariableNames -notcontains $variableName) {
+                throw "Process environment variable is not allow-listed: $variableName"
+            }
+        }
+
+        foreach ($variableName in $environmentVariableNames) {
+            $temporaryEnvironment[$variableName] =
+                [Environment]::GetEnvironmentVariable(
+                    $variableName,
+                    "Process")
+            $processValue = $null
+            if ($ProcessEnvironment.Contains($variableName)) {
+                $processValue =
+                    [string]$ProcessEnvironment[$variableName]
+            }
+            [Environment]::SetEnvironmentVariable(
+                $variableName,
+                $processValue,
+                "Process")
+        }
+
+        $process = Start-Process @startParameters
+    }
+    finally {
+        foreach ($variableName in $temporaryEnvironment.Keys) {
+            [Environment]::SetEnvironmentVariable(
+                $variableName,
+                $temporaryEnvironment[$variableName],
+                "Process")
+        }
+    }
+
+    if ($null -eq $process) {
+        throw "The $Name process could not be started."
+    }
     $startedAtUtc = $process.StartTime.ToUniversalTime().ToString("O")
     $record = [pscustomobject]@{
         Name = $Name
@@ -180,6 +348,22 @@ if (Test-Path -LiteralPath $statePath) {
 $bridgePrefix = "http://127.0.0.1:$BridgePort/"
 $launcherEndpoint = $bridgePrefix + "api/v1/launcher/ticket"
 $healthEndpoint = $bridgePrefix + "api/v1/launcher/health"
+$authenticationGrpcEndpoint =
+    "https://127.0.0.1:$AuthenticationGrpcPort"
+$authenticationBundle = $null
+
+if ($AuthenticationTransport -eq "GRPC") {
+    Assert-GrpcOperatingSystem
+    if ([string]::IsNullOrWhiteSpace(
+            $AuthenticationCertificateManifest)) {
+        $AuthenticationCertificateManifest = Join-Path `
+            $root `
+            "artifacts\authentication-grpc-local\manifest.json"
+    }
+
+    $authenticationBundle = Import-LocalAuthenticationBundle `
+        -ManifestPath $AuthenticationCertificateManifest
+}
 
 if ($ConfigureUrlAcl) {
     if (-not (Test-IsAdministrator)) {
@@ -228,12 +412,33 @@ if (-not $SkipBuild) {
     if ($LASTEXITCODE -ne 0) {
         throw "Launcher build failed."
     }
+
+    if ($AuthenticationTransport -eq "GRPC") {
+        $authenticationProject = Join-Path `
+            $root `
+            "Data\NosGm.Program\NosGm.Authentication.Server\NosGm.Authentication.Server.csproj"
+        $authenticationOutput =
+            Join-Path $root "bin\Release\Authentication"
+        Write-Host "[BUILD] Publishing the .NET 10 authentication runtime"
+        & dotnet publish `
+            $authenticationProject `
+            --configuration Release `
+            --output $authenticationOutput `
+            --nologo
+        if ($LASTEXITCODE -ne 0) {
+            throw "Authentication runtime build failed."
+        }
+    }
 }
 
 $masterExecutable = Join-Path $root "bin\Release\Master\NosGm.Master.Server.exe"
 $worldExecutable = Join-Path $root "bin\Release\World\NosGm.World.exe"
 $loginExecutable = Join-Path $root "bin\Release\Login\NosGm.Login.exe"
 $launcherExecutable = Join-Path $root "Launcher\src\NosGM.Launcher\bin\Release\net10.0-windows\NosGM.Launcher.exe"
+$authenticationExecutable =
+    Join-Path `
+        $root `
+        "bin\Release\Authentication\NosGm.Authentication.Server.exe"
 
 $requiredExecutables = @(
     [pscustomobject]@{ Name = "Master"; Path = $masterExecutable },
@@ -243,6 +448,12 @@ $requiredExecutables = @(
 if (-not $SkipLauncher) {
     $requiredExecutables += [pscustomobject]@{ Name = "Launcher"; Path = $launcherExecutable }
 }
+if ($AuthenticationTransport -eq "GRPC") {
+    $requiredExecutables += [pscustomobject]@{
+        Name = "Authentication gRPC runtime"
+        Path = $authenticationExecutable
+    }
+}
 
 foreach ($requiredExecutable in $requiredExecutables) {
     if (-not (Test-Path -LiteralPath $requiredExecutable.Path -PathType Leaf)) {
@@ -250,41 +461,154 @@ foreach ($requiredExecutable in $requiredExecutables) {
     }
 }
 
-$env:NOSGM_MASTER_AUTH_KEY = New-NosGmSecret
-$env:NOSGM_AUTH_SERVICE_KEY = New-NosGmSecret
-$env:NOSGM_GAMEFORGE_TICKET_ISSUER_KEY = New-NosGmSecret
-$env:NOSGM_GAMEFORGE_TICKET_CONSUMER_KEY = New-NosGmSecret
-$env:NOSGM_ENABLE_GAMEFORGE_TOKEN_LOGIN = "true"
-$env:NOSGM_ENABLE_LAUNCHER_AUTH_BRIDGE = "true"
-$env:NOSGM_START_ALL_REGIONAL_LOGIN_PORTS = "true"
-$env:NOSGM_LAUNCHER_AUTH_BRIDGE_PREFIX = $bridgePrefix
-$env:NOSGM_GAMEFORGE_AUTH_TICKET_TTL_SECONDS = "120"
-$env:NOSGM_GAMEFORGE_WORLD_PERMIT_TTL_SECONDS = "120"
-$env:NOSGM_LAUNCHER_AUTH_ATTEMPT_WINDOW_SECONDS = "60"
-$env:NOSGM_LAUNCHER_AUTH_MAX_ATTEMPTS_PER_WINDOW = "10"
-$env:NOSGM_AUTH_ENDPOINT = $launcherEndpoint
+$sharedServerEnvironment = @{
+    NOSGM_MASTER_AUTH_KEY = New-NosGmSecret
+    NOSGM_AUTH_SERVICE_KEY = New-NosGmSecret
+    NOSGM_GAMEFORGE_TICKET_ISSUER_KEY = New-NosGmSecret
+    NOSGM_GAMEFORGE_TICKET_CONSUMER_KEY = New-NosGmSecret
+    NOSGM_ENABLE_GAMEFORGE_TOKEN_LOGIN = "true"
+    NOSGM_ENABLE_LAUNCHER_AUTH_BRIDGE = "true"
+    NOSGM_START_ALL_REGIONAL_LOGIN_PORTS = "true"
+    NOSGM_LAUNCHER_AUTH_BRIDGE_PREFIX = $bridgePrefix
+    NOSGM_GAMEFORGE_AUTH_TICKET_TTL_SECONDS = "120"
+    NOSGM_GAMEFORGE_WORLD_PERMIT_TTL_SECONDS = "120"
+    NOSGM_LAUNCHER_AUTH_ATTEMPT_WINDOW_SECONDS = "60"
+    NOSGM_LAUNCHER_AUTH_MAX_ATTEMPTS_PER_WINDOW = "10"
+    NOSGM_AUTH_TRANSPORT = $AuthenticationTransport
+}
+$masterEnvironment = $sharedServerEnvironment
+$worldEnvironment = $sharedServerEnvironment
+$loginEnvironment = $sharedServerEnvironment
+$authenticationRuntimeEnvironment = @{}
+
+if ($AuthenticationTransport -eq "GRPC") {
+    $manifest = $authenticationBundle.Manifest
+    $credentials = $authenticationBundle.Credentials
+
+    $authenticationRuntimeEnvironment = @{
+        NOSGM_AUTH_GRPC_SERVER_CERT_PATH =
+            [string]$manifest.ServerCertificatePath
+        NOSGM_AUTH_GRPC_SERVER_CERT_PASSWORD =
+            ConvertFrom-SecureStringInMemory $credentials.Server
+        NOSGM_AUTH_GRPC_AUTHBRIDGE_CERT_SHA256 =
+            [string]$manifest.Clients.AuthBridge.Sha256
+        NOSGM_AUTH_GRPC_LOGIN_CERT_SHA256 =
+            [string]$manifest.Clients.Login.Sha256
+        NOSGM_AUTH_GRPC_WORLD_CERT_SHA256 =
+            [string]$manifest.Clients.World.Sha256
+        NOSGM_AUTH_GRPC_PORT = $AuthenticationGrpcPort.ToString()
+        NOSGM_AUTH_GRPC_TICKET_TTL_SECONDS = "120"
+        NOSGM_AUTH_GRPC_PERMIT_TTL_SECONDS = "120"
+        NOSGM_AUTH_GRPC_INSTANCE_ID = "authentication-local-1"
+    }
+
+    $masterEnvironment = Merge-ProcessEnvironment `
+        -Base $sharedServerEnvironment `
+        -Additional @{
+            NOSGM_AUTH_GRPC_URL = $authenticationGrpcEndpoint
+            NOSGM_AUTH_GRPC_CLIENT_CERT_PATH =
+                [string]$manifest.Clients.AuthBridge.CertificatePath
+            NOSGM_AUTH_GRPC_CLIENT_CERT_PASSWORD =
+                ConvertFrom-SecureStringInMemory $credentials.AuthBridge
+            NOSGM_AUTH_GRPC_CALLER_INSTANCE_ID = "authbridge-local-1"
+            NOSGM_AUTH_GRPC_DEADLINE_MILLISECONDS = "10000"
+        }
+    $loginEnvironment = Merge-ProcessEnvironment `
+        -Base $sharedServerEnvironment `
+        -Additional @{
+            NOSGM_AUTH_GRPC_URL = $authenticationGrpcEndpoint
+            NOSGM_AUTH_GRPC_CLIENT_CERT_PATH =
+                [string]$manifest.Clients.Login.CertificatePath
+            NOSGM_AUTH_GRPC_CLIENT_CERT_PASSWORD =
+                ConvertFrom-SecureStringInMemory $credentials.Login
+            NOSGM_AUTH_GRPC_CALLER_INSTANCE_ID = "login-local-1"
+            NOSGM_AUTH_GRPC_DEADLINE_MILLISECONDS = "10000"
+        }
+    $worldEnvironment = Merge-ProcessEnvironment `
+        -Base $sharedServerEnvironment `
+        -Additional @{
+            NOSGM_AUTH_GRPC_URL = $authenticationGrpcEndpoint
+            NOSGM_AUTH_GRPC_CLIENT_CERT_PATH =
+                [string]$manifest.Clients.World.CertificatePath
+            NOSGM_AUTH_GRPC_CLIENT_CERT_PASSWORD =
+                ConvertFrom-SecureStringInMemory $credentials.World
+            NOSGM_AUTH_GRPC_CALLER_INSTANCE_ID = "world-local-1"
+            NOSGM_AUTH_GRPC_DEADLINE_MILLISECONDS = "10000"
+        }
+}
 
 try {
     New-Item -ItemType Directory -Path $stateDirectory -Force | Out-Null
 
-    Start-TrackedProcess -Name "Master" -Executable $masterExecutable | Out-Null
+    if ($AuthenticationTransport -eq "GRPC") {
+        Start-TrackedProcess `
+            -Name "AuthenticationGrpc" `
+            -Executable $authenticationExecutable `
+            -ProcessEnvironment $authenticationRuntimeEnvironment |
+            Out-Null
+        $authenticationRuntimeEnvironment.Clear()
+        Wait-TcpPort `
+            -HostName "127.0.0.1" `
+            -Port $AuthenticationGrpcPort `
+            -Description "Authentication gRPC"
+    }
+
+    Start-TrackedProcess `
+        -Name "Master" `
+        -Executable $masterExecutable `
+        -ProcessEnvironment $masterEnvironment |
+        Out-Null
+    if ($AuthenticationTransport -eq "GRPC") {
+        $masterEnvironment.Clear()
+    }
     Wait-TcpPort -HostName "127.0.0.1" -Port $masterPort -Description "Master"
     Wait-TcpPort -HostName "127.0.0.1" -Port $BridgePort -Description "Launcher AuthBridge"
 
-    Start-TrackedProcess -Name "World" -Executable $worldExecutable -Arguments @("--nomsg", "--port", $WorldPort.ToString()) | Out-Null
+    Start-TrackedProcess `
+        -Name "World" `
+        -Executable $worldExecutable `
+        -Arguments @("--nomsg", "--port", $WorldPort.ToString()) `
+        -ProcessEnvironment $worldEnvironment |
+        Out-Null
+    if ($AuthenticationTransport -eq "GRPC") {
+        $worldEnvironment.Clear()
+    }
     Wait-TcpPort -HostName "127.0.0.1" -Port $WorldPort -Description "World"
 
-    Start-TrackedProcess -Name "Login" -Executable $loginExecutable -Arguments @("--nomsg") | Out-Null
+    Start-TrackedProcess `
+        -Name "Login" `
+        -Executable $loginExecutable `
+        -Arguments @("--nomsg") `
+        -ProcessEnvironment $loginEnvironment |
+        Out-Null
+    if ($AuthenticationTransport -eq "GRPC") {
+        $loginEnvironment.Clear()
+    }
+    $sharedServerEnvironment.Clear()
     Wait-TcpPort -HostName "127.0.0.1" -Port $spanishLoginPort -Description "Spanish Login"
 
     if (-not $SkipLauncher) {
-        Start-TrackedProcess -Name "Launcher" -Executable $launcherExecutable | Out-Null
+        Start-TrackedProcess `
+            -Name "Launcher" `
+            -Executable $launcherExecutable `
+            -ProcessEnvironment @{
+                NOSGM_AUTH_ENDPOINT = $launcherEndpoint
+            } |
+            Out-Null
     }
 
     $state = [pscustomobject]@{
         SchemaVersion = 1
         CreatedAtUtc = [DateTime]::UtcNow.ToString("O")
+        AuthenticationTransport = $AuthenticationTransport
         AuthenticationEndpoint = $launcherEndpoint
+        AuthenticationGrpcEndpoint =
+            if ($AuthenticationTransport -eq "GRPC") {
+                $authenticationGrpcEndpoint
+            }
+            else {
+                $null
+            }
         HealthEndpoint = $healthEndpoint
         SpanishLoginPort = $spanishLoginPort
         WorldPort = $WorldPort
@@ -315,9 +639,13 @@ try {
     Write-Host ""
     Write-Host "NosGM modern Login local stack is ready." -ForegroundColor Green
     Write-Host "Authentication endpoint: $launcherEndpoint"
+    Write-Host "Internal authentication transport: $AuthenticationTransport"
+    if ($AuthenticationTransport -eq "GRPC") {
+        Write-Host "Authentication gRPC endpoint: $authenticationGrpcEndpoint"
+    }
     Write-Host "Health endpoint: $healthEndpoint"
     Write-Host "Launcher language: Español (region 5 / Login $spanishLoginPort)"
-    Write-Host "Secrets were inherited by the child processes, removed from this shell and never written to disk."
+    Write-Host "Secrets were inherited by the child processes only for their role, removed from this shell and never written to plaintext files."
     if ($readiness.OverallStatus -eq "failed") {
         Write-Warning "The stack is running, but readiness found blockers. Fix them and rerun ./scripts/test-modern-login-readiness.ps1"
     }
@@ -332,6 +660,11 @@ try {
 }
 catch {
     Restore-ProcessEnvironment
+    $authenticationRuntimeEnvironment.Clear()
+    $masterEnvironment.Clear()
+    $worldEnvironment.Clear()
+    $loginEnvironment.Clear()
+    $sharedServerEnvironment.Clear()
     Stop-StartedProcesses
     Remove-Item -LiteralPath $statePath -Force -ErrorAction SilentlyContinue
     throw

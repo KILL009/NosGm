@@ -125,6 +125,34 @@ if ($null -ne $state) {
         }
     }
 
+    $authenticationTransport = "SCS"
+    if ($null -ne $state.PSObject.Properties["AuthenticationTransport"]) {
+        $authenticationTransport =
+            [string]$state.AuthenticationTransport
+    }
+    if ($authenticationTransport -notin @("SCS", "GRPC")) {
+        Add-Check `
+            -Name "Authentication.Transport" `
+            -Status "failed" `
+            -Detail "The recorded authentication transport is invalid."
+    }
+    else {
+        Add-Check `
+            -Name "Authentication.Transport" `
+            -Status "passed" `
+            -Detail "The stack recorded the explicit $authenticationTransport authentication transport."
+    }
+
+    if ($authenticationTransport -eq "GRPC" -and
+        @($records | Where-Object {
+            $_.Name -eq "AuthenticationGrpc"
+        }).Count -ne 1) {
+        Add-Check `
+            -Name "Process.AuthenticationGrpc" `
+            -Status "failed" `
+            -Detail "Exactly one authentication gRPC runtime must be recorded."
+    }
+
     foreach ($record in $records) {
         Test-RecordedProcess -Record $record
     }
@@ -143,6 +171,26 @@ if ($null -ne $state) {
         [pscustomobject]@{ Name = "Port.World"; Port = $worldPort },
         [pscustomobject]@{ Name = "Port.LoginSpanish"; Port = 4005 }
     )
+    if ($authenticationTransport -eq "GRPC") {
+        try {
+            $grpcEndpoint = [Uri](
+                [string]$state.AuthenticationGrpcEndpoint)
+            if (-not $grpcEndpoint.IsLoopback -or
+                $grpcEndpoint.Scheme -ne "https") {
+                throw "The authentication gRPC endpoint is not loopback HTTPS."
+            }
+            $portChecks += [pscustomobject]@{
+                Name = "Port.AuthenticationGrpc"
+                Port = $grpcEndpoint.Port
+            }
+        }
+        catch {
+            Add-Check `
+                -Name "Authentication.GrpcEndpoint" `
+                -Status "failed" `
+                -Detail "The recorded authentication gRPC endpoint is invalid."
+        }
+    }
 
     foreach ($portCheck in $portChecks) {
         if (Test-TcpPort -HostName "127.0.0.1" -Port $portCheck.Port) {

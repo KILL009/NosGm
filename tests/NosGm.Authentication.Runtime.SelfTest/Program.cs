@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Configuration;
+using Grpc.Core;
 using NosGm.Authentication.Client;
 using NosGm.Authentication.Server;
 using NosGm.Authentication.Server.Security;
@@ -33,6 +34,203 @@ static void AssertThrows<TException>(Action action, string name)
 
     throw new InvalidOperationException(
         $"{name}: expected {typeof(TException).Name}.");
+}
+
+static string ReadRequiredEnvironment(string variableName)
+{
+    string value = Environment.GetEnvironmentVariable(variableName);
+    if (string.IsNullOrWhiteSpace(value))
+    {
+        throw new InvalidOperationException(
+            $"Live gRPC acceptance requires {variableName}.");
+    }
+
+    return value;
+}
+
+static AuthenticationGrpcClientOptions LoadLiveClientOptions(
+    ClusterNodeRole role,
+    string roleName)
+{
+    string prefix =
+        "NOSGM_AUTH_GRPC_LIVE_" + roleName.ToUpperInvariant();
+    return AuthenticationGrpcClientOptions.Load(
+        role,
+        variableName => variableName switch
+        {
+            AuthenticationGrpcClientOptions.AddressVariable =>
+                ReadRequiredEnvironment(
+                    AuthenticationGrpcClientOptions.AddressVariable),
+            AuthenticationGrpcClientOptions.CertificatePathVariable =>
+                ReadRequiredEnvironment(prefix + "_CERT_PATH"),
+            AuthenticationGrpcClientOptions.CertificatePasswordVariable =>
+                Environment.GetEnvironmentVariable(
+                    prefix + "_CERT_PASSWORD") ?? string.Empty,
+            AuthenticationGrpcClientOptions.CallerInstanceIdVariable =>
+                "acceptance-" + roleName.ToLowerInvariant() + "-1",
+            AuthenticationGrpcClientOptions.DeadlineVariable => "10000",
+            _ => null
+        });
+}
+
+static async Task AssertPermissionDeniedAsync(
+    Func<Task> action,
+    string name)
+{
+    try
+    {
+        await action();
+    }
+    catch (RpcException exception)
+        when (exception.StatusCode == StatusCode.PermissionDenied)
+    {
+        Console.WriteLine($"[PASS] {name}");
+        return;
+    }
+
+    throw new InvalidOperationException(
+        $"{name}: expected a permission-denied gRPC response.");
+}
+
+static async Task RunLiveGrpcAcceptanceAsync()
+{
+    using var authBridge =
+        new GrpcGameforgeAuthenticationTransport(
+            LoadLiveClientOptions(
+                ClusterNodeRole.AuthBridge,
+                "AuthBridge"));
+    using var login =
+        new GrpcGameforgeAuthenticationTransport(
+            LoadLiveClientOptions(ClusterNodeRole.Login, "Login"));
+    using var world =
+        new GrpcGameforgeAuthenticationTransport(
+            LoadLiveClientOptions(ClusterNodeRole.World, "World"));
+    using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(45));
+
+    string authorizationCode = Guid.NewGuid().ToString("D");
+    string installationId = Guid.NewGuid().ToString("D");
+    const uint countryId = 5;
+
+    AssertEqual(
+        AuthenticationTransportResultCode.Success,
+        await authBridge.IssueAuthTicketAsync(
+            "grpc-acceptance",
+            authorizationCode,
+            installationId,
+            countryId,
+            timeout.Token),
+        "Live AuthBridge certificate issues a ticket through mTLS");
+
+    await AssertPermissionDeniedAsync(
+        async () =>
+        {
+            await authBridge.ConsumeAuthTicketAsync(
+                authorizationCode,
+                installationId,
+                countryId,
+                61000,
+                timeout.Token);
+        },
+        "Live role policy rejects AuthBridge ticket consumption");
+
+    AuthenticationTicketConsumptionResult first =
+        await login.ConsumeAuthTicketAsync(
+            authorizationCode,
+            installationId,
+            countryId,
+            61001,
+            timeout.Token);
+    AuthenticationTicketConsumptionResult second =
+        await login.ConsumeAuthTicketAsync(
+            authorizationCode,
+            installationId,
+            countryId,
+            61002,
+            timeout.Token);
+    AuthenticationTicketConsumptionResult third =
+        await login.ConsumeAuthTicketAsync(
+            authorizationCode,
+            installationId,
+            countryId,
+            61003,
+            timeout.Token);
+    AuthenticationTicketConsumptionResult exhausted =
+        await login.ConsumeAuthTicketAsync(
+            authorizationCode,
+            installationId,
+            countryId,
+            61004,
+            timeout.Token);
+
+    AssertEqual(
+        AuthenticationTransportResultCode.Success,
+        first.Result,
+        "Live Login certificate consumes the first ticket stage");
+    AssertEqual(
+        first.SessionId,
+        second.SessionId,
+        "Live second Login stage preserves the SessionID");
+    AssertEqual(
+        first.SessionId,
+        third.SessionId,
+        "Live third Login stage preserves the SessionID");
+    AssertEqual(
+        AuthenticationTransportResultCode.NotFoundOrExpired,
+        exhausted.Result,
+        "Live ticket is exhausted after exactly three consumptions");
+
+    const long accountId = 9100001;
+    AssertEqual(
+        AuthenticationTransportResultCode.Success,
+        await login.IssueWorldPermitAsync(
+            accountId,
+            first.SessionId,
+            "127.0.0.1",
+            timeout.Token),
+        "Live Login certificate issues a World permit");
+    AssertEqual(
+        AuthenticationTransportResultCode.Success,
+        await world.ConsumeWorldPermitAsync(
+            accountId,
+            first.SessionId,
+            "127.0.0.1",
+            timeout.Token),
+        "Live World certificate consumes its permit");
+    AssertEqual(
+        AuthenticationTransportResultCode.NotFoundOrExpired,
+        await world.ConsumeWorldPermitAsync(
+            accountId,
+            first.SessionId,
+            "127.0.0.1",
+            timeout.Token),
+        "Live World permit cannot be replayed");
+
+    AssertEqual(
+        AuthenticationTransportResultCode.Success,
+        await login.IssueWorldPermitAsync(
+            accountId + 1,
+            first.SessionId + 1,
+            string.Empty,
+            timeout.Token),
+        "Live Login certificate issues the revocation test permit");
+    AssertEqual(
+        AuthenticationTransportResultCode.Success,
+        await login.RevokeWorldPermitAsync(
+            accountId + 1,
+            first.SessionId + 1,
+            timeout.Token),
+        "Live Login certificate revokes a World permit");
+    AssertEqual(
+        AuthenticationTransportResultCode.NotFoundOrExpired,
+        await world.ConsumeWorldPermitAsync(
+            accountId + 1,
+            first.SessionId + 1,
+            "127.0.0.1",
+            timeout.Token),
+        "A revoked live World permit cannot be consumed");
+
+    Console.WriteLine(
+        "Live NosGM authentication gRPC acceptance completed successfully.");
 }
 
 AssertEqual(
@@ -358,6 +556,11 @@ AssertEqual(
         now + ClusterProtocolLimits.DefaultDeadlineMilliseconds,
         now),
     "Duplicate request ID is rejected");
+
+if (args.Contains("--live", StringComparer.Ordinal))
+{
+    await RunLiveGrpcAcceptanceAsync();
+}
 
 Console.WriteLine(
     "Authentication runtime self-test completed successfully.");
