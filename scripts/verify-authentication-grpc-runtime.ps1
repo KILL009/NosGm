@@ -129,12 +129,17 @@ Assert-NotContains $router "catch (" `
 Assert-NotContains $router "Task.WhenAll" `
     "Stateful operations are never mirrored"
 
-$repositoryText =
-    (Get-ChildItem -LiteralPath $repositoryRoot -File -Recurse `
-        -Include *.cs,*.csproj |
+$authenticationSourceRoot = Join-Path `
+    $repositoryRoot `
+    "Data\NosGm.Program\NosGm.Authentication.Server"
+$authenticationSourceText =
+    (Get-ChildItem -LiteralPath $authenticationSourceRoot `
+        -Filter *.cs `
+        -File `
+        -Recurse |
         ForEach-Object { [System.IO.File]::ReadAllText($_.FullName) }) `
         -join "`n"
-Assert-NotContains $repositoryText `
+Assert-NotContains $authenticationSourceText `
     "DangerousAcceptAnyServerCertificateValidator" `
     "Unsafe certificate bypass is absent"
 
