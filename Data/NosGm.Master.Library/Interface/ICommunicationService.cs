@@ -13,7 +13,7 @@ namespace NosGm.Master.Library.Interface
         * Account
         */
         bool IsAccountConnected(long accountId);
-        void DisconnectAccount(long accountId);
+        void DisconnectAccount(long accountId, int sessionId = 0, bool preserveSessionRegistration = false);
         bool ConnectAccount(Guid worldId, long accountId, int sessionId);
         void PulseAccount(long accountId);
         void RegisterAccountLogin(long accountId, int sessionId, string ipAddress);
