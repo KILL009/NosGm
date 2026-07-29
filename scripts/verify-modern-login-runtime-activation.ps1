@@ -4,7 +4,8 @@ param(
     [string]$StartScriptPath = "scripts/start-modern-login-local.ps1",
     [string]$ReadinessPath = "scripts/test-modern-login-readiness.ps1",
     [string]$StopScriptPath = "scripts/stop-modern-login-local.ps1",
-    [string]$DocumentationPath = "docs/modern-login-local-runbook.md"
+    [string]$DocumentationPath = "docs/modern-login-local-runbook.md",
+    [string]$WindowsBuildWorkflowPath = ".github/workflows/build-windows.yml"
 )
 
 $ErrorActionPreference = "Stop"
@@ -48,6 +49,7 @@ $startScript = Read-Required $StartScriptPath
 $readinessScript = Read-Required $ReadinessPath
 $stopScript = Read-Required $StopScriptPath
 $documentation = Read-Required $DocumentationPath
+$windowsBuildWorkflow = Read-Required $WindowsBuildWorkflowPath
 
 Assert-PowerShellParses $StartScriptPath
 Assert-PowerShellParses $ReadinessPath
@@ -115,6 +117,10 @@ Require $startScript 'function Resolve-LegacyMSBuildSdk' 'Visual Studio 2022 mus
 Require $startScript "'^(9\.0\.[0-9]+)\s+\[(.+)\]$'" 'The compatibility resolver must select a stable .NET 9 SDK.'
 Require $startScript '$env:MSBuildSDKsPath = $legacyMSBuildSdk.SdksPath' 'Legacy MSBuild must use the selected .NET 9 SDK instead of the repository-wide .NET 10 SDK.'
 Require $startScript '$env:MSBuildSDKsPath = $previousMSBuildSdksPath' 'The temporary legacy MSBuild SDK path must be restored.'
+Require $startScript '$env:MSBuildEnableWorkloadResolver = "false"' 'Legacy MSBuild must not ask the repository-wide .NET 10 workload resolver to evaluate the .NET 9 bridge projects.'
+Require $startScript '/p:MSBuildEnableWorkloadResolver=false' 'Legacy restore and build commands must explicitly disable the incompatible workload resolver.'
+Require $startScript '$previousMSBuildEnableWorkloadResolver' 'The previous workload-resolver policy must be preserved.'
+Require $startScript '$env:MSBuildEnableWorkloadResolver = $previousMSBuildEnableWorkloadResolver' 'The temporary workload-resolver policy must be restored.'
 Forbid $startScript 'Set-Content -LiteralPath "global.json"' 'Local startup must never rewrite the repository SDK policy.'
 Require $startScript '$loginExecutable = Join-Path $root "bin\Release\Login\NosGm.Login.exe"' 'The startup script must use the Release|AnyCPU Login output path.'
 Require $startScript '$requiredExecutables = @(' 'All required binaries must be preflighted before startup.'
@@ -146,5 +152,9 @@ Require $documentation './scripts/stop-modern-login-local.ps1' 'Documentation mu
 Require $documentation 'NOSGM_MASTER_AUTH_KEY' 'Documentation must list the external secret configuration.'
 Require $documentation 'NuGet CLI is optional' 'Documentation must explain the MSBuild packages.config fallback.'
 Require $documentation '.NET 9 compatibility SDK' 'Documentation must explain the side-by-side SDK required by Visual Studio 2022.'
+Require $documentation 'MSBuildEnableWorkloadResolver=false' 'Documentation must explain why workloads are disabled only for the legacy server build.'
+Require $windowsBuildWorkflow 'MSBuildSDKsPath=$sdkPath' 'Windows CI must select the same .NET 9 SDK imports as local startup.'
+Require $windowsBuildWorkflow 'MSBuildEnableWorkloadResolver=false' 'Windows CI must reproduce the local Visual Studio 2022 workload-resolver boundary.'
+Forbid $windowsBuildWorkflow 'Set-Content -LiteralPath "global.json"' 'Windows CI must keep the repository-wide .NET 10 SDK policy while testing the legacy build.'
 
 Write-Host 'Modern Login runtime environment, transient endpoint/transport/address overrides, PowerShell 5.1 serialization, package restore fallback, executable layout and safe shutdown contracts verified.'
