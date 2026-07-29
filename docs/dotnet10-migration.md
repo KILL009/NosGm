@@ -81,6 +81,13 @@ policy, and a frozen inventory of all 99 legacy SCS methods. It does not route
 runtime traffic or alter any Login, World, or client-facing packet. See
 `docs/scs-transport-migration.md` for the vertical-slice rollout.
 
+The authentication contract is the first service slice in wave 2B. It adds
+five explicit Gameforge ticket and one-use World permit RPCs, per-operation
+caller-role policy, input validation, and a machine-checked disposition for all
+eight legacy authentication methods. Runtime still uses SCS; this contract
+foundation intentionally does not dual-execute stateful operations or expose
+password hashes, shared authentication keys, or DTO object graphs.
+
 ## Known blockers
 
 ### SCS serialization

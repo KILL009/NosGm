@@ -1,0 +1,61 @@
+{
+  "schemaVersion": 1,
+  "legacyInterface": "IAuthentificationService",
+  "legacyTransport": "SCS",
+  "targetService": "GameforgeAuthentication",
+  "methods": [
+    {
+      "legacyMethod": "Authenticate",
+      "disposition": "transport_identity",
+      "target": "mTLS service identity",
+      "reason": "The shared SCS authentication key must not become an application RPC."
+    },
+    {
+      "legacyMethod": "ValidateAccount",
+      "disposition": "deferred",
+      "target": null,
+      "reason": "No active authentication-service consumer exists; do not transport password hashes or AccountDTO graphs."
+    },
+    {
+      "legacyMethod": "ValidateAccountAndCharacter",
+      "disposition": "deferred",
+      "target": null,
+      "reason": "No active consumer exists; do not transport password hashes or CharacterDTO graphs."
+    },
+    {
+      "legacyMethod": "RegisterGameforgeAuthTicket",
+      "disposition": "typed_rpc",
+      "target": "IssueAuthTicket",
+      "sideEffect": true,
+      "allowedCallerRole": "AuthBridge"
+    },
+    {
+      "legacyMethod": "ConsumeGameforgeAuthTicket",
+      "disposition": "typed_rpc",
+      "target": "ConsumeAuthTicket",
+      "sideEffect": true,
+      "allowedCallerRole": "Login"
+    },
+    {
+      "legacyMethod": "RegisterGameforgeWorldPermit",
+      "disposition": "typed_rpc",
+      "target": "IssueWorldPermit",
+      "sideEffect": true,
+      "allowedCallerRole": "Login"
+    },
+    {
+      "legacyMethod": "ConsumeGameforgeWorldPermit",
+      "disposition": "typed_rpc",
+      "target": "ConsumeWorldPermit",
+      "sideEffect": true,
+      "allowedCallerRole": "World"
+    },
+    {
+      "legacyMethod": "RevokeGameforgeWorldPermit",
+      "disposition": "typed_rpc",
+      "target": "RevokeWorldPermit",
+      "sideEffect": true,
+      "allowedCallerRole": "Login"
+    }
+  ]
+}

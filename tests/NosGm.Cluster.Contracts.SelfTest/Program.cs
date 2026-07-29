@@ -1,5 +1,21 @@
 using NosGm.Cluster.Contracts.V1;
+using NosGm.Cluster.Contracts.Authentication.V1;
+using WireAuthenticationResultCode =
+    NosGm.Cluster.Wire.V1.AuthenticationResultCode;
+using WireClusterNodeRole = NosGm.Cluster.Wire.V1.ClusterNodeRole;
+using WireClusterService = NosGm.Cluster.Wire.V1.ClusterService;
+using WireConsumeAuthTicketRequest =
+    NosGm.Cluster.Wire.V1.ConsumeAuthTicketRequest;
+using WireConsumeWorldPermitRequest =
+    NosGm.Cluster.Wire.V1.ConsumeWorldPermitRequest;
+using WireIssueAuthTicketRequest =
+    NosGm.Cluster.Wire.V1.IssueAuthTicketRequest;
+using WireIssueWorldPermitRequest =
+    NosGm.Cluster.Wire.V1.IssueWorldPermitRequest;
 using WireProtocolVersion = NosGm.Cluster.Wire.V1.ProtocolVersion;
+using WireRequestContext = NosGm.Cluster.Wire.V1.RequestContext;
+using WireRevokeWorldPermitRequest =
+    NosGm.Cluster.Wire.V1.RevokeWorldPermitRequest;
 
 static void AssertEqual<T>(T expected, T actual, string name)
 {
@@ -11,6 +27,24 @@ static void AssertEqual<T>(T expected, T actual, string name)
 
     Console.WriteLine($"[PASS] {name}");
 }
+
+static WireRequestContext CreateWireContext(WireClusterNodeRole role) =>
+    new()
+    {
+        Version = new WireProtocolVersion
+        {
+            Major = ClusterContractVersion.Current.Major,
+            Minor = ClusterContractVersion.Current.Minor
+        },
+        RequestId = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+        IssuedAtUnixTimeMs = 1_800_000_000_000,
+        DeadlineUnixTimeMs =
+            1_800_000_000_000 +
+            ClusterProtocolLimits.DefaultDeadlineMilliseconds,
+        CallerRole = role,
+        RequestedService = WireClusterService.Authentication,
+        CallerInstanceId = "self-test"
+    };
 
 const long issuedAt = 1_800_000_000_000;
 var valid = new ClusterRequestContext
@@ -91,6 +125,122 @@ var generatedWireVersion = new WireProtocolVersion
 };
 AssertEqual((uint)1, generatedWireVersion.Major, "Protobuf code generation");
 AssertEqual((uint)0, generatedWireVersion.Minor, "Protobuf minor version");
+
+var issueTicket = new WireIssueAuthTicketRequest
+{
+    Context = CreateWireContext(WireClusterNodeRole.AuthBridge),
+    AccountName = "contract-test",
+    AuthorizationCode = "11111111-2222-3333-4444-555555555555",
+    InstallationId = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+    CountryId = 5
+};
+AssertEqual(
+    AuthenticationContractValidationError.None,
+    GameforgeAuthenticationContractValidator.Validate(issueTicket),
+    "AuthBridge may issue a bounded Gameforge ticket");
+
+issueTicket.Context.CallerRole = WireClusterNodeRole.World;
+AssertEqual(
+    AuthenticationContractValidationError.InvalidCallerRole,
+    GameforgeAuthenticationContractValidator.Validate(issueTicket),
+    "World cannot issue Gameforge tickets");
+issueTicket.Context.CallerRole = WireClusterNodeRole.AuthBridge;
+
+issueTicket.AuthorizationCode = "not-an-authorized-shape";
+AssertEqual(
+    AuthenticationContractValidationError.InvalidAuthorizationCode,
+    GameforgeAuthenticationContractValidator.Validate(issueTicket),
+    "Malformed authorization material fails closed");
+issueTicket.AuthorizationCode =
+    "11111111-2222-3333-4444-555555555555";
+
+issueTicket.CountryId =
+    AuthenticationContractLimits.MaxCountryId + 1;
+AssertEqual(
+    AuthenticationContractValidationError.InvalidCountryId,
+    GameforgeAuthenticationContractValidator.Validate(issueTicket),
+    "Only the ten regional country IDs are accepted");
+issueTicket.CountryId = 5;
+
+issueTicket.InstallationId = Guid.Empty.ToString("D");
+AssertEqual(
+    AuthenticationContractValidationError.InvalidInstallationId,
+    GameforgeAuthenticationContractValidator.Validate(issueTicket),
+    "Empty installation IDs fail closed");
+
+var consumeTicket = new WireConsumeAuthTicketRequest
+{
+    Context = CreateWireContext(WireClusterNodeRole.Login),
+    AuthorizationCode =
+        "31313131313131312D323232322D333333332D343434342D353535353535353535353535",
+    InstallationId = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+    CountryId = 0,
+    ProposedSessionId = 50219
+};
+AssertEqual(
+    AuthenticationContractValidationError.None,
+    GameforgeAuthenticationContractValidator.Validate(consumeTicket),
+    "Login may consume a bound ticket");
+consumeTicket.ProposedSessionId = 0;
+AssertEqual(
+    AuthenticationContractValidationError.InvalidSessionId,
+    GameforgeAuthenticationContractValidator.Validate(consumeTicket),
+    "Ticket consumption requires a positive session ID");
+
+var issuePermit = new WireIssueWorldPermitRequest
+{
+    Context = CreateWireContext(WireClusterNodeRole.Login),
+    AccountId = 42,
+    SessionId = 50219,
+    IpAddress = "127.0.0.1"
+};
+AssertEqual(
+    AuthenticationContractValidationError.None,
+    GameforgeAuthenticationContractValidator.Validate(issuePermit),
+    "Login may issue a World permit");
+issuePermit.IpAddress = "not-an-ip";
+AssertEqual(
+    AuthenticationContractValidationError.InvalidIpAddress,
+    GameforgeAuthenticationContractValidator.Validate(issuePermit),
+    "World permit IP bindings are validated");
+
+var consumePermit = new WireConsumeWorldPermitRequest
+{
+    Context = CreateWireContext(WireClusterNodeRole.World),
+    AccountId = 42,
+    SessionId = 50219,
+    IpAddress = string.Empty
+};
+AssertEqual(
+    AuthenticationContractValidationError.None,
+    GameforgeAuthenticationContractValidator.Validate(consumePermit),
+    "World may consume an unbound one-use permit");
+consumePermit.Context.CallerRole = WireClusterNodeRole.Login;
+AssertEqual(
+    AuthenticationContractValidationError.InvalidCallerRole,
+    GameforgeAuthenticationContractValidator.Validate(consumePermit),
+    "Login cannot consume a World permit");
+
+var revokePermit = new WireRevokeWorldPermitRequest
+{
+    Context = CreateWireContext(WireClusterNodeRole.Login),
+    AccountId = 42,
+    SessionId = 50219
+};
+AssertEqual(
+    AuthenticationContractValidationError.None,
+    GameforgeAuthenticationContractValidator.Validate(revokePermit),
+    "Login may revoke a World permit");
+revokePermit.AccountId = 0;
+AssertEqual(
+    AuthenticationContractValidationError.InvalidAccountId,
+    GameforgeAuthenticationContractValidator.Validate(revokePermit),
+    "Permit operations require a positive account ID");
+
+AssertEqual(
+    WireAuthenticationResultCode.Success,
+    WireAuthenticationResultCode.Success,
+    "Authentication result enum code generation");
 
 if (ClusterProtocolLimits.MaxInboundMessageBytes >= 128 * 1024 * 1024)
 {

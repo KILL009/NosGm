@@ -48,6 +48,40 @@ client and server stubs during the build, in an isolated
 and validation types that can be consumed by both the `net481` compatibility
 side and .NET 10 services.
 
+## Authentication contract slice
+
+The first service-specific contract now maps the stateful Gameforge
+authentication boundary without changing runtime routing:
+
+| Legacy SCS operation | Typed RPC or disposition | Authorized role |
+| --- | --- | --- |
+| `RegisterGameforgeAuthTicket` | `IssueAuthTicket` | AuthBridge |
+| `ConsumeGameforgeAuthTicket` | `ConsumeAuthTicket` | Login |
+| `RegisterGameforgeWorldPermit` | `IssueWorldPermit` | Login |
+| `ConsumeGameforgeWorldPermit` | `ConsumeWorldPermit` | World |
+| `RevokeGameforgeWorldPermit` | `RevokeWorldPermit` | Login |
+| `Authenticate` | transport identity; future mTLS | n/a |
+| `ValidateAccount` | deferred; no active authentication-service consumer | n/a |
+| `ValidateAccountAndCharacter` | deferred; no active consumer | n/a |
+
+Every request uses the common versioned request context. Authorization material
+is capped at 4,096 characters, installation IDs are canonical non-empty GUIDs,
+country IDs are limited to `0..9`, account/session IDs must be positive, and IP
+bindings are parsed and length-bounded. Password hashes, authentication keys,
+arbitrary DTO graphs, generic method names, and untyped byte payloads are not
+part of this contract.
+
+All five RPCs are side-effecting. A ticket or one-use World permit must be
+handled by exactly one transport. The future adapter may select gRPC or SCS for
+an operation, but it must never shadow-execute, retry blindly, or compare these
+operations by running both.
+
+This slice generates typed client/server stubs and validates the wire boundary;
+it deliberately does not start a gRPC listener or change Login, Master, World,
+or AuthBridge traffic. SCS remains active until the .NET 10 authentication
+host, TLS identity, deadlines, sanitized audit logging, compatibility tests,
+and immediate rollback switch are present.
+
 ## Frozen legacy surface
 
 `contracts/cluster/v1/legacy-scs-surface.json` inventories all 99 methods across
@@ -62,14 +96,17 @@ service will receive explicit request and response messages.
 
 1. **Contract foundation** — version negotiation, health, limits, validation,
    legacy inventory, and self-tests. No runtime traffic changes.
-2. **Authentication slice** — add typed authentication RPCs behind an adapter.
-   Compare read-only results with SCS; route side effects through only one
+2. **Authentication contract** — add the five typed ticket/permit RPCs, caller
+   policies, strict validators, and a complete legacy-method disposition map.
+   No runtime traffic changes.
+3. **Authentication runtime** — host the typed service in .NET 10 behind an
+   adapter and rollback switch. Route each side effect through exactly one
    transport.
-3. **Communication slice** — migrate account/session and World registration
+4. **Communication slice** — migrate account/session and World registration
    calls while preserving the verified Login → Master → World sequence.
-4. **Supporting services** — configuration, mail, mall, callbacks, and
+5. **Supporting services** — configuration, mail, mall, callbacks, and
    administrative operations.
-5. **Cutover** — enable gRPC per service behind configuration, retain immediate
+6. **Cutover** — enable gRPC per service behind configuration, retain immediate
    rollback, then remove `BinaryFormatter`, `RealProxy`, and the SCS code only
    after full acceptance.
 
