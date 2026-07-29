@@ -49,7 +49,9 @@ runtime. The legacy server projects do not use .NET workloads, so that scoped
 build also sets `MSBuildEnableWorkloadResolver=false`. This prevents Visual
 Studio 2022 from consulting the repository-wide .NET 10 workload resolver
 after the .NET 9 SDK has already been selected. Both environment values are
-restored afterward, and the script never rewrites `global.json`.
+restored immediately after `NosGm.sln` finishes and before the .NET 10
+Launcher or authentication runtime is built. The script never rewrites
+`global.json`.
 
 If .NET 9 is missing, install it side by side without removing .NET 10:
 
