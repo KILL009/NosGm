@@ -13,6 +13,8 @@ public sealed class AuthenticationServerOptions
         "NOSGM_AUTH_GRPC_SERVER_CERT_PATH";
     public const string CertificatePasswordVariable =
         "NOSGM_AUTH_GRPC_SERVER_CERT_PASSWORD";
+    public const string TrustedRootCertificatePathVariable =
+        "NOSGM_AUTH_GRPC_TRUSTED_ROOT_CERT_PATH";
     public const string AuthBridgeFingerprintsVariable =
         "NOSGM_AUTH_GRPC_AUTHBRIDGE_CERT_SHA256";
     public const string LoginFingerprintsVariable =
@@ -36,6 +38,7 @@ public sealed class AuthenticationServerOptions
         int port,
         string certificatePath,
         string certificatePassword,
+        string trustedRootCertificatePath,
         int ticketTtlSeconds,
         int permitTtlSeconds,
         string instanceId,
@@ -45,6 +48,7 @@ public sealed class AuthenticationServerOptions
         Port = port;
         CertificatePath = certificatePath;
         CertificatePassword = certificatePassword;
+        TrustedRootCertificatePath = trustedRootCertificatePath;
         TicketTtlSeconds = ticketTtlSeconds;
         PermitTtlSeconds = permitTtlSeconds;
         InstanceId = instanceId;
@@ -56,6 +60,8 @@ public sealed class AuthenticationServerOptions
     public string CertificatePath { get; }
 
     public string CertificatePassword { get; }
+
+    public string TrustedRootCertificatePath { get; }
 
     public int TicketTtlSeconds { get; }
 
@@ -103,6 +109,9 @@ public sealed class AuthenticationServerOptions
         string certificatePassword = ReadOptionalSecret(
             configuration[CertificatePasswordVariable],
             CertificatePasswordVariable);
+        string trustedRootCertificatePath = ReadOptionalAbsolutePath(
+            configuration[TrustedRootCertificatePathVariable],
+            TrustedRootCertificatePathVariable);
         string instanceId = configuration[InstanceIdVariable];
         if (string.IsNullOrEmpty(instanceId))
         {
@@ -135,6 +144,7 @@ public sealed class AuthenticationServerOptions
             port,
             certificatePath,
             certificatePassword,
+            trustedRootCertificatePath,
             ticketTtl,
             permitTtl,
             instanceId,
@@ -153,7 +163,7 @@ public sealed class AuthenticationServerOptions
             X509CertificateLoader.LoadPkcs12FromFile(
                 CertificatePath,
                 CertificatePassword,
-                X509KeyStorageFlags.EphemeralKeySet);
+                X509KeyStorageFlags.UserKeySet);
         if (!certificate.HasPrivateKey)
         {
             certificate.Dispose();
@@ -162,6 +172,22 @@ public sealed class AuthenticationServerOptions
         }
 
         return certificate;
+    }
+
+    public X509Certificate2 LoadTrustedRootCertificate()
+    {
+        if (string.IsNullOrEmpty(TrustedRootCertificatePath))
+        {
+            return null;
+        }
+        if (!File.Exists(TrustedRootCertificatePath))
+        {
+            throw new InvalidOperationException(
+                "The authentication trusted-root certificate file does not exist.");
+        }
+
+        return X509CertificateLoader.LoadCertificateFromFile(
+            TrustedRootCertificatePath);
     }
 
     private static int ReadInteger(
@@ -228,6 +254,25 @@ public sealed class AuthenticationServerOptions
         {
             throw new InvalidOperationException(
                 variableName + " contains an invalid secret value.");
+        }
+
+        return value;
+    }
+
+    private static string ReadOptionalAbsolutePath(
+        string value,
+        string variableName)
+    {
+        if (string.IsNullOrEmpty(value))
+        {
+            return string.Empty;
+        }
+
+        value = ReadRequiredText(value, variableName, 1024);
+        if (!Path.IsPathFullyQualified(value))
+        {
+            throw new InvalidOperationException(
+                variableName + " must be an absolute path.");
         }
 
         return value;

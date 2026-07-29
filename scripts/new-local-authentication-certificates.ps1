@@ -1,7 +1,10 @@
 [CmdletBinding()]
 param(
     [string]$OutputDirectory,
-    [switch]$TrustRootCertificate
+    [switch]$TrustRootCertificate,
+    [switch]$ManagedCertificateGenerator,
+    [ValidateSet(2048, 3072, 4096)]
+    [int]$KeyLength = 3072
 )
 
 $ErrorActionPreference = "Stop"
@@ -11,14 +14,15 @@ if ($env:OS -ne "Windows_NT") {
     throw "Local NosGM authentication certificates can only be created on Windows."
 }
 
-foreach ($commandName in @(
-    "New-SelfSignedCertificate",
-    "Export-Certificate",
-    "Export-PfxCertificate",
-    "Import-Certificate"
-)) {
-    if (-not (Get-Command $commandName -ErrorAction SilentlyContinue)) {
-        throw "$commandName is unavailable. Install the Windows PKI PowerShell module."
+if (-not $ManagedCertificateGenerator) {
+    foreach ($commandName in @(
+        "New-SelfSignedCertificate",
+        "Export-Certificate",
+        "Export-PfxCertificate"
+    )) {
+        if (-not (Get-Command $commandName -ErrorAction SilentlyContinue)) {
+            throw "$commandName is unavailable. Install the Windows PKI PowerShell module."
+        }
     }
 }
 
@@ -114,7 +118,99 @@ function Remove-CertificateFromPersonalStore {
     }
 }
 
+function Install-CurrentUserTrustedRoot {
+    param([Parameter(Mandatory = $true)][string]$CertificatePath)
+
+    $certificate =
+        [Security.Cryptography.X509Certificates.X509Certificate2]::new(
+            $CertificatePath)
+    $store =
+        [Security.Cryptography.X509Certificates.X509Store]::new(
+            [Security.Cryptography.X509Certificates.StoreName]::Root,
+            [Security.Cryptography.X509Certificates.StoreLocation]::CurrentUser)
+    try {
+        $store.Open(
+            [Security.Cryptography.X509Certificates.OpenFlags]::ReadWrite)
+        $store.Add($certificate)
+    }
+    finally {
+        $store.Close()
+        $store.Dispose()
+        $certificate.Dispose()
+    }
+}
+
 Protect-OutputDirectory -Path $outputRoot
+
+if ($ManagedCertificateGenerator) {
+    if ($env:GITHUB_ACTIONS -ne "true") {
+        throw "The managed certificate generator is restricted to the isolated GitHub Actions acceptance job."
+    }
+
+    $dotnetCommand = Get-Command dotnet.exe -ErrorAction SilentlyContinue
+    if (-not $dotnetCommand) {
+        throw "dotnet.exe is unavailable for the managed CI certificate generator."
+    }
+    $generatorAssembly = Join-Path `
+        $root `
+        "tests\NosGm.Authentication.Runtime.SelfTest\bin\Release\net10.0\NosGm.Authentication.Runtime.SelfTest.dll"
+    if (-not (Test-Path -LiteralPath $generatorAssembly -PathType Leaf)) {
+        throw "The authentication runtime self-test must be built in Release before generating the isolated CI certificate bundle."
+    }
+
+    Write-Host "[CERT] Creating the isolated CI bundle with managed .NET cryptography."
+    $payloadJson = & $dotnetCommand.Source `
+        $generatorAssembly `
+        "--generate-ci-certificate-bundle" `
+        $outputRoot `
+        ([string]$KeyLength)
+    if ($LASTEXITCODE -ne 0) {
+        throw "The managed CI certificate generator failed."
+    }
+
+    $payload = $payloadJson | Select-Object -Last 1 | ConvertFrom-Json
+    try {
+        $passwords = [pscustomobject]@{
+            SchemaVersion = 1
+            Server = ConvertTo-SecureString `
+                ([string]$payload.Passwords.Server) `
+                -AsPlainText `
+                -Force
+            AuthBridge = ConvertTo-SecureString `
+                ([string]$payload.Passwords.AuthBridge) `
+                -AsPlainText `
+                -Force
+            Login = ConvertTo-SecureString `
+                ([string]$payload.Passwords.Login) `
+                -AsPlainText `
+                -Force
+            World = ConvertTo-SecureString `
+                ([string]$payload.Passwords.World) `
+                -AsPlainText `
+                -Force
+        }
+        $passwords |
+            Export-Clixml -LiteralPath ([string]$payload.CredentialsPath)
+
+        if ($TrustRootCertificate) {
+            throw "The isolated CI certificate bundle uses file-scoped root pinning and must not modify the Windows trust store."
+        }
+
+        Write-Host `
+            "[ISOLATED] The ephemeral CI root will be pinned by absolute file path." `
+            -ForegroundColor Green
+        Write-Host "Manifest: $($payload.ManifestPath)"
+        Write-Output ([string]$payload.ManifestPath)
+    }
+    finally {
+        foreach ($name in @("Server", "AuthBridge", "Login", "World")) {
+            $payload.Passwords.$name = $null
+        }
+        $payloadJson = $null
+        $payload = $null
+    }
+    return
+}
 
 $createdCertificates =
     New-Object System.Collections.Generic.List[object]
@@ -128,12 +224,13 @@ try {
     $notAfter = (Get-Date).ToUniversalTime().AddYears(2)
     $rootNotAfter = (Get-Date).ToUniversalTime().AddYears(5)
 
+    Write-Host "[CERT] Creating the NosGM authentication root."
     $rootCertificate = New-SelfSignedCertificate `
         -Type Custom `
         -Subject "CN=NosGM Local Authentication Root $bundleId" `
         -CertStoreLocation "Cert:\CurrentUser\My" `
         -KeyAlgorithm RSA `
-        -KeyLength 3072 `
+        -KeyLength $KeyLength `
         -HashAlgorithm SHA256 `
         -KeyExportPolicy Exportable `
         -KeyUsage CertSign, CRLSign, DigitalSignature `
@@ -141,13 +238,14 @@ try {
         -NotAfter $rootNotAfter
     $createdCertificates.Add($rootCertificate)
 
+    Write-Host "[CERT] Creating the loopback server identity."
     $serverCertificate = New-SelfSignedCertificate `
         -Type Custom `
         -Subject "CN=NosGM Local Authentication Server" `
         -Signer $rootCertificate `
         -CertStoreLocation "Cert:\CurrentUser\My" `
         -KeyAlgorithm RSA `
-        -KeyLength 3072 `
+        -KeyLength $KeyLength `
         -HashAlgorithm SHA256 `
         -KeyExportPolicy Exportable `
         -KeyUsage DigitalSignature, KeyEncipherment `
@@ -160,13 +258,14 @@ try {
 
     $clientCertificates = @{}
     foreach ($role in @("AuthBridge", "Login", "World")) {
+        Write-Host "[CERT] Creating the $role client identity."
         $certificate = New-SelfSignedCertificate `
             -Type Custom `
             -Subject "CN=NosGM Local Authentication $role" `
             -Signer $rootCertificate `
             -CertStoreLocation "Cert:\CurrentUser\My" `
             -KeyAlgorithm RSA `
-            -KeyLength 3072 `
+            -KeyLength $KeyLength `
             -HashAlgorithm SHA256 `
             -KeyExportPolicy Exportable `
             -KeyUsage DigitalSignature `
@@ -247,9 +346,8 @@ try {
     $createdFiles.Add($manifestPath)
 
     if ($TrustRootCertificate) {
-        Import-Certificate `
-            -FilePath $rootCertificatePath `
-            -CertStoreLocation "Cert:\CurrentUser\Root" | Out-Null
+        Install-CurrentUserTrustedRoot `
+            -CertificatePath $rootCertificatePath
         $trustedRootInstalled = $true
         Write-Host `
             "[TRUSTED] Installed the public NosGM development root in Cert:\CurrentUser\Root." `

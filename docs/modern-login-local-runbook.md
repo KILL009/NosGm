@@ -84,10 +84,11 @@ public development root is installed only because
 and stored through Windows DPAPI, never in `manifest.json`.
 
 The second command performs the live mTLS ticket and World-permit acceptance
-against the real Kestrel runtime over both native HTTP/2 and binary gRPC-Web.
-It stops its temporary runtime automatically. The complete stack start below
-is still required to validate the `net481` callers inside Master, Login, and
-World.
+against the real Kestrel runtime. It always exercises binary gRPC-Web first.
+On Windows 11 and supported Windows Server versions it also exercises native
+HTTP/2; Windows 10 skips that unsupported legacy-caller wire mode. It stops its
+temporary runtime automatically. The complete stack start below is still
+required to validate the `net481` callers inside Master, Login, and World.
 
 Only after that command passes, start the complete stack with gRPC:
 

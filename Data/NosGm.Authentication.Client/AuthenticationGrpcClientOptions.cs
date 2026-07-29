@@ -12,6 +12,8 @@ namespace NosGm.Authentication.Client
             "NOSGM_AUTH_GRPC_CLIENT_CERT_PATH";
         public const string CertificatePasswordVariable =
             "NOSGM_AUTH_GRPC_CLIENT_CERT_PASSWORD";
+        public const string TrustedRootCertificatePathVariable =
+            "NOSGM_AUTH_GRPC_TRUSTED_ROOT_CERT_PATH";
         public const string CallerInstanceIdVariable =
             "NOSGM_AUTH_GRPC_CALLER_INSTANCE_ID";
         public const string DeadlineVariable =
@@ -26,6 +28,7 @@ namespace NosGm.Authentication.Client
             Uri address,
             string certificatePath,
             string certificatePassword,
+            string trustedRootCertificatePath,
             string callerInstanceId,
             int deadlineMilliseconds,
             ClusterNodeRole callerRole,
@@ -34,6 +37,7 @@ namespace NosGm.Authentication.Client
             Address = address;
             CertificatePath = certificatePath;
             CertificatePassword = certificatePassword;
+            TrustedRootCertificatePath = trustedRootCertificatePath;
             CallerInstanceId = callerInstanceId;
             DeadlineMilliseconds = deadlineMilliseconds;
             CallerRole = callerRole;
@@ -45,6 +49,8 @@ namespace NosGm.Authentication.Client
         public string CertificatePath { get; }
 
         public string CertificatePassword { get; }
+
+        public string TrustedRootCertificatePath { get; }
 
         public string CallerInstanceId { get; }
 
@@ -108,6 +114,26 @@ namespace NosGm.Authentication.Client
                 CertificatePasswordVariable,
                 4096,
                 required: false);
+            string trustedRootCertificatePath = ReadBoundedValue(
+                readVariable(TrustedRootCertificatePathVariable),
+                TrustedRootCertificatePathVariable,
+                1024,
+                required: false);
+            if (!string.IsNullOrEmpty(trustedRootCertificatePath) &&
+                !Path.IsPathRooted(trustedRootCertificatePath))
+            {
+                throw new InvalidOperationException(
+                    TrustedRootCertificatePathVariable +
+                    " must be an absolute path.");
+            }
+#if !NET10_0_OR_GREATER
+            if (!string.IsNullOrEmpty(trustedRootCertificatePath))
+            {
+                throw new InvalidOperationException(
+                    TrustedRootCertificatePathVariable +
+                    " is reserved for the isolated .NET 10 acceptance process.");
+            }
+#endif
             string callerInstanceId = ReadBoundedValue(
                 readVariable(CallerInstanceIdVariable),
                 CallerInstanceIdVariable,
@@ -122,6 +148,7 @@ namespace NosGm.Authentication.Client
                 address,
                 certificatePath,
                 certificatePassword,
+                trustedRootCertificatePath,
                 callerInstanceId,
                 deadlineMilliseconds,
                 callerRole,

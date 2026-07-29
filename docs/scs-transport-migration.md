@@ -179,8 +179,9 @@ acceptance:
 ```
 
 This publishes and starts the real .NET 10 Kestrel runtime, performs mTLS with
-all three role certificates, and verifies the same contract over native HTTP/2
-and `GRPCWEB`:
+all three role certificates, and always verifies the same contract over
+`GRPCWEB`. Native HTTP/2 is additionally verified only on an OS where the
+legacy `net481` callers can use it:
 
 - AuthBridge-only ticket issue and rejection of an unauthorized role;
 - three Login ticket consumptions with one stable `SessionID`;

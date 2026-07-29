@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Security;
+using System.Security.Cryptography.X509Certificates;
 using Microsoft.AspNetCore.Server.Kestrel.Core;
 using Microsoft.AspNetCore.Server.Kestrel.Https;
 using NosGm.Authentication.Server;
@@ -13,6 +14,7 @@ AuthenticationServerOptions options =
     AuthenticationServerOptions.Load(builder.Configuration);
 var roleMap = new ClientCertificateRoleMap(options);
 var serverCertificate = options.LoadServerCertificate();
+var trustedRootCertificate = options.LoadTrustedRootCertificate();
 
 builder.WebHost.ConfigureKestrel(kestrel =>
 {
@@ -31,7 +33,10 @@ builder.WebHost.ConfigureKestrel(kestrel =>
                     ClientCertificateMode.RequireCertificate;
                 https.ClientCertificateValidation =
                     (certificate, chain, errors) =>
-                        errors == SslPolicyErrors.None &&
+                        ValidateClientCertificate(
+                            certificate,
+                            errors,
+                            trustedRootCertificate) &&
                         roleMap.IsKnownCertificate(certificate);
             });
         });
@@ -56,9 +61,51 @@ WebApplication app = builder.Build();
 app.UseGrpcWeb();
 app.MapGrpcService<GameforgeAuthenticationService>().EnableGrpcWeb();
 app.Lifetime.ApplicationStopped.Register(serverCertificate.Dispose);
+if (trustedRootCertificate != null)
+{
+    app.Lifetime.ApplicationStopped.Register(
+        trustedRootCertificate.Dispose);
+}
 
 app.Logger.LogInformation(
     "NosGM authentication runtime {InstanceId} listening on loopback port {Port}.",
     options.InstanceId,
     options.Port);
 app.Run();
+
+static bool ValidateClientCertificate(
+    X509Certificate2 certificate,
+    SslPolicyErrors errors,
+    X509Certificate2 trustedRootCertificate)
+{
+    if (certificate == null)
+    {
+        return false;
+    }
+    if (trustedRootCertificate == null)
+    {
+        return errors == SslPolicyErrors.None;
+    }
+    if ((errors & ~SslPolicyErrors.RemoteCertificateChainErrors) !=
+        SslPolicyErrors.None)
+    {
+        return false;
+    }
+
+    using var chain = new X509Chain();
+    chain.ChainPolicy.TrustMode = X509ChainTrustMode.CustomRootTrust;
+    chain.ChainPolicy.CustomTrustStore.Add(trustedRootCertificate);
+    chain.ChainPolicy.RevocationMode = X509RevocationMode.NoCheck;
+    chain.ChainPolicy.DisableCertificateDownloads = true;
+    bool trusted = chain.Build(certificate);
+    if (!trusted)
+    {
+        Console.Error.WriteLine(
+            "[TLS] Client certificate chain rejected: " +
+            string.Join(
+                ",",
+                chain.ChainStatus.Select(
+                    status => status.Status.ToString())));
+    }
+    return trusted;
+}

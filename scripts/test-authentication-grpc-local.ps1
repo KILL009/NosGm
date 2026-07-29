@@ -2,6 +2,7 @@
 param(
     [string]$CertificateManifest,
     [switch]$SkipBuild,
+    [switch]$UseFileScopedRootTrust,
     [ValidateRange(1024, 65535)]
     [int]$Port = 7443,
     [ValidateRange(10, 120)]
@@ -50,7 +51,20 @@ function Resolve-DotNet10Executable {
     throw ".NET 10 SDK was not found in PATH, DOTNET_ROOT, Program Files, or the NosGM local SDK directories."
 }
 
+function Test-NetFrameworkGrpcHttp2Support {
+    $operatingSystem =
+        Get-CimInstance -ClassName Win32_OperatingSystem
+    $version = [Version]$operatingSystem.Version
+    $isWorkstation = [int]$operatingSystem.ProductType -eq 1
+    return (
+        ($isWorkstation -and $version.Build -ge 22000) -or
+        (-not $isWorkstation -and $version.Build -ge 17763)
+    )
+}
+
 $dotnetExecutable = Resolve-DotNet10Executable
+$supportsNetFrameworkGrpcHttp2 =
+    Test-NetFrameworkGrpcHttp2Support
 
 $root = Split-Path -Parent $PSScriptRoot
 if ([string]::IsNullOrWhiteSpace($CertificateManifest)) {
@@ -80,11 +94,19 @@ if ($credentials.SchemaVersion -ne 1) {
     throw "The DPAPI-protected authentication credential bundle is invalid."
 }
 
-$trustedRootPath =
-    "Cert:\CurrentUser\Root\" +
-    [string]$manifest.RootCertificateThumbprint
-if (-not (Test-Path -LiteralPath $trustedRootPath)) {
-    throw "The NosGM development root is not trusted for the current Windows user. Import '$($manifest.RootCertificatePath)' into Cert:\CurrentUser\Root first."
+$rootCertificatePath =
+    [System.IO.Path]::GetFullPath(
+        [string]$manifest.RootCertificatePath)
+if (-not (Test-Path -LiteralPath $rootCertificatePath -PathType Leaf)) {
+    throw "The NosGM development root certificate is missing."
+}
+if (-not $UseFileScopedRootTrust) {
+    $trustedRootPath =
+        "Cert:\CurrentUser\Root\" +
+        [string]$manifest.RootCertificateThumbprint
+    if (-not (Test-Path -LiteralPath $trustedRootPath)) {
+        throw "The NosGM development root is not trusted for the current Windows user. Import '$rootCertificatePath' into Cert:\CurrentUser\Root first."
+    }
 }
 
 foreach ($certificatePath in @(
@@ -102,6 +124,7 @@ foreach ($certificatePath in @(
 $environmentVariableNames = @(
     "NOSGM_AUTH_GRPC_SERVER_CERT_PATH",
     "NOSGM_AUTH_GRPC_SERVER_CERT_PASSWORD",
+    "NOSGM_AUTH_GRPC_TRUSTED_ROOT_CERT_PATH",
     "NOSGM_AUTH_GRPC_AUTHBRIDGE_CERT_SHA256",
     "NOSGM_AUTH_GRPC_LOGIN_CERT_SHA256",
     "NOSGM_AUTH_GRPC_WORLD_CERT_SHA256",
@@ -116,7 +139,8 @@ $environmentVariableNames = @(
     "NOSGM_AUTH_GRPC_LIVE_LOGIN_CERT_PASSWORD",
     "NOSGM_AUTH_GRPC_LIVE_WORLD_CERT_PATH",
     "NOSGM_AUTH_GRPC_LIVE_WORLD_CERT_PASSWORD",
-    "NOSGM_AUTH_GRPC_WIRE_MODE"
+    "NOSGM_AUTH_GRPC_WIRE_MODE",
+    "Logging__LogLevel__Microsoft.AspNetCore.Server.Kestrel.Https"
 )
 $previousEnvironment = @{}
 foreach ($variableName in $environmentVariableNames) {
@@ -269,6 +293,12 @@ try {
             [string]$manifest.ServerCertificatePath
         NOSGM_AUTH_GRPC_SERVER_CERT_PASSWORD =
             ConvertFrom-SecureStringInMemory $credentials.Server
+        NOSGM_AUTH_GRPC_TRUSTED_ROOT_CERT_PATH =
+            $(if ($UseFileScopedRootTrust) {
+                $rootCertificatePath
+            } else {
+                $null
+            })
         NOSGM_AUTH_GRPC_AUTHBRIDGE_CERT_SHA256 =
             [string]$manifest.Clients.AuthBridge.Sha256
         NOSGM_AUTH_GRPC_LOGIN_CERT_SHA256 =
@@ -279,6 +309,12 @@ try {
         NOSGM_AUTH_GRPC_TICKET_TTL_SECONDS = "120"
         NOSGM_AUTH_GRPC_PERMIT_TTL_SECONDS = "120"
         NOSGM_AUTH_GRPC_INSTANCE_ID = "authentication-acceptance-1"
+        "Logging__LogLevel__Microsoft.AspNetCore.Server.Kestrel.Https" =
+            $(if ($UseFileScopedRootTrust) {
+                "Trace"
+            } else {
+                $null
+            })
     }
     $runtimeProcess = Start-Process `
         -FilePath $dotnetExecutable `
@@ -291,6 +327,12 @@ try {
 
     Set-ProcessEnvironment -Values @{
         NOSGM_AUTH_GRPC_URL = "https://127.0.0.1:$Port"
+        NOSGM_AUTH_GRPC_TRUSTED_ROOT_CERT_PATH =
+            $(if ($UseFileScopedRootTrust) {
+                $rootCertificatePath
+            } else {
+                $null
+            })
         NOSGM_AUTH_GRPC_LIVE_AUTHBRIDGE_CERT_PATH =
             [string]$manifest.Clients.AuthBridge.CertificatePath
         NOSGM_AUTH_GRPC_LIVE_AUTHBRIDGE_CERT_PASSWORD =
@@ -307,16 +349,6 @@ try {
 
     [Environment]::SetEnvironmentVariable(
         "NOSGM_AUTH_GRPC_WIRE_MODE",
-        "HTTP2",
-        "Process")
-    Write-Host "[TEST] Native HTTP/2 authentication acceptance"
-    & $dotnetExecutable $selfTestAssembly --live
-    if ($LASTEXITCODE -ne 0) {
-        throw "Native HTTP/2 authentication acceptance failed."
-    }
-
-    [Environment]::SetEnvironmentVariable(
-        "NOSGM_AUTH_GRPC_WIRE_MODE",
         "GRPCWEB",
         "Process")
     Write-Host "[TEST] Windows 10 gRPC-Web authentication acceptance"
@@ -325,10 +357,34 @@ try {
         throw "Windows 10 gRPC-Web authentication acceptance failed."
     }
 
+    if ($supportsNetFrameworkGrpcHttp2) {
+        [Environment]::SetEnvironmentVariable(
+            "NOSGM_AUTH_GRPC_WIRE_MODE",
+            "HTTP2",
+            "Process")
+        Write-Host "[TEST] Native HTTP/2 authentication acceptance"
+        & $dotnetExecutable $selfTestAssembly --live
+        if ($LASTEXITCODE -ne 0) {
+            throw "Native HTTP/2 authentication acceptance failed."
+        }
+    }
+    else {
+        Write-Host `
+            "[SKIP] Native HTTP/2 is unavailable to the net481 callers on Windows 10; the complete stack will use GRPCWEB." `
+            -ForegroundColor Yellow
+    }
+
     Write-Host ""
-    Write-Host `
-        "NosGM authentication gRPC and gRPC-Web mTLS acceptance passed." `
-        -ForegroundColor Green
+    if ($supportsNetFrameworkGrpcHttp2) {
+        Write-Host `
+            "NosGM authentication gRPC and gRPC-Web mTLS acceptance passed." `
+            -ForegroundColor Green
+    }
+    else {
+        Write-Host `
+            "NosGM authentication gRPC-Web mTLS acceptance passed for Windows 10." `
+            -ForegroundColor Green
+    }
 }
 finally {
     Restore-ProcessEnvironment

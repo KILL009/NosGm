@@ -8,6 +8,26 @@ using NosGm.Cluster.Contracts.Authentication.Runtime;
 using NosGm.Cluster.Contracts.V1;
 using WireNodeRole = NosGm.Cluster.Wire.V1.ClusterNodeRole;
 
+if (args.Length > 0 &&
+    string.Equals(
+        args[0],
+        "--generate-ci-certificate-bundle",
+        StringComparison.Ordinal))
+{
+    if (args.Length != 3 ||
+        !int.TryParse(args[2], out int keyLength))
+    {
+        throw new InvalidOperationException(
+            "Usage: --generate-ci-certificate-bundle <output-directory> <key-length>");
+    }
+
+    Console.WriteLine(
+        LocalAuthenticationCertificateGenerator.Generate(
+            args[1],
+            keyLength));
+    return;
+}
+
 static void AssertEqual<T>(T expected, T actual, string name)
 {
     if (!EqualityComparer<T>.Default.Equals(expected, actual))
@@ -66,6 +86,11 @@ static AuthenticationGrpcClientOptions LoadLiveClientOptions(
             AuthenticationGrpcClientOptions.CertificatePasswordVariable =>
                 Environment.GetEnvironmentVariable(
                     prefix + "_CERT_PASSWORD") ?? string.Empty,
+            AuthenticationGrpcClientOptions
+                    .TrustedRootCertificatePathVariable =>
+                Environment.GetEnvironmentVariable(
+                    AuthenticationGrpcClientOptions
+                        .TrustedRootCertificatePathVariable),
             AuthenticationGrpcClientOptions.CallerInstanceIdVariable =>
                 "acceptance-" + roleName.ToLowerInvariant() + "-1",
             AuthenticationGrpcClientOptions.DeadlineVariable => "10000",
