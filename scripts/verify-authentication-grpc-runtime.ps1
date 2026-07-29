@@ -139,8 +139,12 @@ Assert-Contains $service "request {RequestId}" `
 Assert-NotContains $service "AuthorizationCode}" `
     "Authentication material is not interpolated into logs"
 
-Assert-Contains $state "MaximumConsumptionsPerTicket = 3" `
-    "Ticket consumption count remains compatible"
+Assert-Contains $state "MaximumActiveSessionLifetime" `
+    "Authentication tickets become bounded active-session leases"
+Assert-Contains $state "ConsumptionCount" `
+    "Repeated character-selection entries retain an auditable counter"
+Assert-NotContains $state "MaximumConsumptionsPerTicket" `
+    "The obsolete three-entry cap is absent"
 Assert-Contains $state "_permits.TryRemove" `
     "World permits remain one-use"
 Assert-Contains $state "SHA256.HashData" `
@@ -206,7 +210,7 @@ $authenticationSourceText =
         -Filter *.cs `
         -File `
         -Recurse |
-        ForEach-Object { [System.IO.File]::ReadAllText($_.FullName) }) `
+     ForEach-Object { [System.IO.File]::ReadAllText($_.FullName) }) `
         -join "`n"
 Assert-NotContains $authenticationSourceText `
     "DangerousAcceptAnyServerCertificateValidator" `
