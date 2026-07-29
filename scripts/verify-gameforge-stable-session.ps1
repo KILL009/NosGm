@@ -27,6 +27,12 @@ function Assert-Contains([string]$Content, [string]$Needle, [string]$Message) {
     }
 }
 
+function Assert-NotContains([string]$Content, [string]$Needle, [string]$Message) {
+    if ($Content.IndexOf($Needle, [StringComparison]::Ordinal) -ge 0) {
+        throw $Message
+    }
+}
+
 function Assert-Regex([string]$Content, [string]$Pattern, [string]$Message) {
     if (-not [regex]::IsMatch(
             $Content,
@@ -51,10 +57,12 @@ Assert-Contains $store "[Serializable]" "The remote ticket consumption result mu
 Assert-Contains $store "public sealed class GameforgeAuthTicketConsumption" "The stable ticket consumption DTO is missing."
 Assert-Contains $store "public int ConsumptionNumber" "The renewable modern entry number is missing."
 Assert-Contains $store "public int SessionId" "The stable modern SessionId is missing."
-Assert-Contains $store "if (ticket.SessionId <= 0)" "The first valid ticket entry must bind its proposed SessionId exactly once."
-Assert-Contains $store "ticket.SessionId = proposedSessionId;" "The first valid ticket entry no longer stores its proposed SessionId."
+Assert-Regex $store 'if \(ticket\.SessionId <= 0\).*?ticket\.SessionId = proposedSessionId;.*?ticket\.ExpiresAtUtc = nowUtc\.Add\(MaximumActiveSessionLifetime\);' "The first valid entry must bind its proposed SessionId and convert the short ticket into a bounded active-session lease."
 Assert-Contains $store "SessionId = ticket.SessionId" "Every ticket entry must return the bound SessionId."
-Assert-Contains $store "MaximumActiveSessionLifetime" "The short authorization no longer becomes a bounded active-session lease."
+Assert-Contains $store "public static readonly TimeSpan MaximumActiveSessionLifetime = TimeSpan.FromHours(24);" "The active-session lease must remain explicitly bounded to 24 hours."
+Assert-Contains $store "ticket.ConsumptionCount++;" "Repeated character-selection entries must advance the session entry counter."
+Assert-NotContains $store "MaximumConsumptionsPerTicket" "The obsolete three-entry ticket limit returned."
+Assert-NotContains $store "RemainingConsumptions" "The obsolete remaining-consumption counter returned."
 Assert-Contains $sessionFactory "Interlocked.Add(ref _sessionCounter, 2)" "Concurrent Login entries could generate duplicate proposed SessionIds."
 
 Assert-Regex $authInterface 'ConsumeGameforgeAuthTicket\s*\(\s*string authToken,\s*string installationId,\s*byte countryId,\s*int proposedSessionId\s*\)' "The authentication contract does not carry the proposed SessionId."
@@ -77,6 +85,8 @@ if ($communicationClient.IndexOf(
 
 Assert-Contains $login "gameforgeTicket?.SessionId ?? SessionFactory.Instance.GenerateSessionId()" "Login does not distinguish stable modern sessions from generated legacy sessions."
 Assert-Contains $login "IsAccountSessionRegistered(loadedAccount.AccountId, newSessionId)" "A later modern entry cannot recognize its already registered session."
+Assert-Contains $login "!gameforgeTicket.IsFirstConsumption" "Login no longer distinguishes the initial entry from active-session continuations."
+Assert-Contains $login "Gameforge session is no longer active" "A stale authorization could recreate a disconnected Master session."
 Assert-Contains $login "bool issueGameforgeWorldPermit = gameforgeTicket != null;" "Every accepted modern Login entry must issue a fresh one-use World permit."
 if ($login.IndexOf(
         'bool issueGameforgeWorldPermit = gameforgeTicket?.IsFirstConsumption == true;',
