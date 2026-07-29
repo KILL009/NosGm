@@ -69,8 +69,13 @@ if ($communicationClient.IndexOf(
 
 Assert-Contains $login "gameforgeTicket?.SessionId ?? SessionFactory.Instance.GenerateSessionId()" "Login does not distinguish stable modern sessions from generated legacy sessions."
 Assert-Contains $login "IsAccountSessionRegistered(loadedAccount.AccountId, newSessionId)" "A later modern stage cannot recognize its already registered session."
-Assert-Contains $login "gameforgeTicket?.IsFirstConsumption == true" "World permit issuance is not owned exclusively by stage one."
+Assert-Contains $login "bool issueGameforgeWorldPermit = gameforgeTicket != null;" "Every accepted modern Login stage must issue a fresh one-use World permit."
+if ($login.IndexOf(
+        'bool issueGameforgeWorldPermit = gameforgeTicket?.IsFirstConsumption == true;',
+        [StringComparison]::Ordinal) -ge 0) {
+    throw "Character reselection would reuse an already consumed stage-one World permit."
+}
 Assert-Contains $login "if (accountRegistered && ownsAccountRegistration)" "A later modern stage could disconnect the shared account during rollback."
-Assert-Regex $login 'RegisterGameforgeWorldPermit\(loadedAccount\.AccountId, newSessionId, ipAddress\).*?BuildServersPacket\(' "The one-use World permit must exist before the first server list is sent."
+Assert-Regex $login 'RegisterGameforgeWorldPermit\(loadedAccount\.AccountId, newSessionId, ipAddress\).*?BuildServersPacket\(' "A fresh one-use World permit must exist before every modern server list is sent."
 
-Write-Host "[PASS] Modern NoS0577 stages share one stable SessionId, preserve an attached World session and issue one bounded World permit."
+Write-Host "[PASS] Modern NoS0577 stages share one stable SessionId, preserve the account registration and issue a fresh one-use World permit for character reselection."

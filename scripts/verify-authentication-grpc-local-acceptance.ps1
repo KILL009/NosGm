@@ -205,6 +205,10 @@ Require $selfTest "Live second Login stage preserves the SessionID" `
     "Live acceptance protects stable SessionID reuse"
 Require $selfTest "Live World permit cannot be replayed" `
     "Live acceptance protects one-use World permits"
+Require $selfTest "Live Login issues a fresh character-reselection permit" `
+    "Live acceptance covers a second World entry on the stable SessionID"
+Require $selfTest "Live character-reselection permit cannot be replayed" `
+    "Fresh character-reselection permits remain one-use"
 Require $selfTest "StatusCode.PermissionDenied" `
     "Live acceptance verifies certificate-role authorization"
 

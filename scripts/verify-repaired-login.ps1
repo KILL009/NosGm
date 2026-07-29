@@ -97,7 +97,8 @@ Require $login 'ClientRegionMap.TryResolveLoginPort(_session.ListeningPort' 'Log
 Require $login 'CommunicationServiceClient.Instance.DisconnectAccount(loadedAccount.AccountId);' 'Failed Login registration no longer rolls Master back.'
 Require $login 'gameforgeTicket?.SessionId ?? SessionFactory.Instance.GenerateSessionId()' 'Modern Login no longer reuses the SessionId bound by Master.'
 Require $login 'IsAccountSessionRegistered(loadedAccount.AccountId, newSessionId)' 'Modern Login stages no longer recognize their existing account/session tuple.'
-Require $login 'gameforgeTicket?.IsFirstConsumption == true' 'World permits are no longer limited to the first modern Login stage.'
+Require $login 'bool issueGameforgeWorldPermit = gameforgeTicket != null;' 'Every modern Login continuation must receive a fresh one-use World permit.'
+Forbid $login 'bool issueGameforgeWorldPermit = gameforgeTicket?.IsFirstConsumption == true;' 'Character reselection cannot depend on the already consumed first-stage World permit.'
 Require $login 'accountRegistered && ownsAccountRegistration' 'Later modern Login stages could roll back a session they do not own.'
 
 Require-Ordered $entry @(

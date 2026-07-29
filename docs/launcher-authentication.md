@@ -9,7 +9,9 @@ For the one-command Windows development environment, use [`modern-login-local-ru
 1. the launcher sends the NosGM account name and password to the versioned authentication endpoint;
 2. Master verifies the account and returns a short-lived, one-use authorization code;
 3. the launcher gives that code to the client through the current-user `GameforgeClientJSONRPC` named pipe;
-4. Login consumes the ticket and creates a separate one-use World permit.
+4. Login consumes an allowed ticket stage and creates a separate one-use World
+   permit for that World entry. A later character-selection return preserves
+   the bound SessionId but receives a fresh World permit.
 
 The password is never stored in launcher settings, written to logs or sent to Login or World.
 
