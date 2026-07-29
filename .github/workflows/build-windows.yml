@@ -34,14 +34,14 @@ jobs:
 
       # The legacy .NET Framework solution is built by Visual Studio 2022
       # MSBuild 17.14, which cannot load the repository-wide .NET 10 SDK.
-      # Keep this compatibility SDK confined to this job while the modern
-      # projects are validated on .NET 10 by their dedicated workflows.
+      # Keep global.json on .NET 10, select only the SDK imports from .NET 9,
+      # and disable the unused workload resolver exactly as local startup does.
       - name: Install .NET 9 compatibility SDK
         uses: actions/setup-dotnet@v5
         with:
           dotnet-version: 9.0.x
 
-      - name: Pin compatible SDK for legacy MSBuild
+      - name: Select compatible SDK imports for legacy MSBuild
         shell: pwsh
         run: |
           $sdkLine = dotnet --list-sdks |
@@ -61,18 +61,12 @@ jobs:
             throw "Microsoft.NET.Sdk was not found under $sdkPath"
           }
 
-          $jobGlobalJson = @{
-            sdk = @{
-              version = $sdkVersion
-              rollForward = "latestPatch"
-              allowPrerelease = $false
-            }
-          } | ConvertTo-Json -Depth 3
-          Set-Content -LiteralPath "global.json" -Value $jobGlobalJson -Encoding utf8
           "MSBuildSDKsPath=$sdkPath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "MSBuildEnableWorkloadResolver=false" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
-          Write-Host "Legacy job SDK: $(dotnet --version)"
+          Write-Host "Legacy job SDK imports: $sdkVersion"
           Write-Host "Legacy MSBuild SDK path: $sdkPath"
+          Write-Host "Repository global.json remains on .NET 10; legacy workloads are disabled."
 
       - name: Set up Visual Studio MSBuild
         uses: microsoft/setup-msbuild@v3
