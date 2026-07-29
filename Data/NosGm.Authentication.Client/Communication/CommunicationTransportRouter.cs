@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Concurrent;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -7,6 +9,18 @@ namespace NosGm.Communication.Client
     public sealed class CommunicationTransportRouter
         : IClusterCommunicationTransport
     {
+        private sealed class CharacterSessionBinding
+        {
+            public Guid WorldId { get; set; }
+
+            public long AccountId { get; set; }
+
+            public int SessionId { get; set; }
+        }
+
+        private readonly ConcurrentDictionary<long, CharacterSessionBinding>
+            _characterBindings =
+                new ConcurrentDictionary<long, CharacterSessionBinding>();
         private readonly IClusterCommunicationTransport _selectedTransport;
 
         public CommunicationTransportRouter(
@@ -84,17 +98,25 @@ namespace NosGm.Communication.Client
                 cancellationToken);
         }
 
-        public Task<CommunicationTransportResultCode> DisconnectAccountAsync(
+        public async Task<CommunicationTransportResultCode> DisconnectAccountAsync(
             long accountId,
             int sessionId,
             bool preserveSessionRegistration,
             CancellationToken cancellationToken)
         {
-            return _selectedTransport.DisconnectAccountAsync(
-                accountId,
-                sessionId,
-                preserveSessionRegistration,
-                cancellationToken);
+            CommunicationTransportResultCode result =
+                await _selectedTransport.DisconnectAccountAsync(
+                        accountId,
+                        sessionId,
+                        preserveSessionRegistration,
+                        cancellationToken)
+                    .ConfigureAwait(false);
+            if (result == CommunicationTransportResultCode.Success)
+            {
+                RemoveAccountBindings(accountId, sessionId);
+            }
+
+            return result;
         }
 
         public Task<CommunicationTransportResultCode> PulseAccountAsync(
@@ -108,34 +130,91 @@ namespace NosGm.Communication.Client
                 cancellationToken);
         }
 
-        public Task<CommunicationTransportResultCode> ConnectCharacterAsync(
+        public async Task<CommunicationTransportResultCode> ConnectCharacterAsync(
             Guid worldId,
             long accountId,
             int sessionId,
             long characterId,
             CancellationToken cancellationToken)
         {
-            return _selectedTransport.ConnectCharacterAsync(
+            ValidateCharacterTuple(
                 worldId,
                 accountId,
                 sessionId,
                 characterId,
-                cancellationToken);
+                "connect");
+
+            CommunicationTransportResultCode result =
+                await _selectedTransport.ConnectCharacterAsync(
+                        worldId,
+                        accountId,
+                        sessionId,
+                        characterId,
+                        cancellationToken)
+                    .ConfigureAwait(false);
+            if (result == CommunicationTransportResultCode.Success)
+            {
+                _characterBindings[characterId] =
+                    new CharacterSessionBinding
+                    {
+                        WorldId = worldId,
+                        AccountId = accountId,
+                        SessionId = sessionId
+                    };
+            }
+
+            return result;
         }
 
-        public Task<CommunicationTransportResultCode> DisconnectCharacterAsync(
-            Guid worldId,
-            long accountId,
-            int sessionId,
-            long characterId,
-            CancellationToken cancellationToken)
+        public async Task<CommunicationTransportResultCode>
+            DisconnectCharacterAsync(
+                Guid worldId,
+                long accountId,
+                int sessionId,
+                long characterId,
+                CancellationToken cancellationToken)
         {
-            return _selectedTransport.DisconnectCharacterAsync(
+            if (accountId <= 0 || sessionId <= 0)
+            {
+                if (!_characterBindings.TryGetValue(
+                        characterId,
+                        out CharacterSessionBinding binding))
+                {
+                    throw new InvalidOperationException(
+                        "Character disconnect requires the exact account/session binding created during character connection.");
+                }
+
+                if (binding.WorldId != worldId)
+                {
+                    throw new InvalidOperationException(
+                        "Character disconnect World identity does not match its registered binding.");
+                }
+
+                accountId = binding.AccountId;
+                sessionId = binding.SessionId;
+            }
+
+            ValidateCharacterTuple(
                 worldId,
                 accountId,
                 sessionId,
                 characterId,
-                cancellationToken);
+                "disconnect");
+
+            CommunicationTransportResultCode result =
+                await _selectedTransport.DisconnectCharacterAsync(
+                        worldId,
+                        accountId,
+                        sessionId,
+                        characterId,
+                        cancellationToken)
+                    .ConfigureAwait(false);
+            if (result == CommunicationTransportResultCode.Success)
+            {
+                _characterBindings.TryRemove(characterId, out _);
+            }
+
+            return result;
         }
 
         public Task<CommunicationWorldRegistrationResult>
@@ -169,6 +248,38 @@ namespace NosGm.Communication.Client
             CancellationToken cancellationToken)
         {
             return _selectedTransport.ListWorldServersAsync(cancellationToken);
+        }
+
+        private void RemoveAccountBindings(long accountId, int sessionId)
+        {
+            foreach (long characterId in _characterBindings
+                         .Where(pair =>
+                             pair.Value.AccountId == accountId &&
+                             (sessionId <= 0 ||
+                              pair.Value.SessionId == sessionId))
+                         .Select(pair => pair.Key)
+                         .ToArray())
+            {
+                _characterBindings.TryRemove(characterId, out _);
+            }
+        }
+
+        private static void ValidateCharacterTuple(
+            Guid worldId,
+            long accountId,
+            int sessionId,
+            long characterId,
+            string operation)
+        {
+            if (worldId == Guid.Empty ||
+                accountId <= 0 ||
+                sessionId <= 0 ||
+                characterId <= 0)
+            {
+                throw new InvalidOperationException(
+                    "Character " + operation +
+                    " requires a non-empty World ID and positive account, session, and character IDs.");
+            }
         }
     }
 }
