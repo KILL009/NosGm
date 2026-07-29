@@ -1,0 +1,56 @@
+name: .NET 10 foundation
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/dotnet10-foundation.yml"
+      - "global.json"
+      - "Web/**"
+      - "Launcher/**"
+      - "Tools/**"
+      - "scripts/verify-dotnet10-foundation.ps1"
+  pull_request:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/dotnet10-foundation.yml"
+      - "global.json"
+      - "Web/**"
+      - "Launcher/**"
+      - "Tools/**"
+      - "scripts/verify-dotnet10-foundation.ps1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dotnet10-foundation-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build .NET 10 islands
+    runs-on: windows-2022
+    timeout-minutes: 45
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Install stable .NET 10 SDK
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Show selected SDK
+        shell: pwsh
+        run: |
+          dotnet --version
+          dotnet --info
+
+      - name: Verify inventory and build wave 0
+        shell: powershell
+        run: ./scripts/verify-dotnet10-foundation.ps1

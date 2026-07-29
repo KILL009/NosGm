@@ -1,0 +1,8 @@
+{
+  "sdk": {
+    "version": "10.0.100",
+    "rollForward": "latestFeature",
+    "allowPrerelease": false,
+    "errorMessage": "NosGM requires a stable .NET 10 SDK. Install .NET 10 x64 or run scripts/verify-dotnet10-foundation.ps1 for diagnostics."
+  }
+}
