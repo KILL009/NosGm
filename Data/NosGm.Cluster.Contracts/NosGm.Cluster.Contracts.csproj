@@ -26,5 +26,9 @@
               Link="Protos\gameforge_authentication.proto"
               ProtoRoot="..\..\contracts\cluster\v1"
               GrpcServices="Both" />
+    <Protobuf Include="..\..\contracts\cluster\v1\cluster_communication.proto"
+              Link="Protos\cluster_communication.proto"
+              ProtoRoot="..\..\contracts\cluster\v1"
+              GrpcServices="Both" />
   </ItemGroup>
 </Project>

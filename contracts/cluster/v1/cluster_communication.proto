@@ -1,0 +1,138 @@
+syntax = "proto3";
+
+package nosgm.cluster.v1;
+
+option csharp_namespace = "NosGm.Cluster.Wire.V1";
+
+import "cluster_control.proto";
+
+// Internal Master/Login/World coordination only. Client-facing NosTale packet
+// bytes, including NoS0577 and NsTeST, remain outside this service.
+service ClusterCommunication {
+  rpc RegisterAccountLogin(RegisterAccountLoginRequest)
+      returns (CommunicationMutationResponse);
+  rpc IsAccountSessionRegistered(AccountSessionRequest)
+      returns (CommunicationBooleanResponse);
+  rpc IsLoginPermitted(AccountSessionRequest)
+      returns (CommunicationBooleanResponse);
+  rpc IsAccountConnected(AccountRequest)
+      returns (CommunicationBooleanResponse);
+  rpc ConnectAccount(ConnectAccountRequest)
+      returns (CommunicationMutationResponse);
+  rpc DisconnectAccount(DisconnectAccountRequest)
+      returns (CommunicationMutationResponse);
+  rpc PulseAccount(AccountRequest)
+      returns (CommunicationMutationResponse);
+  rpc ConnectCharacter(CharacterWorldRequest)
+      returns (CommunicationMutationResponse);
+  rpc DisconnectCharacter(CharacterWorldRequest)
+      returns (CommunicationMutationResponse);
+  rpc RegisterWorldServer(RegisterWorldServerRequest)
+      returns (RegisterWorldServerResponse);
+  rpc UnregisterWorldServer(WorldRequest)
+      returns (CommunicationMutationResponse);
+  rpc ListWorldServers(ListWorldServersRequest)
+      returns (ListWorldServersResponse);
+}
+
+enum CommunicationResultCode {
+  COMMUNICATION_RESULT_CODE_UNSPECIFIED = 0;
+  COMMUNICATION_RESULT_CODE_SUCCESS = 1;
+  COMMUNICATION_RESULT_CODE_INVALID_REQUEST = 2;
+  COMMUNICATION_RESULT_CODE_UNAUTHORIZED = 3;
+  COMMUNICATION_RESULT_CODE_NOT_FOUND = 4;
+  COMMUNICATION_RESULT_CODE_CONFLICT = 5;
+  COMMUNICATION_RESULT_CODE_CAPACITY_EXCEEDED = 6;
+  COMMUNICATION_RESULT_CODE_UNAVAILABLE = 7;
+}
+
+message CommunicationMutationResponse {
+  CommunicationResultCode result = 1;
+}
+
+message CommunicationBooleanResponse {
+  CommunicationResultCode result = 1;
+  bool value = 2;
+}
+
+message AccountRequest {
+  RequestContext context = 1;
+  int64 account_id = 2;
+}
+
+message AccountSessionRequest {
+  RequestContext context = 1;
+  int64 account_id = 2;
+  int32 session_id = 3;
+}
+
+message RegisterAccountLoginRequest {
+  RequestContext context = 1;
+  int64 account_id = 2;
+  int32 session_id = 3;
+  string ip_address = 4;
+}
+
+message ConnectAccountRequest {
+  RequestContext context = 1;
+  string world_id = 2;
+  int64 account_id = 3;
+  int32 session_id = 4;
+}
+
+message DisconnectAccountRequest {
+  RequestContext context = 1;
+  int64 account_id = 2;
+  int32 session_id = 3;
+  bool preserve_session_registration = 4;
+}
+
+message CharacterWorldRequest {
+  RequestContext context = 1;
+  string world_id = 2;
+  int64 character_id = 3;
+}
+
+message RegisterWorldServerRequest {
+  RequestContext context = 1;
+  WorldServerRegistration world = 2;
+}
+
+message WorldServerRegistration {
+  string world_id = 1;
+  string endpoint_ip = 2;
+  uint32 endpoint_port = 3;
+  uint32 account_limit = 4;
+  string world_group = 5;
+}
+
+message RegisterWorldServerResponse {
+  CommunicationResultCode result = 1;
+  int32 channel_id = 2;
+}
+
+message WorldRequest {
+  RequestContext context = 1;
+  string world_id = 2;
+}
+
+message ListWorldServersRequest {
+  RequestContext context = 1;
+  int64 account_id = 2;
+}
+
+message WorldChannelSnapshot {
+  string world_id = 1;
+  string endpoint_ip = 2;
+  uint32 endpoint_port = 3;
+  uint32 account_limit = 4;
+  uint32 connected_accounts = 5;
+  int32 channel_id = 6;
+  string world_group = 7;
+}
+
+message ListWorldServersResponse {
+  CommunicationResultCode result = 1;
+  uint32 character_count = 2;
+  repeated WorldChannelSnapshot worlds = 3;
+}

@@ -1,0 +1,304 @@
+{
+  "schemaVersion": 1,
+  "legacyInterface": "ICommunicationService",
+  "legacyTransport": "SCS",
+  "targetService": "ClusterCommunication",
+  "clientPacketFormatting": "Login adapter retains exact NsTeST byte layout",
+  "methods": [
+    {
+      "legacyMethod": "Authenticate",
+      "disposition": "transport_identity",
+      "target": "mTLS service identity",
+      "reason": "The shared SCS authentication key must not become an application RPC."
+    },
+    {
+      "legacyMethod": "RegisterAccountLogin",
+      "disposition": "typed_rpc",
+      "target": "RegisterAccountLogin",
+      "sideEffect": true,
+      "allowedCallerRoles": ["Login"]
+    },
+    {
+      "legacyMethod": "IsAccountSessionRegistered",
+      "disposition": "typed_rpc",
+      "target": "IsAccountSessionRegistered",
+      "sideEffect": false,
+      "allowedCallerRoles": ["Login"]
+    },
+    {
+      "legacyMethod": "IsLoginPermitted",
+      "disposition": "typed_rpc",
+      "target": "IsLoginPermitted",
+      "sideEffect": false,
+      "allowedCallerRoles": ["World"]
+    },
+    {
+      "legacyMethod": "IsAccountConnected",
+      "disposition": "typed_rpc",
+      "target": "IsAccountConnected",
+      "sideEffect": false,
+      "allowedCallerRoles": ["Login", "World"]
+    },
+    {
+      "legacyMethod": "ConnectAccount",
+      "disposition": "typed_rpc",
+      "target": "ConnectAccount",
+      "sideEffect": true,
+      "allowedCallerRoles": ["World"]
+    },
+    {
+      "legacyMethod": "DisconnectAccount",
+      "disposition": "typed_rpc",
+      "target": "DisconnectAccount",
+      "sideEffect": true,
+      "allowedCallerRoles": ["Login", "World"]
+    },
+    {
+      "legacyMethod": "PulseAccount",
+      "disposition": "typed_rpc",
+      "target": "PulseAccount",
+      "sideEffect": true,
+      "allowedCallerRoles": ["World"]
+    },
+    {
+      "legacyMethod": "ConnectCharacter",
+      "disposition": "typed_rpc",
+      "target": "ConnectCharacter",
+      "sideEffect": true,
+      "allowedCallerRoles": ["World"]
+    },
+    {
+      "legacyMethod": "DisconnectCharacter",
+      "disposition": "typed_rpc",
+      "target": "DisconnectCharacter",
+      "sideEffect": true,
+      "allowedCallerRoles": ["World"]
+    },
+    {
+      "legacyMethod": "RegisterWorldServer",
+      "disposition": "typed_rpc",
+      "target": "RegisterWorldServer",
+      "sideEffect": true,
+      "allowedCallerRoles": ["World"]
+    },
+    {
+      "legacyMethod": "UnregisterWorldServer",
+      "disposition": "typed_rpc",
+      "target": "UnregisterWorldServer",
+      "sideEffect": true,
+      "allowedCallerRoles": ["World"]
+    },
+    {
+      "legacyMethod": "RetrieveRegisteredWorldServers",
+      "disposition": "typed_rpc",
+      "target": "ListWorldServers",
+      "sideEffect": false,
+      "allowedCallerRoles": ["Login"],
+      "reason": "The RPC returns typed world/channel state. Login remains responsible for rendering the exact NsTeST packet."
+    },
+    {
+      "legacyMethod": "AddOrRemoveSavingCharacters",
+      "disposition": "deferred",
+      "target": null,
+      "reason": "Character-save coordination is a later state slice."
+    },
+    {
+      "legacyMethod": "CheckForStuckAccountsAtSaving",
+      "disposition": "deferred",
+      "target": null,
+      "reason": "Character-save cleanup is a later state slice."
+    },
+    {
+      "legacyMethod": "Cleanup",
+      "disposition": "deferred",
+      "target": null,
+      "reason": "Global destructive cleanup requires a dedicated administrative contract."
+    },
+    {
+      "legacyMethod": "CleanupOutdatedSession",
+      "disposition": "deferred",
+      "target": null,
+      "reason": "Session expiry will move with the authoritative communication runtime."
+    },
+    {
+      "legacyMethod": "ConnectAccountCrossServer",
+      "disposition": "deferred",
+      "target": null,
+      "reason": "Cross-server transfer requires its own atomic transition contract."
+    },
+    {
+      "legacyMethod": "GetChannelIdByWorldId",
+      "disposition": "deferred",
+      "target": null,
+      "reason": "Additional world-registry queries follow after the login path is proven."
+    },
+    {
+      "legacyMethod": "GetChannelStat",
+      "disposition": "deferred",
+      "target": null,
+      "reason": "Statistics are not required for the first login communication slice."
+    },
+    {
+      "legacyMethod": "GetOnlineCharacters",
+      "disposition": "deferred",
+      "target": null,
+      "reason": "Online-character snapshots require bounded repeated messages."
+    },
+    {
+      "legacyMethod": "GetPorts",
+      "disposition": "deferred",
+      "target": null,
+      "reason": "Port discovery will be represented by the typed world registry."
+    },
+    {
+      "legacyMethod": "GetServerStat",
+      "disposition": "deferred",
+      "target": null,
+      "reason": "Statistics are not required for the first login communication slice."
+    },
+    {
+      "legacyMethod": "IsAct4Online",
+      "disposition": "deferred",
+      "target": null,
+      "reason": "Special-channel discovery belongs to the expanded world registry slice."
+    },
+    {
+      "legacyMethod": "IsChannel1Online",
+      "disposition": "deferred",
+      "target": null,
+      "reason": "Numbered channel helpers will be replaced by one typed registry query."
+    },
+    {
+      "legacyMethod": "IsChannel2Online",
+      "disposition": "deferred",
+      "target": null,
+      "reason": "Numbered channel helpers will be replaced by one typed registry query."
+    },
+    {
+      "legacyMethod": "IsChannel3Online",
+      "disposition": "deferred",
+      "target": null,
+      "reason": "Numbered channel helpers will be replaced by one typed registry query."
+    },
+    {
+      "legacyMethod": "IsChannel4Online",
+      "disposition": "deferred",
+      "target": null,
+      "reason": "Numbered channel helpers will be replaced by one typed registry query."
+    },
+    {
+      "legacyMethod": "IsChannel5Online",
+      "disposition": "deferred",
+      "target": null,
+      "reason": "Numbered channel helpers will be replaced by one typed registry query."
+    },
+    {
+      "legacyMethod": "IsChannel6Online",
+      "disposition": "deferred",
+      "target": null,
+      "reason": "Numbered channel helpers will be replaced by one typed registry query."
+    },
+    {
+      "legacyMethod": "IsChannel7Online",
+      "disposition": "deferred",
+      "target": null,
+      "reason": "Numbered channel helpers will be replaced by one typed registry query."
+    },
+    {
+      "legacyMethod": "IsCharacterConnected",
+      "disposition": "deferred",
+      "target": null,
+      "reason": "Character presence queries follow the first connection lifecycle slice."
+    },
+    {
+      "legacyMethod": "IsCharacterSaving",
+      "disposition": "deferred",
+      "target": null,
+      "reason": "Character-save coordination is a later state slice."
+    },
+    {
+      "legacyMethod": "IsCrossServerLoginPermitted",
+      "disposition": "deferred",
+      "target": null,
+      "reason": "Cross-server transfer requires its own atomic transition contract."
+    },
+    {
+      "legacyMethod": "KickSession",
+      "disposition": "deferred",
+      "target": null,
+      "reason": "Kick fan-out requires the typed communication callback service."
+    },
+    {
+      "legacyMethod": "RefreshPenalty",
+      "disposition": "deferred",
+      "target": null,
+      "reason": "Penalty fan-out requires the typed communication callback service."
+    },
+    {
+      "legacyMethod": "RegisterCrossServerAccountLogin",
+      "disposition": "deferred",
+      "target": null,
+      "reason": "Cross-server transfer requires its own atomic transition contract."
+    },
+    {
+      "legacyMethod": "Restart",
+      "disposition": "deferred",
+      "target": null,
+      "reason": "Administrative fan-out requires the typed communication callback service."
+    },
+    {
+      "legacyMethod": "RetrieveOnlineCharacters",
+      "disposition": "deferred",
+      "target": null,
+      "reason": "Related-character snapshots require bounded repeated messages."
+    },
+    {
+      "legacyMethod": "RetrieveOriginWorld",
+      "disposition": "deferred",
+      "target": null,
+      "reason": "Cross-server origin state belongs to the transfer slice."
+    },
+    {
+      "legacyMethod": "RetrieveServerStatistics",
+      "disposition": "deferred",
+      "target": null,
+      "reason": "Human-readable statistics strings will be replaced by typed metrics."
+    },
+    {
+      "legacyMethod": "RunGlobalEvent",
+      "disposition": "deferred",
+      "target": null,
+      "reason": "Global-event fan-out requires the typed communication callback service."
+    },
+    {
+      "legacyMethod": "SendMessageToCharacter",
+      "disposition": "deferred",
+      "target": null,
+      "reason": "Character messaging requires explicit typed variants and callback routing."
+    },
+    {
+      "legacyMethod": "Shutdown",
+      "disposition": "deferred",
+      "target": null,
+      "reason": "Administrative fan-out requires the typed communication callback service."
+    },
+    {
+      "legacyMethod": "UpdateBazaar",
+      "disposition": "deferred",
+      "target": null,
+      "reason": "Bazaar fan-out requires the typed communication callback service."
+    },
+    {
+      "legacyMethod": "UpdateFamily",
+      "disposition": "deferred",
+      "target": null,
+      "reason": "Family fan-out requires the typed communication callback service."
+    },
+    {
+      "legacyMethod": "UpdateRelation",
+      "disposition": "deferred",
+      "target": null,
+      "reason": "Relation fan-out requires the typed communication callback service."
+    }
+  ]
+}
