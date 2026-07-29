@@ -111,6 +111,11 @@ Require $startScript 'if ($nuget)' 'The startup script must prefer NuGet CLI whe
 Require $startScript 'nuget.exe not found; restoring packages.config with MSBuild' 'The startup script must explain the MSBuild restore fallback.'
 Require $startScript '/p:RestorePackagesConfig=true' 'MSBuild fallback must restore legacy packages.config dependencies.'
 Require $startScript '$solutionPath = Join-Path $root "NosGm.sln"' 'Restore and build must share one resolved solution path.'
+Require $startScript 'function Resolve-LegacyMSBuildSdk' 'Visual Studio 2022 must resolve a compatible SDK for the legacy server solution.'
+Require $startScript "'^(9\.0\.[0-9]+)\s+\[(.+)\]$'" 'The compatibility resolver must select a stable .NET 9 SDK.'
+Require $startScript '$env:MSBuildSDKsPath = $legacyMSBuildSdk.SdksPath' 'Legacy MSBuild must use the selected .NET 9 SDK instead of the repository-wide .NET 10 SDK.'
+Require $startScript '$env:MSBuildSDKsPath = $previousMSBuildSdksPath' 'The temporary legacy MSBuild SDK path must be restored.'
+Forbid $startScript 'Set-Content -LiteralPath "global.json"' 'Local startup must never rewrite the repository SDK policy.'
 Require $startScript '$loginExecutable = Join-Path $root "bin\Release\Login\NosGm.Login.exe"' 'The startup script must use the Release|AnyCPU Login output path.'
 Require $startScript '$requiredExecutables = @(' 'All required binaries must be preflighted before startup.'
 Require $startScript 'Missing $($requiredExecutable.Name) executable after build' 'Preflight failures must identify the missing component and path.'
@@ -140,5 +145,6 @@ Require $documentation './scripts/start-modern-login-local.ps1' 'Documentation m
 Require $documentation './scripts/stop-modern-login-local.ps1' 'Documentation must expose the safe shutdown command.'
 Require $documentation 'NOSGM_MASTER_AUTH_KEY' 'Documentation must list the external secret configuration.'
 Require $documentation 'NuGet CLI is optional' 'Documentation must explain the MSBuild packages.config fallback.'
+Require $documentation '.NET 9 compatibility SDK' 'Documentation must explain the side-by-side SDK required by Visual Studio 2022.'
 
 Write-Host 'Modern Login runtime environment, transient endpoint/transport/address overrides, PowerShell 5.1 serialization, package restore fallback, executable layout and safe shutdown contracts verified.'
