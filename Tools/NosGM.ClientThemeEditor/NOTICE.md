@@ -13,7 +13,7 @@ The upstream README credits Cryless for publishing a GM-tag color method and Fiz
 
 NosGM modifications include:
 
-- migration to a package-free .NET 9 command-line tool;
+- migration to a package-free .NET 10 command-line tool;
 - exact PE architecture, version, size and SHA-256 gates;
 - strict JSON profiles and themes;
 - bounded wildcard pattern matching;

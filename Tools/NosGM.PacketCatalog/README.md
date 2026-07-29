@@ -1,6 +1,6 @@
 # NosGM.PacketCatalog
 
-`NosGM.PacketCatalog` is a standalone .NET 9 maintenance tool that parses the NosGM C# source tree and produces a deterministic packet catalog without loading or executing the legacy server assemblies.
+`NosGM.PacketCatalog` is a standalone .NET 10 maintenance tool that parses the NosGM C# source tree and produces a deterministic packet catalog without loading or executing the legacy server assemblies.
 
 It is intentionally outside `NosGm.sln`, Login, Master and World Server.
 

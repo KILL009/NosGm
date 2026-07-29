@@ -17,7 +17,7 @@ The default build has no dependency on private GitHub Packages. It accepts:
 - a local `BCard.dat` file;
 - one JSON translation map per language.
 
-This core can be restored and compiled by anyone with the .NET 9 SDK.
+This core can be restored and compiled by anyone with the .NET 10 SDK.
 
 ### Optional automatic-download adapter
 
@@ -35,7 +35,7 @@ A normal GitHub repository token from another owner may receive `403 Forbidden`.
 
 ## Requirements
 
-- .NET 9 SDK
+- .NET 10 SDK
 - `BCard.dat`
 - translation maps for local mode
 - GitHub write access only when `--publish` is used

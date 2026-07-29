@@ -59,7 +59,7 @@ The script:
 - verifies the package before moving it to the requested destination;
 - removes generated channel source in a `finally` block.
 
-The process is reproducible from the recorded commit, public channel values, public key, .NET 9 SDK and runtime identifier. Platform signing can add certificate-dependent bytes afterward and is therefore a separate release step.
+The process is reproducible from the recorded commit, public channel values, public key, .NET 10 SDK and runtime identifier. Platform signing can add certificate-dependent bytes afterward and is therefore a separate release step.
 
 ## Verify and optionally sign
 

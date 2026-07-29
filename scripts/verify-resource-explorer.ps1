@@ -41,7 +41,7 @@ if ($license -notmatch 'Boost Software License - Version 1.0') {
 }
 
 $project = Get-Content -LiteralPath "$root/NosGM.ResourceExplorer.csproj" -Raw
-foreach ($text in @('net9.0', 'BSL-1.0', 'TreatWarningsAsErrors')) {
+foreach ($text in @('net10.0', 'BSL-1.0', 'TreatWarningsAsErrors')) {
     if ($project -notmatch [regex]::Escape($text)) {
         Fail "Resource explorer project is missing: $text"
     }

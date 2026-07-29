@@ -195,7 +195,7 @@ if ($ConfigureUrlAcl) {
 
 if (-not $SkipBuild) {
     if (-not (Get-Command dotnet.exe -ErrorAction SilentlyContinue)) {
-        throw ".NET 9 SDK was not found. Install it or run with -SkipBuild after building the launcher."
+        throw ".NET 10 SDK was not found. Install it or run with -SkipBuild after building the launcher."
     }
 
     $msbuild = Resolve-MSBuild
@@ -233,7 +233,7 @@ if (-not $SkipBuild) {
 $masterExecutable = Join-Path $root "bin\Release\Master\NosGm.Master.Server.exe"
 $worldExecutable = Join-Path $root "bin\Release\World\NosGm.World.exe"
 $loginExecutable = Join-Path $root "bin\Release\Login\NosGm.Login.exe"
-$launcherExecutable = Join-Path $root "Launcher\src\NosGM.Launcher\bin\Release\net9.0-windows\NosGM.Launcher.exe"
+$launcherExecutable = Join-Path $root "Launcher\src\NosGM.Launcher\bin\Release\net10.0-windows\NosGM.Launcher.exe"
 
 $requiredExecutables = @(
     [pscustomobject]@{ Name = "Master"; Path = $masterExecutable },

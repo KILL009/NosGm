@@ -41,7 +41,7 @@ foreach ($requiredText in @(
 }
 
 $project = Get-Content -LiteralPath 'Tools/NosGM.TimeSpaceParser/NosGM.TimeSpaceParser.csproj' -Raw
-foreach ($requiredText in @('net9.0', 'GPL-3.0-only', 'Elendan', 'SEOVA', 'noszanou', 'OpenNos contributors', 'NosGM contributors')) {
+foreach ($requiredText in @('net10.0', 'GPL-3.0-only', 'Elendan', 'SEOVA', 'noszanou', 'OpenNos contributors', 'NosGM contributors')) {
     if (-not $project.Contains($requiredText)) {
         Fail "NosGM.TimeSpaceParser.csproj is missing framework, attribution or license text: $requiredText"
     }

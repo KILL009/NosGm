@@ -26,10 +26,10 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v6
 
-      - name: Set up .NET 9
+      - name: Set up .NET 10
         uses: actions/setup-dotnet@v5
         with:
-          dotnet-version: 9.0.x
+          dotnet-version: 10.0.x
 
       - name: Restore parser
         run: dotnet restore Tools/NosGM.TimeSpaceParser/NosGM.TimeSpaceParser.csproj

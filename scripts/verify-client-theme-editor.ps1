@@ -38,7 +38,7 @@ foreach ($needle in @(
 
 $project = Get-Content (Join-Path $tool "NosGM.ClientThemeEditor.csproj") -Raw
 foreach ($needle in @(
-    "<TargetFramework>net9.0</TargetFramework>",
+    "<TargetFramework>net10.0</TargetFramework>",
     "<Nullable>enable</Nullable>",
     "<TreatWarningsAsErrors>true</TreatWarningsAsErrors>"
 )) {

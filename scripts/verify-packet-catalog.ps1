@@ -50,7 +50,7 @@ foreach ($text in @(
 
 $project = Get-Content -LiteralPath "$root/NosGM.PacketCatalog.csproj" -Raw
 foreach ($text in @(
-    'net9.0',
+    'net10.0',
     'GPL-3.0-only',
     'TreatWarningsAsErrors',
     'Microsoft.CodeAnalysis.CSharp',

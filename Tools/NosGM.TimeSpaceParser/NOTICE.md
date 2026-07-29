@@ -20,7 +20,7 @@ The intermediate repository does not identify an immutable Elendan base commit o
 
 NosGM contributors added or changed:
 
-- a package-free .NET 9 command-line application;
+- a package-free .NET 10 command-line application;
 - explicit `parse`, `batch`, `validate` and `self-test` commands;
 - configurable input and output paths;
 - deterministic XML and reports without generation timestamps;
