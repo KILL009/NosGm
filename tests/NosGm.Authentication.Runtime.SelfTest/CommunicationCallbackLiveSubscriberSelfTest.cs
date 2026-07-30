@@ -335,7 +335,7 @@ internal static class CommunicationCallbackLiveSubscriberSelfTest
                         Target = new WireV1.CommunicationCallbackTarget
                         {
                             Kind = WireV1
-                                .CommunicationCallbackTargetKind.AllLoginNodes
+                                .CommunicationCallbackTargetKind.AllNodes
                         },
                         PenaltyRefresh = new WireV1.PenaltyRefreshCallback
                         {
