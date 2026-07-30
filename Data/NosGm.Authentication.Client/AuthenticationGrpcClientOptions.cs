@@ -66,10 +66,11 @@ namespace NosGm.Authentication.Client
         {
             if (callerRole != ClusterNodeRole.AuthBridge &&
                 callerRole != ClusterNodeRole.Login &&
-                callerRole != ClusterNodeRole.World)
+                callerRole != ClusterNodeRole.World &&
+                callerRole != ClusterNodeRole.Master)
             {
                 throw new InvalidOperationException(
-                    "The authentication gRPC client role must be AuthBridge, Login, or World.");
+                    "The gRPC client role must be AuthBridge, Login, World, or Master.");
             }
 
             readVariable = readVariable ?? Environment.GetEnvironmentVariable;
