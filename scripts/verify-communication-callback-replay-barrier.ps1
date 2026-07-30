@@ -171,7 +171,7 @@ Require $liveTest "Live callback sequence follows the replay boundary" `
 
 Require $documentation "SCS remains the only callback transport allowed to apply effects" `
     "Documentation preserves SCS authority"
-Require $documentation "a client that sends `false` receives the legacy stream" `
+Require $documentation 'a client that sends `false` receives the legacy stream' `
     "Documentation records old-client compatibility"
 Require $documentation "never reaches the processor" `
     "Documentation records control/data separation"
