@@ -21,7 +21,7 @@ NOSGM_COMMUNICATION_GRPC_CALLBACK_RECONNECT_MAXIMUM_MILLISECONDS
 
 Login is forbidden from supplying World fields. World must supply the exact registered World ID, assigned channel and group. Master cannot open a subscriber stream.
 
-The endpoint must be an HTTPS loopback origin. The certificate and cursor paths must be absolute and cannot point to the same file.
+The endpoint must be an HTTPS loopback origin. The client certificate, optional trusted root and durable cursor paths must be absolute and pairwise distinct. The cursor writer is never allowed to overwrite either certificate file.
 
 ## Transport selection
 
@@ -31,21 +31,36 @@ Native HTTP/2 is the primary Windows 11 path. `HTTP2` is also the default when `
 
 The selector is resolved before opening the stream. There is no automatic fallback from one wire mode to another and no fallback to SCS after a gRPC dispatch.
 
+## Envelope validation
+
+Before a new sequence may enter a handler or advance the cursor, the client verifies:
+
+1. a canonical non-empty event GUID;
+2. a positive sequence inside the signed runtime range;
+3. a positive issued time and a strictly later expiry;
+4. an event lifetime no longer than the bounded server replay TTL;
+5. a defined target with no contradictory target details;
+6. a supported typed payload whose identity and target match the authoritative callback contract.
+
+A malformed envelope fails closed. It is not applied and its sequence is not saved. Duplicate or older sequences are ignored before this validation because they have already been durably acknowledged by the same process identity.
+
 ## Durable cursor
 
 The subscriber loads one unsigned 64-bit sequence from its cursor store. The file implementation writes ASCII to a temporary file, flushes it to disk, then atomically replaces the previous cursor.
 
 A corrupt cursor fails closed. A missing cursor begins at zero.
 
-For every envelope:
+For every valid envelope:
 
 1. sequences already at or below the durable cursor are ignored;
 2. an unexpired envelope is passed to the typed handler;
-3. the cursor is saved only after the handler completes successfully;
+3. the cursor is saved only after the typed handler returns successfully;
 4. an expired envelope is not applied, but its sequence is durably skipped;
 5. a handler exception is surfaced and leaves the previous cursor unchanged.
 
-This gives at-least-once recovery without acknowledging work before it is applied. A process crash after applying a handler but before the atomic cursor write may replay that event, so callback handlers must remain safe for repeat application.
+This gives at-least-once delivery at the typed handler boundary. A process crash after the handler returns but before the atomic cursor write may replay that event, so callback handlers must remain safe for repeat application.
+
+The legacy handler surface is not uniformly completion-aware. Some handlers, including global-event generation and restart or shutdown scheduling, enqueue asynchronous work and return before the complete gameplay effect finishes. Therefore a cursor commit currently proves successful typed dispatch, not completion of every downstream business effect. Production cutover must either make those handlers awaitable and idempotent or explicitly accept and test that boundary.
 
 The current cursor is runtime-generation scoped. It can recover a Login or World process restart while the central callback runtime still retains that subscriber state. The central runtime currently keeps its sequence and replay registry in memory, so production lifecycle wiring must rotate or bind the cursor to a runtime generation before the callback cutover is enabled. A stale cursor from a previous runtime generation fails closed with an unavailable replay-cursor error.
 
@@ -77,13 +92,16 @@ The deferred `SCSCharacterMessage` path is not accepted by the typed dispatcher.
 
 The isolated acceptance runtime performs the complete loop over both supported wire modes, with native HTTP/2 treated as the primary Windows 11 route:
 
-1. Login opens a real callback server stream using the Login certificate;
-2. Master publishes a typed penalty refresh using the separate Master certificate;
-3. the runtime routes it to the Login subscriber;
-4. the handler applies the envelope;
-5. the test observes the cursor commit after handler completion;
-6. cancellation closes the stream.
+1. each wire-mode execution uses a unique Login subscriber process identity;
+2. Login opens a real callback server stream using the Login certificate;
+3. Master publishes a typed penalty refresh using the separate Master certificate;
+4. the runtime routes it to the Login subscriber;
+5. the handler applies the envelope exactly once;
+6. the test observes the matching cursor commit after handler completion;
+7. cancellation closes the stream.
+
+Unique test identities prevent the second wire-mode execution from inheriting retained events from the first while preserving the runtime's real replay behavior.
 
 ## Current migration boundary
 
-Production remains on the SCS callback path. This slice provides the client, durable processing semantics and typed dispatcher only. A later coordinated PR must start the subscriber after successful Login/World registration, bind the cursor to the active runtime generation, disable the matching SCS callbacks at the same boundary, and prove full real-client behavior before the communication transport selector can allow gRPC.
+Production remains on the SCS callback path. This slice provides the client, durable processing semantics and typed dispatcher only. A later coordinated PR must start the subscriber after successful Login/World registration, bind the cursor to the active runtime generation, disable the matching SCS callbacks at the same boundary, resolve the downstream completion boundary, and prove full real-client behavior before the communication transport selector can allow gRPC.
