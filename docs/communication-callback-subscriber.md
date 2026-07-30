@@ -23,11 +23,13 @@ Login is forbidden from supplying World fields. World must supply the exact regi
 
 The endpoint must be an HTTPS loopback origin. The certificate and cursor paths must be absolute and cannot point to the same file.
 
-## Windows 10 transport
+## Transport selection
 
-`GRPCWEB` uses binary gRPC-Web over TLS 1.2 with the process certificate selected explicitly. This mode supports the contract's server-streaming response on Windows 10.
+Native HTTP/2 is the primary Windows 11 path. `HTTP2` is also the default when `NOSGM_COMMUNICATION_GRPC_WIRE_MODE` is not set. The legacy `net481` process uses `WinHttpHandler`, while .NET 10 uses `SocketsHttpHandler` with TLS 1.2 or TLS 1.3.
 
-`HTTP2` uses native HTTP/2. The same explicit selector is resolved before opening the stream. There is no fallback from one wire mode to another and no fallback to SCS after a gRPC dispatch.
+`GRPCWEB` remains an explicit compatibility mode. It uses binary gRPC-Web over TLS 1.2 with the process certificate selected explicitly. New migration work, acceptance decisions and production wiring target native HTTP/2 first.
+
+The selector is resolved before opening the stream. There is no automatic fallback from one wire mode to another and no fallback to SCS after a gRPC dispatch.
 
 ## Durable cursor
 
@@ -44,6 +46,8 @@ For every envelope:
 5. a handler exception is surfaced and leaves the previous cursor unchanged.
 
 This gives at-least-once recovery without acknowledging work before it is applied. A process crash after applying a handler but before the atomic cursor write may replay that event, so callback handlers must remain safe for repeat application.
+
+The current cursor is runtime-generation scoped. It can recover a Login or World process restart while the central callback runtime still retains that subscriber state. The central runtime currently keeps its sequence and replay registry in memory, so production lifecycle wiring must rotate or bind the cursor to a runtime generation before the callback cutover is enabled. A stale cursor from a previous runtime generation fails closed with an unavailable replay-cursor error.
 
 ## Controlled reconnection
 
@@ -65,11 +69,13 @@ A second `RunAsync` call on the same subscriber fails immediately. Cancellation 
 - Relation refresh;
 - Static Bonus refresh.
 
+Global events use `CommunicationGlobalEventMapper`. The Protobuf enum starts at one while the legacy domain enum starts at zero, so direct numeric casts are forbidden. The mapper contains an explicit two-way entry for every supported event and can later be reused by the Master publisher.
+
 The deferred `SCSCharacterMessage` path is not accepted by the typed dispatcher.
 
 ## Live acceptance
 
-The isolated acceptance runtime performs the complete loop over both supported wire modes:
+The isolated acceptance runtime performs the complete loop over both supported wire modes, with native HTTP/2 treated as the primary Windows 11 route:
 
 1. Login opens a real callback server stream using the Login certificate;
 2. Master publishes a typed penalty refresh using the separate Master certificate;
@@ -80,4 +86,4 @@ The isolated acceptance runtime performs the complete loop over both supported w
 
 ## Current migration boundary
 
-Production remains on the SCS callback path. This PR provides the client, durable processing semantics and typed dispatcher only. A later coordinated PR must start the subscriber after successful Login/World registration, disable the matching SCS callbacks at the same boundary, and prove full real-client behavior before the communication transport selector can allow gRPC.
+Production remains on the SCS callback path. This slice provides the client, durable processing semantics and typed dispatcher only. A later coordinated PR must start the subscriber after successful Login/World registration, bind the cursor to the active runtime generation, disable the matching SCS callbacks at the same boundary, and prove full real-client behavior before the communication transport selector can allow gRPC.
