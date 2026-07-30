@@ -220,6 +220,10 @@ internal static class CommunicationCallbackSubscriberSelfTest
             IssuedAtUnixTimeMs = expiresAt.AddMinutes(-1)
                 .ToUnixTimeMilliseconds(),
             ExpiresAtUnixTimeMs = expiresAt.ToUnixTimeMilliseconds(),
+            Target = new WireV1.CommunicationCallbackTarget
+            {
+                Kind = WireV1.CommunicationCallbackTargetKind.AllNodes
+            },
             PenaltyRefresh = new WireV1.PenaltyRefreshCallback
             {
                 PenaltyLogId = checked((int)sequence)
