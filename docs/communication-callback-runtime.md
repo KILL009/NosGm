@@ -79,3 +79,5 @@ Subscriptions accept only Login and World certificates. The stream setup request
 ## Current migration boundary
 
 The runtime is intentionally isolated. Production `CommunicationServiceClient` still defaults to SCS and the guarded gRPC selector remains blocked. The next slices must add the net481 callback subscriber/client adapter, migrate the legacy callback handlers, and prove coordinated state plus callback cutover before removing that guard.
+
+Production CommunicationServiceClient still defaults to SCS.
