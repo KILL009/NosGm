@@ -161,6 +161,10 @@ jobs:
         shell: powershell
         run: ./scripts/verify-master-callback-mirror-interface-map.ps1
 
+      - name: Verify compiled SCS callback observation ledger
+        shell: powershell
+        run: ./scripts/verify-scs-callback-observation-ledger-runtime.ps1
+
       - name: Verify password hashing behavior
         shell: powershell
         run: ./scripts/verify-password-hashing.ps1
