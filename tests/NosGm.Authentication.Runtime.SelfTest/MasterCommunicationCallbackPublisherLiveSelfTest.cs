@@ -52,9 +52,11 @@ internal static class MasterCommunicationCallbackPublisherLiveSelfTest
             {
                 Kind = WireV1.CommunicationCallbackTargetKind.AllWorlds
             },
-            PenaltyRefresh = new WireV1.PenaltyRefreshCallback
+            GlobalEvent = new WireV1.GlobalEventCallback
             {
-                PenaltyLogId = 7315
+                EventType =
+                    WireV1.CommunicationGlobalEventType.InstantBattle,
+                Value = 0
             }
         };
 
