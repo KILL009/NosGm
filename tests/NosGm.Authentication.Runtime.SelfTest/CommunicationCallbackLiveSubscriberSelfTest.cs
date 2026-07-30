@@ -1,6 +1,5 @@
 using System.Net.Http;
 using System.Net.Security;
-using System.Runtime.CompilerServices;
 using System.Security.Authentication;
 using System.Security.Cryptography.X509Certificates;
 using Grpc.Net.Client;
@@ -11,25 +10,15 @@ using WireV1 = global::NosGm.Cluster.Wire.V1;
 
 internal static class CommunicationCallbackLiveSubscriberSelfTest
 {
-    [ModuleInitializer]
-    public static void Run()
-    {
-        if (!Environment.GetCommandLineArgs()
-                .Contains("--live", StringComparer.Ordinal))
-        {
-            return;
-        }
-
-        RunLiveAsync().GetAwaiter().GetResult();
-    }
-
-    private static async Task RunLiveAsync()
+    public static async Task RunLiveAsync()
     {
         string cursorDirectory = Path.Combine(
             Path.GetTempPath(),
             "nosgm-live-callback-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(cursorDirectory);
         string cursorPath = Path.Combine(cursorDirectory, "login.cursor");
+        string subscriberInstanceId =
+            "acceptance-login-callback-" + Guid.NewGuid().ToString("N");
         var cursorStore = new SignalingCursorStore();
         var handler = new SignalingHandler();
         CommunicationCallbackSubscriberOptions options =
@@ -38,7 +27,10 @@ internal static class CommunicationCallbackLiveSubscriberSelfTest
                 Guid.Empty,
                 0,
                 string.Empty,
-                name => ReadSubscriberVariable(name, cursorPath));
+                name => ReadSubscriberVariable(
+                    name,
+                    cursorPath,
+                    subscriberInstanceId));
 
         using var subscriber = new GrpcCommunicationCallbackSubscriber(
             options,
@@ -53,49 +45,59 @@ internal static class CommunicationCallbackLiveSubscriberSelfTest
         try
         {
             using var publisher = new LiveMasterCallbackPublisher();
-            WireV1.PublishCommunicationCallbackResponse accepted = null;
-            const int penaltyLogId = 4242;
-            for (int attempt = 0; attempt < 30; attempt++)
+            var acceptedPenalties = new Dictionary<ulong, int>();
+            WireV1.CommunicationCallbackEnvelope envelope = null;
+            for (int attempt = 0; attempt < 30 && envelope == null; attempt++)
             {
-                accepted = await publisher.PublishPenaltyAsync(
-                        penaltyLogId,
-                        lifetime.Token)
-                    .ConfigureAwait(false);
+                int penaltyLogId = 4242 + attempt;
+                WireV1.PublishCommunicationCallbackResponse accepted =
+                    await publisher.PublishPenaltyAsync(
+                            penaltyLogId,
+                            lifetime.Token)
+                        .ConfigureAwait(false);
                 if (accepted.Result !=
-                    WireV1.CommunicationResultCode.Success)
+                    WireV1.CommunicationResultCode.Success ||
+                    accepted.AcceptedSequence == 0)
                 {
                     throw new InvalidOperationException(
                         "Live Master callback publication failed with " +
                         accepted.Result + ".");
                 }
-                if (accepted.MatchedSubscribers == 1)
-                {
-                    break;
-                }
+                acceptedPenalties[accepted.AcceptedSequence] = penaltyLogId;
 
-                await Task.Delay(200, lifetime.Token)
-                    .ConfigureAwait(false);
+                using var deliveryPoll =
+                    CancellationTokenSource.CreateLinkedTokenSource(
+                        lifetime.Token);
+                deliveryPoll.CancelAfter(TimeSpan.FromMilliseconds(250));
+                try
+                {
+                    envelope = await handler.WaitAsync(deliveryPoll.Token)
+                        .ConfigureAwait(false);
+                }
+                catch (OperationCanceledException)
+                    when (!lifetime.IsCancellationRequested)
+                {
+                    // The stream may still be registering. Publish another
+                    // uniquely identifiable event and wait again.
+                }
             }
 
-            if (accepted == null || accepted.MatchedSubscribers != 1)
+            if (envelope == null ||
+                !acceptedPenalties.TryGetValue(
+                    envelope.Sequence,
+                    out int expectedPenaltyLogId))
             {
                 throw new InvalidOperationException(
-                    "The live Login callback subscriber did not register in time.");
+                    "The live Login callback subscriber did not receive an accepted event in time.");
             }
 
-            WireV1.CommunicationCallbackEnvelope envelope =
-                await handler.WaitAsync(lifetime.Token).ConfigureAwait(false);
             ulong savedSequence =
                 await cursorStore.WaitForSaveAsync(lifetime.Token)
                     .ConfigureAwait(false);
             AssertEqual(
-                penaltyLogId,
+                expectedPenaltyLogId,
                 envelope.PenaltyRefresh.PenaltyLogId,
                 "Live Login stream applies the typed penalty callback");
-            AssertEqual(
-                accepted.AcceptedSequence,
-                envelope.Sequence,
-                "Live callback stream preserves the accepted sequence");
             AssertEqual(
                 envelope.Sequence,
                 savedSequence,
@@ -161,7 +163,8 @@ internal static class CommunicationCallbackLiveSubscriberSelfTest
 
     private static string ReadSubscriberVariable(
         string variableName,
-        string cursorPath)
+        string cursorPath,
+        string subscriberInstanceId)
     {
         return variableName switch
         {
@@ -177,7 +180,7 @@ internal static class CommunicationCallbackLiveSubscriberSelfTest
                 Environment.GetEnvironmentVariable(
                     "NOSGM_AUTH_GRPC_TRUSTED_ROOT_CERT_PATH"),
             CommunicationCallbackSubscriberOptions.CallerInstanceIdVariable =>
-                "acceptance-login-callback-subscriber-1",
+                subscriberInstanceId,
             CommunicationCallbackSubscriberOptions.CursorPathVariable =>
                 cursorPath,
             CommunicationCallbackSubscriberOptions.SetupDeadlineVariable =>
@@ -335,7 +338,7 @@ internal static class CommunicationCallbackLiveSubscriberSelfTest
                         Target = new WireV1.CommunicationCallbackTarget
                         {
                             Kind = WireV1
-                                .CommunicationCallbackTargetKind.AllLoginNodes
+                                .CommunicationCallbackTargetKind.AllNodes
                         },
                         PenaltyRefresh = new WireV1.PenaltyRefreshCallback
                         {

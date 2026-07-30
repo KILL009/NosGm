@@ -26,9 +26,7 @@ internal static class CommunicationCallbackSubscriberSelfTest
             [CommunicationCallbackSubscriberOptions.CursorPathVariable] =
                 cursorPath,
             [CommunicationCallbackSubscriberOptions.CallerInstanceIdVariable] =
-                "world-callback-self-test-1",
-            [CommunicationCallbackSubscriberOptions.WireModeVariable] =
-                "GRPCWEB"
+                "world-callback-self-test-1"
         };
         Guid worldId = Guid.Parse(
             "11111111-2222-3333-4444-555555555555");
@@ -51,13 +49,30 @@ internal static class CommunicationCallbackSubscriberSelfTest
             options.WorldId,
             "Callback subscriber retains its registered World ID");
         AssertEqual(
-            AuthenticationGrpcWireMode.GrpcWeb,
+            AuthenticationGrpcWireMode.Http2,
             options.WireMode,
-            "Windows 10 callback subscriber selects binary gRPC-Web");
+            "Windows 11 callback subscriber defaults to native HTTP/2");
         AssertEqual(
             cursorPath,
             options.CursorPath,
             "Callback subscriber uses an explicit durable cursor path");
+
+        values[CommunicationCallbackSubscriberOptions.WireModeVariable] =
+            "GRPCWEB";
+        CommunicationCallbackSubscriberOptions compatibilityOptions =
+            CommunicationCallbackSubscriberOptions.Load(
+                ClusterNodeRole.World,
+                worldId,
+                1,
+                "Sumeria",
+                name => values.TryGetValue(name, out string value)
+                    ? value
+                    : null);
+        AssertEqual(
+            AuthenticationGrpcWireMode.GrpcWeb,
+            compatibilityOptions.WireMode,
+            "gRPC-Web remains an explicit compatibility mode");
+        values.Remove(CommunicationCallbackSubscriberOptions.WireModeVariable);
 
         AssertThrows<InvalidOperationException>(
             () => CommunicationCallbackSubscriberOptions.Load(
@@ -205,6 +220,10 @@ internal static class CommunicationCallbackSubscriberSelfTest
             IssuedAtUnixTimeMs = expiresAt.AddMinutes(-1)
                 .ToUnixTimeMilliseconds(),
             ExpiresAtUnixTimeMs = expiresAt.ToUnixTimeMilliseconds(),
+            Target = new WireV1.CommunicationCallbackTarget
+            {
+                Kind = WireV1.CommunicationCallbackTargetKind.AllNodes
+            },
             PenaltyRefresh = new WireV1.PenaltyRefreshCallback
             {
                 PenaltyLogId = checked((int)sequence)

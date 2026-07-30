@@ -8,8 +8,9 @@ import "cluster_control.proto";
 import "cluster_communication.proto";
 
 // Master publishes typed coordination events to the central runtime. Login and
-// World nodes keep one authenticated server-streaming subscription, which is
-// compatible with binary gRPC-Web on Windows 10.
+// World nodes keep one authenticated server-streaming subscription. Native
+// HTTP/2 is the primary Windows 11 transport and binary gRPC-Web remains an
+// explicit compatibility mode.
 service ClusterCommunicationCallbacks {
   rpc SubscribeCommunicationCallbacks(
       SubscribeCommunicationCallbacksRequest)
@@ -86,7 +87,7 @@ message SubscribeCommunicationCallbacksRequest {
   int32 channel_id = 3;
   // Required for World subscribers and empty for Login subscribers.
   string world_group = 4;
-  // The last event durably applied by this process instance. The runtime may
+  // The last event durably applied by this process identity. The runtime may
   // replay newer retained events after reconnect.
   uint64 resume_after_sequence = 5;
   // Empty means every callback kind allowed for the authenticated role.
@@ -102,7 +103,8 @@ message CommunicationCallbackTarget {
 
 message PublishCommunicationCallbackRequest {
   RequestContext context = 1;
-  // Canonical GUID used by subscribers for idempotent application.
+  // Canonical GUID used by the publisher and central runtime to make repeated
+  // publication idempotent. Subscriber replay acknowledgement is sequence-based.
   string event_id = 2;
   uint32 ttl_seconds = 3;
   CommunicationCallbackTarget target = 4;

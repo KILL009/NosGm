@@ -30,6 +30,22 @@ function Require {
     Write-Host "[PASS] $Name" -ForegroundColor Green
 }
 
+function Require-Match {
+    param(
+        [Parameter(Mandatory = $true)][string]$Content,
+        [Parameter(Mandatory = $true)][string]$Pattern,
+        [Parameter(Mandatory = $true)][string]$Name
+    )
+
+    if (-not [regex]::IsMatch(
+        $Content,
+        $Pattern,
+        [Text.RegularExpressions.RegexOptions]::Singleline)) {
+        throw "$Name does not match the required mapping pattern."
+    }
+    Write-Host "[PASS] $Name" -ForegroundColor Green
+}
+
 function Forbid {
     param(
         [Parameter(Mandatory = $true)][string]$Content,
@@ -53,14 +69,26 @@ $subscriber = Read-RequiredFile `
     "Data\NosGm.Authentication.Client\Communication\GrpcCommunicationCallbackSubscriber.cs"
 $dispatcher = Read-RequiredFile `
     "Data\NosGm.Master.Library\Client\CommunicationCallbackEnvelopeDispatcher.cs"
+$eventMapper = Read-RequiredFile `
+    "Data\NosGm.Master.Library\Client\CommunicationGlobalEventMapper.cs"
 $masterProject = Read-RequiredFile `
     "Data\NosGm.Master.Library\NosGm.Master.Library.csproj"
 $legacyClient = Read-RequiredFile `
     "Data\NosGm.Master.Library\Client\CommunicationServiceClient.cs"
 $selfTest = Read-RequiredFile `
     "tests\NosGm.Authentication.Runtime.SelfTest\CommunicationCallbackSubscriberSelfTest.cs"
+$envelopeValidationTest = Read-RequiredFile `
+    "tests\NosGm.Authentication.Runtime.SelfTest\CommunicationCallbackEnvelopeValidationSelfTest.cs"
+$optionsSafetyTest = Read-RequiredFile `
+    "tests\NosGm.Authentication.Runtime.SelfTest\CommunicationCallbackOptionsSafetySelfTest.cs"
 $liveTest = Read-RequiredFile `
     "tests\NosGm.Authentication.Runtime.SelfTest\CommunicationCallbackLiveSubscriberSelfTest.cs"
+$masterRoleTest = Read-RequiredFile `
+    "tests\NosGm.Authentication.Runtime.SelfTest\MasterCertificateRoleSelfTest.cs"
+$testProgram = Read-RequiredFile `
+    "tests\NosGm.Authentication.Runtime.SelfTest\Program.cs"
+$protocol = Read-RequiredFile `
+    "contracts\cluster\v1\cluster_communication_callbacks.proto"
 $documentation = Read-RequiredFile `
     "docs\communication-callback-subscriber.md"
 
@@ -78,12 +106,22 @@ Require $options "address.IsLoopback" `
     "Callback endpoint remains loopback-only"
 Require $options "Uri.UriSchemeHttps" `
     "Callback endpoint requires HTTPS"
+Require $options "return AuthenticationGrpcWireMode.Http2;" `
+    "Callback subscriber defaults to native HTTP/2"
 Require $options "GRPCWEB" `
-    "Callback subscriber exposes the Windows 10 wire mode"
+    "Callback subscriber retains optional gRPC-Web compatibility"
 Require $options "InitialReconnectDelayMilliseconds" `
     "Callback reconnection starts with a bounded delay"
 Require $options "MaximumReconnectDelayMilliseconds" `
     "Callback reconnection has a hard delay ceiling"
+Require $options "PathsEqual(certificatePath, cursorPath)" `
+    "Cursor path cannot collide with the client certificate"
+Require $options "PathsEqual(cursorPath, trustedRootPath)" `
+    "Cursor path cannot collide with the trusted root"
+Require $options "PathsEqual(certificatePath, trustedRootPath)" `
+    "Client certificate cannot be reused as the trusted root"
+Require $options "client certificate, trusted root, and cursor paths must be distinct" `
+    "All callback security files remain isolated"
 
 Require $cursor "FileOptions.WriteThrough" `
     "Cursor writes request durable storage"
@@ -100,6 +138,14 @@ Forbid $cursor "BinaryFormatter" `
 
 Require $processor "envelope.Sequence <= _appliedSequence" `
     "Already applied callback sequences are ignored"
+Require $processor "ValidateEnvelope(envelope);" `
+    "New callback sequences are validated before application"
+Require $processor "IsCanonicalNonEmptyGuid" `
+    "Callback envelopes require canonical event IDs"
+Require $processor "ValidateCallbackAndTarget" `
+    "Callback payloads must match their target"
+Require $processor "MaxEventTtlSeconds" `
+    "Callback envelope lifetime is bounded"
 Require $processor "await _handler.ApplyAsync" `
     "Callback handler completes before acknowledgement"
 Require $processor "_cursorStore.Save(envelope.Sequence);" `
@@ -110,7 +156,9 @@ Require $processor "envelope.ExpiresAtUnixTimeMs" `
 Require $subscriber "SubscribeCommunicationCallbacks" `
     "Client uses the generated server-streaming callback stub"
 Require $subscriber "GrpcWebMode.GrpcWeb" `
-    "Windows 10 callback streaming uses binary gRPC-Web"
+    "Optional compatibility mode uses binary gRPC-Web"
+Require $subscriber "WinHttpHandler" `
+    "Legacy Windows 11 callers use native HTTP/2"
 Require $subscriber "ClientCertificates.Add" `
     "Callback subscriber presents its mTLS identity"
 Require $subscriber "RequestedService = WireV1.ClusterService.Communication" `
@@ -152,11 +200,65 @@ Require $dispatcher "OnCharacterConnected" `
     "Typed dispatcher reuses the existing presence handler"
 Require $dispatcher "OnUpdatePenaltyLog" `
     "Typed dispatcher reuses the existing Login penalty handler"
+Require $dispatcher "CommunicationGlobalEventMapper.ToDomain" `
+    "Typed dispatcher uses the explicit global-event mapping"
+Forbid $dispatcher "(EventType)envelope.GlobalEvent.EventType" `
+    "Typed dispatcher never casts offset enums directly"
 Forbid $dispatcher "SCSCharacterMessage" `
     "Deferred rendered messaging is absent from typed dispatch"
+
+$eventMappings = @(
+    @("InstantBattle", "INSTANTBATTLE"),
+    @("LandOfDeath", "LOD"),
+    @("MinilandRefresh", "MINILANDREFRESHEVENT"),
+    @("RankingRefresh", "RANKINGREFRESH"),
+    @("GlacernonShip", "GLACERNONSHIP"),
+    @("GlacernonRaid", "GLACERNONRAID"),
+    @("MeteoriteGame", "METEORITEGAME"),
+    @("TalentArena", "TALENTARENA"),
+    @("Caligor", "CALIGOR"),
+    @("IceBreaker", "ICEBREAKER"),
+    @("AutoReboot", "AUTOREBOOT"),
+    @("Act7Ship", "Act7Ship"),
+    @("CelestialSpire", "CELESTIALSPIRE"),
+    @("RainbowBattle", "RAINBOWBATTLE"),
+    @("DropRate", "DROPRATE"),
+    @("FairyRate", "FAIRYRATE"),
+    @("HeroRate", "HERORATE"),
+    @("XpRate", "XPRATE"),
+    @("ResetRate", "RESETRATE"),
+    @("DailyMissionExtensionRefresh", "DAILYMISSIONEXTENSIONREFRESH"),
+    @("Asgobas", "ASGOBAS"),
+    @("WorldBoss", "WORLDBOSS"),
+    @("BattleRoyale", "BattleRoyal"),
+    @("DuelEvent", "DUELEVENT"),
+    @("PrivateDuelEvent", "DUELEVENTPRIVATE"),
+    @("OpenWorldBoss", "OpenWorldBoss")
+)
+foreach ($mapping in $eventMappings) {
+    $wireName = [regex]::Escape([string]$mapping[0])
+    $domainName = [regex]::Escape([string]$mapping[1])
+    Require-Match $eventMapper `
+        ("case\s+WireV1\.CommunicationGlobalEventType\." +
+         $wireName + ":\s*return\s+EventType\." +
+         $domainName + ";") `
+        ("Wire-to-domain global event pair is exact: " + $mapping[0])
+    Require-Match $eventMapper `
+        ("case\s+EventType\." + $domainName +
+         ":\s*return\s+WireV1\.CommunicationGlobalEventType\." +
+         $wireName + ";") `
+        ("Domain-to-wire global event pair is exact: " + $mapping[1])
+}
+Require $eventMapper "public static EventType ToDomain" `
+    "Global-event mapper supports callback consumption"
+Require $eventMapper "public static WireV1.CommunicationGlobalEventType ToWire" `
+    "Global-event mapper supports future Master publication"
 Require $masterProject `
     '<Compile Include="Client\CommunicationCallbackEnvelopeDispatcher.cs" />' `
     "Legacy Master library compiles the typed dispatcher"
+Require $masterProject `
+    '<Compile Include="Client\CommunicationGlobalEventMapper.cs" />' `
+    "Legacy Master library compiles the explicit event mapper"
 
 Require $selfTest "The callback cursor advances after the handler returns" `
     "Self-test proves post-application cursor commit"
@@ -164,6 +266,31 @@ Require $selfTest "A failed callback never advances the durable cursor" `
     "Self-test protects callback replay after handler failure"
 Require $selfTest "A corrupt callback cursor fails closed" `
     "Self-test protects cursor corruption"
+Require $selfTest "defaults to native HTTP/2" `
+    "Self-test protects the Windows 11 transport default"
+Require $selfTest "CommunicationCallbackTargetKind.AllNodes" `
+    "Processor self-test constructs an authoritative penalty target"
+Require $envelopeValidationTest "Malformed callback event IDs fail before application" `
+    "Malformed event IDs are covered by runtime tests"
+Require $envelopeValidationTest "without advancing the cursor" `
+    "Malformed envelopes cannot be acknowledged"
+Require $envelopeValidationTest "MaxEventTtlSeconds" `
+    "Envelope lifetime bounds are covered by runtime tests"
+Require $optionsSafetyTest "Callback cursor cannot overwrite the trusted root" `
+    "Trusted root collision has a regression test"
+Require $optionsSafetyTest "client certificate and trusted root must be distinct" `
+    "Certificate role separation has a regression test"
+
+Require $liveTest "public static async Task RunLiveAsync()" `
+    "Live callback acceptance exposes an explicit async entry point"
+Forbid $liveTest "[ModuleInitializer]" `
+    "Live callback networking never runs under the CLR module initializer lock"
+Require $liveTest "subscriberInstanceId" `
+    "Live callback acceptance owns an explicit process identity"
+Require $liveTest 'Guid.NewGuid().ToString("N")' `
+    "Each live wire-mode acceptance uses an isolated process identity"
+Forbid $liveTest "acceptance-login-callback-subscriber-1" `
+    "Live acceptance never reuses the stale fixed subscriber identity"
 Require $liveTest "Live Login stream applies the typed penalty callback" `
     "Live acceptance applies a typed callback"
 Require $liveTest "Live callback cursor commits after handler completion" `
@@ -172,16 +299,43 @@ Require $liveTest "NOSGM_AUTH_GRPC_LIVE_LOGIN_CERT_PATH" `
     "Live subscriber presents the Login certificate"
 Require $liveTest "NOSGM_AUTH_GRPC_LIVE_MASTER_CERT_PATH" `
     "Live publisher presents the separate Master certificate"
-Require $liveTest "AllLoginNodes" `
-    "Live acceptance exercises role-targeted routing"
+Require $liveTest "CommunicationCallbackTargetKind.AllNodes" `
+    "Live penalty acceptance targets Login and World subscribers"
+Forbid $liveTest "CommunicationCallbackTargetKind.AllLoginNodes" `
+    "Live penalty acceptance never narrows the all-node contract"
+Require $masterRoleTest "public static async Task RunLiveAsync()" `
+    "Live Master certificate probe exposes an explicit async entry point"
+Forbid $masterRoleTest 'Contains("--live"' `
+    "Master network probing never runs from its static module initializer"
+Forbid $masterRoleTest ".GetAwaiter().GetResult()" `
+    "Master network probing never blocks the module initializer"
+Require $testProgram "await MasterCertificateRoleSelfTest.RunLiveAsync();" `
+    "Main self-test flow runs the live Master role probe"
+Require $testProgram "await CommunicationCallbackLiveSubscriberSelfTest.RunLiveAsync();" `
+    "Main self-test flow runs the live callback acceptance"
+Require-Match $testProgram `
+    'if\s*\(args\.Contains\("--live".*?MasterCertificateRoleSelfTest\.RunLiveAsync\(\).*?CommunicationCallbackLiveSubscriberSelfTest\.RunLiveAsync\(\).*?RunLiveGrpcAcceptanceAsync\(\)' `
+    "All live network tests run after module initialization completes"
 
+Require $protocol "HTTP/2 is the primary Windows 11 transport" `
+    "Protocol comments record the current primary transport"
+Require $protocol "Subscriber replay acknowledgement is sequence-based" `
+    "Protocol distinguishes publication idempotency from replay acknowledgement"
 Require $legacyClient "Communication gRPC cutover is blocked" `
     "Production communication cutover remains guarded"
 Forbid $legacyClient "new GrpcCommunicationCallbackSubscriber" `
     "Production does not start the callback subscriber yet"
 Require $documentation "Production remains on the SCS callback path." `
     "Documentation preserves the current production boundary"
+Require $documentation "Native HTTP/2 is the primary Windows 11 path." `
+    "Documentation records the Windows 11 transport decision"
+Require $documentation "A malformed envelope fails closed." `
+    "Documentation records the envelope validation boundary"
+Require $documentation "successful typed dispatch" `
+    "Documentation distinguishes dispatch from downstream completion"
+Require $documentation "runtime-generation scoped" `
+    "Documentation records the durable-cursor generation boundary"
 
 Write-Host `
-    "NosGM dual-target callback subscriber, durable cursor and typed dispatcher contracts passed." `
+    "NosGM dual-target callback subscriber, validation, durable cursor and typed dispatcher contracts passed." `
     -ForegroundColor Green
