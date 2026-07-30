@@ -34,6 +34,8 @@ namespace NosGm.Master.Server
             }
 
             public DateTimeOffset EnqueuedAt { get; set; }
+
+            public bool DropIfTargetNotFound { get; set; }
         }
 
         private static readonly Lazy<MasterCommunicationCallbackMirror>
@@ -157,7 +159,7 @@ namespace NosGm.Master.Server
         }
 
         public bool TryCharacterPresence(
-            string worldGroup,
+            Guid targetWorldId,
             long characterId,
             bool connected)
         {
@@ -168,13 +170,14 @@ namespace NosGm.Master.Server
                     EventId = NewEventId(),
                     TtlSeconds =
                         CommunicationCallbackContractLimits.DefaultEventTtlSeconds,
-                    Target = WorldGroupTarget(worldGroup),
+                    Target = WorldIdTarget(targetWorldId),
                     CharacterPresence = new WireV1.CharacterPresenceCallback
                     {
                         CharacterId = characterId,
                         Connected = connected
                     }
-                });
+                },
+                dropIfTargetNotFound: true);
         }
 
         public bool TryKickSession(long? accountId, int? sessionId)
@@ -450,7 +453,8 @@ namespace NosGm.Master.Server
 
         private bool TryCreateAndEnqueue(
             string operation,
-            Func<WireV1.PublishCommunicationCallbackRequest> create)
+            Func<WireV1.PublishCommunicationCallbackRequest> create,
+            bool dropIfTargetNotFound = false)
         {
             BlockingCollection<MirrorItem> queue;
             lock (_syncRoot)
@@ -463,16 +467,30 @@ namespace NosGm.Master.Server
                 queue = _queue;
             }
 
+            WireV1.PublishCommunicationCallbackRequest template;
             try
             {
-                WireV1.PublishCommunicationCallbackRequest template = create();
+                template = create();
                 template.Context = null;
+            }
+            catch (Exception ex)
+            {
+                RecordDrop(operation, "BUILD_FAILED");
+                Logger.Error(
+                    "[CALLBACK_MIRROR_BUILD_FAILED] Operation=" + operation,
+                    ex);
+                return false;
+            }
+
+            try
+            {
                 bool added = queue.TryAdd(
                     new MirrorItem
                     {
                         Operation = operation,
                         Template = template,
-                        EnqueuedAt = DateTimeOffset.UtcNow
+                        EnqueuedAt = DateTimeOffset.UtcNow,
+                        DropIfTargetNotFound = dropIfTargetNotFound
                     });
                 if (added)
                 {
@@ -485,14 +503,6 @@ namespace NosGm.Master.Server
             catch (InvalidOperationException)
             {
                 RecordDrop(operation, "QUEUE_CLOSED");
-                return false;
-            }
-            catch (Exception ex)
-            {
-                RecordDrop(operation, "BUILD_FAILED");
-                Logger.Error(
-                    "[CALLBACK_MIRROR_BUILD_FAILED] Operation=" + operation,
-                    ex);
                 return false;
             }
         }
@@ -575,6 +585,13 @@ namespace NosGm.Master.Server
                         WireV1.CommunicationResultCode.Success)
                     {
                         Interlocked.Increment(ref _published);
+                        return;
+                    }
+                    if (item.DropIfTargetNotFound &&
+                        response.Result ==
+                            WireV1.CommunicationResultCode.NotFound)
+                    {
+                        RecordDrop(item.Operation, "TARGET_NOT_REGISTERED");
                         return;
                     }
                     if (response.Result ==
@@ -696,6 +713,21 @@ namespace NosGm.Master.Server
             {
                 Kind = WireV1.CommunicationCallbackTargetKind.WorldGroup,
                 WorldGroup = worldGroup ?? string.Empty
+            };
+        }
+
+        private static WireV1.CommunicationCallbackTarget WorldIdTarget(
+            Guid worldId)
+        {
+            if (worldId == Guid.Empty)
+            {
+                throw new InvalidOperationException(
+                    "A character-presence mirror target requires a World ID.");
+            }
+            return new WireV1.CommunicationCallbackTarget
+            {
+                Kind = WireV1.CommunicationCallbackTargetKind.WorldId,
+                WorldId = worldId.ToString("D")
             };
         }
 
