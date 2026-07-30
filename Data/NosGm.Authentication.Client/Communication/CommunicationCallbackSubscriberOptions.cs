@@ -115,8 +115,7 @@ namespace NosGm.Communication.Client
             {
                 if (worldId == Guid.Empty ||
                     channelId <= 0 ||
-                    channelId > CommunicationCallbackContractLimits
-                        .MaxChannelId ||
+                    channelId > CommunicationContractLimits.MaxChannelId ||
                     !IsValidText(
                         worldGroup,
                         CommunicationCallbackContractLimits
