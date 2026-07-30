@@ -1,6 +1,5 @@
 using System.Net.Http;
 using System.Net.Security;
-using System.Runtime.CompilerServices;
 using System.Security.Authentication;
 using System.Security.Cryptography.X509Certificates;
 using Grpc.Net.Client;
@@ -11,19 +10,7 @@ using WireV1 = global::NosGm.Cluster.Wire.V1;
 
 internal static class CommunicationCallbackLiveSubscriberSelfTest
 {
-    [ModuleInitializer]
-    public static void Run()
-    {
-        if (!Environment.GetCommandLineArgs()
-                .Contains("--live", StringComparer.Ordinal))
-        {
-            return;
-        }
-
-        RunLiveAsync().GetAwaiter().GetResult();
-    }
-
-    private static async Task RunLiveAsync()
+    public static async Task RunLiveAsync()
     {
         string cursorDirectory = Path.Combine(
             Path.GetTempPath(),
