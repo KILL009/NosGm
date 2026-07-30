@@ -136,8 +136,9 @@ namespace NosGm.Cluster.Contracts.Communication.V1
                     {
                         return InvalidPayload();
                     }
-                    return targetKind ==
-                           WireV1.CommunicationCallbackTargetKind.WorldGroup
+                    return targetKind == WireV1
+                               .CommunicationCallbackTargetKind
+                               .WorldGroupExceptWorldId
                         ? CommunicationCallbackContractValidationError.None
                         : TargetMismatch();
 
@@ -297,6 +298,15 @@ namespace NosGm.Cluster.Contracts.Communication.V1
                     return string.IsNullOrEmpty(target.WorldGroup) &&
                            string.IsNullOrEmpty(target.WorldId) &&
                            target.CharacterId > 0;
+
+                case WireV1.CommunicationCallbackTargetKind
+                    .WorldGroupExceptWorldId:
+                    return IsBoundedText(
+                               target.WorldGroup,
+                               CommunicationCallbackContractLimits
+                                   .MaxWorldGroupLength) &&
+                           IsCanonicalWorldId(target.WorldId) &&
+                           target.CharacterId == 0;
 
                 default:
                     return false;
