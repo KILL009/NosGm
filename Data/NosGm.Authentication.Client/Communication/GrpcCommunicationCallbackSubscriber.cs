@@ -33,6 +33,8 @@ namespace NosGm.Communication.Client
         private readonly CommunicationCallbackProcessor _processor;
         private readonly CommunicationCallbackReplayTracker _replayTracker =
             new CommunicationCallbackReplayTracker();
+        private readonly ICommunicationCallbackStreamObservationContext
+            _streamObservationContext;
         private readonly X509Certificate2 _clientCertificate;
         private readonly HttpMessageHandler _httpHandler;
         private readonly GrpcChannel _channel;
@@ -49,10 +51,14 @@ namespace NosGm.Communication.Client
         {
             _options = options ??
                 throw new ArgumentNullException(nameof(options));
+            ICommunicationCallbackEnvelopeHandler envelopeHandler =
+                handler ?? throw new ArgumentNullException(nameof(handler));
+            _streamObservationContext = envelopeHandler as
+                ICommunicationCallbackStreamObservationContext;
             _processor = new CommunicationCallbackProcessor(
                 cursorStore ??
                     throw new ArgumentNullException(nameof(cursorStore)),
-                handler ?? throw new ArgumentNullException(nameof(handler)));
+                envelopeHandler);
             _clientCertificate = LoadClientCertificate(options);
             try
             {
@@ -134,6 +140,7 @@ namespace NosGm.Communication.Client
             }
             finally
             {
+                _streamObservationContext?.EndStream();
                 _replayTracker.Reset();
                 string registeredGeneration = _shadowWorldGeneration;
                 _shadowWorldGeneration = string.Empty;
@@ -162,6 +169,7 @@ namespace NosGm.Communication.Client
         private async Task RunSingleStreamAsync(
             CancellationToken cancellationToken)
         {
+            _streamObservationContext?.EndStream();
             _replayTracker.Reset();
             try
             {
@@ -171,6 +179,9 @@ namespace NosGm.Communication.Client
                 _processor.BindRuntimeGeneration(runtimeInfo.RuntimeGenerationId);
                 ulong resumeAfterSequence = _processor.AppliedSequence;
                 _replayTracker.BeginStream(
+                    runtimeInfo.RuntimeGenerationId,
+                    resumeAfterSequence);
+                _streamObservationContext?.BeginStream(
                     runtimeInfo.RuntimeGenerationId,
                     resumeAfterSequence);
 
@@ -209,6 +220,7 @@ namespace NosGm.Communication.Client
             }
             finally
             {
+                _streamObservationContext?.EndStream();
                 _replayTracker.Reset();
             }
         }
@@ -223,7 +235,9 @@ namespace NosGm.Communication.Client
                     .CommunicationCallbackEnvelope.CallbackOneofCase
                     .ReplayComplete)
             {
-                _replayTracker.Complete(envelope, now);
+                CommunicationCallbackReplayEvidence evidence =
+                    _replayTracker.Complete(envelope, now);
+                _streamObservationContext?.CompleteReplay(evidence);
                 return;
             }
 

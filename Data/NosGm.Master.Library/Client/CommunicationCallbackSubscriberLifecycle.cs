@@ -2,6 +2,7 @@ using NosGm.Cluster.Contracts.V1;
 using NosGm.Communication.Client;
 using NosGm.Core;
 using System;
+using System.Collections.Generic;
 
 namespace NosGm.Master.Library.Client
 {
@@ -121,6 +122,38 @@ namespace NosGm.Master.Library.Client
             }
         }
 
+        public int ObservationCapacity
+        {
+            get
+            {
+                lock (_syncRoot)
+                {
+                    return _shadowHandler?.ObservationCapacity ?? 0;
+                }
+            }
+        }
+
+        public long EvictedObservations
+        {
+            get
+            {
+                lock (_syncRoot)
+                {
+                    return _shadowHandler?.EvictedObservations ?? 0;
+                }
+            }
+        }
+
+        public IReadOnlyList<CommunicationCallbackShadowObservation>
+            GetObservationSnapshot()
+        {
+            lock (_syncRoot)
+            {
+                return _shadowHandler?.GetObservationSnapshot() ??
+                       Array.Empty<CommunicationCallbackShadowObservation>();
+            }
+        }
+
         public Exception LastException
         {
             get
@@ -197,6 +230,10 @@ namespace NosGm.Master.Library.Client
                         "[CALLBACK_SHADOW_STOPPED] Identity=" + identity +
                         " Observed=" +
                         (shadowHandler?.ObservedCallbacks ?? 0) +
+                        " RetainedObservations=" +
+                        (shadowHandler?.GetObservationSnapshot().Count ?? 0) +
+                        " EvictedObservations=" +
+                        (shadowHandler?.EvictedObservations ?? 0) +
                         " LastSequence=" +
                         (shadowHandler?.LastObservedSequence ?? 0) +
                         " ReplayComplete=" +
@@ -313,7 +350,9 @@ namespace NosGm.Master.Library.Client
                     "[CALLBACK_SHADOW_STARTED] Identity=" + identity +
                     " CallerInstance=" + subscriberOptions.CallerInstanceId +
                     " WireMode=" + subscriberOptions.WireMode +
-                    " Endpoint=" + subscriberOptions.Address);
+                    " Endpoint=" + subscriberOptions.Address +
+                    " ObservationCapacity=" +
+                    shadowHandler.ObservationCapacity);
                 return true;
             }
         }
