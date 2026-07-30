@@ -45,53 +45,63 @@ internal static class CommunicationCallbackLiveSubscriberSelfTest
         try
         {
             using var publisher = new LiveMasterCallbackPublisher();
-            WireV1.PublishCommunicationCallbackResponse accepted = null;
-            const int penaltyLogId = 4242;
-            for (int attempt = 0; attempt < 30; attempt++)
+            var acceptedPenalties = new Dictionary<ulong, int>();
+            WireV1.CommunicationCallbackEnvelope envelope = null;
+            for (int attempt = 0; attempt < 30 && envelope == null; attempt++)
             {
-                accepted = await publisher.PublishPenaltyAsync(
-                        penaltyLogId,
-                        lifetime.Token)
-                    .ConfigureAwait(false);
+                int penaltyLogId = 4242 + attempt;
+                WireV1.PublishCommunicationCallbackResponse accepted =
+                    await publisher.PublishPenaltyAsync(
+                            penaltyLogId,
+                            lifetime.Token)
+                        .ConfigureAwait(false);
                 if (accepted.Result !=
-                    WireV1.CommunicationResultCode.Success)
+                    WireV1.CommunicationResultCode.Success ||
+                    accepted.AcceptedSequence == 0)
                 {
                     throw new InvalidOperationException(
                         "Live Master callback publication failed with " +
                         accepted.Result + ".");
                 }
-                if (accepted.MatchedSubscribers == 1)
-                {
-                    break;
-                }
+                acceptedPenalties[accepted.AcceptedSequence] = penaltyLogId;
 
-                await Task.Delay(200, lifetime.Token)
-                    .ConfigureAwait(false);
+                using var deliveryPoll =
+                    CancellationTokenSource.CreateLinkedTokenSource(
+                        lifetime.Token);
+                deliveryPoll.CancelAfter(TimeSpan.FromMilliseconds(250));
+                try
+                {
+                    envelope = await handler.WaitAsync(deliveryPoll.Token)
+                        .ConfigureAwait(false);
+                }
+                catch (OperationCanceledException)
+                    when (!lifetime.IsCancellationRequested)
+                {
+                    // The stream may still be registering. Publish another
+                    // uniquely identifiable event and wait again.
+                }
             }
 
-            if (accepted == null || accepted.MatchedSubscribers != 1)
+            if (envelope == null ||
+                !acceptedPenalties.TryGetValue(
+                    envelope.Sequence,
+                    out int expectedPenaltyLogId))
             {
                 throw new InvalidOperationException(
-                    "The live Login callback subscriber did not register in time.");
+                    "The live Login callback subscriber did not receive an accepted event in time.");
             }
 
-            WireV1.CommunicationCallbackEnvelope envelope =
-                await handler.WaitAsync(lifetime.Token).ConfigureAwait(false);
             ulong savedSequence =
                 await cursorStore.WaitForSaveAsync(lifetime.Token)
                     .ConfigureAwait(false);
             AssertEqual(
-                penaltyLogId,
+                expectedPenaltyLogId,
                 envelope.PenaltyRefresh.PenaltyLogId,
                 "Live Login stream applies the typed penalty callback");
             AssertEqual(
-                accepted.AcceptedSequence,
-                envelope.Sequence,
-                "Live callback stream preserves the accepted sequence");
-            AssertEqual(
                 envelope.Sequence,
                 savedSequence,
-                "Live callback cursor commits after handler completion");
+                "Live callback cursor commits the delivered accepted sequence");
             AssertEqual(
                 1,
                 handler.Calls,
