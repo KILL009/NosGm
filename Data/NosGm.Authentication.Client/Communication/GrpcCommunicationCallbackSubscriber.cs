@@ -1,113 +1,115 @@
 using System;
-using System.Collections.Generic;
 using System.Net.Http;
+using System.Net.Security;
+using System.Security.Authentication;
 using System.Security.Cryptography.X509Certificates;
 using System.Threading;
 using System.Threading.Tasks;
 using Grpc.Core;
 using Grpc.Net.Client;
 using Grpc.Net.Client.Web;
+using NosGm.Authentication.Client;
 using NosGm.Cluster.Contracts.V1;
 using WireV1 = global::NosGm.Cluster.Wire.V1;
 
-namespace NosGm.Authentication.Client.Communication
+namespace NosGm.Communication.Client
 {
+    public interface ICommunicationCallbackEnvelopeHandler
+    {
+        Task ApplyAsync(
+            WireV1.CommunicationCallbackEnvelope envelope,
+            CancellationToken cancellationToken);
+    }
+
     public sealed class GrpcCommunicationCallbackSubscriber : IDisposable
     {
-        private const int MaximumRememberedEventIds = 4096;
-        private readonly CommunicationCallbackSubscriptionOptions _options;
-        private readonly ICommunicationCallbackApplier _applier;
-        private readonly X509Certificate2 _certificate;
-        private readonly HttpMessageHandler _handler;
+        private readonly CommunicationCallbackSubscriberOptions _options;
+        private readonly CommunicationCallbackProcessor _processor;
+        private readonly X509Certificate2 _clientCertificate;
+        private readonly HttpMessageHandler _httpHandler;
         private readonly GrpcChannel _channel;
-        private readonly WireV1.ClusterCommunicationCallbacks.ClusterCommunicationCallbacksClient _client;
-        private readonly object _stateLock = new object();
-        private readonly HashSet<string> _eventIds = new HashSet<string>(StringComparer.Ordinal);
-        private readonly Queue<string> _eventIdOrder = new Queue<string>();
-        private long _resumeAfterSequence;
+        private readonly WireV1.ClusterCommunicationCallbacks
+            .ClusterCommunicationCallbacksClient _client;
         private int _disposed;
+        private int _running;
 
         public GrpcCommunicationCallbackSubscriber(
-            CommunicationCallbackSubscriptionOptions options,
-            ICommunicationCallbackApplier applier)
+            CommunicationCallbackSubscriberOptions options,
+            ICommunicationCallbackCursorStore cursorStore,
+            ICommunicationCallbackEnvelopeHandler handler)
         {
-            _options = options ?? throw new ArgumentNullException(nameof(options));
-            _applier = applier ?? throw new ArgumentNullException(nameof(applier));
-            _certificate = LoadCertificate(options.Transport);
+            _options = options ??
+                throw new ArgumentNullException(nameof(options));
+            _processor = new CommunicationCallbackProcessor(
+                cursorStore ??
+                    throw new ArgumentNullException(nameof(cursorStore)),
+                handler ?? throw new ArgumentNullException(nameof(handler)));
+            _clientCertificate = LoadClientCertificate(options);
             try
             {
-                var httpClientHandler = new HttpClientHandler();
-                httpClientHandler.ClientCertificates.Add(_certificate);
-                _handler = new GrpcWebHandler(GrpcWebMode.GrpcWeb, httpClientHandler);
+                _httpHandler = CreateHttpHandler(
+                    options,
+                    _clientCertificate);
                 _channel = GrpcChannel.ForAddress(
-                    options.Transport.Address,
+                    options.Address,
                     new GrpcChannelOptions
                     {
-                        HttpHandler = _handler,
-                        MaxReceiveMessageSize = ClusterProtocolLimits.MaxInboundMessageBytes,
-                        MaxSendMessageSize = ClusterProtocolLimits.MaxOutboundMessageBytes
+                        HttpHandler = _httpHandler,
+                        MaxReceiveMessageSize =
+                            ClusterProtocolLimits.MaxInboundMessageBytes,
+                        MaxSendMessageSize =
+                            ClusterProtocolLimits.MaxOutboundMessageBytes
                     });
                 _client = new WireV1.ClusterCommunicationCallbacks
                     .ClusterCommunicationCallbacksClient(_channel);
             }
             catch
             {
-                _handler?.Dispose();
-                _certificate.Dispose();
+                _httpHandler?.Dispose();
+                _clientCertificate.Dispose();
                 throw;
-            }
-        }
-
-        public ulong ResumeAfterSequence
-        {
-            get
-            {
-                lock (_stateLock)
-                {
-                    return unchecked((ulong)_resumeAfterSequence);
-                }
             }
         }
 
         public async Task RunAsync(CancellationToken cancellationToken)
         {
             ThrowIfDisposed();
-            int failedAttempts = 0;
-            while (!cancellationToken.IsCancellationRequested)
+            if (Interlocked.CompareExchange(ref _running, 1, 0) != 0)
             {
-                try
-                {
-                    await RunConnectedAsync(cancellationToken).ConfigureAwait(false);
-                    failedAttempts = 0;
-                }
-                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-                {
-                    return;
-                }
-                catch (RpcException exception) when (IsReconnectable(exception.StatusCode))
-                {
-                    failedAttempts++;
-                }
-
-                int delayMilliseconds = Math.Min(30000, 250 * (1 << Math.Min(failedAttempts, 7)));
-                await Task.Delay(delayMilliseconds, cancellationToken).ConfigureAwait(false);
+                throw new InvalidOperationException(
+                    "The communication callback subscriber is already running.");
             }
-        }
 
-        public async Task RunConnectedAsync(CancellationToken cancellationToken)
-        {
-            ThrowIfDisposed();
-            WireV1.SubscribeCommunicationCallbacksRequest request = CreateRequest();
-            using (AsyncServerStreamingCall<WireV1.CommunicationCallbackEnvelope> call =
-                   _client.SubscribeCommunicationCallbacks(
-                       request,
-                       cancellationToken: cancellationToken))
+            int reconnectDelay =
+                _options.InitialReconnectDelayMilliseconds;
+            try
             {
-                while (await call.ResponseStream.MoveNext(cancellationToken).ConfigureAwait(false))
+                while (true)
                 {
-                    await ApplyEnvelopeAsync(call.ResponseStream.Current, cancellationToken)
-                        .ConfigureAwait(false);
+                    cancellationToken.ThrowIfCancellationRequested();
+                    try
+                    {
+                        await RunSingleStreamAsync(cancellationToken)
+                            .ConfigureAwait(false);
+                        reconnectDelay =
+                            _options.InitialReconnectDelayMilliseconds;
+                        await Task.Delay(reconnectDelay, cancellationToken)
+                            .ConfigureAwait(false);
+                    }
+                    catch (RpcException exception)
+                        when (ShouldReconnect(exception, cancellationToken))
+                    {
+                        await Task.Delay(reconnectDelay, cancellationToken)
+                            .ConfigureAwait(false);
+                        reconnectDelay = Math.Min(
+                            _options.MaximumReconnectDelayMilliseconds,
+                            checked(reconnectDelay * 2));
+                    }
                 }
+            }
+            finally
+            {
+                Volatile.Write(ref _running, 0);
             }
         }
 
@@ -119,125 +121,236 @@ namespace NosGm.Authentication.Client.Communication
             }
 
             _channel.Dispose();
-            _handler.Dispose();
-            _certificate.Dispose();
+            _httpHandler.Dispose();
+            _clientCertificate.Dispose();
         }
 
-        private WireV1.SubscribeCommunicationCallbacksRequest CreateRequest()
+        private async Task RunSingleStreamAsync(
+            CancellationToken cancellationToken)
         {
-            long now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+            WireV1.SubscribeCommunicationCallbacksRequest request =
+                CreateSubscribeRequest(_processor.AppliedSequence);
+            using AsyncServerStreamingCall<
+                    WireV1.CommunicationCallbackEnvelope> call =
+                _client.SubscribeCommunicationCallbacks(
+                    request,
+                    cancellationToken: cancellationToken);
+
+            while (await call.ResponseStream
+                       .MoveNext(cancellationToken)
+                       .ConfigureAwait(false))
+            {
+                await _processor.ProcessAsync(
+                        call.ResponseStream.Current,
+                        DateTimeOffset.UtcNow,
+                        cancellationToken)
+                    .ConfigureAwait(false);
+            }
+        }
+
+        private WireV1.SubscribeCommunicationCallbacksRequest
+            CreateSubscribeRequest(ulong resumeAfterSequence)
+        {
+            DateTimeOffset issuedAt = DateTimeOffset.UtcNow;
+            DateTimeOffset setupDeadline = issuedAt.AddMilliseconds(
+                _options.SetupDeadlineMilliseconds);
             var request = new WireV1.SubscribeCommunicationCallbacksRequest
             {
                 Context = new WireV1.RequestContext
                 {
-                    Version = new WireV1.ProtocolVersion { Major = 1, Minor = 0 },
+                    Version = new WireV1.ProtocolVersion
+                    {
+                        Major = ClusterContractVersion.CurrentMajor,
+                        Minor = ClusterContractVersion.CurrentMinor
+                    },
                     RequestId = Guid.NewGuid().ToString("D"),
-                    IssuedAtUnixTimeMs = now,
-                    DeadlineUnixTimeMs = now + _options.Transport.DeadlineMilliseconds,
-                    CallerRole = ToWireRole(_options.Transport.CallerRole),
-                    RequestedService = WireV1.ClusterService.CommunicationCallback,
-                    CallerInstanceId = _options.Transport.CallerInstanceId
+                    IssuedAtUnixTimeMs = issuedAt.ToUnixTimeMilliseconds(),
+                    DeadlineUnixTimeMs =
+                        setupDeadline.ToUnixTimeMilliseconds(),
+                    CallerRole =
+                        (WireV1.ClusterNodeRole)(int)_options.CallerRole,
+                    RequestedService = WireV1.ClusterService.Communication,
+                    CallerInstanceId = _options.CallerInstanceId
                 },
-                WorldId = _options.WorldId,
-                ChannelId = _options.ChannelId,
-                WorldGroup = _options.WorldGroup,
-                ResumeAfterSequence = ResumeAfterSequence
+                ResumeAfterSequence = resumeAfterSequence
             };
-            request.AcceptedKinds.Add(_options.AcceptedKinds);
+
+            if (_options.CallerRole == ClusterNodeRole.World)
+            {
+                request.WorldId = _options.WorldId.ToString("D");
+                request.ChannelId = _options.ChannelId;
+                request.WorldGroup = _options.WorldGroup;
+            }
+
             return request;
         }
 
-        private async Task ApplyEnvelopeAsync(
-            WireV1.CommunicationCallbackEnvelope envelope,
+        private static bool ShouldReconnect(
+            RpcException exception,
             CancellationToken cancellationToken)
         {
-            if (envelope == null || envelope.Sequence == 0 ||
-                !Guid.TryParse(envelope.EventId, out _) ||
-                envelope.ExpiresAtUnixTimeMs <= DateTimeOffset.UtcNow.ToUnixTimeMilliseconds())
+            if (cancellationToken.IsCancellationRequested)
             {
-                return;
+                return false;
             }
 
-            bool duplicate;
-            lock (_stateLock)
+            switch (exception.StatusCode)
             {
-                if (envelope.Sequence <= unchecked((ulong)_resumeAfterSequence))
-                {
-                    return;
-                }
-                duplicate = _eventIds.Contains(envelope.EventId);
-            }
-
-            if (!duplicate)
-            {
-                await _applier.ApplyAsync(envelope, cancellationToken).ConfigureAwait(false);
-            }
-
-            lock (_stateLock)
-            {
-                if (!duplicate && _eventIds.Add(envelope.EventId))
-                {
-                    _eventIdOrder.Enqueue(envelope.EventId);
-                    while (_eventIdOrder.Count > MaximumRememberedEventIds)
-                    {
-                        _eventIds.Remove(_eventIdOrder.Dequeue());
-                    }
-                }
-                if (envelope.Sequence > unchecked((ulong)_resumeAfterSequence))
-                {
-                    _resumeAfterSequence = checked((long)envelope.Sequence);
-                }
+                case StatusCode.Cancelled:
+                case StatusCode.Unknown:
+                case StatusCode.DeadlineExceeded:
+                case StatusCode.ResourceExhausted:
+                case StatusCode.Aborted:
+                case StatusCode.Internal:
+                case StatusCode.Unavailable:
+                case StatusCode.FailedPrecondition:
+                    return true;
+                default:
+                    return false;
             }
         }
 
-        private static bool IsReconnectable(StatusCode statusCode)
-        {
-            return statusCode == StatusCode.Unavailable ||
-                   statusCode == StatusCode.Cancelled ||
-                   statusCode == StatusCode.DeadlineExceeded ||
-                   statusCode == StatusCode.ResourceExhausted;
-        }
-
-        private static WireV1.ClusterNodeRole ToWireRole(ClusterNodeRole role)
-        {
-            return role == ClusterNodeRole.Login
-                ? WireV1.ClusterNodeRole.Login
-                : WireV1.ClusterNodeRole.World;
-        }
-
-        private static X509Certificate2 LoadCertificate(
-            AuthenticationGrpcClientOptions options)
+        private static X509Certificate2 LoadClientCertificate(
+            CommunicationCallbackSubscriberOptions options)
         {
             if (!System.IO.File.Exists(options.CertificatePath))
             {
                 throw new InvalidOperationException(
-                    "The callback subscriber certificate file does not exist.");
+                    "The communication callback client certificate file does not exist.");
             }
+
+            X509KeyStorageFlags keyStorageFlags =
+                Environment.OSVersion.Platform == PlatformID.Win32NT
+                    ? X509KeyStorageFlags.UserKeySet
+                    : X509KeyStorageFlags.EphemeralKeySet;
 #if NET10_0_OR_GREATER
-            X509Certificate2 certificate = X509CertificateLoader.LoadPkcs12FromFile(
-                options.CertificatePath,
-                options.CertificatePassword,
-                X509KeyStorageFlags.UserKeySet);
+            X509Certificate2 certificate =
+                X509CertificateLoader.LoadPkcs12FromFile(
+                    options.CertificatePath,
+                    options.CertificatePassword,
+                    keyStorageFlags);
 #else
-            X509Certificate2 certificate = new X509Certificate2(
+            var certificate = new X509Certificate2(
                 options.CertificatePath,
                 options.CertificatePassword,
-                X509KeyStorageFlags.UserKeySet);
+                keyStorageFlags);
 #endif
             if (!certificate.HasPrivateKey)
             {
                 certificate.Dispose();
                 throw new InvalidOperationException(
-                    "The callback subscriber certificate has no private key.");
+                    "The communication callback client certificate has no private key.");
             }
+
             return certificate;
         }
+
+        private static HttpMessageHandler CreateHttpHandler(
+            CommunicationCallbackSubscriberOptions options,
+            X509Certificate2 certificate)
+        {
+            if (options.WireMode == AuthenticationGrpcWireMode.GrpcWeb)
+            {
+                var primaryHandler = new HttpClientHandler
+                {
+                    ClientCertificateOptions =
+                        ClientCertificateOption.Manual,
+                    SslProtocols = SslProtocols.Tls12
+                };
+                primaryHandler.ClientCertificates.Add(certificate);
+#if NET10_0_OR_GREATER
+                if (!string.IsNullOrEmpty(
+                        options.TrustedRootCertificatePath))
+                {
+                    primaryHandler.ServerCertificateCustomValidationCallback =
+                        (_, serverCertificate, _, errors) =>
+                            ValidatePinnedServerCertificate(
+                                options,
+                                serverCertificate,
+                                errors);
+                }
+#endif
+                return new GrpcWebHandler(
+                    GrpcWebMode.GrpcWeb,
+                    primaryHandler);
+            }
+
+#if NET10_0_OR_GREATER
+            var handler = new SocketsHttpHandler
+            {
+                SslOptions = new System.Net.Security
+                    .SslClientAuthenticationOptions
+                {
+                    EnabledSslProtocols =
+                        SslProtocols.Tls12 | SslProtocols.Tls13,
+                    ClientCertificates = new X509CertificateCollection
+                    {
+                        certificate
+                    }
+                }
+            };
+            if (!string.IsNullOrEmpty(options.TrustedRootCertificatePath))
+            {
+                handler.SslOptions.RemoteCertificateValidationCallback =
+                    (_, serverCertificate, _, errors) =>
+                    {
+                        if (serverCertificate == null)
+                        {
+                            return false;
+                        }
+
+                        using (var certificateCopy =
+                               new X509Certificate2(serverCertificate))
+                        {
+                            return ValidatePinnedServerCertificate(
+                                options,
+                                certificateCopy,
+                                errors);
+                        }
+                    };
+            }
+            return handler;
+#else
+            var handler = new WinHttpHandler
+            {
+                SslProtocols = SslProtocols.Tls12
+            };
+            handler.ClientCertificates.Add(certificate);
+            return handler;
+#endif
+        }
+
+#if NET10_0_OR_GREATER
+        private static bool ValidatePinnedServerCertificate(
+            CommunicationCallbackSubscriberOptions options,
+            X509Certificate2 serverCertificate,
+            SslPolicyErrors errors)
+        {
+            if (serverCertificate == null ||
+                (errors & ~SslPolicyErrors.RemoteCertificateChainErrors) !=
+                SslPolicyErrors.None)
+            {
+                return false;
+            }
+
+            using X509Certificate2 trustedRoot =
+                X509CertificateLoader.LoadCertificateFromFile(
+                    options.TrustedRootCertificatePath);
+            using var chain = new X509Chain();
+            chain.ChainPolicy.TrustMode = X509ChainTrustMode.CustomRootTrust;
+            chain.ChainPolicy.CustomTrustStore.Add(trustedRoot);
+            chain.ChainPolicy.RevocationMode = X509RevocationMode.NoCheck;
+            chain.ChainPolicy.DisableCertificateDownloads = true;
+            return chain.Build(serverCertificate);
+        }
+#endif
 
         private void ThrowIfDisposed()
         {
             if (Volatile.Read(ref _disposed) != 0)
             {
-                throw new ObjectDisposedException(nameof(GrpcCommunicationCallbackSubscriber));
+                throw new ObjectDisposedException(
+                    nameof(GrpcCommunicationCallbackSubscriber));
             }
         }
     }
