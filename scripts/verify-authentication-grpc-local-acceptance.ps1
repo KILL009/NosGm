@@ -91,6 +91,8 @@ $serverOptions = Read-RepositoryFile `
     "Data\NosGm.Program\NosGm.Authentication.Server\AuthenticationServerOptions.cs"
 $clientOptions = Read-RepositoryFile `
     "Data\NosGm.Authentication.Client\AuthenticationGrpcClientOptions.cs"
+$masterOptions = Read-RepositoryFile `
+    "Data\NosGm.Authentication.Client\Communication\MasterCommunicationGrpcIdentityOptions.cs"
 $workflow = Read-RepositoryFile `
     ".github\workflows\dotnet10-foundation.yml"
 $documentation = Read-RepositoryFile `
@@ -157,10 +159,22 @@ Require $serverOptions "ParseOptionalFingerprints" `
     "Authentication-only deployments remain compatible before callbacks activate"
 Require $serverOptions "RejectCrossRoleCertificateReuse" `
     "Master fingerprints participate in cross-role reuse rejection"
-Require $clientOptions "callerRole != ClusterNodeRole.Master" `
-    "The shared gRPC option loader admits the dedicated Master role"
-Require $clientOptions "AuthBridge, Login, World, or Master" `
-    "Invalid gRPC caller roles still fail closed"
+Require $clientOptions "callerRole != ClusterNodeRole.World" `
+    "The public authentication option loader retains its three-role boundary"
+Require $clientOptions "The authentication gRPC client role must be AuthBridge, Login, or World." `
+    "The public authentication loader rejects Master impersonation"
+Require $clientOptions "internal static AuthenticationGrpcClientOptions LoadMaster" `
+    "Master construction is available only through an internal specialized path"
+Require $masterOptions "AuthenticationGrpcClientOptions.LoadMaster" `
+    "The communication identity loader uses the callback-only Master path"
+Require $masterOptions "NOSGM_COMMUNICATION_GRPC_MASTER_CERT_PATH" `
+    "Master callback publication has a separate certificate variable"
+Require $masterOptions "NOSGM_COMMUNICATION_GRPC_MASTER_CERT_PASSWORD" `
+    "Master callback publication has a separate password variable"
+Require $masterOptions "NOSGM_COMMUNICATION_GRPC_MASTER_INSTANCE_ID" `
+    "Master callback publication has a separate instance identity"
+Forbid $masterOptions "NOSGM_AUTH_GRPC_CLIENT_CERT_PATH" `
+    "The callback publisher never reads the AuthBridge certificate namespace"
 
 Require $startup '[ValidateSet("SCS", "GRPC")]' `
     "Local startup keeps one explicit authentication selector"
