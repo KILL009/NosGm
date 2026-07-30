@@ -52,9 +52,6 @@ enum CommunicationCallbackTargetKind {
   COMMUNICATION_CALLBACK_TARGET_KIND_ALL_LOGIN_NODES = 4;
   COMMUNICATION_CALLBACK_TARGET_KIND_ALL_NODES = 5;
   COMMUNICATION_CALLBACK_TARGET_KIND_CHARACTER_ID = 6;
-  // Deliver to every World in one group except the exact World identified by
-  // world_id. This preserves legacy cross-World presence notifications.
-  COMMUNICATION_CALLBACK_TARGET_KIND_WORLD_GROUP_EXCEPT_WORLD_ID = 7;
 }
 
 enum CommunicationLifecycleAction {
@@ -141,8 +138,6 @@ message SubscribeCommunicationCallbacksRequest {
 message CommunicationCallbackTarget {
   CommunicationCallbackTargetKind kind = 1;
   string world_group = 2;
-  // Exact destination for WORLD_ID, or the excluded source World for
-  // WORLD_GROUP_EXCEPT_WORLD_ID.
   string world_id = 3;
   int64 character_id = 4;
 }
