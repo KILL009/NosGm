@@ -8,6 +8,7 @@ internal static class CommunicationCallbackSubscriberHostSelfTest
     {
         VerifyControlledLifecycle();
         VerifyFaultVisibility();
+        VerifyUnexpectedCompletion();
     }
 
     private static void VerifyControlledLifecycle()
@@ -64,6 +65,22 @@ internal static class CommunicationCallbackSubscriberHostSelfTest
             failure,
             observed,
             "Callback lifecycle host invokes the explicit fault observer");
+    }
+
+    private static void VerifyUnexpectedCompletion()
+    {
+        var runner = new CompletingRunner();
+        using var host = new CommunicationCallbackSubscriberHost(runner);
+        host.Start();
+        host.Completion.GetAwaiter().GetResult();
+        AssertEqual(
+            CommunicationCallbackSubscriberHostState.Faulted,
+            host.State,
+            "Unexpected callback subscriber completion is unhealthy");
+        AssertEqual(
+            true,
+            host.LastException is InvalidOperationException,
+            "Unexpected callback completion retains a terminal failure");
     }
 
     private static void AssertEqual<T>(T expected, T actual, string name)
@@ -128,6 +145,20 @@ internal static class CommunicationCallbackSubscriberHostSelfTest
         {
             cancellationToken.ThrowIfCancellationRequested();
             return Task.FromException(_failure);
+        }
+
+        public void Dispose()
+        {
+        }
+    }
+
+    private sealed class CompletingRunner
+        : ICommunicationCallbackSubscriberRunner
+    {
+        public Task RunAsync(CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return Task.CompletedTask;
         }
 
         public void Dispose()
