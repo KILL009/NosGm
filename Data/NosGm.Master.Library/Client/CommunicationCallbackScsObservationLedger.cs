@@ -51,6 +51,7 @@ namespace NosGm.Master.Library.Client
     {
         public const int DefaultObservationCapacity = 4096;
         public const int MaximumObservationCapacity = 16384;
+        public const int MaximumProcessIdentityLength = 128;
 
         private static readonly Lazy<CommunicationCallbackScsObservationLedger>
             LazyInstance =
@@ -138,6 +139,7 @@ namespace NosGm.Master.Library.Client
             ulong resumeAfterSequence)
         {
             if (string.IsNullOrWhiteSpace(processIdentity) ||
+                processIdentity.Length > MaximumProcessIdentityLength ||
                 !string.Equals(
                     processIdentity,
                     processIdentity.Trim(),
@@ -151,6 +153,12 @@ namespace NosGm.Master.Library.Client
 
             lock (_syncRoot)
             {
+                if (_windowActive)
+                {
+                    throw new InvalidOperationException(
+                        "An SCS observation window is already active.");
+                }
+
                 _observations.Clear();
                 _processIdentity = processIdentity;
                 _runtimeGenerationId = runtimeGenerationId;
@@ -174,6 +182,9 @@ namespace NosGm.Master.Library.Client
             lock (_syncRoot)
             {
                 if (!_windowActive ||
+                    _phase !=
+                        CommunicationCallbackScsObservationPhase.Warmup ||
+                    _replayEvidence != null ||
                     !string.Equals(
                         _runtimeGenerationId,
                         evidence.RuntimeGenerationId,
@@ -202,6 +213,9 @@ namespace NosGm.Master.Library.Client
             string semanticFingerprint)
         {
             if (kind == WireV1.CommunicationCallbackKind.Unspecified ||
+                !Enum.IsDefined(
+                    typeof(WireV1.CommunicationCallbackKind),
+                    kind) ||
                 !IsSha256Hex(semanticFingerprint))
             {
                 throw new InvalidOperationException(
