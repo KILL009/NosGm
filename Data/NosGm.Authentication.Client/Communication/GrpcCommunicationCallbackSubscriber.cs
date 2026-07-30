@@ -31,6 +31,8 @@ namespace NosGm.Communication.Client
     {
         private readonly CommunicationCallbackSubscriberOptions _options;
         private readonly CommunicationCallbackProcessor _processor;
+        private readonly CommunicationCallbackReplayTracker _replayTracker =
+            new CommunicationCallbackReplayTracker();
         private readonly X509Certificate2 _clientCertificate;
         private readonly HttpMessageHandler _httpHandler;
         private readonly GrpcChannel _channel;
@@ -80,6 +82,11 @@ namespace NosGm.Communication.Client
 
         public ulong AppliedSequence => _processor.AppliedSequence;
 
+        public bool IsReplayComplete => _replayTracker.IsComplete;
+
+        public CommunicationCallbackReplayEvidence ReplayEvidence =>
+            _replayTracker.Evidence;
+
         public string RuntimeGenerationId =>
             _processor.RuntimeGenerationId;
 
@@ -127,6 +134,7 @@ namespace NosGm.Communication.Client
             }
             finally
             {
+                _replayTracker.Reset();
                 string registeredGeneration = _shadowWorldGeneration;
                 _shadowWorldGeneration = string.Empty;
                 if (_options.CallerRole == ClusterNodeRole.World &&
@@ -154,44 +162,86 @@ namespace NosGm.Communication.Client
         private async Task RunSingleStreamAsync(
             CancellationToken cancellationToken)
         {
-            WireV1.GetCommunicationCallbackRuntimeInfoResponse runtimeInfo =
-                await GetRuntimeInfoAsync(cancellationToken)
-                    .ConfigureAwait(false);
-            _processor.BindRuntimeGeneration(runtimeInfo.RuntimeGenerationId);
-
-            if (_options.CallerRole == ClusterNodeRole.World &&
-                !string.Equals(
-                    _shadowWorldGeneration,
-                    runtimeInfo.RuntimeGenerationId,
-                    StringComparison.Ordinal))
+            _replayTracker.Reset();
+            try
             {
-                await RegisterShadowWorldAsync(
+                WireV1.GetCommunicationCallbackRuntimeInfoResponse runtimeInfo =
+                    await GetRuntimeInfoAsync(cancellationToken)
+                        .ConfigureAwait(false);
+                _processor.BindRuntimeGeneration(runtimeInfo.RuntimeGenerationId);
+                ulong resumeAfterSequence = _processor.AppliedSequence;
+                _replayTracker.BeginStream(
+                    runtimeInfo.RuntimeGenerationId,
+                    resumeAfterSequence);
+
+                if (_options.CallerRole == ClusterNodeRole.World &&
+                    !string.Equals(
+                        _shadowWorldGeneration,
                         runtimeInfo.RuntimeGenerationId,
-                        cancellationToken)
-                    .ConfigureAwait(false);
-                _shadowWorldGeneration = runtimeInfo.RuntimeGenerationId;
+                        StringComparison.Ordinal))
+                {
+                    await RegisterShadowWorldAsync(
+                            runtimeInfo.RuntimeGenerationId,
+                            cancellationToken)
+                        .ConfigureAwait(false);
+                    _shadowWorldGeneration = runtimeInfo.RuntimeGenerationId;
+                }
+
+                WireV1.SubscribeCommunicationCallbacksRequest request =
+                    CreateSubscribeRequest(
+                        runtimeInfo.RuntimeGenerationId,
+                        resumeAfterSequence);
+                using AsyncServerStreamingCall<
+                        WireV1.CommunicationCallbackEnvelope> call =
+                    _client.SubscribeCommunicationCallbacks(
+                        request,
+                        cancellationToken: cancellationToken);
+
+                while (await call.ResponseStream
+                           .MoveNext(cancellationToken)
+                           .ConfigureAwait(false))
+                {
+                    await ProcessStreamEnvelopeAsync(
+                            call.ResponseStream.Current,
+                            cancellationToken)
+                        .ConfigureAwait(false);
+                }
             }
-
-            WireV1.SubscribeCommunicationCallbacksRequest request =
-                CreateSubscribeRequest(
-                    runtimeInfo.RuntimeGenerationId,
-                    _processor.AppliedSequence);
-            using AsyncServerStreamingCall<
-                    WireV1.CommunicationCallbackEnvelope> call =
-                _client.SubscribeCommunicationCallbacks(
-                    request,
-                    cancellationToken: cancellationToken);
-
-            while (await call.ResponseStream
-                       .MoveNext(cancellationToken)
-                       .ConfigureAwait(false))
+            finally
             {
-                await _processor.ProcessAsync(
-                        call.ResponseStream.Current,
-                        DateTimeOffset.UtcNow,
-                        cancellationToken)
-                    .ConfigureAwait(false);
+                _replayTracker.Reset();
             }
+        }
+
+        private async Task ProcessStreamEnvelopeAsync(
+            WireV1.CommunicationCallbackEnvelope envelope,
+            CancellationToken cancellationToken)
+        {
+            DateTimeOffset now = DateTimeOffset.UtcNow;
+            if (envelope != null &&
+                envelope.CallbackCase == WireV1
+                    .CommunicationCallbackEnvelope.CallbackOneofCase
+                    .ReplayComplete)
+            {
+                _replayTracker.Complete(envelope, now);
+                return;
+            }
+
+            if (_replayTracker.IsComplete)
+            {
+                _replayTracker.ValidateLiveSequence(envelope?.Sequence ?? 0);
+            }
+            else
+            {
+                _replayTracker.ObserveCallbackBeforeBarrier(
+                    envelope?.Sequence ?? 0);
+            }
+
+            await _processor.ProcessAsync(
+                    envelope,
+                    now,
+                    cancellationToken)
+                .ConfigureAwait(false);
         }
 
         private async Task<WireV1.GetCommunicationCallbackRuntimeInfoResponse>
@@ -312,7 +362,8 @@ namespace NosGm.Communication.Client
             {
                 Context = CreateRequestContext(issuedAt, setupDeadline),
                 ResumeAfterSequence = resumeAfterSequence,
-                RuntimeGenerationId = runtimeGenerationId
+                RuntimeGenerationId = runtimeGenerationId,
+                SupportsReplayCompleteBarrier = true
             };
 
             if (_options.CallerRole == ClusterNodeRole.World)
@@ -385,18 +436,18 @@ namespace NosGm.Communication.Client
                 Environment.OSVersion.Platform == PlatformID.Win32NT
                     ? X509KeyStorageFlags.UserKeySet
                     : X509KeyStorageFlags.EphemeralKeySet;
-#if NET10_0_OR_GREATER
+ #if NET10_0_OR_GREATER
             X509Certificate2 certificate =
                 X509CertificateLoader.LoadPkcs12FromFile(
                     options.CertificatePath,
                     options.CertificatePassword,
                     keyStorageFlags);
-#else
+ #else
             var certificate = new X509Certificate2(
                 options.CertificatePath,
                 options.CertificatePassword,
                 keyStorageFlags);
-#endif
+ #endif
             if (!certificate.HasPrivateKey)
             {
                 certificate.Dispose();
@@ -420,7 +471,7 @@ namespace NosGm.Communication.Client
                     SslProtocols = SslProtocols.Tls12
                 };
                 primaryHandler.ClientCertificates.Add(certificate);
-#if NET10_0_OR_GREATER
+ #if NET10_0_OR_GREATER
                 if (!string.IsNullOrEmpty(
                         options.TrustedRootCertificatePath))
                 {
@@ -431,13 +482,13 @@ namespace NosGm.Communication.Client
                                 serverCertificate,
                                 errors);
                 }
-#endif
+ #endif
                 return new GrpcWebHandler(
                     GrpcWebMode.GrpcWeb,
                     primaryHandler);
             }
 
-#if NET10_0_OR_GREATER
+ #if NET10_0_OR_GREATER
             var handler = new SocketsHttpHandler
             {
                 SslOptions = new System.Net.Security
@@ -472,17 +523,17 @@ namespace NosGm.Communication.Client
                     };
             }
             return handler;
-#else
+ #else
             var handler = new WinHttpHandler
             {
                 SslProtocols = SslProtocols.Tls12
             };
             handler.ClientCertificates.Add(certificate);
             return handler;
-#endif
+ #endif
         }
 
-#if NET10_0_OR_GREATER
+ #if NET10_0_OR_GREATER
         private static bool ValidatePinnedServerCertificate(
             CommunicationCallbackSubscriberOptions options,
             X509Certificate2 serverCertificate,
@@ -505,7 +556,7 @@ namespace NosGm.Communication.Client
             chain.ChainPolicy.DisableCertificateDownloads = true;
             return chain.Build(serverCertificate);
         }
-#endif
+ #endif
 
         private static bool IsCanonicalNonEmptyGuid(string value)
         {
