@@ -15,7 +15,11 @@ internal static class CommunicationCallbackSubscriberHostSelfTest
         var runner = new BlockingRunner();
         using var host = new CommunicationCallbackSubscriberHost(runner);
         host.Start();
-        runner.Started.Task.Wait(TimeSpan.FromSeconds(2));
+        if (!runner.Started.Task.Wait(TimeSpan.FromSeconds(2)))
+        {
+            throw new InvalidOperationException(
+                "The callback lifecycle test runner did not start in time.");
+        }
         AssertEqual(
             CommunicationCallbackSubscriberHostState.Running,
             host.State,
@@ -96,11 +100,12 @@ internal static class CommunicationCallbackSubscriberHostSelfTest
 
         public bool Disposed { get; private set; }
 
-        public async Task RunAsync(CancellationToken cancellationToken)
+        public Task RunAsync(CancellationToken cancellationToken)
         {
             Started.TrySetResult(true);
-            await Task.Delay(Timeout.Infinite, cancellationToken)
-                .ConfigureAwait(false);
+            cancellationToken.WaitHandle.WaitOne();
+            cancellationToken.ThrowIfCancellationRequested();
+            return Task.CompletedTask;
         }
 
         public void Dispose()
