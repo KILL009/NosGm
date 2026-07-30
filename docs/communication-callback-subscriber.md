@@ -59,7 +59,7 @@ A malformed envelope fails closed. It is not applied and its sequence is not sav
 
 ## Durable cursor
 
-The file cursor uses the following ASCII structure:
+The durable cursor is runtime-generation scoped. The file cursor uses the following ASCII structure:
 
 ```text
 NOSGM_CALLBACK_CURSOR_V1
