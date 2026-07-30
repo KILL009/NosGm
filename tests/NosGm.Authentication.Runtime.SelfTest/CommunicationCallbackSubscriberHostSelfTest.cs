@@ -4,7 +4,17 @@ using NosGm.Communication.Client;
 internal static class CommunicationCallbackSubscriberHostSelfTest
 {
     [ModuleInitializer]
-    public static void Run()
+    public static void Register()
+    {
+        var thread = new Thread(Run)
+        {
+            IsBackground = false,
+            Name = "NosGM callback lifecycle self-test"
+        };
+        thread.Start();
+    }
+
+    private static void Run()
     {
         VerifyControlledLifecycle();
         VerifyFaultVisibility();
