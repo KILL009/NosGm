@@ -25,7 +25,7 @@ namespace NosGm.Master.Server
 |  __| |  _  /| |  | |\___ \   | |    \ \/ / |  __|   | | | . ` |
 | |    | | \ \| |__| |____) |  | |     \  /  | |____ _| |_| |\  |
 |_|    |_|  \_\\____/|_____/   |_|      \/   |______|_____|_| \_|
-                                                                                            
+                                                                                             
 ";
             string separator = new string('=', Math.Max(1, Console.WindowWidth));
             string logo = text.Split('\n')
@@ -50,6 +50,7 @@ namespace NosGm.Master.Server
                 }
 
                 Logger.Info("Master Server Config has been loaded");
+                StartCommunicationCallbackMirror();
 
                 string ipAddress = ServerConfiguration.IPAddress;
                 var server = ScsServiceBuilder.CreateService(new ScsTcpEndPoint(ipAddress, port));
@@ -63,11 +64,11 @@ namespace NosGm.Master.Server
                 server.Start();
 
                 StartLauncherAuthBridge();
-                AppDomain.CurrentDomain.ProcessExit += (_, __) => StopLauncherAuthBridge();
+                AppDomain.CurrentDomain.ProcessExit += (_, __) => StopInfrastructure();
                 Console.CancelKeyPress += (_, eventArgs) =>
                 {
                     eventArgs.Cancel = true;
-                    StopLauncherAuthBridge();
+                    StopInfrastructure();
                     Environment.Exit(0);
                 };
 
@@ -79,9 +80,14 @@ namespace NosGm.Master.Server
             catch (Exception ex)
             {
                 Logger.Error("General Error", ex);
-                StopLauncherAuthBridge();
+                StopInfrastructure();
                 Console.ReadKey();
             }
+        }
+
+        private static void StartCommunicationCallbackMirror()
+        {
+            MasterCommunicationCallbackMirror.Instance.Start();
         }
 
         private static void StartLauncherAuthBridge()
@@ -99,6 +105,12 @@ namespace NosGm.Master.Server
 
             _launcherAuthBridge = new LauncherAuthBridge();
             _launcherAuthBridge.Start();
+        }
+
+        private static void StopInfrastructure()
+        {
+            MasterCommunicationCallbackMirror.Instance.Stop();
+            StopLauncherAuthBridge();
         }
 
         private static void StopLauncherAuthBridge()
