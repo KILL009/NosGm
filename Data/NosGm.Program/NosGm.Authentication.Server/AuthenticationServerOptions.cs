@@ -139,7 +139,7 @@ public sealed class AuthenticationServerOptions
                 [WireNodeRole.World] = ParseFingerprints(
                     configuration[WorldFingerprintsVariable],
                     WorldFingerprintsVariable),
-                [WireNodeRole.Master] = ParseFingerprints(
+                [WireNodeRole.Master] = ParseOptionalFingerprints(
                     configuration[MasterFingerprintsVariable],
                     MasterFingerprintsVariable)
             };
@@ -288,6 +288,26 @@ public sealed class AuthenticationServerOptions
         string variableName)
     {
         value = ReadRequiredText(value, variableName, 8192);
+        return ParseFingerprintValues(value, variableName);
+    }
+
+    private static IReadOnlyCollection<string> ParseOptionalFingerprints(
+        string value,
+        string variableName)
+    {
+        if (string.IsNullOrEmpty(value))
+        {
+            return Array.Empty<string>();
+        }
+
+        value = ReadRequiredText(value, variableName, 8192);
+        return ParseFingerprintValues(value, variableName);
+    }
+
+    private static IReadOnlyCollection<string> ParseFingerprintValues(
+        string value,
+        string variableName)
+    {
         var fingerprints = new HashSet<string>(StringComparer.Ordinal);
         foreach (string candidate in value.Split(','))
         {
