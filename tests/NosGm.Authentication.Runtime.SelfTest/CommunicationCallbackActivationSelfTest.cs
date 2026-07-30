@@ -94,7 +94,10 @@ internal static class CommunicationCallbackActivationSelfTest
 
     private static void VerifyShadowHandler()
     {
+        const string generation =
+            "11111111-2222-3333-4444-555555555555";
         var handler = new CommunicationCallbackShadowEnvelopeHandler();
+        handler.BeginStream(generation, 0);
         var envelope = new WireV1.CommunicationCallbackEnvelope
         {
             EventId = Guid.NewGuid().ToString("D"),
@@ -121,6 +124,15 @@ internal static class CommunicationCallbackActivationSelfTest
             (ulong)42,
             handler.LastObservedSequence,
             "Shadow callback handler records the observed sequence");
+        AssertEqual(
+            1,
+            handler.GetObservationSnapshot().Count,
+            "Shadow callback handler retains one bounded observation");
+        AssertEqual(
+            generation,
+            handler.GetObservationSnapshot()[0].RuntimeGenerationId,
+            "Shadow observation is bound to the active runtime generation");
+        handler.EndStream();
     }
 
     private static void AssertEqual<T>(T expected, T actual, string name)
