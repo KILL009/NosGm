@@ -273,7 +273,7 @@ Require $testProgram "await MasterCertificateRoleSelfTest.RunLiveAsync();" `
 Require $testProgram "await CommunicationCallbackLiveSubscriberSelfTest.RunLiveAsync();" `
     "Main self-test flow runs the live callback acceptance"
 Require-Match $testProgram `
-    "if\s*\(args\.Contains\(\"--live\".*?MasterCertificateRoleSelfTest\.RunLiveAsync\(\).*?CommunicationCallbackLiveSubscriberSelfTest\.RunLiveAsync\(\).*?RunLiveGrpcAcceptanceAsync\(\)" `
+    'if\s*\(args\.Contains\("--live".*?MasterCertificateRoleSelfTest\.RunLiveAsync\(\).*?CommunicationCallbackLiveSubscriberSelfTest\.RunLiveAsync\(\).*?RunLiveGrpcAcceptanceAsync\(\)' `
     "All live network tests run after module initialization completes"
 
 Require $legacyClient "Communication gRPC cutover is blocked" `
