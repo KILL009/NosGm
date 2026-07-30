@@ -65,8 +65,24 @@ Any parity report built from a ledger with nonzero evictions must declare the ob
 
 Startup and shutdown logs include retained and evicted observation counts.
 
+## Legacy SCS counterpart
+
+The receiving `CommunicationClient` now records the comparable legacy SCS
+callbacks in a separate bounded ledger before scheduling their existing local
+handlers. Its lifecycle is bound to the typed stream:
+
+- warmup starts only after the typed runtime generation is validated;
+- the SCS ledger becomes live only after the typed replay barrier is accepted;
+- stream exit closes observation while retaining a defensive diagnostic
+  snapshot.
+
+The complete SCS-side contract and inventory are documented in
+[`communication-callback-scs-observation-ledger.md`](communication-callback-scs-observation-ledger.md).
+
 ## Next boundary
 
-The next slice will instrument the legacy SCS callback receiver with the same semantic fingerprint vocabulary and a separate bounded ledger. A comparator can then pair live observations by process identity, callback kind, semantic fingerprint and FIFO order after the replay boundary.
+The next slice can compare typed and SCS live observations by process identity,
+runtime generation, callback kind, semantic fingerprint and FIFO order after
+the replay boundary.
 
 No transport cutover is permitted merely because fingerprints exist. Parity must first prove complete, non-evicted observation windows and explain every unmatched or reordered callback.
