@@ -123,8 +123,8 @@ Require $subscriber "ShouldReconnect" `
     "Transient callback failures use an explicit retry policy"
 Require $subscriber "MaximumReconnectDelayMilliseconds" `
     "Callback reconnect backoff is capped"
-Require $subscriber "StatusCode.OutOfRange" `
-    "Unavailable replay cursors are not classified as transient" 
+Require $subscriber "default:" `
+    "Unlisted fatal gRPC statuses are not retried"
 Forbid $subscriber "Task.WhenAll" `
     "Callback delivery is not mirrored"
 Forbid $subscriber "Scs" `
