@@ -59,7 +59,7 @@ $processor = Read-RequiredFile `
     "Data\NosGm.Authentication.Client\Communication\CommunicationCallbackProcessor.cs"
 $subscriber = Read-RequiredFile `
     "Data\NosGm.Authentication.Client\Communication\GrpcCommunicationCallbackSubscriber.cs"
-$host = Read-RequiredFile `
+$lifecycleHost = Read-RequiredFile `
     "Data\NosGm.Authentication.Client\Communication\CommunicationCallbackSubscriberHost.cs"
 $generationTest = Read-RequiredFile `
     "tests\NosGm.Authentication.Runtime.SelfTest\CommunicationCallbackRuntimeGenerationSelfTest.cs"
@@ -137,17 +137,17 @@ Require $subscriber "StatusCode.DataLoss" `
 Require $subscriber "StatusCode.FailedPrecondition" `
     "Runtime restart races enter controlled reconnection"
 
-Require $host "CommunicationCallbackSubscriberHostState" `
+Require $lifecycleHost "CommunicationCallbackSubscriberHostState" `
     "Lifecycle owner exposes explicit states"
-Require $host "The communication callback subscriber host can be started only once." `
+Require $lifecycleHost "The communication callback subscriber host can be started only once." `
     "Lifecycle owner forbids duplicate starts"
-Require $host "CancellationTokenSource" `
+Require $lifecycleHost "CancellationTokenSource" `
     "Lifecycle owner controls subscriber cancellation"
-Require $host "LastException" `
+Require $lifecycleHost "LastException" `
     "Lifecycle owner exposes terminal failure"
-Require $host "Stop(TimeSpan timeout)" `
+Require $lifecycleHost "Stop(TimeSpan timeout)" `
     "Lifecycle shutdown has a bounded wait"
-Forbid $host "Thread.Abort" `
+Forbid $lifecycleHost "Thread.Abort" `
     "Lifecycle shutdown never aborts threads"
 
 Require $generationTest "Every callback runtime process receives a distinct generation" `
