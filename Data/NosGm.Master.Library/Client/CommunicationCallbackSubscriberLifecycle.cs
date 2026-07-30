@@ -22,6 +22,7 @@ namespace NosGm.Master.Library.Client
             CommunicationCallbackActivationOptions
                 .DefaultStopTimeoutMilliseconds;
         private bool _disposed;
+        private bool _processExitRegistered;
 
         private CommunicationCallbackSubscriberLifecycle()
         {
@@ -238,6 +239,7 @@ namespace NosGm.Master.Library.Client
                 _host = host;
                 try
                 {
+                    RegisterProcessExitOnce();
                     host.Start();
                 }
                 catch
@@ -255,6 +257,31 @@ namespace NosGm.Master.Library.Client
                     " WireMode=" + subscriberOptions.WireMode +
                     " Endpoint=" + subscriberOptions.Address);
                 return true;
+            }
+        }
+
+        private void RegisterProcessExitOnce()
+        {
+            if (_processExitRegistered)
+            {
+                return;
+            }
+
+            AppDomain.CurrentDomain.ProcessExit += OnProcessExit;
+            _processExitRegistered = true;
+        }
+
+        private void OnProcessExit(object sender, EventArgs eventArgs)
+        {
+            try
+            {
+                Stop();
+            }
+            catch (Exception exception)
+            {
+                Logger.Error(
+                    "[CALLBACK_SHADOW_PROCESS_EXIT_FAILURE]",
+                    exception);
             }
         }
 
