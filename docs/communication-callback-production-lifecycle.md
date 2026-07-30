@@ -35,9 +35,9 @@ Any later initialization exception stops the subscriber before listeners are tor
 
 The SCS state transport starts the optional World shadow only after Master successfully registers the World and returns its assigned channel ID. The subscriber identity uses the exact registered World GUID, channel ID and World group.
 
-Because authoritative World state still lives in SCS, the callback runtime does not learn that assignment through `ClusterCommunicationService`. Before opening its stream, the World subscriber therefore calls `RegisterCommunicationCallbackShadowWorld` using its World certificate, current runtime generation and SCS-assigned identity. This temporary route exists only in `CommunicationCallbackHub`; it cannot create accounts, attach sessions, assign a channel or modify authoritative cluster state.
+Because authoritative World state still lives in SCS, the callback runtime does not learn that assignment through `ClusterCommunicationService`. Before opening its first stream for a runtime generation, the World subscriber therefore calls `RegisterCommunicationCallbackShadowWorld` using its World certificate, current runtime generation and SCS-assigned identity. This temporary route exists only in `CommunicationCallbackHub`; it cannot create accounts, attach sessions, assign a channel or modify authoritative cluster state.
 
-When a stream ends, the client attempts `UnregisterCommunicationCallbackShadowWorld`. Runtime restart clears the route automatically. Registration conflict or identity mismatch fails the subscriber closed rather than opening an unrouteable stream.
+The route survives transient stream reconnects so retained events and a non-zero cursor remain valid. During controlled subscriber shutdown, the client calls `UnregisterCommunicationCallbackShadowWorld`. Runtime restart clears the route automatically. Registration conflict or identity mismatch fails the subscriber closed rather than opening an unrouteable stream.
 
 If subscriber configuration or startup throws, the SCS transport immediately unregisters the authoritative World before surfacing the failure. A World therefore cannot remain registered after a synchronous shadow-lifecycle start failure.
 
