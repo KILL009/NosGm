@@ -96,7 +96,7 @@ Require $runtimeValidator "InvalidCallerRole" `
     "Other roles fail the generation query closed"
 Require $runtimeService "GetCommunicationCallbackRuntimeInfo" `
     "Runtime serves authenticated generation metadata"
-Require $runtimeService "_runtimeIdentity.GenerationId.ToString(\"D\")" `
+Require $runtimeService '_runtimeIdentity.GenerationId.ToString("D")' `
     "Runtime returns a canonical generation GUID"
 Require $runtimeService "request.RuntimeGenerationId" `
     "Stream setup validates the caller generation"
