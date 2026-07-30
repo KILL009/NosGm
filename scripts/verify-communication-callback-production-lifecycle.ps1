@@ -75,14 +75,20 @@ $scsTransport = Read-RequiredFile `
     "Data\NosGm.Master.Library\Client\ScsClusterCommunicationTransport.cs"
 $protocol = Read-RequiredFile `
     "contracts\cluster\v1\cluster_communication_callbacks.proto"
+$runtimeProgram = Read-RequiredFile `
+    "Data\NosGm.Program\NosGm.Authentication.Server\Program.cs"
 $shadowWorldValidator = Read-RequiredFile `
     "Data\NosGm.Cluster.Contracts\Communication\V1\CommunicationCallbackShadowWorldContractValidator.cs"
+$shadowWorldRegistry = Read-RequiredFile `
+    "Data\NosGm.Program\NosGm.Authentication.Server\State\CommunicationCallbackShadowWorldRegistry.cs"
 $callbackService = Read-RequiredFile `
     "Data\NosGm.Program\NosGm.Authentication.Server\Services\ClusterCommunicationCallbackService.cs"
 $selfTest = Read-RequiredFile `
     "tests\NosGm.Authentication.Runtime.SelfTest\CommunicationCallbackActivationSelfTest.cs"
 $shadowWorldTest = Read-RequiredFile `
     "tests\NosGm.Authentication.Runtime.SelfTest\CommunicationCallbackShadowWorldSelfTest.cs"
+$shadowWorldRegistryTest = Read-RequiredFile `
+    "tests\NosGm.Authentication.Runtime.SelfTest\CommunicationCallbackShadowWorldRegistrySelfTest.cs"
 $documentation = Read-RequiredFile `
     "docs\communication-callback-production-lifecycle.md"
 
@@ -165,10 +171,25 @@ Require $shadowWorldValidator "ClusterNodeRole.World" `
     "Only World may validate a shadow route request"
 Require $shadowWorldValidator "InvalidSubscriberIdentity" `
     "Malformed shadow World identity fails closed"
-Require $callbackService "_hub.RegisterWorld" `
-    "Shadow registration feeds only the callback routing hub"
-Require $callbackService "_hub.UnregisterWorld" `
+Require $runtimeProgram `
+    "AddSingleton<CommunicationCallbackShadowWorldRegistry>" `
+    "World shadow ownership is process-wide"
+Require $shadowWorldRegistry "CommunicationCallbackHub" `
+    "Shadow registry feeds only the callback routing hub"
+Require $shadowWorldRegistry "CallerInstanceId" `
+    "Shadow route ownership binds to one process identity"
+Require $shadowWorldRegistry "RuntimeGenerationId" `
+    "Shadow route ownership binds to one runtime generation"
+Require $shadowWorldRegistry "CommunicationResultCode.Conflict" `
+    "Another process cannot take over or remove the route"
+Require $shadowWorldRegistry "_hub.UnregisterWorld" `
     "Shadow cleanup removes the callback route"
+Require $callbackService "_shadowWorldRegistry.Register" `
+    "RPC registration uses the singleton ownership registry"
+Require $callbackService "_shadowWorldRegistry.Unregister" `
+    "RPC cleanup uses the singleton ownership registry"
+Require $callbackService "_shadowWorldRegistry.Owns" `
+    "World stream setup proves route ownership"
 Forbid $callbackService "_state.RegisterWorldServer" `
     "Shadow registration cannot mutate authoritative communication state"
 Require-Match $subscriber `
@@ -176,11 +197,13 @@ Require-Match $subscriber `
     "World registers its callback-only route before stream setup"
 Require-Match $subscriber `
     'finally\s*\{.*?TryUnregisterShadowWorldAsync' `
-    "World shadow route cleanup runs after every stream"
+    "World shadow route cleanup runs during subscriber shutdown"
 Require $subscriber "RegisterCommunicationCallbackShadowWorldAsync" `
     "Subscriber uses the typed shadow registration RPC"
 Require $subscriber "UnregisterCommunicationCallbackShadowWorldAsync" `
     "Subscriber uses the typed shadow cleanup RPC"
+Require $subscriber "_shadowWorldGeneration" `
+    "World route survives transient stream reconnects"
 
 Require $selfTest "Production callback subscriber is disabled by default" `
     "Activation default has a regression test"
@@ -196,6 +219,15 @@ Require $shadowWorldTest "Login cannot register a callback-only World route" `
     "Login shadow-route impersonation has a regression test"
 Require $shadowWorldTest "Shadow World registration requires the assigned channel" `
     "World shadow registration requires exact assigned identity"
+Require $shadowWorldRegistryTest `
+    "World shadow registration is idempotent for its owner" `
+    "World shadow ownership idempotency has a runtime test"
+Require $shadowWorldRegistryTest `
+    "Another process cannot take over a World shadow route" `
+    "World shadow takeover has a runtime test"
+Require $shadowWorldRegistryTest `
+    "Another process cannot remove a World shadow route" `
+    "World shadow cleanup ownership has a runtime test"
 
 Require $documentation "SCS remains the only callback path allowed to execute" `
     "Documentation preserves one authoritative callback applier"
@@ -209,5 +241,5 @@ Require $documentation "server-issued replay-complete barrier" `
     "Documentation names the atomic cutover requirement"
 
 Write-Host `
-    "NosGM Login and World callback shadow lifecycle and routing contracts passed." `
+    "NosGM Login and World callback shadow lifecycle, routing and ownership contracts passed." `
     -ForegroundColor Green
