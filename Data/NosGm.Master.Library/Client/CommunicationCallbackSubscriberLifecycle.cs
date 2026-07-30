@@ -158,6 +158,14 @@ namespace NosGm.Master.Library.Client
             CommunicationCallbackScsObservationLedger.Instance
                 .IsWindowActive;
 
+        public bool IsScsReplayComplete =>
+            CommunicationCallbackScsObservationLedger.Instance
+                .IsReplayComplete;
+
+        public CommunicationCallbackReplayEvidence ScsReplayEvidence =>
+            CommunicationCallbackScsObservationLedger.Instance
+                .ReplayEvidence;
+
         public int ScsObservationCapacity =>
             CommunicationCallbackScsObservationLedger.Instance
                 .ObservationCapacity;
@@ -262,6 +270,7 @@ namespace NosGm.Master.Library.Client
                         " ScsRetained=" +
                         GetScsObservationSnapshot().Count +
                         " ScsEvicted=" + ScsEvictedObservations +
+                        " ScsReplayComplete=" + IsScsReplayComplete +
                         " LastSequence=" +
                         (shadowHandler?.LastObservedSequence ?? 0) +
                         " ReplayComplete=" +
@@ -348,8 +357,12 @@ namespace NosGm.Master.Library.Client
                         subscriberOptions.CursorPath);
                 var shadowHandler =
                     new CommunicationCallbackShadowEnvelopeHandler(
-                        replayCompleted: evidence =>
-                            BeginScsObservationWindow(identity, evidence),
+                        streamBegan: (runtimeGenerationId, resumeAfterSequence) =>
+                            BeginScsObservationWindow(
+                                identity,
+                                runtimeGenerationId,
+                                resumeAfterSequence),
+                        replayCompleted: CompleteScsObservationReplay,
                         streamEnded: EndScsObservationWindow);
                 var subscriber =
                     new GrpcCommunicationCallbackSubscriber(
@@ -395,24 +408,48 @@ namespace NosGm.Master.Library.Client
 
         private static void BeginScsObservationWindow(
             string identity,
-            CommunicationCallbackReplayEvidence evidence)
+            string runtimeGenerationId,
+            ulong resumeAfterSequence)
         {
             try
             {
                 CommunicationCallbackScsObservationLedger.Instance
-                    .BeginWindow(identity, evidence);
+                    .BeginWindow(
+                        identity,
+                        runtimeGenerationId,
+                        resumeAfterSequence);
                 Logger.Info(
-                    "[CALLBACK_SCS_OBSERVATION_STARTED] Identity=" +
+                    "[CALLBACK_SCS_OBSERVATION_WARMUP] Identity=" +
                     identity +
-                    " Generation=" + evidence.RuntimeGenerationId +
-                    " ReplayThrough=" +
-                    evidence.ReplayThroughSequence);
+                    " Generation=" + runtimeGenerationId +
+                    " ResumeAfter=" + resumeAfterSequence);
             }
             catch (Exception exception)
             {
                 Logger.Error(
                     "[CALLBACK_SCS_OBSERVATION_START_FAILED] Identity=" +
                     identity,
+                    exception);
+            }
+        }
+
+        private static void CompleteScsObservationReplay(
+            CommunicationCallbackReplayEvidence evidence)
+        {
+            try
+            {
+                CommunicationCallbackScsObservationLedger.Instance
+                    .CompleteReplay(evidence);
+                Logger.Info(
+                    "[CALLBACK_SCS_OBSERVATION_LIVE] Generation=" +
+                    evidence.RuntimeGenerationId +
+                    " ReplayThrough=" +
+                    evidence.ReplayThroughSequence);
+            }
+            catch (Exception exception)
+            {
+                Logger.Error(
+                    "[CALLBACK_SCS_OBSERVATION_REPLAY_FAILED]",
                     exception);
             }
         }
