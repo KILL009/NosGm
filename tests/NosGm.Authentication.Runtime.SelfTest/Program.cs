@@ -699,6 +699,8 @@ AssertEqual(
 
 if (args.Contains("--live", StringComparer.Ordinal))
 {
+    await MasterCertificateRoleSelfTest.RunLiveAsync();
+    await CommunicationCallbackLiveSubscriberSelfTest.RunLiveAsync();
     await RunLiveGrpcAcceptanceAsync();
 }
 
