@@ -36,6 +36,7 @@ namespace NosGm.Communication.Client
         private readonly GrpcChannel _channel;
         private readonly WireV1.ClusterCommunicationCallbacks
             .ClusterCommunicationCallbacksClient _client;
+        private string _shadowWorldGeneration = string.Empty;
         private int _disposed;
         private int _running;
 
@@ -110,6 +111,12 @@ namespace NosGm.Communication.Client
                     catch (RpcException exception)
                         when (ShouldReconnect(exception, cancellationToken))
                     {
+                        if (_options.CallerRole == ClusterNodeRole.World &&
+                            exception.StatusCode ==
+                                StatusCode.FailedPrecondition)
+                        {
+                            _shadowWorldGeneration = string.Empty;
+                        }
                         await Task.Delay(reconnectDelay, cancellationToken)
                             .ConfigureAwait(false);
                         reconnectDelay = Math.Min(
@@ -120,6 +127,14 @@ namespace NosGm.Communication.Client
             }
             finally
             {
+                string registeredGeneration = _shadowWorldGeneration;
+                _shadowWorldGeneration = string.Empty;
+                if (_options.CallerRole == ClusterNodeRole.World &&
+                    !string.IsNullOrEmpty(registeredGeneration))
+                {
+                    await TryUnregisterShadowWorldAsync(registeredGeneration)
+                        .ConfigureAwait(false);
+                }
                 Volatile.Write(ref _running, 0);
             }
         }
@@ -144,47 +159,38 @@ namespace NosGm.Communication.Client
                     .ConfigureAwait(false);
             _processor.BindRuntimeGeneration(runtimeInfo.RuntimeGenerationId);
 
-            bool shadowWorldRegistered = false;
-            try
+            if (_options.CallerRole == ClusterNodeRole.World &&
+                !string.Equals(
+                    _shadowWorldGeneration,
+                    runtimeInfo.RuntimeGenerationId,
+                    StringComparison.Ordinal))
             {
-                if (_options.CallerRole == ClusterNodeRole.World)
-                {
-                    await RegisterShadowWorldAsync(
-                            runtimeInfo.RuntimeGenerationId,
-                            cancellationToken)
-                        .ConfigureAwait(false);
-                    shadowWorldRegistered = true;
-                }
-
-                WireV1.SubscribeCommunicationCallbacksRequest request =
-                    CreateSubscribeRequest(
+                await RegisterShadowWorldAsync(
                         runtimeInfo.RuntimeGenerationId,
-                        _processor.AppliedSequence);
-                using AsyncServerStreamingCall<
-                        WireV1.CommunicationCallbackEnvelope> call =
-                    _client.SubscribeCommunicationCallbacks(
-                        request,
-                        cancellationToken: cancellationToken);
-
-                while (await call.ResponseStream
-                           .MoveNext(cancellationToken)
-                           .ConfigureAwait(false))
-                {
-                    await _processor.ProcessAsync(
-                            call.ResponseStream.Current,
-                            DateTimeOffset.UtcNow,
-                            cancellationToken)
-                        .ConfigureAwait(false);
-                }
+                        cancellationToken)
+                    .ConfigureAwait(false);
+                _shadowWorldGeneration = runtimeInfo.RuntimeGenerationId;
             }
-            finally
+
+            WireV1.SubscribeCommunicationCallbacksRequest request =
+                CreateSubscribeRequest(
+                    runtimeInfo.RuntimeGenerationId,
+                    _processor.AppliedSequence);
+            using AsyncServerStreamingCall<
+                    WireV1.CommunicationCallbackEnvelope> call =
+                _client.SubscribeCommunicationCallbacks(
+                    request,
+                    cancellationToken: cancellationToken);
+
+            while (await call.ResponseStream
+                       .MoveNext(cancellationToken)
+                       .ConfigureAwait(false))
             {
-                if (shadowWorldRegistered)
-                {
-                    await TryUnregisterShadowWorldAsync(
-                            runtimeInfo.RuntimeGenerationId)
-                        .ConfigureAwait(false);
-                }
+                await _processor.ProcessAsync(
+                        call.ResponseStream.Current,
+                        DateTimeOffset.UtcNow,
+                        cancellationToken)
+                    .ConfigureAwait(false);
             }
         }
 
