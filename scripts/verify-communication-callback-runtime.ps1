@@ -57,6 +57,8 @@ $contract = Read-RequiredFile `
     "contracts\cluster\v1\cluster_communication_callbacks.proto"
 $selfTest = Read-RequiredFile `
     "tests\NosGm.Authentication.Runtime.SelfTest\CommunicationCallbackHubSelfTest.cs"
+$publicationOrderTest = Read-RequiredFile `
+    "tests\NosGm.Authentication.Runtime.SelfTest\CommunicationCallbackPublicationOrderSelfTest.cs"
 $documentation = Read-RequiredFile `
     "docs\communication-callback-runtime.md"
 
@@ -65,7 +67,7 @@ Require $program "AddSingleton<CommunicationCallbackHub>" `
 Require $program "MapGrpcService<ClusterCommunicationCallbackService>" `
     "The typed callback service is mapped"
 Require $program ".EnableGrpcWeb()" `
-    "Callback streaming remains available to Windows 10 callers"
+    "Callback streaming retains explicit gRPC-Web compatibility"
 
 Require $options "NOSGM_COMMUNICATION_MAX_CALLBACK_SUBSCRIBERS" `
     "Subscriber-state capacity is configurable"
@@ -94,6 +96,16 @@ Require $hub "SHA256.HashData" `
     "Idempotency fingerprints use a stable cryptographic digest"
 Require $hub "existing.Fingerprint" `
     "Duplicate event IDs distinguish idempotency from conflict"
+Require $hub "PublishedEventOrderEntry" `
+    "Publication order stores one explicit EventId generation"
+Require $hub "Sequence = sequence" `
+    "Publication order records the accepted generation sequence"
+Require $hub "current.Sequence == candidate.Sequence" `
+    "Stale order entries cannot remove a newer EventId generation"
+Require $hub "CompactPublishedEventOrder" `
+    "Expired publication-order residue is compacted"
+Forbid $hub "_publishedEvents.Remove(_publishedEventOrder.Dequeue())" `
+    "Generation-blind EventId trimming cannot return"
 Require $hub "ExpiresAtUnixTimeMs" `
     "Callback TTL is enforced during delivery and replay"
 Require $hub "CharacterId" `
@@ -160,11 +172,20 @@ Require $selfTest "Expired callbacks are never replayed" `
     "Runtime self-test covers TTL"
 Require $selfTest "QueueOverflow" `
     "Runtime self-test covers bounded backpressure"
+Require $publicationOrderTest `
+    "A stale order entry cannot delete the reused EventId generation" `
+    "Runtime self-test covers expired EventId generation reuse"
+Require $publicationOrderTest `
+    "Conflicting reuse reports the surviving generation sequence" `
+    "Runtime self-test proves the newer generation remains registered"
+Require $publicationOrderTest `
+    "Idempotent retry preserves the reused generation sequence" `
+    "Runtime self-test preserves idempotency after capacity trimming"
 Require $documentation "Production `CommunicationServiceClient` still defaults to SCS" `
     "Documentation preserves the guarded production boundary"
 
 & (Join-Path $PSScriptRoot "verify-communication-callback-subscriber.ps1")
 
 Write-Host `
-    "NosGM bounded communication callback runtime contracts passed." `
+    "NosGM bounded communication callback runtime and EventId generation contracts passed." `
     -ForegroundColor Green
