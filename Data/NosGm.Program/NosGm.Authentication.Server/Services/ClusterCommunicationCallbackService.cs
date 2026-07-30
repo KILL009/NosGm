@@ -211,6 +211,9 @@ public sealed class ClusterCommunicationCallbackService
                     "The callback subscriber does not own the registered shadow World route."));
         }
 
+        ulong replayThroughSequence = Math.Max(
+            _hub.CurrentSequence,
+            request.ResumeAfterSequence);
         CallbackSubscriptionOpenResult openResult =
             _hub.TryOpenSubscription(request, out var subscription);
         if (openResult != CallbackSubscriptionOpenResult.Success)
@@ -226,6 +229,7 @@ public sealed class ClusterCommunicationCallbackService
             matchedSubscribers: 1);
         try
         {
+            uint replayedEvents = 0;
             foreach (WireV1.CommunicationCallbackEnvelope envelope in
                      subscription.ReplayEvents)
             {
@@ -233,7 +237,36 @@ public sealed class ClusterCommunicationCallbackService
                 if (!IsExpired(envelope))
                 {
                     await responseStream.WriteAsync(envelope);
+                    replayThroughSequence = Math.Max(
+                        replayThroughSequence,
+                        envelope.Sequence);
+                    replayedEvents++;
                 }
+            }
+
+            if (request.SupportsReplayCompleteBarrier)
+            {
+                await responseStream.WriteAsync(
+                    new WireV1.CommunicationCallbackEnvelope
+                    {
+                        Sequence = replayThroughSequence,
+                        ReplayComplete =
+                            new WireV1.CommunicationCallbackReplayComplete
+                            {
+                                RuntimeGenerationId =
+                                    _runtimeIdentity.GenerationId.ToString("D"),
+                                ReplayThroughSequence = replayThroughSequence,
+                                ResumeAfterSequence =
+                                    request.ResumeAfterSequence,
+                                ReplayedEvents = replayedEvents
+                            }
+                    });
+                WriteAudit(
+                    request.Context,
+                    "CommunicationCallbackReplayComplete",
+                    WireV1.CommunicationResultCode.Success,
+                    replayThroughSequence,
+                    replayedEvents);
             }
 
             using var linked = CancellationTokenSource
