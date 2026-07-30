@@ -63,6 +63,8 @@ $options = Read-RequiredFile `
     "Data\NosGm.Authentication.Client\Communication\CommunicationCallbackMirrorOptions.cs"
 $publisher = Read-RequiredFile `
     "Data\NosGm.Authentication.Client\Communication\GrpcCommunicationCallbackPublisher.cs"
+$planner = Read-RequiredFile `
+    "Data\NosGm.Authentication.Client\Communication\CharacterPresenceMirrorRoutePlanner.cs"
 $mirror = Read-RequiredFile `
     "Data\NosGm.Program\NosGm.Master.Server\MasterCommunicationCallbackMirror.cs"
 $service = Read-RequiredFile `
@@ -73,6 +75,8 @@ $project = Read-RequiredFile `
     "Data\NosGm.Program\NosGm.Master.Server\NosGm.Master.Server.csproj"
 $optionsTest = Read-RequiredFile `
     "tests\NosGm.Authentication.Runtime.SelfTest\CommunicationCallbackMirrorOptionsSelfTest.cs"
+$plannerTest = Read-RequiredFile `
+    "tests\NosGm.Authentication.Runtime.SelfTest\CharacterPresenceMirrorRoutePlannerSelfTest.cs"
 $liveTest = Read-RequiredFile `
     "tests\NosGm.Authentication.Runtime.SelfTest\MasterCommunicationCallbackPublisherLiveSelfTest.cs"
 $interfaceMapTest = Read-RequiredFile `
@@ -108,6 +112,17 @@ Require $publisher 'RequestId = Guid.NewGuid().ToString("D")' `
 Forbid $publisher "NOSGM_AUTH_GRPC_CLIENT_CERT_PATH" `
     "Callback publisher never reads the AuthBridge certificate namespace"
 
+Require $planner "ResolvePeerWorldIds" `
+    "Presence routing has one pure route planner"
+Require $planner "route.WorldId != sourceWorldId" `
+    "Presence route planning excludes the source World"
+Require $planner "StringComparison.Ordinal" `
+    "Presence route planning compares World groups exactly"
+Require $planner ".Distinct()" `
+    "Presence route planning collapses duplicate World registrations"
+Require $planner ".OrderBy(worldId => worldId)" `
+    "Presence route planning is deterministic"
+
 Require $mirror "MasterCommunicationGrpcIdentityOptions.Load()" `
     "Mirror lifecycle loads the communication-specific Master identity"
 Require $mirror "new BlockingCollection<MirrorItem>" `
@@ -127,7 +142,15 @@ Require $mirror "CALLBACK_MIRROR_FAULTED" `
 Require $mirror "SCS remains authoritative" `
     "Terminal mirror failure cannot claim transport authority"
 Require $mirror "TryCharacterPresence" `
-    "Character-presence builder remains staged for exact routing"
+    "Character presence is published through the shared mirror queue"
+Require $mirror "WorldIdTarget(targetWorldId)" `
+    "Each presence copy targets one exact peer World"
+Require $mirror "DropIfTargetNotFound" `
+    "Presence copies may tolerate a missing shadow target"
+Require $mirror "TARGET_NOT_REGISTERED" `
+    "Missing presence shadow targets remain observable"
+Require $mirror "CommunicationResultCode.NotFound" `
+    "Missing presence shadow targets do not fault the worker"
 Require $mirror "TryStaticBonusRefresh" `
     "Future static-bonus publication already has an exact typed builder"
 Require $mirror "CommunicationCallbackTargetKind.CharacterId" `
@@ -138,6 +161,8 @@ Require $mirror "CommunicationCallbackTargetKind.AllWorlds" `
     "World-wide callbacks preserve their legacy scope"
 Require $mirror "CommunicationCallbackTargetKind.WorldGroup" `
     "Group-scoped callbacks preserve their legacy scope"
+Require $mirror "CommunicationCallbackTargetKind.WorldId" `
+    "Character presence uses exact World routing"
 
 Require $service ": CommunicationService," `
     "Mirrored service inherits the complete legacy implementation"
@@ -145,14 +170,16 @@ Require $service "ICommunicationService" `
     "Mirrored service reimplements the SCS interface"
 Require $service "CALLBACK_MIRROR_ISOLATED_FAILURE" `
     "Mirror exceptions are isolated from SCS results"
-Forbid $service "ConnectCharacter" `
-    "Character-connected mirroring waits for source-World exclusion"
-Forbid $service "DisconnectCharacter" `
-    "Character-disconnected mirroring waits for source-World exclusion"
+Require $service "ResolvePeerWorldIds" `
+    "Presence callbacks snapshot exact peer Worlds"
+Require $service "MirrorPresence" `
+    "Presence callbacks fan out through one isolated helper"
 Forbid $service "SendMessageToCharacter" `
     "Rendered legacy character messaging is not mirrored"
 
 $orderedMethods = @(
+    @{ Name = "ConnectCharacter"; Mirror = "MirrorPresence" },
+    @{ Name = "DisconnectCharacter"; Mirror = "MirrorPresence" },
     @{ Name = "KickSession"; Mirror = "TryKickSession" },
     @{ Name = "RefreshPenalty"; Mirror = "TryPenaltyRefresh" },
     @{ Name = "Restart"; Mirror = "TryRestart" },
@@ -172,6 +199,13 @@ foreach ($entry in $orderedMethods) {
         ("SCS executes before the typed mirror for " + $entry.Name)
 }
 
+Require-Match $service `
+    'DisconnectCharacter\(.*?wasConnected.*?base\.DisconnectCharacter\(.*?if\s*\(wasConnected\).*?MirrorPresence' `
+    "Redundant character disconnects do not create mirror events"
+Require-Match $service `
+    'MirrorPresence\(.*?foreach\s*\(Guid targetWorldId in peerWorldIds\).*?TryCharacterPresence\(\s*targetWorldId' `
+    "Presence fan-out publishes one copy per exact peer World"
+
 Require-Match $program `
     'StartCommunicationCallbackMirror\(\).*?AddService<ICommunicationService, MirroredCommunicationService>.*?server\.Start\(\)' `
     "Master validates mirror configuration before exposing SCS"
@@ -188,10 +222,14 @@ Require $project '<Compile Include="MirroredCommunicationService.cs" />' `
 
 Require $interfaceMapTest "GetInterfaceMap" `
     "Compiled mirror verification inspects the CLR interface map"
+Require $interfaceMapTest '"ConnectCharacter"' `
+    "Compiled mirror verification includes character connection"
+Require $interfaceMapTest '"DisconnectCharacter"' `
+    "Compiled mirror verification includes character disconnection"
 Require $interfaceMapTest "NosGm.Master.Server.MirroredCommunicationService" `
-    "Compiled mirror verification expects the eight derived targets"
-Require $interfaceMapTest "NosGm.Master.Server.CommunicationService" `
-    "Compiled mirror verification preserves deferred legacy targets"
+    "Compiled mirror verification expects all ten derived targets"
+Require $interfaceMapTest '"SendMessageToCharacter"' `
+    "Compiled mirror verification preserves raw messaging on the legacy service"
 Require $windowsWorkflow "Verify Master callback mirror interface dispatch" `
     "Windows CI names the compiled interface-dispatch check"
 Require $windowsWorkflow "./scripts/verify-master-callback-mirror-interface-map.ps1" `
@@ -201,10 +239,14 @@ Require $optionsTest "Master callback mirror is disabled by default" `
     "Mirror activation default has a regression test"
 Require $optionsTest "rejects surrounding whitespace" `
     "Mirror boolean strictness has a regression test"
-Require $optionsTest "below the safe floor" `
-    "Mirror queue floor has a regression test"
-Require $optionsTest "above the ceiling" `
-    "Mirror shutdown ceiling has a regression test"
+Require $plannerTest "unique deterministic peers" `
+    "Presence peer selection has a deterministic regression test"
+Require $plannerTest "excludes the source World" `
+    "Presence source exclusion has a regression test"
+Require $plannerTest "excludes another World group" `
+    "Presence group isolation has a regression test"
+Require $plannerTest "unknown source World" `
+    "Unknown presence sources have a regression test"
 
 Require $liveTest "new GrpcCommunicationCallbackPublisher" `
     "Live acceptance exercises the reusable publisher"
@@ -218,6 +260,10 @@ Require $liveTest "retry.AcceptedSequence" `
 Require $liveTest "IsBackground = false" `
     "Live publisher acceptance cannot be skipped by process exit"
 
+Require $migrationMap '"legacyMethod": "CharacterConnected"' `
+    "Migration inventory contains character connection"
+Require $migrationMap '"legacyMethod": "CharacterDisconnected"' `
+    "Migration inventory contains character disconnection"
 Require $migrationMap '"legacyMethod": "SendMessageToCharacter"' `
     "Migration inventory retains the deferred raw-message boundary"
 Require $migrationMap '"targetKind": "ALL_NODES"' `
@@ -226,8 +272,10 @@ Require $documentation "SCS remains the only transport allowed to apply" `
     "Documentation preserves one callback effect authority"
 Require $documentation 'non-blocking `TryAdd`' `
     "Documentation records the non-blocking queue boundary"
-Require $documentation "source World" `
-    "Documentation records the deferred presence exclusion"
+Require $documentation "one `WORLD_ID` publication per peer World" `
+    "Documentation records exact presence fan-out"
+Require $documentation "source World never receives" `
+    "Documentation records source-World exclusion"
 Require $documentation 'current `ICommunicationService` exposes no SCS emitter' `
     "Documentation does not invent a static-bonus source"
 Require $documentation "server-issued replay-complete barrier" `
