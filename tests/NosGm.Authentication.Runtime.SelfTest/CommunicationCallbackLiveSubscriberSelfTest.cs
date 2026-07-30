@@ -112,15 +112,29 @@ internal static class CommunicationCallbackLiveSubscriberSelfTest
         finally
         {
             lifetime.Cancel();
+            subscriber.Dispose();
             try
             {
+                Task completed = await Task.WhenAny(
+                        subscriberTask,
+                        Task.Delay(TimeSpan.FromSeconds(5)))
+                    .ConfigureAwait(false);
+                if (completed != subscriberTask)
+                {
+                    throw new InvalidOperationException(
+                        "The live callback subscriber did not stop within five seconds.");
+                }
+
                 await subscriberTask.ConfigureAwait(false);
             }
             catch (OperationCanceledException)
             {
                 // Expected shutdown after the live acceptance event is applied.
             }
-            Directory.Delete(cursorDirectory, true);
+            finally
+            {
+                Directory.Delete(cursorDirectory, true);
+            }
         }
     }
 
@@ -133,9 +147,13 @@ internal static class CommunicationCallbackLiveSubscriberSelfTest
             await subscriber.RunAsync(cancellationToken)
                 .ConfigureAwait(false);
         }
-        catch (Grpc.Core.RpcException exception)
-            when (cancellationToken.IsCancellationRequested &&
-                  exception.StatusCode == Grpc.Core.StatusCode.Cancelled)
+        catch (Grpc.Core.RpcException)
+            when (cancellationToken.IsCancellationRequested)
+        {
+            throw new OperationCanceledException(cancellationToken);
+        }
+        catch (ObjectDisposedException)
+            when (cancellationToken.IsCancellationRequested)
         {
             throw new OperationCanceledException(cancellationToken);
         }
