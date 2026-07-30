@@ -30,6 +30,22 @@ function Require {
     Write-Host "[PASS] $Name" -ForegroundColor Green
 }
 
+function Require-Match {
+    param(
+        [Parameter(Mandatory = $true)][string]$Content,
+        [Parameter(Mandatory = $true)][string]$Pattern,
+        [Parameter(Mandatory = $true)][string]$Name
+    )
+
+    if (-not [regex]::IsMatch(
+        $Content,
+        $Pattern,
+        [Text.RegularExpressions.RegexOptions]::Singleline)) {
+        throw "$Name does not match the required mapping pattern."
+    }
+    Write-Host "[PASS] $Name" -ForegroundColor Green
+}
+
 function Forbid {
     param(
         [Parameter(Mandatory = $true)][string]$Content,
@@ -194,10 +210,18 @@ $eventMappings = @(
     @("OpenWorldBoss", "OpenWorldBoss")
 )
 foreach ($mapping in $eventMappings) {
-    Require $eventMapper ("CommunicationGlobalEventType." + $mapping[0]) `
-        ("Wire global event is mapped: " + $mapping[0])
-    Require $eventMapper ("EventType." + $mapping[1]) `
-        ("Domain global event is mapped: " + $mapping[1])
+    $wireName = [regex]::Escape([string]$mapping[0])
+    $domainName = [regex]::Escape([string]$mapping[1])
+    Require-Match $eventMapper `
+        ("case\s+WireV1\.CommunicationGlobalEventType\." +
+         $wireName + ":\s*return\s+EventType\." +
+         $domainName + ";") `
+        ("Wire-to-domain global event pair is exact: " + $mapping[0])
+    Require-Match $eventMapper `
+        ("case\s+EventType\." + $domainName +
+         ":\s*return\s+WireV1\.CommunicationGlobalEventType\." +
+         $wireName + ";") `
+        ("Domain-to-wire global event pair is exact: " + $mapping[1])
 }
 Require $eventMapper "public static EventType ToDomain" `
     "Global-event mapper supports callback consumption"
