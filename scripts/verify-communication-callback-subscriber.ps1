@@ -77,12 +77,18 @@ $legacyClient = Read-RequiredFile `
     "Data\NosGm.Master.Library\Client\CommunicationServiceClient.cs"
 $selfTest = Read-RequiredFile `
     "tests\NosGm.Authentication.Runtime.SelfTest\CommunicationCallbackSubscriberSelfTest.cs"
+$envelopeValidationTest = Read-RequiredFile `
+    "tests\NosGm.Authentication.Runtime.SelfTest\CommunicationCallbackEnvelopeValidationSelfTest.cs"
+$optionsSafetyTest = Read-RequiredFile `
+    "tests\NosGm.Authentication.Runtime.SelfTest\CommunicationCallbackOptionsSafetySelfTest.cs"
 $liveTest = Read-RequiredFile `
     "tests\NosGm.Authentication.Runtime.SelfTest\CommunicationCallbackLiveSubscriberSelfTest.cs"
 $masterRoleTest = Read-RequiredFile `
     "tests\NosGm.Authentication.Runtime.SelfTest\MasterCertificateRoleSelfTest.cs"
 $testProgram = Read-RequiredFile `
     "tests\NosGm.Authentication.Runtime.SelfTest\Program.cs"
+$protocol = Read-RequiredFile `
+    "contracts\cluster\v1\cluster_communication_callbacks.proto"
 $documentation = Read-RequiredFile `
     "docs\communication-callback-subscriber.md"
 
@@ -108,6 +114,14 @@ Require $options "InitialReconnectDelayMilliseconds" `
     "Callback reconnection starts with a bounded delay"
 Require $options "MaximumReconnectDelayMilliseconds" `
     "Callback reconnection has a hard delay ceiling"
+Require $options "PathsEqual(certificatePath, cursorPath)" `
+    "Cursor path cannot collide with the client certificate"
+Require $options "PathsEqual(cursorPath, trustedRootPath)" `
+    "Cursor path cannot collide with the trusted root"
+Require $options "PathsEqual(certificatePath, trustedRootPath)" `
+    "Client certificate cannot be reused as the trusted root"
+Require $options "client certificate, trusted root, and cursor paths must be distinct" `
+    "All callback security files remain isolated"
 
 Require $cursor "FileOptions.WriteThrough" `
     "Cursor writes request durable storage"
@@ -124,6 +138,14 @@ Forbid $cursor "BinaryFormatter" `
 
 Require $processor "envelope.Sequence <= _appliedSequence" `
     "Already applied callback sequences are ignored"
+Require $processor "ValidateEnvelope(envelope);" `
+    "New callback sequences are validated before application"
+Require $processor "IsCanonicalNonEmptyGuid" `
+    "Callback envelopes require canonical event IDs"
+Require $processor "ValidateCallbackAndTarget" `
+    "Callback payloads must match their target"
+Require $processor "MaxEventTtlSeconds" `
+    "Callback envelope lifetime is bounded"
 Require $processor "await _handler.ApplyAsync" `
     "Callback handler completes before acknowledgement"
 Require $processor "_cursorStore.Save(envelope.Sequence);" `
@@ -246,10 +268,29 @@ Require $selfTest "A corrupt callback cursor fails closed" `
     "Self-test protects cursor corruption"
 Require $selfTest "defaults to native HTTP/2" `
     "Self-test protects the Windows 11 transport default"
+Require $selfTest "CommunicationCallbackTargetKind.AllNodes" `
+    "Processor self-test constructs an authoritative penalty target"
+Require $envelopeValidationTest "Malformed callback event IDs fail before application" `
+    "Malformed event IDs are covered by runtime tests"
+Require $envelopeValidationTest "without advancing the cursor" `
+    "Malformed envelopes cannot be acknowledged"
+Require $envelopeValidationTest "MaxEventTtlSeconds" `
+    "Envelope lifetime bounds are covered by runtime tests"
+Require $optionsSafetyTest "Callback cursor cannot overwrite the trusted root" `
+    "Trusted root collision has a regression test"
+Require $optionsSafetyTest "client certificate and trusted root must be distinct" `
+    "Certificate role separation has a regression test"
+
 Require $liveTest "public static async Task RunLiveAsync()" `
     "Live callback acceptance exposes an explicit async entry point"
 Forbid $liveTest "[ModuleInitializer]" `
     "Live callback networking never runs under the CLR module initializer lock"
+Require $liveTest "subscriberInstanceId" `
+    "Live callback acceptance owns an explicit process identity"
+Require $liveTest 'Guid.NewGuid().ToString("N")' `
+    "Each live wire-mode acceptance uses an isolated process identity"
+Forbid $liveTest "acceptance-login-callback-subscriber-1" `
+    "Live acceptance never reuses the stale fixed subscriber identity"
 Require $liveTest "Live Login stream applies the typed penalty callback" `
     "Live acceptance applies a typed callback"
 Require $liveTest "Live callback cursor commits after handler completion" `
@@ -276,6 +317,10 @@ Require-Match $testProgram `
     'if\s*\(args\.Contains\("--live".*?MasterCertificateRoleSelfTest\.RunLiveAsync\(\).*?CommunicationCallbackLiveSubscriberSelfTest\.RunLiveAsync\(\).*?RunLiveGrpcAcceptanceAsync\(\)' `
     "All live network tests run after module initialization completes"
 
+Require $protocol "Native HTTP/2 is the primary Windows 11 transport" `
+    "Protocol comments record the current primary transport"
+Require $protocol "Subscriber replay acknowledgement is sequence-based" `
+    "Protocol distinguishes publication idempotency from replay acknowledgement"
 Require $legacyClient "Communication gRPC cutover is blocked" `
     "Production communication cutover remains guarded"
 Forbid $legacyClient "new GrpcCommunicationCallbackSubscriber" `
@@ -284,9 +329,13 @@ Require $documentation "Production remains on the SCS callback path." `
     "Documentation preserves the current production boundary"
 Require $documentation "Native HTTP/2 is the primary Windows 11 path." `
     "Documentation records the Windows 11 transport decision"
+Require $documentation "A malformed envelope fails closed." `
+    "Documentation records the envelope validation boundary"
+Require $documentation "successful typed dispatch" `
+    "Documentation distinguishes dispatch from downstream completion"
 Require $documentation "runtime-generation scoped" `
     "Documentation records the durable-cursor generation boundary"
 
 Write-Host `
-    "NosGM dual-target callback subscriber, durable cursor and typed dispatcher contracts passed." `
+    "NosGM dual-target callback subscriber, validation, durable cursor and typed dispatcher contracts passed." `
     -ForegroundColor Green
