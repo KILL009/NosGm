@@ -156,7 +156,7 @@ Require $selfTest "Shadow callback handler records one validated envelope" `
 
 Require $documentation "SCS remains the only callback path allowed to execute" `
     "Documentation preserves one authoritative callback applier"
-Require $documentation "Setting it to `true` fails process initialization" `
+Require $documentation 'Setting it to `true` fails process initialization' `
     "Documentation records the application fail-closed boundary"
 Require $documentation "server-issued replay-complete barrier" `
     "Documentation names the next atomic cutover requirement"
