@@ -21,6 +21,8 @@ public sealed class AuthenticationServerOptions
         "NOSGM_AUTH_GRPC_LOGIN_CERT_SHA256";
     public const string WorldFingerprintsVariable =
         "NOSGM_AUTH_GRPC_WORLD_CERT_SHA256";
+    public const string MasterFingerprintsVariable =
+        "NOSGM_AUTH_GRPC_MASTER_CERT_SHA256";
     public const string TicketTtlVariable =
         "NOSGM_AUTH_GRPC_TICKET_TTL_SECONDS";
     public const string PermitTtlVariable =
@@ -136,7 +138,10 @@ public sealed class AuthenticationServerOptions
                     LoginFingerprintsVariable),
                 [WireNodeRole.World] = ParseFingerprints(
                     configuration[WorldFingerprintsVariable],
-                    WorldFingerprintsVariable)
+                    WorldFingerprintsVariable),
+                [WireNodeRole.Master] = ParseOptionalFingerprints(
+                    configuration[MasterFingerprintsVariable],
+                    MasterFingerprintsVariable)
             };
         RejectCrossRoleCertificateReuse(roles);
 
@@ -283,6 +288,26 @@ public sealed class AuthenticationServerOptions
         string variableName)
     {
         value = ReadRequiredText(value, variableName, 8192);
+        return ParseFingerprintValues(value, variableName);
+    }
+
+    private static IReadOnlyCollection<string> ParseOptionalFingerprints(
+        string value,
+        string variableName)
+    {
+        if (string.IsNullOrEmpty(value))
+        {
+            return Array.Empty<string>();
+        }
+
+        value = ReadRequiredText(value, variableName, 8192);
+        return ParseFingerprintValues(value, variableName);
+    }
+
+    private static IReadOnlyCollection<string> ParseFingerprintValues(
+        string value,
+        string variableName)
+    {
         var fingerprints = new HashSet<string>(StringComparer.Ordinal);
         foreach (string candidate in value.Split(','))
         {

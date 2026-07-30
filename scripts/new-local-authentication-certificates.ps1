@@ -188,6 +188,10 @@ if ($ManagedCertificateGenerator) {
                 ([string]$payload.Passwords.World) `
                 -AsPlainText `
                 -Force
+            Master = ConvertTo-SecureString `
+                ([string]$payload.Passwords.Master) `
+                -AsPlainText `
+                -Force
         }
         $passwords |
             Export-Clixml -LiteralPath ([string]$payload.CredentialsPath)
@@ -203,7 +207,7 @@ if ($ManagedCertificateGenerator) {
         Write-Output ([string]$payload.ManifestPath)
     }
     finally {
-        foreach ($name in @("Server", "AuthBridge", "Login", "World")) {
+        foreach ($name in @("Server", "AuthBridge", "Login", "World", "Master")) {
             $payload.Passwords.$name = $null
         }
         $payloadJson = $null
@@ -257,7 +261,7 @@ try {
     $createdCertificates.Add($serverCertificate)
 
     $clientCertificates = @{}
-    foreach ($role in @("AuthBridge", "Login", "World")) {
+    foreach ($role in @("AuthBridge", "Login", "World", "Master")) {
         Write-Host "[CERT] Creating the $role client identity."
         $certificate = New-SelfSignedCertificate `
             -Type Custom `
@@ -281,6 +285,7 @@ try {
         AuthBridge = New-SecureRandomPassword
         Login = New-SecureRandomPassword
         World = New-SecureRandomPassword
+        Master = New-SecureRandomPassword
     }
 
     $rootCertificatePath =
@@ -303,7 +308,7 @@ try {
     $createdFiles.Add($serverCertificatePath)
 
     $clientManifest = [ordered]@{}
-    foreach ($role in @("AuthBridge", "Login", "World")) {
+    foreach ($role in @("AuthBridge", "Login", "World", "Master")) {
         $fileName =
             "nosgm-authentication-" + $role.ToLowerInvariant() + ".pfx"
         $certificatePath = Join-Path $outputRoot $fileName

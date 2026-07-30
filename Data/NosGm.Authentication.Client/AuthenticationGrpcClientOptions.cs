@@ -72,6 +72,19 @@ namespace NosGm.Authentication.Client
                     "The authentication gRPC client role must be AuthBridge, Login, or World.");
             }
 
+            return LoadCore(callerRole, readVariable);
+        }
+
+        internal static AuthenticationGrpcClientOptions LoadMaster(
+            Func<string, string> readVariable)
+        {
+            return LoadCore(ClusterNodeRole.Master, readVariable);
+        }
+
+        private static AuthenticationGrpcClientOptions LoadCore(
+            ClusterNodeRole callerRole,
+            Func<string, string> readVariable)
+        {
             readVariable = readVariable ?? Environment.GetEnvironmentVariable;
             string configuredAddress = readVariable(AddressVariable);
             if (string.IsNullOrEmpty(configuredAddress))

@@ -83,8 +83,16 @@ $readiness = Read-RepositoryFile `
     "scripts\test-modern-login-readiness.ps1"
 $selfTest = Read-RepositoryFile `
     "tests\NosGm.Authentication.Runtime.SelfTest\Program.cs"
+$masterSelfTest = Read-RepositoryFile `
+    "tests\NosGm.Authentication.Runtime.SelfTest\MasterCertificateRoleSelfTest.cs"
 $managedGenerator = Read-RepositoryFile `
     "tests\NosGm.Authentication.Runtime.SelfTest\LocalAuthenticationCertificateGenerator.cs"
+$serverOptions = Read-RepositoryFile `
+    "Data\NosGm.Program\NosGm.Authentication.Server\AuthenticationServerOptions.cs"
+$clientOptions = Read-RepositoryFile `
+    "Data\NosGm.Authentication.Client\AuthenticationGrpcClientOptions.cs"
+$masterOptions = Read-RepositoryFile `
+    "Data\NosGm.Authentication.Client\Communication\MasterCommunicationGrpcIdentityOptions.cs"
 $workflow = Read-RepositoryFile `
     ".github\workflows\dotnet10-foundation.yml"
 $documentation = Read-RepositoryFile `
@@ -110,8 +118,10 @@ Require $generator "1.3.6.1.5.5.7.3.2" `
     "Role certificates receive only the client-authentication EKU"
 Require $generator "IPAddress=127.0.0.1" `
     "Server certificate contains the loopback IP SAN"
-Require $generator "foreach (`$role in @(`"AuthBridge`", `"Login`", `"World`"))" `
-    "Three distinct role certificates are generated"
+Require $generator 'foreach ($role in @("AuthBridge", "Login", "World", "Master"))' `
+    "Four distinct role certificates are generated"
+Require $generator "Master = New-SecureRandomPassword" `
+    "Master receives an independent protected PKCS#12 password"
 Forbid $generator "PfxPassword =" `
     "The public manifest never contains a plaintext PKCS#12 password"
 Require $generator '$env:GITHUB_ACTIONS -ne "true"' `
@@ -126,6 +136,10 @@ Require $managedGenerator "ServerAuthenticationOid" `
     "Managed CI server identity is restricted to server authentication"
 Require $managedGenerator "ClientAuthenticationOid" `
     "Managed CI role identities are restricted to client authentication"
+Require $managedGenerator '"Master"' `
+    "Managed CI bundles include a dedicated Master identity"
+Require $managedGenerator 'Master = clients["Master"]' `
+    "Managed manifest exposes the Master certificate separately"
 Require $managedGenerator "X509Certificate2Collection" `
     "Managed CI PFX files carry the issuing chain for Schannel selection"
 Require $managedGenerator "File.WriteAllText(" `
@@ -136,6 +150,31 @@ Require $workflow "-ManagedCertificateGenerator -KeyLength 2048" `
     "Live CI acceptance avoids the blocking Windows PKI provider"
 Require $workflow "-UseFileScopedRootTrust" `
     "Live CI acceptance never changes the runner trust store"
+
+Require $serverOptions "NOSGM_AUTH_GRPC_MASTER_CERT_SHA256" `
+    "The runtime exposes a separate Master certificate allow-list"
+Require $serverOptions "[WireNodeRole.Master]" `
+    "The certificate role map reserves the Master role"
+Require $serverOptions "ParseOptionalFingerprints" `
+    "Authentication-only deployments remain compatible before callbacks activate"
+Require $serverOptions "RejectCrossRoleCertificateReuse" `
+    "Master fingerprints participate in cross-role reuse rejection"
+Require $clientOptions "callerRole != ClusterNodeRole.World" `
+    "The public authentication option loader retains its three-role boundary"
+Require $clientOptions "The authentication gRPC client role must be AuthBridge, Login, or World." `
+    "The public authentication loader rejects Master impersonation"
+Require $clientOptions "internal static AuthenticationGrpcClientOptions LoadMaster" `
+    "Master construction is available only through an internal specialized path"
+Require $masterOptions "AuthenticationGrpcClientOptions.LoadMaster" `
+    "The communication identity loader uses the callback-only Master path"
+Require $masterOptions "NOSGM_COMMUNICATION_GRPC_MASTER_CERT_PATH" `
+    "Master callback publication has a separate certificate variable"
+Require $masterOptions "NOSGM_COMMUNICATION_GRPC_MASTER_CERT_PASSWORD" `
+    "Master callback publication has a separate password variable"
+Require $masterOptions "NOSGM_COMMUNICATION_GRPC_MASTER_INSTANCE_ID" `
+    "Master callback publication has a separate instance identity"
+Forbid $masterOptions "NOSGM_AUTH_GRPC_CLIENT_CERT_PATH" `
+    "The callback publisher never reads the AuthBridge certificate namespace"
 
 Require $startup '[ValidateSet("SCS", "GRPC")]' `
     "Local startup keeps one explicit authentication selector"
@@ -190,6 +229,12 @@ Require $acceptance "UseFileScopedRootTrust" `
     "Isolated acceptance supports explicit private-root pinning"
 Require $acceptance "NOSGM_AUTH_GRPC_TRUSTED_ROOT_CERT_PATH" `
     "The isolated server and callers share one absolute root path"
+Require $acceptance "NOSGM_AUTH_GRPC_MASTER_CERT_SHA256" `
+    "The live runtime trusts the dedicated Master fingerprint"
+Require $acceptance "NOSGM_AUTH_GRPC_LIVE_MASTER_CERT_PATH" `
+    "The live client receives only the Master certificate path"
+Require $acceptance "NOSGM_AUTH_GRPC_LIVE_MASTER_CERT_PASSWORD" `
+    "The live Master password stays in process memory"
 Require $acceptance "Microsoft.AspNetCore.Server.Kestrel.Https" `
     "Isolated acceptance captures bounded TLS handshake diagnostics"
 Require $acceptance "[SKIP] Native HTTP/2 is unavailable" `
@@ -211,6 +256,12 @@ Require $selfTest "Live character-reselection permit cannot be replayed" `
     "Fresh character-reselection permits remain one-use"
 Require $selfTest "StatusCode.PermissionDenied" `
     "Live acceptance verifies certificate-role authorization"
+Require $masterSelfTest "Master certificate cannot be reused by World" `
+    "Master certificate reuse is regression-tested"
+Require $masterSelfTest "Live Master certificate authenticates through mTLS but cannot impersonate AuthBridge" `
+    "The Master certificate passes TLS but cannot borrow the AuthBridge role"
+Require $masterSelfTest "NOSGM_AUTH_GRPC_LIVE_MASTER" `
+    "Live Master credentials use a separate environment prefix"
 
 Require $readiness "Port.AuthenticationGrpc" `
     "Readiness verifies the optional gRPC runtime port"
@@ -224,5 +275,5 @@ Require $documentation "GRPCWEB" `
     "Migration documentation explains Windows 10 compatibility"
 
 Write-Host `
-    "NosGM local gRPC certificate, process-isolation and live-acceptance contracts passed." `
+    "NosGM local gRPC certificate, dedicated Master identity, process-isolation and live-acceptance contracts passed." `
     -ForegroundColor Green
