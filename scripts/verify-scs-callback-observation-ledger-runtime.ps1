@@ -85,6 +85,9 @@ try {
         "Compiled SCS ledger opens during stream warmup"
     Assert-Equal $false $ledger.IsReplayComplete `
         "Warmup does not claim replay completion"
+    Assert-Throws {
+        $ledger.BeginWindow($identity, $generation, [uint64]0)
+    } "An active SCS window cannot be replaced silently"
 
     $computePenalty = $fingerprintType.GetMethod(
         "ComputePenaltyRefresh",
@@ -129,6 +132,9 @@ try {
         "Compiled SCS ledger crosses into live phase"
     Assert-Equal ([uint64]3) $ledger.ReplayEvidence.ReplayThroughSequence `
         "SCS ledger retains the typed replay boundary"
+    Assert-Throws {
+        $ledger.CompleteReplay($evidence)
+    } "Duplicate replay completion fails closed"
 
     Assert-Equal $true ($ledger.TryRecord($penaltyKind, $fingerprint7)) `
         "First live SCS callback is retained"
@@ -168,9 +174,21 @@ try {
     Assert-Throws {
         $ledger.TryRecord($penaltyKind, "not-a-sha256") | Out-Null
     } "Malformed SCS semantic fingerprint fails closed"
+    $unknownKind = [Enum]::ToObject($kindType, 2147483647)
+    Assert-Throws {
+        $ledger.TryRecord($unknownKind, $fingerprint8) | Out-Null
+    } "Unknown SCS callback kind fails closed"
     Assert-Throws {
         [Activator]::CreateInstance($ledgerType, @([int]0)) | Out-Null
     } "Compiled SCS ledger rejects zero capacity"
+    Assert-Throws {
+        $tooLongIdentity = "W" * 129
+        $freshLedger = [Activator]::CreateInstance($ledgerType, @([int]2))
+        $freshLedger.BeginWindow(
+            $tooLongIdentity,
+            $nextGeneration,
+            [uint64]0)
+    } "Compiled SCS ledger bounds process identity"
 
     Write-Host `
         "NosGM compiled SCS callback observation ledger runtime passed." `
