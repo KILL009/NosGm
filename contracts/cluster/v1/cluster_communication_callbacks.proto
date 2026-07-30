@@ -140,10 +140,6 @@ message CommunicationCallbackTarget {
   string world_group = 2;
   string world_id = 3;
   int64 character_id = 4;
-  // Optional only for character-presence events targeted to a World group.
-  // The source World already owns the presence change and must not receive the
-  // legacy cross-World notification again.
-  string excluded_world_id = 5;
 }
 
 message PublishCommunicationCallbackRequest {
