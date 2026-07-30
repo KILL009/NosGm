@@ -7,7 +7,7 @@ using WireV1 = global::NosGm.Cluster.Wire.V1;
 
 namespace NosGm.Master.Library.Client
 {
-    internal sealed class CommunicationCallbackEnvelopeDispatcher
+    public sealed class CommunicationCallbackEnvelopeDispatcher
         : ICommunicationCallbackEnvelopeHandler
     {
         private readonly CommunicationServiceClient _owner;
