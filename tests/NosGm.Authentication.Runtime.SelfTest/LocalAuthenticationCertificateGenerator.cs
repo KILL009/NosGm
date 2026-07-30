@@ -82,7 +82,13 @@ internal static class LocalAuthenticationCertificateGenerator
                 StringComparer.Ordinal);
         var clientPasswords =
             new Dictionary<string, string>(StringComparer.Ordinal);
-        foreach (string role in new[] { "AuthBridge", "Login", "World" })
+        foreach (string role in new[]
+                 {
+                     "AuthBridge",
+                     "Login",
+                     "World",
+                     "Master"
+                 })
         {
             string password = NewPassword();
             string certificatePath = Path.Combine(
@@ -122,7 +128,8 @@ internal static class LocalAuthenticationCertificateGenerator
             {
                 AuthBridge = clients["AuthBridge"],
                 Login = clients["Login"],
-                World = clients["World"]
+                World = clients["World"],
+                Master = clients["Master"]
             },
             CredentialsPath = credentialsPath
         };
@@ -144,7 +151,8 @@ internal static class LocalAuthenticationCertificateGenerator
                     Server = serverPassword,
                     AuthBridge = clientPasswords["AuthBridge"],
                     Login = clientPasswords["Login"],
-                    World = clientPasswords["World"]
+                    World = clientPasswords["World"],
+                    Master = clientPasswords["Master"]
                 }
             });
     }
