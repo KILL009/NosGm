@@ -133,27 +133,28 @@ internal static class MasterCertificateRoleSelfTest
     private static AuthenticationGrpcClientOptions LoadLiveMasterOptions()
     {
         const string prefix = "NOSGM_AUTH_GRPC_LIVE_MASTER";
-        return AuthenticationGrpcClientOptions.Load(
-            ClusterNodeRole.Master,
+        return MasterCommunicationGrpcIdentityOptions.Load(
             variableName => variableName switch
             {
-                AuthenticationGrpcClientOptions.AddressVariable =>
+                MasterCommunicationGrpcIdentityOptions.AddressVariable =>
                     ReadRequiredEnvironment(
                         AuthenticationGrpcClientOptions.AddressVariable),
-                AuthenticationGrpcClientOptions.CertificatePathVariable =>
+                MasterCommunicationGrpcIdentityOptions.CertificatePathVariable =>
                     ReadRequiredEnvironment(prefix + "_CERT_PATH"),
-                AuthenticationGrpcClientOptions.CertificatePasswordVariable =>
+                MasterCommunicationGrpcIdentityOptions
+                        .CertificatePasswordVariable =>
                     Environment.GetEnvironmentVariable(
                         prefix + "_CERT_PASSWORD") ?? string.Empty,
-                AuthenticationGrpcClientOptions
+                MasterCommunicationGrpcIdentityOptions
                         .TrustedRootCertificatePathVariable =>
                     Environment.GetEnvironmentVariable(
                         AuthenticationGrpcClientOptions
                             .TrustedRootCertificatePathVariable),
-                AuthenticationGrpcClientOptions.CallerInstanceIdVariable =>
+                MasterCommunicationGrpcIdentityOptions.CallerInstanceIdVariable =>
                     "acceptance-master-callback-publisher-1",
-                AuthenticationGrpcClientOptions.DeadlineVariable => "10000",
-                AuthenticationGrpcClientOptions.WireModeVariable =>
+                MasterCommunicationGrpcIdentityOptions.DeadlineVariable =>
+                    "10000",
+                MasterCommunicationGrpcIdentityOptions.WireModeVariable =>
                     Environment.GetEnvironmentVariable(
                         AuthenticationGrpcClientOptions.WireModeVariable),
                 _ => null
