@@ -120,9 +120,7 @@ namespace NosGm.Communication.Client
                     .CharacterPresence:
                     return envelope.CharacterPresence.CharacterId > 0 &&
                            targetKind == WireV1
-                               .CommunicationCallbackTargetKind.WorldGroup &&
-                           IsCanonicalNonEmptyGuid(
-                               envelope.Target.ExcludedWorldId);
+                               .CommunicationCallbackTargetKind.WorldGroup;
 
                 case WireV1.CommunicationCallbackEnvelope.CallbackOneofCase
                     .KickSession:
@@ -150,10 +148,8 @@ namespace NosGm.Communication.Client
                             envelope.Lifecycle.DelaySeconds == 0) &&
                            (targetKind == WireV1
                                 .CommunicationCallbackTargetKind.AllWorlds ||
-                            (targetKind == WireV1
-                                 .CommunicationCallbackTargetKind.WorldGroup &&
-                             string.IsNullOrEmpty(
-                                 envelope.Target.ExcludedWorldId)));
+                            targetKind == WireV1
+                                .CommunicationCallbackTargetKind.WorldGroup);
 
                 case WireV1.CommunicationCallbackEnvelope.CallbackOneofCase
                     .GlobalEvent:
@@ -171,12 +167,14 @@ namespace NosGm.Communication.Client
                 case WireV1.CommunicationCallbackEnvelope.CallbackOneofCase
                     .BazaarRefresh:
                     return envelope.BazaarRefresh.BazaarItemId > 0 &&
-                           IsPlainWorldGroupTarget(envelope.Target);
+                           targetKind == WireV1
+                               .CommunicationCallbackTargetKind.WorldGroup;
 
                 case WireV1.CommunicationCallbackEnvelope.CallbackOneofCase
                     .FamilyRefresh:
                     return envelope.FamilyRefresh.FamilyId > 0 &&
-                           IsPlainWorldGroupTarget(envelope.Target);
+                           targetKind == WireV1
+                               .CommunicationCallbackTargetKind.WorldGroup;
 
                 case WireV1.CommunicationCallbackEnvelope.CallbackOneofCase
                     .PenaltyRefresh:
@@ -187,7 +185,8 @@ namespace NosGm.Communication.Client
                 case WireV1.CommunicationCallbackEnvelope.CallbackOneofCase
                     .RelationRefresh:
                     return envelope.RelationRefresh.RelationId > 0 &&
-                           IsPlainWorldGroupTarget(envelope.Target);
+                           targetKind == WireV1
+                               .CommunicationCallbackTargetKind.WorldGroup;
 
                 case WireV1.CommunicationCallbackEnvelope.CallbackOneofCase
                     .StaticBonusRefresh:
@@ -228,22 +227,17 @@ namespace NosGm.Communication.Client
                                CommunicationCallbackContractLimits
                                    .MaxWorldGroupLength) &&
                            string.IsNullOrEmpty(target.WorldId) &&
-                           target.CharacterId == 0 &&
-                           (string.IsNullOrEmpty(target.ExcludedWorldId) ||
-                            IsCanonicalNonEmptyGuid(
-                                target.ExcludedWorldId));
+                           target.CharacterId == 0;
 
                 case WireV1.CommunicationCallbackTargetKind.WorldId:
                     return string.IsNullOrEmpty(target.WorldGroup) &&
                            IsCanonicalNonEmptyGuid(target.WorldId) &&
-                           target.CharacterId == 0 &&
-                           string.IsNullOrEmpty(target.ExcludedWorldId);
+                           target.CharacterId == 0;
 
                 case WireV1.CommunicationCallbackTargetKind.CharacterId:
                     return string.IsNullOrEmpty(target.WorldGroup) &&
                            string.IsNullOrEmpty(target.WorldId) &&
-                           target.CharacterId > 0 &&
-                           string.IsNullOrEmpty(target.ExcludedWorldId);
+                           target.CharacterId > 0;
 
                 default:
                     return false;
@@ -255,16 +249,7 @@ namespace NosGm.Communication.Client
         {
             return string.IsNullOrEmpty(target.WorldGroup) &&
                    string.IsNullOrEmpty(target.WorldId) &&
-                   target.CharacterId == 0 &&
-                   string.IsNullOrEmpty(target.ExcludedWorldId);
-        }
-
-        private static bool IsPlainWorldGroupTarget(
-            WireV1.CommunicationCallbackTarget target)
-        {
-            return target.Kind == WireV1
-                       .CommunicationCallbackTargetKind.WorldGroup &&
-                   string.IsNullOrEmpty(target.ExcludedWorldId);
+                   target.CharacterId == 0;
         }
 
         private static bool IsCanonicalNonEmptyGuid(string value)
