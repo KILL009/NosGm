@@ -75,6 +75,10 @@ $optionsTest = Read-RequiredFile `
     "tests\NosGm.Authentication.Runtime.SelfTest\CommunicationCallbackMirrorOptionsSelfTest.cs"
 $liveTest = Read-RequiredFile `
     "tests\NosGm.Authentication.Runtime.SelfTest\MasterCommunicationCallbackPublisherLiveSelfTest.cs"
+$interfaceMapTest = Read-RequiredFile `
+    "scripts\verify-master-callback-mirror-interface-map.ps1"
+$windowsWorkflow = Read-RequiredFile `
+    ".github\workflows\build-windows.yml"
 $documentation = Read-RequiredFile `
     "docs\master-callback-publication-mirror.md"
 $migrationMap = Read-RequiredFile `
@@ -181,6 +185,17 @@ Require $project '<Compile Include="MasterCommunicationCallbackMirror.cs" />' `
     "Classic Master project compiles the mirror lifecycle"
 Require $project '<Compile Include="MirroredCommunicationService.cs" />' `
     "Classic Master project compiles the SCS-first wrapper"
+
+Require $interfaceMapTest "GetInterfaceMap" `
+    "Compiled mirror verification inspects the CLR interface map"
+Require $interfaceMapTest "NosGm.Master.Server.MirroredCommunicationService" `
+    "Compiled mirror verification expects the eight derived targets"
+Require $interfaceMapTest "NosGm.Master.Server.CommunicationService" `
+    "Compiled mirror verification preserves deferred legacy targets"
+Require $windowsWorkflow "Verify Master callback mirror interface dispatch" `
+    "Windows CI names the compiled interface-dispatch check"
+Require $windowsWorkflow "./scripts/verify-master-callback-mirror-interface-map.ps1" `
+    "Windows CI executes the compiled interface-dispatch check"
 
 Require $optionsTest "Master callback mirror is disabled by default" `
     "Mirror activation default has a regression test"
