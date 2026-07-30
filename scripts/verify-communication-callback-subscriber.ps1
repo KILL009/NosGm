@@ -79,6 +79,10 @@ $selfTest = Read-RequiredFile `
     "tests\NosGm.Authentication.Runtime.SelfTest\CommunicationCallbackSubscriberSelfTest.cs"
 $liveTest = Read-RequiredFile `
     "tests\NosGm.Authentication.Runtime.SelfTest\CommunicationCallbackLiveSubscriberSelfTest.cs"
+$masterRoleTest = Read-RequiredFile `
+    "tests\NosGm.Authentication.Runtime.SelfTest\MasterCertificateRoleSelfTest.cs"
+$testProgram = Read-RequiredFile `
+    "tests\NosGm.Authentication.Runtime.SelfTest\Program.cs"
 $documentation = Read-RequiredFile `
     "docs\communication-callback-subscriber.md"
 
@@ -242,6 +246,10 @@ Require $selfTest "A corrupt callback cursor fails closed" `
     "Self-test protects cursor corruption"
 Require $selfTest "defaults to native HTTP/2" `
     "Self-test protects the Windows 11 transport default"
+Require $liveTest "public static async Task RunLiveAsync()" `
+    "Live callback acceptance exposes an explicit async entry point"
+Forbid $liveTest "[ModuleInitializer]" `
+    "Live callback networking never runs under the CLR module initializer lock"
 Require $liveTest "Live Login stream applies the typed penalty callback" `
     "Live acceptance applies a typed callback"
 Require $liveTest "Live callback cursor commits after handler completion" `
@@ -254,6 +262,19 @@ Require $liveTest "CommunicationCallbackTargetKind.AllNodes" `
     "Live penalty acceptance targets Login and World subscribers"
 Forbid $liveTest "CommunicationCallbackTargetKind.AllLoginNodes" `
     "Live penalty acceptance never narrows the all-node contract"
+Require $masterRoleTest "public static async Task RunLiveAsync()" `
+    "Live Master certificate probe exposes an explicit async entry point"
+Forbid $masterRoleTest 'Contains("--live"' `
+    "Master network probing never runs from its static module initializer"
+Forbid $masterRoleTest ".GetAwaiter().GetResult()" `
+    "Master network probing never blocks the module initializer"
+Require $testProgram "await MasterCertificateRoleSelfTest.RunLiveAsync();" `
+    "Main self-test flow runs the live Master role probe"
+Require $testProgram "await CommunicationCallbackLiveSubscriberSelfTest.RunLiveAsync();" `
+    "Main self-test flow runs the live callback acceptance"
+Require-Match $testProgram `
+    "if\s*\(args\.Contains\(\"--live\".*?MasterCertificateRoleSelfTest\.RunLiveAsync\(\).*?CommunicationCallbackLiveSubscriberSelfTest\.RunLiveAsync\(\).*?RunLiveGrpcAcceptanceAsync\(\)" `
+    "All live network tests run after module initialization completes"
 
 Require $legacyClient "Communication gRPC cutover is blocked" `
     "Production communication cutover remains guarded"
