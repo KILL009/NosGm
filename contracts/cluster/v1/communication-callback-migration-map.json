@@ -1,0 +1,103 @@
+{
+  "schemaVersion": 1,
+  "legacyInterface": "ICommunicationClient",
+  "legacyTransport": "SCS callbacks",
+  "targetService": "ClusterCommunicationCallbacks",
+  "deliveryModel": "bounded server-streaming subscription with replay cursor",
+  "methods": [
+    {
+      "legacyMethod": "CharacterConnected",
+      "disposition": "typed_stream_event",
+      "target": "CharacterPresenceCallback",
+      "targetKind": "WORLD_GROUP",
+      "publisherRole": "Master",
+      "subscriberRoles": ["World"]
+    },
+    {
+      "legacyMethod": "CharacterDisconnected",
+      "disposition": "typed_stream_event",
+      "target": "CharacterPresenceCallback",
+      "targetKind": "WORLD_GROUP",
+      "publisherRole": "Master",
+      "subscriberRoles": ["World"]
+    },
+    {
+      "legacyMethod": "KickSession",
+      "disposition": "typed_stream_event",
+      "target": "KickSessionCallback",
+      "targetKind": "ALL_WORLDS",
+      "publisherRole": "Master",
+      "subscriberRoles": ["World"]
+    },
+    {
+      "legacyMethod": "Restart",
+      "disposition": "typed_stream_event",
+      "target": "LifecycleCallback",
+      "targetKind": "ALL_WORLDS_OR_WORLD_GROUP",
+      "publisherRole": "Master",
+      "subscriberRoles": ["World"]
+    },
+    {
+      "legacyMethod": "RunGlobalEvent",
+      "disposition": "typed_stream_event",
+      "target": "GlobalEventCallback",
+      "targetKind": "ALL_WORLDS",
+      "publisherRole": "Master",
+      "subscriberRoles": ["World"]
+    },
+    {
+      "legacyMethod": "SendMessageToCharacter",
+      "disposition": "deferred",
+      "target": null,
+      "reason": "The legacy DTO may contain already-rendered client packet text and complex routing rules. It requires a dedicated typed messaging contract rather than tunneling SCSCharacterMessage through Protobuf."
+    },
+    {
+      "legacyMethod": "Shutdown",
+      "disposition": "typed_stream_event",
+      "target": "LifecycleCallback",
+      "targetKind": "ALL_WORLDS_OR_WORLD_GROUP",
+      "publisherRole": "Master",
+      "subscriberRoles": ["World"]
+    },
+    {
+      "legacyMethod": "UpdateBazaar",
+      "disposition": "typed_stream_event",
+      "target": "BazaarRefreshCallback",
+      "targetKind": "WORLD_GROUP",
+      "publisherRole": "Master",
+      "subscriberRoles": ["World"]
+    },
+    {
+      "legacyMethod": "UpdateFamily",
+      "disposition": "typed_stream_event",
+      "target": "FamilyRefreshCallback",
+      "targetKind": "WORLD_GROUP",
+      "publisherRole": "Master",
+      "subscriberRoles": ["World"]
+    },
+    {
+      "legacyMethod": "UpdatePenaltyLog",
+      "disposition": "typed_stream_event",
+      "target": "PenaltyRefreshCallback",
+      "targetKind": "ALL_NODES",
+      "publisherRole": "Master",
+      "subscriberRoles": ["Login", "World"]
+    },
+    {
+      "legacyMethod": "UpdateRelation",
+      "disposition": "typed_stream_event",
+      "target": "RelationRefreshCallback",
+      "targetKind": "WORLD_GROUP",
+      "publisherRole": "Master",
+      "subscriberRoles": ["World"]
+    },
+    {
+      "legacyMethod": "UpdateStaticBonus",
+      "disposition": "typed_stream_event",
+      "target": "StaticBonusRefreshCallback",
+      "targetKind": "CHARACTER_ID",
+      "publisherRole": "Master",
+      "subscriberRoles": ["World"]
+    }
+  ]
+}

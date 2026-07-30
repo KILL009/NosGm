@@ -1,0 +1,188 @@
+syntax = "proto3";
+
+package nosgm.cluster.v1;
+
+option csharp_namespace = "NosGm.Cluster.Wire.V1";
+
+import "cluster_control.proto";
+import "cluster_communication.proto";
+
+// Master publishes typed coordination events to the central runtime. Login and
+// World nodes keep one authenticated server-streaming subscription, which is
+// compatible with binary gRPC-Web on Windows 10.
+service ClusterCommunicationCallbacks {
+  rpc SubscribeCommunicationCallbacks(
+      SubscribeCommunicationCallbacksRequest)
+      returns (stream CommunicationCallbackEnvelope);
+  rpc PublishCommunicationCallback(
+      PublishCommunicationCallbackRequest)
+      returns (PublishCommunicationCallbackResponse);
+}
+
+enum CommunicationCallbackKind {
+  COMMUNICATION_CALLBACK_KIND_UNSPECIFIED = 0;
+  COMMUNICATION_CALLBACK_KIND_CHARACTER_PRESENCE = 1;
+  COMMUNICATION_CALLBACK_KIND_KICK_SESSION = 2;
+  COMMUNICATION_CALLBACK_KIND_LIFECYCLE = 3;
+  COMMUNICATION_CALLBACK_KIND_GLOBAL_EVENT = 4;
+  COMMUNICATION_CALLBACK_KIND_BAZAAR_REFRESH = 5;
+  COMMUNICATION_CALLBACK_KIND_FAMILY_REFRESH = 6;
+  COMMUNICATION_CALLBACK_KIND_PENALTY_REFRESH = 7;
+  COMMUNICATION_CALLBACK_KIND_RELATION_REFRESH = 8;
+  COMMUNICATION_CALLBACK_KIND_STATIC_BONUS_REFRESH = 9;
+}
+
+enum CommunicationCallbackTargetKind {
+  COMMUNICATION_CALLBACK_TARGET_KIND_UNSPECIFIED = 0;
+  COMMUNICATION_CALLBACK_TARGET_KIND_ALL_WORLDS = 1;
+  COMMUNICATION_CALLBACK_TARGET_KIND_WORLD_GROUP = 2;
+  COMMUNICATION_CALLBACK_TARGET_KIND_WORLD_ID = 3;
+  COMMUNICATION_CALLBACK_TARGET_KIND_ALL_LOGIN_NODES = 4;
+  COMMUNICATION_CALLBACK_TARGET_KIND_ALL_NODES = 5;
+  COMMUNICATION_CALLBACK_TARGET_KIND_CHARACTER_ID = 6;
+}
+
+enum CommunicationLifecycleAction {
+  COMMUNICATION_LIFECYCLE_ACTION_UNSPECIFIED = 0;
+  COMMUNICATION_LIFECYCLE_ACTION_RESTART = 1;
+  COMMUNICATION_LIFECYCLE_ACTION_SHUTDOWN = 2;
+}
+
+enum CommunicationGlobalEventType {
+  COMMUNICATION_GLOBAL_EVENT_TYPE_UNSPECIFIED = 0;
+  COMMUNICATION_GLOBAL_EVENT_TYPE_INSTANT_BATTLE = 1;
+  COMMUNICATION_GLOBAL_EVENT_TYPE_LAND_OF_DEATH = 2;
+  COMMUNICATION_GLOBAL_EVENT_TYPE_MINILAND_REFRESH = 3;
+  COMMUNICATION_GLOBAL_EVENT_TYPE_RANKING_REFRESH = 4;
+  COMMUNICATION_GLOBAL_EVENT_TYPE_GLACERNON_SHIP = 5;
+  COMMUNICATION_GLOBAL_EVENT_TYPE_GLACERNON_RAID = 6;
+  COMMUNICATION_GLOBAL_EVENT_TYPE_METEORITE_GAME = 7;
+  COMMUNICATION_GLOBAL_EVENT_TYPE_TALENT_ARENA = 8;
+  COMMUNICATION_GLOBAL_EVENT_TYPE_CALIGOR = 9;
+  COMMUNICATION_GLOBAL_EVENT_TYPE_ICE_BREAKER = 10;
+  COMMUNICATION_GLOBAL_EVENT_TYPE_AUTO_REBOOT = 11;
+  COMMUNICATION_GLOBAL_EVENT_TYPE_ACT7_SHIP = 12;
+  COMMUNICATION_GLOBAL_EVENT_TYPE_CELESTIAL_SPIRE = 13;
+  COMMUNICATION_GLOBAL_EVENT_TYPE_RAINBOW_BATTLE = 14;
+  COMMUNICATION_GLOBAL_EVENT_TYPE_DROP_RATE = 15;
+  COMMUNICATION_GLOBAL_EVENT_TYPE_FAIRY_RATE = 16;
+  COMMUNICATION_GLOBAL_EVENT_TYPE_HERO_RATE = 17;
+  COMMUNICATION_GLOBAL_EVENT_TYPE_XP_RATE = 18;
+  COMMUNICATION_GLOBAL_EVENT_TYPE_RESET_RATE = 19;
+  COMMUNICATION_GLOBAL_EVENT_TYPE_DAILY_MISSION_EXTENSION_REFRESH = 20;
+  COMMUNICATION_GLOBAL_EVENT_TYPE_ASGOBAS = 21;
+  COMMUNICATION_GLOBAL_EVENT_TYPE_WORLD_BOSS = 22;
+  COMMUNICATION_GLOBAL_EVENT_TYPE_BATTLE_ROYALE = 23;
+  COMMUNICATION_GLOBAL_EVENT_TYPE_DUEL_EVENT = 24;
+  COMMUNICATION_GLOBAL_EVENT_TYPE_PRIVATE_DUEL_EVENT = 25;
+  COMMUNICATION_GLOBAL_EVENT_TYPE_OPEN_WORLD_BOSS = 26;
+}
+
+message SubscribeCommunicationCallbacksRequest {
+  RequestContext context = 1;
+  // Required for World subscribers and empty for Login subscribers.
+  string world_id = 2;
+  // Required for World subscribers and zero for Login subscribers.
+  int32 channel_id = 3;
+  // Required for World subscribers and empty for Login subscribers.
+  string world_group = 4;
+  // The last event durably applied by this process instance. The runtime may
+  // replay newer retained events after reconnect.
+  uint64 resume_after_sequence = 5;
+  // Empty means every callback kind allowed for the authenticated role.
+  repeated CommunicationCallbackKind accepted_kinds = 6;
+}
+
+message CommunicationCallbackTarget {
+  CommunicationCallbackTargetKind kind = 1;
+  string world_group = 2;
+  string world_id = 3;
+  int64 character_id = 4;
+}
+
+message PublishCommunicationCallbackRequest {
+  RequestContext context = 1;
+  // Canonical GUID used by subscribers for idempotent application.
+  string event_id = 2;
+  uint32 ttl_seconds = 3;
+  CommunicationCallbackTarget target = 4;
+
+  oneof callback {
+    CharacterPresenceCallback character_presence = 10;
+    KickSessionCallback kick_session = 11;
+    LifecycleCallback lifecycle = 12;
+    GlobalEventCallback global_event = 13;
+    BazaarRefreshCallback bazaar_refresh = 14;
+    FamilyRefreshCallback family_refresh = 15;
+    PenaltyRefreshCallback penalty_refresh = 16;
+    RelationRefreshCallback relation_refresh = 17;
+    StaticBonusRefreshCallback static_bonus_refresh = 18;
+  }
+}
+
+message PublishCommunicationCallbackResponse {
+  CommunicationResultCode result = 1;
+  uint64 accepted_sequence = 2;
+  uint32 matched_subscribers = 3;
+}
+
+message CommunicationCallbackEnvelope {
+  string event_id = 1;
+  uint64 sequence = 2;
+  int64 issued_at_unix_time_ms = 3;
+  int64 expires_at_unix_time_ms = 4;
+  CommunicationCallbackTarget target = 5;
+
+  oneof callback {
+    CharacterPresenceCallback character_presence = 10;
+    KickSessionCallback kick_session = 11;
+    LifecycleCallback lifecycle = 12;
+    GlobalEventCallback global_event = 13;
+    BazaarRefreshCallback bazaar_refresh = 14;
+    FamilyRefreshCallback family_refresh = 15;
+    PenaltyRefreshCallback penalty_refresh = 16;
+    RelationRefreshCallback relation_refresh = 17;
+    StaticBonusRefreshCallback static_bonus_refresh = 18;
+  }
+}
+
+message CharacterPresenceCallback {
+  int64 character_id = 1;
+  bool connected = 2;
+}
+
+message KickSessionCallback {
+  optional int64 account_id = 1;
+  optional int32 session_id = 2;
+}
+
+message LifecycleCallback {
+  CommunicationLifecycleAction action = 1;
+  uint32 delay_seconds = 2;
+}
+
+message GlobalEventCallback {
+  CommunicationGlobalEventType event_type = 1;
+  uint32 value = 2;
+}
+
+message BazaarRefreshCallback {
+  int64 bazaar_item_id = 1;
+}
+
+message FamilyRefreshCallback {
+  int64 family_id = 1;
+  bool change_faction = 2;
+}
+
+message PenaltyRefreshCallback {
+  int32 penalty_log_id = 1;
+}
+
+message RelationRefreshCallback {
+  int64 relation_id = 1;
+}
+
+message StaticBonusRefreshCallback {
+  int64 character_id = 1;
+}

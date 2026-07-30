@@ -30,5 +30,9 @@
               Link="Protos\cluster_communication.proto"
               ProtoRoot="..\..\contracts\cluster\v1"
               GrpcServices="Both" />
+    <Protobuf Include="..\..\contracts\cluster\v1\cluster_communication_callbacks.proto"
+              Link="Protos\cluster_communication_callbacks.proto"
+              ProtoRoot="..\..\contracts\cluster\v1"
+              GrpcServices="Both" />
   </ItemGroup>
 </Project>
