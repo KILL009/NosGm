@@ -113,7 +113,8 @@ foreach ($certificatePath in @(
     [string]$manifest.ServerCertificatePath,
     [string]$manifest.Clients.AuthBridge.CertificatePath,
     [string]$manifest.Clients.Login.CertificatePath,
-    [string]$manifest.Clients.World.CertificatePath
+    [string]$manifest.Clients.World.CertificatePath,
+    [string]$manifest.Clients.Master.CertificatePath
 )) {
     if (-not [System.IO.Path]::IsPathRooted($certificatePath) -or
         -not (Test-Path -LiteralPath $certificatePath -PathType Leaf)) {
@@ -128,6 +129,7 @@ $environmentVariableNames = @(
     "NOSGM_AUTH_GRPC_AUTHBRIDGE_CERT_SHA256",
     "NOSGM_AUTH_GRPC_LOGIN_CERT_SHA256",
     "NOSGM_AUTH_GRPC_WORLD_CERT_SHA256",
+    "NOSGM_AUTH_GRPC_MASTER_CERT_SHA256",
     "NOSGM_AUTH_GRPC_PORT",
     "NOSGM_AUTH_GRPC_TICKET_TTL_SECONDS",
     "NOSGM_AUTH_GRPC_PERMIT_TTL_SECONDS",
@@ -139,6 +141,8 @@ $environmentVariableNames = @(
     "NOSGM_AUTH_GRPC_LIVE_LOGIN_CERT_PASSWORD",
     "NOSGM_AUTH_GRPC_LIVE_WORLD_CERT_PATH",
     "NOSGM_AUTH_GRPC_LIVE_WORLD_CERT_PASSWORD",
+    "NOSGM_AUTH_GRPC_LIVE_MASTER_CERT_PATH",
+    "NOSGM_AUTH_GRPC_LIVE_MASTER_CERT_PASSWORD",
     "NOSGM_AUTH_GRPC_WIRE_MODE",
     "Logging__LogLevel__Microsoft.AspNetCore.Server.Kestrel.Https"
 )
@@ -305,6 +309,8 @@ try {
             [string]$manifest.Clients.Login.Sha256
         NOSGM_AUTH_GRPC_WORLD_CERT_SHA256 =
             [string]$manifest.Clients.World.Sha256
+        NOSGM_AUTH_GRPC_MASTER_CERT_SHA256 =
+            [string]$manifest.Clients.Master.Sha256
         NOSGM_AUTH_GRPC_PORT = $Port.ToString()
         NOSGM_AUTH_GRPC_TICKET_TTL_SECONDS = "120"
         NOSGM_AUTH_GRPC_PERMIT_TTL_SECONDS = "120"
@@ -345,6 +351,10 @@ try {
             [string]$manifest.Clients.World.CertificatePath
         NOSGM_AUTH_GRPC_LIVE_WORLD_CERT_PASSWORD =
             ConvertFrom-SecureStringInMemory $credentials.World
+        NOSGM_AUTH_GRPC_LIVE_MASTER_CERT_PATH =
+            [string]$manifest.Clients.Master.CertificatePath
+        NOSGM_AUTH_GRPC_LIVE_MASTER_CERT_PASSWORD =
+            ConvertFrom-SecureStringInMemory $credentials.Master
     }
 
     [Environment]::SetEnvironmentVariable(
