@@ -12,6 +12,9 @@ import "cluster_communication.proto";
 // HTTP/2 is the primary Windows 11 transport and binary gRPC-Web remains an
 // explicit compatibility mode.
 service ClusterCommunicationCallbacks {
+  rpc GetCommunicationCallbackRuntimeInfo(
+      GetCommunicationCallbackRuntimeInfoRequest)
+      returns (GetCommunicationCallbackRuntimeInfoResponse);
   rpc SubscribeCommunicationCallbacks(
       SubscribeCommunicationCallbacksRequest)
       returns (stream CommunicationCallbackEnvelope);
@@ -79,6 +82,19 @@ enum CommunicationGlobalEventType {
   COMMUNICATION_GLOBAL_EVENT_TYPE_OPEN_WORLD_BOSS = 26;
 }
 
+message GetCommunicationCallbackRuntimeInfoRequest {
+  RequestContext context = 1;
+}
+
+message GetCommunicationCallbackRuntimeInfoResponse {
+  CommunicationResultCode result = 1;
+  // Canonical GUID generated once for this runtime process. It changes on every
+  // restart even when the configured server instance name remains unchanged.
+  string runtime_generation_id = 2;
+  int64 started_at_unix_time_ms = 3;
+  uint64 current_sequence = 4;
+}
+
 message SubscribeCommunicationCallbacksRequest {
   RequestContext context = 1;
   // Required for World subscribers and empty for Login subscribers.
@@ -87,11 +103,14 @@ message SubscribeCommunicationCallbacksRequest {
   int32 channel_id = 3;
   // Required for World subscribers and empty for Login subscribers.
   string world_group = 4;
-  // The last event durably applied by this process identity. The runtime may
-  // replay newer retained events after reconnect.
+  // The last event durably applied by this process identity in the supplied
+  // runtime generation. The runtime may replay newer retained events.
   uint64 resume_after_sequence = 5;
   // Empty means every callback kind allowed for the authenticated role.
   repeated CommunicationCallbackKind accepted_kinds = 6;
+  // Generation obtained from GetCommunicationCallbackRuntimeInfo immediately
+  // before opening this stream. A changed generation fails the setup closed.
+  string runtime_generation_id = 7;
 }
 
 message CommunicationCallbackTarget {
