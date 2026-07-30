@@ -203,9 +203,9 @@ Require $migrationMap '"targetKind": "ALL_NODES"' `
     "Migration inventory preserves penalty all-node routing"
 Require $documentation "SCS remains the only transport allowed to apply" `
     "Documentation preserves one callback effect authority"
-Require $documentation "non-blocking `TryAdd`" `
+Require $documentation 'non-blocking `TryAdd`' `
     "Documentation records the non-blocking queue boundary"
-Require $documentation "current `ICommunicationService` exposes no SCS emitter" `
+Require $documentation 'current `ICommunicationService` exposes no SCS emitter' `
     "Documentation does not invent a static-bonus source"
 Require $documentation "server-issued replay-complete barrier" `
     "Documentation names the next atomic cutover boundary"
