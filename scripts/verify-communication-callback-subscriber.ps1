@@ -53,6 +53,8 @@ $subscriber = Read-RequiredFile `
     "Data\NosGm.Authentication.Client\Communication\GrpcCommunicationCallbackSubscriber.cs"
 $dispatcher = Read-RequiredFile `
     "Data\NosGm.Master.Library\Client\CommunicationCallbackEnvelopeDispatcher.cs"
+$eventMapper = Read-RequiredFile `
+    "Data\NosGm.Master.Library\Client\CommunicationGlobalEventMapper.cs"
 $masterProject = Read-RequiredFile `
     "Data\NosGm.Master.Library\NosGm.Master.Library.csproj"
 $legacyClient = Read-RequiredFile `
@@ -78,8 +80,10 @@ Require $options "address.IsLoopback" `
     "Callback endpoint remains loopback-only"
 Require $options "Uri.UriSchemeHttps" `
     "Callback endpoint requires HTTPS"
+Require $options "return AuthenticationGrpcWireMode.Http2;" `
+    "Callback subscriber defaults to native HTTP/2"
 Require $options "GRPCWEB" `
-    "Callback subscriber exposes the Windows 10 wire mode"
+    "Callback subscriber retains optional gRPC-Web compatibility"
 Require $options "InitialReconnectDelayMilliseconds" `
     "Callback reconnection starts with a bounded delay"
 Require $options "MaximumReconnectDelayMilliseconds" `
@@ -110,7 +114,9 @@ Require $processor "envelope.ExpiresAtUnixTimeMs" `
 Require $subscriber "SubscribeCommunicationCallbacks" `
     "Client uses the generated server-streaming callback stub"
 Require $subscriber "GrpcWebMode.GrpcWeb" `
-    "Windows 10 callback streaming uses binary gRPC-Web"
+    "Optional compatibility mode uses binary gRPC-Web"
+Require $subscriber "WinHttpHandler" `
+    "Legacy Windows 11 callers use native HTTP/2"
 Require $subscriber "ClientCertificates.Add" `
     "Callback subscriber presents its mTLS identity"
 Require $subscriber "RequestedService = WireV1.ClusterService.Communication" `
@@ -152,11 +158,57 @@ Require $dispatcher "OnCharacterConnected" `
     "Typed dispatcher reuses the existing presence handler"
 Require $dispatcher "OnUpdatePenaltyLog" `
     "Typed dispatcher reuses the existing Login penalty handler"
+Require $dispatcher "CommunicationGlobalEventMapper.ToDomain" `
+    "Typed dispatcher uses the explicit global-event mapping"
+Forbid $dispatcher "(EventType)envelope.GlobalEvent.EventType" `
+    "Typed dispatcher never casts offset enums directly"
 Forbid $dispatcher "SCSCharacterMessage" `
     "Deferred rendered messaging is absent from typed dispatch"
+
+$eventMappings = @(
+    @("InstantBattle", "INSTANTBATTLE"),
+    @("LandOfDeath", "LOD"),
+    @("MinilandRefresh", "MINILANDREFRESHEVENT"),
+    @("RankingRefresh", "RANKINGREFRESH"),
+    @("GlacernonShip", "GLACERNONSHIP"),
+    @("GlacernonRaid", "GLACERNONRAID"),
+    @("MeteoriteGame", "METEORITEGAME"),
+    @("TalentArena", "TALENTARENA"),
+    @("Caligor", "CALIGOR"),
+    @("IceBreaker", "ICEBREAKER"),
+    @("AutoReboot", "AUTOREBOOT"),
+    @("Act7Ship", "Act7Ship"),
+    @("CelestialSpire", "CELESTIALSPIRE"),
+    @("RainbowBattle", "RAINBOWBATTLE"),
+    @("DropRate", "DROPRATE"),
+    @("FairyRate", "FAIRYRATE"),
+    @("HeroRate", "HERORATE"),
+    @("XpRate", "XPRATE"),
+    @("ResetRate", "RESETRATE"),
+    @("DailyMissionExtensionRefresh", "DAILYMISSIONEXTENSIONREFRESH"),
+    @("Asgobas", "ASGOBAS"),
+    @("WorldBoss", "WORLDBOSS"),
+    @("BattleRoyale", "BattleRoyal"),
+    @("DuelEvent", "DUELEVENT"),
+    @("PrivateDuelEvent", "DUELEVENTPRIVATE"),
+    @("OpenWorldBoss", "OpenWorldBoss")
+)
+foreach ($mapping in $eventMappings) {
+    Require $eventMapper ("CommunicationGlobalEventType." + $mapping[0]) `
+        ("Wire global event is mapped: " + $mapping[0])
+    Require $eventMapper ("EventType." + $mapping[1]) `
+        ("Domain global event is mapped: " + $mapping[1])
+}
+Require $eventMapper "public static EventType ToDomain" `
+    "Global-event mapper supports callback consumption"
+Require $eventMapper "public static WireV1.CommunicationGlobalEventType ToWire" `
+    "Global-event mapper supports future Master publication"
 Require $masterProject `
     '<Compile Include="Client\CommunicationCallbackEnvelopeDispatcher.cs" />' `
     "Legacy Master library compiles the typed dispatcher"
+Require $masterProject `
+    '<Compile Include="Client\CommunicationGlobalEventMapper.cs" />' `
+    "Legacy Master library compiles the explicit event mapper"
 
 Require $selfTest "The callback cursor advances after the handler returns" `
     "Self-test proves post-application cursor commit"
@@ -164,6 +216,8 @@ Require $selfTest "A failed callback never advances the durable cursor" `
     "Self-test protects callback replay after handler failure"
 Require $selfTest "A corrupt callback cursor fails closed" `
     "Self-test protects cursor corruption"
+Require $selfTest "defaults to native HTTP/2" `
+    "Self-test protects the Windows 11 transport default"
 Require $liveTest "Live Login stream applies the typed penalty callback" `
     "Live acceptance applies a typed callback"
 Require $liveTest "Live callback cursor commits after handler completion" `
@@ -181,6 +235,10 @@ Forbid $legacyClient "new GrpcCommunicationCallbackSubscriber" `
     "Production does not start the callback subscriber yet"
 Require $documentation "Production remains on the SCS callback path." `
     "Documentation preserves the current production boundary"
+Require $documentation "Native HTTP/2 is the primary Windows 11 path." `
+    "Documentation records the Windows 11 transport decision"
+Require $documentation "runtime-generation scoped" `
+    "Documentation records the durable-cursor generation boundary"
 
 Write-Host `
     "NosGM dual-target callback subscriber, durable cursor and typed dispatcher contracts passed." `
