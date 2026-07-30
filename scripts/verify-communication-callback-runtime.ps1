@@ -184,8 +184,9 @@ Require $publicationOrderTest `
 Require $documentation "Production `CommunicationServiceClient` still defaults to SCS" `
     "Documentation preserves the guarded production boundary"
 
+& (Join-Path $PSScriptRoot "verify-communication-callback-generation.ps1")
 & (Join-Path $PSScriptRoot "verify-communication-callback-subscriber.ps1")
 
 Write-Host `
-    "NosGM bounded communication callback runtime and EventId generation contracts passed." `
+    "NosGM bounded communication callback runtime, generation lifecycle and EventId contracts passed." `
     -ForegroundColor Green
