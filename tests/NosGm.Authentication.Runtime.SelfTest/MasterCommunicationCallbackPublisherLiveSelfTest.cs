@@ -50,7 +50,7 @@ internal static class MasterCommunicationCallbackPublisherLiveSelfTest
                 CommunicationCallbackContractLimits.DefaultEventTtlSeconds,
             Target = new WireV1.CommunicationCallbackTarget
             {
-                Kind = WireV1.CommunicationCallbackTargetKind.AllNodes
+                Kind = WireV1.CommunicationCallbackTargetKind.AllWorlds
             },
             PenaltyRefresh = new WireV1.PenaltyRefreshCallback
             {
