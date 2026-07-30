@@ -133,6 +133,9 @@ message SubscribeCommunicationCallbacksRequest {
   // Generation obtained from GetCommunicationCallbackRuntimeInfo immediately
   // before opening this stream. A changed generation fails the setup closed.
   string runtime_generation_id = 7;
+  // Old clients leave this false and receive only callback envelopes. New
+  // clients set it true to receive one server-issued replay/live boundary.
+  bool supports_replay_complete_barrier = 8;
 }
 
 message CommunicationCallbackTarget {
@@ -186,7 +189,17 @@ message CommunicationCallbackEnvelope {
     PenaltyRefreshCallback penalty_refresh = 16;
     RelationRefreshCallback relation_refresh = 17;
     StaticBonusRefreshCallback static_bonus_refresh = 18;
+    // Server-only control element. It is never published by Master and is not
+    // applied or committed as a callback event by subscribers.
+    CommunicationCallbackReplayComplete replay_complete = 19;
   }
+}
+
+message CommunicationCallbackReplayComplete {
+  string runtime_generation_id = 1;
+  uint64 replay_through_sequence = 2;
+  uint64 resume_after_sequence = 3;
+  uint32 replayed_events = 4;
 }
 
 message CharacterPresenceCallback {

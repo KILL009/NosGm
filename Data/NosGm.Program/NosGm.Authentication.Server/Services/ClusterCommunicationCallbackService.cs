@@ -12,6 +12,8 @@ public sealed class ClusterCommunicationCallbackService
     : WireV1.ClusterCommunicationCallbacks
         .ClusterCommunicationCallbacksBase
 {
+    private static readonly object StreamBoundarySync = new();
+
     private readonly AuthenticationDispatchGate _dispatchGate;
     private readonly CommunicationCallbackHub _hub;
     private readonly ILogger<ClusterCommunicationCallbackService> _logger;
@@ -211,8 +213,16 @@ public sealed class ClusterCommunicationCallbackService
                     "The callback subscriber does not own the registered shadow World route."));
         }
 
-        CallbackSubscriptionOpenResult openResult =
-            _hub.TryOpenSubscription(request, out var subscription);
+        CallbackSubscriptionOpenResult openResult;
+        CommunicationCallbackSubscription subscription;
+        ulong replayThroughSequence;
+        lock (StreamBoundarySync)
+        {
+            openResult = _hub.TryOpenSubscription(
+                request,
+                out subscription);
+            replayThroughSequence = _hub.CurrentSequence;
+        }
         if (openResult != CallbackSubscriptionOpenResult.Success)
         {
             ThrowForSubscriptionOpenResult(openResult);
@@ -226,6 +236,7 @@ public sealed class ClusterCommunicationCallbackService
             matchedSubscribers: 1);
         try
         {
+            uint replayedEvents = 0;
             foreach (WireV1.CommunicationCallbackEnvelope envelope in
                      subscription.ReplayEvents)
             {
@@ -233,7 +244,33 @@ public sealed class ClusterCommunicationCallbackService
                 if (!IsExpired(envelope))
                 {
                     await responseStream.WriteAsync(envelope);
+                    replayedEvents++;
                 }
+            }
+
+            if (request.SupportsReplayCompleteBarrier)
+            {
+                await responseStream.WriteAsync(
+                    new WireV1.CommunicationCallbackEnvelope
+                    {
+                        Sequence = replayThroughSequence,
+                        ReplayComplete =
+                            new WireV1.CommunicationCallbackReplayComplete
+                            {
+                                RuntimeGenerationId =
+                                    _runtimeIdentity.GenerationId.ToString("D"),
+                                ReplayThroughSequence = replayThroughSequence,
+                                ResumeAfterSequence =
+                                    request.ResumeAfterSequence,
+                                ReplayedEvents = replayedEvents
+                            }
+                    });
+                WriteAudit(
+                    request.Context,
+                    "CommunicationCallbackReplayComplete",
+                    WireV1.CommunicationResultCode.Success,
+                    replayThroughSequence,
+                    replayedEvents);
             }
 
             using var linked = CancellationTokenSource
@@ -326,8 +363,11 @@ public sealed class ClusterCommunicationCallbackService
                             "Master callback publication is not configured."));
                 }
 
-                CommunicationCallbackPublishResult result =
-                    _hub.Publish(request);
+                CommunicationCallbackPublishResult result;
+                lock (StreamBoundarySync)
+                {
+                    result = _hub.Publish(request);
+                }
                 WriteAudit(
                     request.Context,
                     "PublishCommunicationCallback",

@@ -44,6 +44,32 @@ internal static class CommunicationCallbackLiveSubscriberSelfTest
 
         try
         {
+            CommunicationCallbackReplayEvidence replayEvidence =
+                await WaitForReplayEvidenceAsync(
+                        subscriber,
+                        lifetime.Token)
+                    .ConfigureAwait(false);
+            AssertEqual(
+                true,
+                subscriber.IsReplayComplete,
+                "Live Login stream receives the replay-complete barrier");
+            AssertEqual(
+                subscriber.RuntimeGenerationId,
+                replayEvidence.RuntimeGenerationId,
+                "Live replay evidence is bound to the active runtime generation");
+            AssertEqual(
+                (ulong)0,
+                replayEvidence.ResumeAfterSequence,
+                "The first live callback stream starts from an empty durable cursor");
+            AssertEqual(
+                0,
+                handler.Calls,
+                "Replay barrier never invokes the callback handler");
+            AssertEqual(
+                (ulong)0,
+                cursorStore.Load(),
+                "Replay barrier never advances the callback cursor");
+
             using var publisher = new LiveMasterCallbackPublisher();
             var acceptedPenalties = new Dictionary<ulong, int>();
             WireV1.CommunicationCallbackEnvelope envelope = null;
@@ -95,6 +121,10 @@ internal static class CommunicationCallbackLiveSubscriberSelfTest
                 await cursorStore.WaitForSaveAsync(lifetime.Token)
                     .ConfigureAwait(false);
             AssertEqual(
+                true,
+                envelope.Sequence > replayEvidence.ReplayThroughSequence,
+                "Live callback sequence follows the replay boundary");
+            AssertEqual(
                 expectedPenaltyLogId,
                 envelope.PenaltyRefresh.PenaltyLogId,
                 "Live Login stream applies the typed penalty callback");
@@ -109,7 +139,7 @@ internal static class CommunicationCallbackLiveSubscriberSelfTest
             Console.WriteLine(
                 "[PASS] Live communication callback server stream over " +
                 options.WireMode +
-                " with post-application cursor commit");
+                " with replay barrier and post-application cursor commit");
         }
         finally
         {
@@ -137,6 +167,24 @@ internal static class CommunicationCallbackLiveSubscriberSelfTest
             {
                 Directory.Delete(cursorDirectory, true);
             }
+        }
+    }
+
+    private static async Task<CommunicationCallbackReplayEvidence>
+        WaitForReplayEvidenceAsync(
+            GrpcCommunicationCallbackSubscriber subscriber,
+            CancellationToken cancellationToken)
+    {
+        while (true)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            CommunicationCallbackReplayEvidence evidence =
+                subscriber.ReplayEvidence;
+            if (evidence != null)
+            {
+                return evidence;
+            }
+            await Task.Delay(25, cancellationToken).ConfigureAwait(false);
         }
     }
 
