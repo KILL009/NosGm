@@ -68,6 +68,7 @@
     <Reference Include="System.Net.Http" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="Client\CommunicationCallbackEnvelopeDispatcher.cs" />
     <Compile Include="Client\CommunicationClient.cs" />
     <Compile Include="Client\CommunicationServiceClient.cs" />
     <Compile Include="Client\ScsClusterCommunicationTransport.cs" />
