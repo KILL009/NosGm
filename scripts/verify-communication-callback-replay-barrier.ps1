@@ -115,7 +115,8 @@ Require $subscriber "SupportsReplayCompleteBarrier = true" `
     "New subscribers explicitly request the replay barrier"
 Require $subscriber "CommunicationCallbackReplayTracker" `
     "Subscriber owns a dedicated control-plane tracker"
-Require $subscriber "CallbackOneofCase.ReplayComplete" `
+Require-Match $subscriber `
+    'CallbackOneofCase\s*\.ReplayComplete' `
     "Subscriber intercepts the control variant"
 Require-Match $subscriber `
     'CallbackOneofCase\s*\.ReplayComplete.*?_replayTracker\.Complete\s*\(.*?return;.*?_processor\.ProcessAsync' `
