@@ -5,6 +5,11 @@ using WireV1 = global::NosGm.Cluster.Wire.V1;
 
 internal static class CommunicationCallbackSubscriberSelfTest
 {
+    private const string GenerationA =
+        "11111111-2222-3333-4444-555555555555";
+    private const string GenerationB =
+        "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee";
+
     [ModuleInitializer]
     public static void Run()
     {
@@ -96,9 +101,19 @@ internal static class CommunicationCallbackSubscriberSelfTest
 
     private static void VerifyPostApplicationCursorCommit()
     {
-        var store = new RecordingCursorStore(10);
+        var store = new RecordingCursorStore();
+        store.SetSequence(GenerationA, 10);
         var handler = new RecordingEnvelopeHandler();
         var processor = new CommunicationCallbackProcessor(store, handler);
+        AssertEqual(
+            true,
+            processor.BindRuntimeGeneration(GenerationA),
+            "The processor binds its first callback runtime generation");
+        AssertEqual(
+            (ulong)10,
+            processor.AppliedSequence,
+            "The processor loads only the bound generation cursor");
+
         DateTimeOffset now = new DateTimeOffset(
             2033,
             1,
@@ -107,7 +122,6 @@ internal static class CommunicationCallbackSubscriberSelfTest
             4,
             5,
             TimeSpan.Zero);
-
         bool applied = processor.ProcessAsync(
                 CreateEnvelope(11, now.AddMinutes(1)),
                 now,
@@ -120,6 +134,10 @@ internal static class CommunicationCallbackSubscriberSelfTest
             (ulong)11,
             store.Sequence,
             "The callback cursor advances after the handler returns");
+        AssertEqual(
+            GenerationA,
+            store.RuntimeGenerationId,
+            "The callback cursor commit retains its runtime generation");
         AssertEqual(
             1,
             store.Saves,
@@ -170,6 +188,15 @@ internal static class CommunicationCallbackSubscriberSelfTest
             (ulong)12,
             store.Sequence,
             "A failed callback never advances the durable cursor");
+
+        AssertEqual(
+            true,
+            processor.BindRuntimeGeneration(GenerationB),
+            "A restarted callback runtime changes the processor generation");
+        AssertEqual(
+            (ulong)0,
+            processor.AppliedSequence,
+            "A new runtime generation never inherits the previous sequence");
     }
 
     private static void VerifyFileCursorStore()
@@ -181,23 +208,41 @@ internal static class CommunicationCallbackSubscriberSelfTest
         try
         {
             var store = new FileCommunicationCallbackCursorStore(path);
+            AssertThrows<InvalidOperationException>(
+                () => store.Save(1),
+                "A callback cursor cannot commit before generation binding");
             AssertEqual(
                 (ulong)0,
-                store.Load(),
+                store.BindRuntimeGeneration(GenerationA),
                 "A missing callback cursor starts at zero");
             store.Save(123);
             AssertEqual(
                 (ulong)123,
                 store.Load(),
-                "The file callback cursor survives its first commit");
+                "The generation-scoped cursor survives its first commit");
             store.Save(456);
             AssertEqual(
                 (ulong)456,
                 store.Load(),
-                "The file callback cursor replaces the previous commit");
-            File.WriteAllText(path, "not-a-sequence");
+                "The generation-scoped cursor replaces its previous commit");
+            AssertEqual(
+                (ulong)0,
+                store.BindRuntimeGeneration(GenerationB),
+                "A different runtime generation resets the durable sequence");
+            store.Save(7);
+            AssertEqual(
+                (ulong)7,
+                store.Load(),
+                "The replacement generation owns its independent sequence");
+
+            File.WriteAllText(path, "999\n");
+            AssertEqual(
+                (ulong)0,
+                store.BindRuntimeGeneration(GenerationA),
+                "A legacy unscoped cursor migrates safely from zero");
+            File.WriteAllText(path, "not-a-cursor");
             AssertThrows<InvalidOperationException>(
-                () => store.Load(),
+                () => store.BindRuntimeGeneration(GenerationA),
                 "A corrupt callback cursor fails closed");
         }
         finally
@@ -258,16 +303,28 @@ internal static class CommunicationCallbackSubscriberSelfTest
     }
 
     private sealed class RecordingCursorStore
-        : ICommunicationCallbackCursorStore
+        : ICommunicationCallbackCursorStore,
+          ICommunicationCallbackGenerationCursorStore
     {
-        public RecordingCursorStore(ulong sequence)
-        {
-            Sequence = sequence;
-        }
+        private readonly Dictionary<string, ulong> _sequences =
+            new(StringComparer.Ordinal);
+
+        public string RuntimeGenerationId { get; private set; } = string.Empty;
 
         public ulong Sequence { get; private set; }
 
         public int Saves { get; private set; }
+
+        public ulong BindRuntimeGeneration(string runtimeGenerationId)
+        {
+            RuntimeGenerationId = runtimeGenerationId;
+            Sequence = _sequences.TryGetValue(
+                runtimeGenerationId,
+                out ulong sequence)
+                ? sequence
+                : 0;
+            return Sequence;
+        }
 
         public ulong Load()
         {
@@ -278,6 +335,12 @@ internal static class CommunicationCallbackSubscriberSelfTest
         {
             Saves++;
             Sequence = sequence;
+            _sequences[RuntimeGenerationId] = sequence;
+        }
+
+        public void SetSequence(string runtimeGenerationId, ulong sequence)
+        {
+            _sequences[runtimeGenerationId] = sequence;
         }
     }
 

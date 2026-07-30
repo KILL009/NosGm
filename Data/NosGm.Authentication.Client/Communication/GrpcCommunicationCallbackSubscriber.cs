@@ -21,7 +21,13 @@ namespace NosGm.Communication.Client
             CancellationToken cancellationToken);
     }
 
-    public sealed class GrpcCommunicationCallbackSubscriber : IDisposable
+    public interface ICommunicationCallbackSubscriberRunner : IDisposable
+    {
+        Task RunAsync(CancellationToken cancellationToken);
+    }
+
+    public sealed class GrpcCommunicationCallbackSubscriber
+        : ICommunicationCallbackSubscriberRunner
     {
         private readonly CommunicationCallbackSubscriberOptions _options;
         private readonly CommunicationCallbackProcessor _processor;
@@ -70,6 +76,11 @@ namespace NosGm.Communication.Client
                 throw;
             }
         }
+
+        public ulong AppliedSequence => _processor.AppliedSequence;
+
+        public string RuntimeGenerationId =>
+            _processor.RuntimeGenerationId;
 
         public async Task RunAsync(CancellationToken cancellationToken)
         {
@@ -128,8 +139,15 @@ namespace NosGm.Communication.Client
         private async Task RunSingleStreamAsync(
             CancellationToken cancellationToken)
         {
+            WireV1.GetCommunicationCallbackRuntimeInfoResponse runtimeInfo =
+                await GetRuntimeInfoAsync(cancellationToken)
+                    .ConfigureAwait(false);
+            _processor.BindRuntimeGeneration(runtimeInfo.RuntimeGenerationId);
+
             WireV1.SubscribeCommunicationCallbacksRequest request =
-                CreateSubscribeRequest(_processor.AppliedSequence);
+                CreateSubscribeRequest(
+                    runtimeInfo.RuntimeGenerationId,
+                    _processor.AppliedSequence);
             using AsyncServerStreamingCall<
                     WireV1.CommunicationCallbackEnvelope> call =
                 _client.SubscribeCommunicationCallbacks(
@@ -148,31 +166,57 @@ namespace NosGm.Communication.Client
             }
         }
 
+        private async Task<WireV1.GetCommunicationCallbackRuntimeInfoResponse>
+            GetRuntimeInfoAsync(CancellationToken cancellationToken)
+        {
+            DateTimeOffset issuedAt = DateTimeOffset.UtcNow;
+            DateTimeOffset setupDeadline = issuedAt.AddMilliseconds(
+                _options.SetupDeadlineMilliseconds);
+            var request =
+                new WireV1.GetCommunicationCallbackRuntimeInfoRequest
+                {
+                    Context = CreateRequestContext(issuedAt, setupDeadline)
+                };
+            WireV1.GetCommunicationCallbackRuntimeInfoResponse response =
+                await _client.GetCommunicationCallbackRuntimeInfoAsync(
+                        request,
+                        deadline: setupDeadline.UtcDateTime,
+                        cancellationToken: cancellationToken)
+                    .ResponseAsync.ConfigureAwait(false);
+            if (response == null ||
+                response.Result != WireV1.CommunicationResultCode.Success)
+            {
+                throw new RpcException(
+                    new Status(
+                        StatusCode.FailedPrecondition,
+                        "The callback runtime generation is unavailable."));
+            }
+            if (!IsCanonicalNonEmptyGuid(response.RuntimeGenerationId) ||
+                response.StartedAtUnixTimeMs <= 0 ||
+                response.CurrentSequence > (ulong)long.MaxValue)
+            {
+                throw new RpcException(
+                    new Status(
+                        StatusCode.DataLoss,
+                        "The callback runtime returned malformed generation metadata."));
+            }
+
+            return response;
+        }
+
         private WireV1.SubscribeCommunicationCallbacksRequest
-            CreateSubscribeRequest(ulong resumeAfterSequence)
+            CreateSubscribeRequest(
+                string runtimeGenerationId,
+                ulong resumeAfterSequence)
         {
             DateTimeOffset issuedAt = DateTimeOffset.UtcNow;
             DateTimeOffset setupDeadline = issuedAt.AddMilliseconds(
                 _options.SetupDeadlineMilliseconds);
             var request = new WireV1.SubscribeCommunicationCallbacksRequest
             {
-                Context = new WireV1.RequestContext
-                {
-                    Version = new WireV1.ProtocolVersion
-                    {
-                        Major = ClusterContractVersion.CurrentMajor,
-                        Minor = ClusterContractVersion.CurrentMinor
-                    },
-                    RequestId = Guid.NewGuid().ToString("D"),
-                    IssuedAtUnixTimeMs = issuedAt.ToUnixTimeMilliseconds(),
-                    DeadlineUnixTimeMs =
-                        setupDeadline.ToUnixTimeMilliseconds(),
-                    CallerRole =
-                        (WireV1.ClusterNodeRole)(int)_options.CallerRole,
-                    RequestedService = WireV1.ClusterService.Communication,
-                    CallerInstanceId = _options.CallerInstanceId
-                },
-                ResumeAfterSequence = resumeAfterSequence
+                Context = CreateRequestContext(issuedAt, setupDeadline),
+                ResumeAfterSequence = resumeAfterSequence,
+                RuntimeGenerationId = runtimeGenerationId
             };
 
             if (_options.CallerRole == ClusterNodeRole.World)
@@ -183,6 +227,28 @@ namespace NosGm.Communication.Client
             }
 
             return request;
+        }
+
+        private WireV1.RequestContext CreateRequestContext(
+            DateTimeOffset issuedAt,
+            DateTimeOffset setupDeadline)
+        {
+            return new WireV1.RequestContext
+            {
+                Version = new WireV1.ProtocolVersion
+                {
+                    Major = ClusterContractVersion.CurrentMajor,
+                    Minor = ClusterContractVersion.CurrentMinor
+                },
+                RequestId = Guid.NewGuid().ToString("D"),
+                IssuedAtUnixTimeMs = issuedAt.ToUnixTimeMilliseconds(),
+                DeadlineUnixTimeMs =
+                    setupDeadline.ToUnixTimeMilliseconds(),
+                CallerRole =
+                    (WireV1.ClusterNodeRole)(int)_options.CallerRole,
+                RequestedService = WireV1.ClusterService.Communication,
+                CallerInstanceId = _options.CallerInstanceId
+            };
         }
 
         private static bool ShouldReconnect(
@@ -344,6 +410,18 @@ namespace NosGm.Communication.Client
             return chain.Build(serverCertificate);
         }
 #endif
+
+        private static bool IsCanonicalNonEmptyGuid(string value)
+        {
+            return value != null &&
+                   value.Length == 36 &&
+                   Guid.TryParseExact(value, "D", out Guid parsed) &&
+                   parsed != Guid.Empty &&
+                   string.Equals(
+                       parsed.ToString("D"),
+                       value,
+                       StringComparison.Ordinal);
+        }
 
         private void ThrowIfDisposed()
         {

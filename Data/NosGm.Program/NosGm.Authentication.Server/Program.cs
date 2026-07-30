@@ -48,6 +48,7 @@ builder.Services.AddSingleton(options);
 builder.Services.AddSingleton(communicationOptions);
 builder.Services.AddSingleton(roleMap);
 builder.Services.AddSingleton<TimeProvider>(TimeProvider.System);
+builder.Services.AddSingleton<CommunicationCallbackRuntimeIdentity>();
 builder.Services.AddSingleton<GameforgeAuthenticationState>();
 builder.Services.AddSingleton<ClusterCommunicationState>();
 builder.Services.AddSingleton<CommunicationCallbackHub>();
@@ -74,9 +75,12 @@ if (trustedRootCertificate != null)
         trustedRootCertificate.Dispose);
 }
 
+CommunicationCallbackRuntimeIdentity callbackRuntimeIdentity =
+    app.Services.GetRequiredService<CommunicationCallbackRuntimeIdentity>();
 app.Logger.LogInformation(
-    "NosGM internal cluster runtime {InstanceId} listening on loopback port {Port}; authentication, communication state and callback services enabled.",
+    "NosGM internal cluster runtime {InstanceId} generation {CallbackGenerationId} listening on loopback port {Port}; authentication, communication state and callback services enabled.",
     options.InstanceId,
+    callbackRuntimeIdentity.GenerationId,
     options.Port);
 app.Run();
 

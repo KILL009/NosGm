@@ -1,6 +1,6 @@
 # Communication callback subscriber
 
-This slice adds the dual-target `net481` / `net10.0` client that consumes typed callbacks from the central .NET 10 runtime. The client is not started by the production Login or World processes yet, and the guarded SCS communication cutover remains unchanged.
+This slice provides the dual-target `net481` / `net10.0` client that consumes typed callbacks from the central .NET 10 runtime. The subscriber lifecycle primitive is available, but production Login and World do not start it yet. The guarded SCS communication cutover remains unchanged.
 
 ## Connection identity
 
@@ -31,6 +31,19 @@ Native HTTP/2 is the primary Windows 11 path. `HTTP2` is also the default when `
 
 The selector is resolved before opening the stream. There is no automatic fallback from one wire mode to another and no fallback to SCS after a gRPC dispatch.
 
+## Runtime-generation handshake
+
+Each central callback runtime creates a new canonical generation GUID when its process starts. This value is intentionally different from the configured server instance name and changes even when the process restarts with identical configuration.
+
+Before every stream connection the subscriber:
+
+1. calls `GetCommunicationCallbackRuntimeInfo` with its Login or World mTLS identity;
+2. validates the returned generation, start time and current sequence;
+3. binds the durable cursor to that generation;
+4. sends the same generation in `SubscribeCommunicationCallbacks`.
+
+The server compares the supplied generation with the process currently serving the stream. If the runtime restarted between the unary query and stream setup, the subscription fails with `FailedPrecondition`. The reconnect loop queries the runtime again and binds to the new generation before retrying.
+
 ## Envelope validation
 
 Before a new sequence may enter a handler or advance the cursor, the client verifies:
@@ -42,17 +55,25 @@ Before a new sequence may enter a handler or advance the cursor, the client veri
 5. a defined target with no contradictory target details;
 6. a supported typed payload whose identity and target match the authoritative callback contract.
 
-A malformed envelope fails closed. It is not applied and its sequence is not saved. Duplicate or older sequences are ignored before this validation because they have already been durably acknowledged by the same process identity.
+A malformed envelope fails closed. It is not applied and its sequence is not saved. Duplicate or older sequences are ignored before this validation because they have already been durably acknowledged by the same process identity and runtime generation.
 
 ## Durable cursor
 
-The subscriber loads one unsigned 64-bit sequence from its cursor store. The file implementation writes ASCII to a temporary file, flushes it to disk, then atomically replaces the previous cursor.
+The durable cursor is runtime-generation scoped. The file cursor uses the following ASCII structure:
 
-A corrupt cursor fails closed. A missing cursor begins at zero.
+```text
+NOSGM_CALLBACK_CURSOR_V1
+<runtime-generation-guid>
+<unsigned-sequence>
+```
+
+The file implementation writes to a temporary file, flushes it to disk and atomically replaces the previous cursor. The client certificate, trusted root and cursor paths remain isolated.
+
+A missing cursor begins at zero. A cursor from another runtime generation also begins at zero. Legacy pre-generation files containing one unsigned sequence are migrated safely from zero on the next commit. Structurally corrupt files fail closed.
 
 For every valid envelope:
 
-1. sequences already at or below the durable cursor are ignored;
+1. sequences already at or below the generation-scoped durable cursor are ignored;
 2. an unexpired envelope is passed to the typed handler;
 3. the cursor is saved only after the typed handler returns successfully;
 4. an expired envelope is not applied, but its sequence is durably skipped;
@@ -62,13 +83,13 @@ This gives at-least-once delivery at the typed handler boundary. A process crash
 
 The legacy handler surface is not uniformly completion-aware. Some handlers, including global-event generation and restart or shutdown scheduling, enqueue asynchronous work and return before the complete gameplay effect finishes. Therefore a cursor commit currently proves successful typed dispatch, not completion of every downstream business effect. Production cutover must either make those handlers awaitable and idempotent or explicitly accept and test that boundary.
 
-The current cursor is runtime-generation scoped. It can recover a Login or World process restart while the central callback runtime still retains that subscriber state. The central runtime currently keeps its sequence and replay registry in memory, so production lifecycle wiring must rotate or bind the cursor to a runtime generation before the callback cutover is enabled. A stale cursor from a previous runtime generation fails closed with an unavailable replay-cursor error.
+## Controlled lifecycle and reconnection
 
-## Controlled reconnection
+`CommunicationCallbackSubscriberHost` owns exactly one subscriber runner. It exposes `Created`, `Starting`, `Running`, `Stopping`, `Stopped` and `Faulted` states, retains a terminal exception and supports bounded cancellation during process shutdown.
 
-The subscriber opens one stream at a time. Transient gRPC status codes reconnect with bounded exponential delay. Fatal authorization, invalid-request, replay-cursor and data-loss errors escape to the process supervisor.
+The subscriber opens one stream at a time. Transient gRPC status codes reconnect with bounded exponential delay. A generation change is retried through a fresh runtime-info query. Fatal authorization, invalid-request, replay-cursor and data-loss errors escape to the lifecycle host and become visible as `Faulted`.
 
-A second `RunAsync` call on the same subscriber fails immediately. Cancellation stops retry and stream processing.
+A second `Start` or `RunAsync` call fails immediately. Cancellation stops retry and stream processing. The lifecycle host does not silently start SCS or another wire mode.
 
 ## Existing handler reuse
 
@@ -93,15 +114,16 @@ The deferred `SCSCharacterMessage` path is not accepted by the typed dispatcher.
 The isolated acceptance runtime performs the complete loop over both supported wire modes, with native HTTP/2 treated as the primary Windows 11 route:
 
 1. each wire-mode execution uses a unique Login subscriber process identity;
-2. Login opens a real callback server stream using the Login certificate;
-3. Master publishes a typed penalty refresh using the separate Master certificate;
-4. the runtime routes it to the Login subscriber;
-5. the handler applies the envelope exactly once;
-6. the test observes the matching cursor commit after handler completion;
-7. cancellation closes the stream.
+2. Login queries the real runtime generation with its Login certificate;
+3. Login opens a generation-bound callback server stream;
+4. Master publishes a typed penalty refresh using the separate Master certificate;
+5. the runtime routes it to the Login subscriber;
+6. the handler applies the envelope exactly once;
+7. the test observes the matching cursor commit after handler completion;
+8. cancellation closes the stream.
 
 Unique test identities prevent the second wire-mode execution from inheriting retained events from the first while preserving the runtime's real replay behavior.
 
 ## Current migration boundary
 
-Production remains on the SCS callback path. This slice provides the client, durable processing semantics and typed dispatcher only. A later coordinated PR must start the subscriber after successful Login/World registration, bind the cursor to the active runtime generation, disable the matching SCS callbacks at the same boundary, resolve the downstream completion boundary, and prove full real-client behavior before the communication transport selector can allow gRPC.
+Production remains on the SCS callback path. The generation handshake, cursor format and lifecycle owner are now available, but a coordinated PR must still start the host only after successful Login or World registration, stop it before teardown, expose process health, disable matching SCS callbacks at the same boundary, resolve the downstream completion boundary and prove full real-client behavior before the communication transport selector can allow gRPC.
