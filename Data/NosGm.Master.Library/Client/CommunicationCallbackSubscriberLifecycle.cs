@@ -16,6 +16,7 @@ namespace NosGm.Master.Library.Client
         private CommunicationCallbackActivationMode _activationMode =
             CommunicationCallbackActivationMode.Disabled;
         private CommunicationCallbackSubscriberHost _host;
+        private GrpcCommunicationCallbackSubscriber _subscriber;
         private CommunicationCallbackShadowEnvelopeHandler _shadowHandler;
         private string _identity = string.Empty;
         private int _stopTimeoutMilliseconds =
@@ -38,6 +39,50 @@ namespace NosGm.Master.Library.Client
                 lock (_syncRoot)
                 {
                     return _activationMode;
+                }
+            }
+        }
+
+        public ulong AppliedSequence
+        {
+            get
+            {
+                lock (_syncRoot)
+                {
+                    return _subscriber?.AppliedSequence ?? 0;
+                }
+            }
+        }
+
+        public bool IsReplayComplete
+        {
+            get
+            {
+                lock (_syncRoot)
+                {
+                    return _subscriber?.IsReplayComplete ?? false;
+                }
+            }
+        }
+
+        public CommunicationCallbackReplayEvidence ReplayEvidence
+        {
+            get
+            {
+                lock (_syncRoot)
+                {
+                    return _subscriber?.ReplayEvidence;
+                }
+            }
+        }
+
+        public string RuntimeGenerationId
+        {
+            get
+            {
+                lock (_syncRoot)
+                {
+                    return _subscriber?.RuntimeGenerationId ?? string.Empty;
                 }
             }
         }
@@ -111,16 +156,19 @@ namespace NosGm.Master.Library.Client
         public bool Stop()
         {
             CommunicationCallbackSubscriberHost host;
+            GrpcCommunicationCallbackSubscriber subscriber;
             CommunicationCallbackShadowEnvelopeHandler shadowHandler;
             int timeoutMilliseconds;
             string identity;
             lock (_syncRoot)
             {
                 host = _host;
+                subscriber = _subscriber;
                 shadowHandler = _shadowHandler;
                 timeoutMilliseconds = _stopTimeoutMilliseconds;
                 identity = _identity;
                 _host = null;
+                _subscriber = null;
                 _shadowHandler = null;
                 _identity = string.Empty;
             }
@@ -130,6 +178,8 @@ namespace NosGm.Master.Library.Client
                 return true;
             }
 
+            CommunicationCallbackReplayEvidence replayEvidence =
+                subscriber?.ReplayEvidence;
             bool stopped = false;
             try
             {
@@ -148,7 +198,13 @@ namespace NosGm.Master.Library.Client
                         " Observed=" +
                         (shadowHandler?.ObservedCallbacks ?? 0) +
                         " LastSequence=" +
-                        (shadowHandler?.LastObservedSequence ?? 0));
+                        (shadowHandler?.LastObservedSequence ?? 0) +
+                        " ReplayComplete=" +
+                        (replayEvidence != null) +
+                        " ReplayThrough=" +
+                        (replayEvidence?.ReplayThroughSequence ?? 0) +
+                        " Replayed=" +
+                        (replayEvidence?.ReplayedEvents ?? 0));
                 }
                 return stopped;
             }
@@ -235,6 +291,7 @@ namespace NosGm.Master.Library.Client
                     exception => OnFault(identity, exception));
 
                 _identity = identity;
+                _subscriber = subscriber;
                 _shadowHandler = shadowHandler;
                 _host = host;
                 try
@@ -245,6 +302,7 @@ namespace NosGm.Master.Library.Client
                 catch
                 {
                     _host = null;
+                    _subscriber = null;
                     _shadowHandler = null;
                     _identity = string.Empty;
                     host.Dispose();
