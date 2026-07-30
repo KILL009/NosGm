@@ -36,6 +36,7 @@ namespace NosGm.Communication.Client
         private readonly GrpcChannel _channel;
         private readonly WireV1.ClusterCommunicationCallbacks
             .ClusterCommunicationCallbacksClient _client;
+        private string _shadowWorldGeneration = string.Empty;
         private int _disposed;
         private int _running;
 
@@ -110,6 +111,12 @@ namespace NosGm.Communication.Client
                     catch (RpcException exception)
                         when (ShouldReconnect(exception, cancellationToken))
                     {
+                        if (_options.CallerRole == ClusterNodeRole.World &&
+                            exception.StatusCode ==
+                                StatusCode.FailedPrecondition)
+                        {
+                            _shadowWorldGeneration = string.Empty;
+                        }
                         await Task.Delay(reconnectDelay, cancellationToken)
                             .ConfigureAwait(false);
                         reconnectDelay = Math.Min(
@@ -120,6 +127,14 @@ namespace NosGm.Communication.Client
             }
             finally
             {
+                string registeredGeneration = _shadowWorldGeneration;
+                _shadowWorldGeneration = string.Empty;
+                if (_options.CallerRole == ClusterNodeRole.World &&
+                    !string.IsNullOrEmpty(registeredGeneration))
+                {
+                    await TryUnregisterShadowWorldAsync(registeredGeneration)
+                        .ConfigureAwait(false);
+                }
                 Volatile.Write(ref _running, 0);
             }
         }
@@ -143,6 +158,19 @@ namespace NosGm.Communication.Client
                 await GetRuntimeInfoAsync(cancellationToken)
                     .ConfigureAwait(false);
             _processor.BindRuntimeGeneration(runtimeInfo.RuntimeGenerationId);
+
+            if (_options.CallerRole == ClusterNodeRole.World &&
+                !string.Equals(
+                    _shadowWorldGeneration,
+                    runtimeInfo.RuntimeGenerationId,
+                    StringComparison.Ordinal))
+            {
+                await RegisterShadowWorldAsync(
+                        runtimeInfo.RuntimeGenerationId,
+                        cancellationToken)
+                    .ConfigureAwait(false);
+                _shadowWorldGeneration = runtimeInfo.RuntimeGenerationId;
+            }
 
             WireV1.SubscribeCommunicationCallbacksRequest request =
                 CreateSubscribeRequest(
@@ -202,6 +230,74 @@ namespace NosGm.Communication.Client
             }
 
             return response;
+        }
+
+        private async Task RegisterShadowWorldAsync(
+            string runtimeGenerationId,
+            CancellationToken cancellationToken)
+        {
+            DateTimeOffset issuedAt = DateTimeOffset.UtcNow;
+            DateTimeOffset setupDeadline = issuedAt.AddMilliseconds(
+                _options.SetupDeadlineMilliseconds);
+            WireV1.CommunicationMutationResponse response =
+                await _client.RegisterCommunicationCallbackShadowWorldAsync(
+                        new WireV1.RegisterCommunicationCallbackShadowWorldRequest
+                        {
+                            Context = CreateRequestContext(
+                                issuedAt,
+                                setupDeadline),
+                            RuntimeGenerationId = runtimeGenerationId,
+                            WorldId = _options.WorldId.ToString("D"),
+                            ChannelId = _options.ChannelId,
+                            WorldGroup = _options.WorldGroup
+                        },
+                        deadline: setupDeadline.UtcDateTime,
+                        cancellationToken: cancellationToken)
+                    .ResponseAsync.ConfigureAwait(false);
+            if (response == null ||
+                response.Result != WireV1.CommunicationResultCode.Success)
+            {
+                throw new RpcException(
+                    new Status(
+                        response?.Result ==
+                            WireV1.CommunicationResultCode.Conflict
+                            ? StatusCode.AlreadyExists
+                            : StatusCode.FailedPrecondition,
+                        "The callback-only World shadow route could not be registered."));
+            }
+        }
+
+        private async Task TryUnregisterShadowWorldAsync(
+            string runtimeGenerationId)
+        {
+            try
+            {
+                DateTimeOffset issuedAt = DateTimeOffset.UtcNow;
+                DateTimeOffset setupDeadline = issuedAt.AddMilliseconds(
+                    _options.SetupDeadlineMilliseconds);
+                await _client.UnregisterCommunicationCallbackShadowWorldAsync(
+                        new WireV1
+                            .UnregisterCommunicationCallbackShadowWorldRequest
+                        {
+                            Context = CreateRequestContext(
+                                issuedAt,
+                                setupDeadline),
+                            RuntimeGenerationId = runtimeGenerationId,
+                            WorldId = _options.WorldId.ToString("D")
+                        },
+                        deadline: setupDeadline.UtcDateTime,
+                        cancellationToken: CancellationToken.None)
+                    .ResponseAsync.ConfigureAwait(false);
+            }
+            catch (RpcException exception)
+                when (exception.StatusCode == StatusCode.Cancelled ||
+                      exception.StatusCode == StatusCode.DeadlineExceeded ||
+                      exception.StatusCode == StatusCode.FailedPrecondition ||
+                      exception.StatusCode == StatusCode.Unavailable)
+            {
+                // The route belongs only to the runtime generation that may
+                // already be unavailable. Process exit or restart clears it.
+            }
         }
 
         private WireV1.SubscribeCommunicationCallbacksRequest

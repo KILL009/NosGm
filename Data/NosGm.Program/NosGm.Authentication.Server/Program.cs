@@ -52,6 +52,7 @@ builder.Services.AddSingleton<CommunicationCallbackRuntimeIdentity>();
 builder.Services.AddSingleton<GameforgeAuthenticationState>();
 builder.Services.AddSingleton<ClusterCommunicationState>();
 builder.Services.AddSingleton<CommunicationCallbackHub>();
+builder.Services.AddSingleton<CommunicationCallbackShadowWorldRegistry>();
 builder.Services.AddSingleton<AuthenticationRequestReplayGuard>();
 builder.Services.AddSingleton<AuthenticationDispatchGate>();
 builder.Services.AddGrpc(grpc =>

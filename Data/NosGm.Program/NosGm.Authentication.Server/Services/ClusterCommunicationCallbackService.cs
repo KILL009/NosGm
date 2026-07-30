@@ -19,6 +19,8 @@ public sealed class ClusterCommunicationCallbackService
     private readonly ClientCertificateRoleMap _roleMap;
     private readonly CommunicationCallbackRuntimeIdentity _runtimeIdentity;
     private readonly AuthenticationServerOptions _serverOptions;
+    private readonly CommunicationCallbackShadowWorldRegistry
+        _shadowWorldRegistry;
     private readonly TimeProvider _timeProvider;
 
     public ClusterCommunicationCallbackService(
@@ -27,6 +29,7 @@ public sealed class ClusterCommunicationCallbackService
         ClientCertificateRoleMap roleMap,
         CommunicationCallbackHub hub,
         CommunicationCallbackRuntimeIdentity runtimeIdentity,
+        CommunicationCallbackShadowWorldRegistry shadowWorldRegistry,
         AuthenticationServerOptions serverOptions,
         TimeProvider timeProvider,
         ILogger<ClusterCommunicationCallbackService> logger)
@@ -36,6 +39,7 @@ public sealed class ClusterCommunicationCallbackService
         _roleMap = roleMap;
         _hub = hub;
         _runtimeIdentity = runtimeIdentity;
+        _shadowWorldRegistry = shadowWorldRegistry;
         _serverOptions = serverOptions;
         _timeProvider = timeProvider;
         _logger = logger;
@@ -81,6 +85,90 @@ public sealed class ClusterCommunicationCallbackService
             });
     }
 
+    public override Task<WireV1.CommunicationMutationResponse>
+        RegisterCommunicationCallbackShadowWorld(
+            WireV1.RegisterCommunicationCallbackShadowWorldRequest request,
+            ServerCallContext context)
+    {
+        WireV1.CommunicationResultCode authorization = ValidateAndAuthorize(
+            request?.Context,
+            CommunicationCallbackShadowWorldContractValidator.ValidateRegister(
+                request),
+            "RegisterCommunicationCallbackShadowWorld",
+            context,
+            requireGrpcDeadline: true,
+            WireV1.ClusterNodeRole.World);
+        if (authorization != WireV1.CommunicationResultCode.Success)
+        {
+            WriteAudit(
+                request?.Context,
+                "RegisterCommunicationCallbackShadowWorld",
+                authorization,
+                sequence: 0,
+                matchedSubscribers: 0);
+            return Mutation(authorization);
+        }
+        if (!MatchesRuntimeGeneration(request.RuntimeGenerationId))
+        {
+            throw new RpcException(
+                new Status(
+                    StatusCode.FailedPrecondition,
+                    "The callback runtime generation changed before the shadow World route was registered."));
+        }
+
+        WireV1.CommunicationResultCode result =
+            _shadowWorldRegistry.Register(request);
+        WriteAudit(
+            request.Context,
+            "RegisterCommunicationCallbackShadowWorld",
+            result,
+            sequence: 0,
+            matchedSubscribers: 0);
+        return Mutation(result);
+    }
+
+    public override Task<WireV1.CommunicationMutationResponse>
+        UnregisterCommunicationCallbackShadowWorld(
+            WireV1.UnregisterCommunicationCallbackShadowWorldRequest request,
+            ServerCallContext context)
+    {
+        WireV1.CommunicationResultCode authorization = ValidateAndAuthorize(
+            request?.Context,
+            CommunicationCallbackShadowWorldContractValidator.ValidateUnregister(
+                request),
+            "UnregisterCommunicationCallbackShadowWorld",
+            context,
+            requireGrpcDeadline: true,
+            WireV1.ClusterNodeRole.World);
+        if (authorization != WireV1.CommunicationResultCode.Success)
+        {
+            WriteAudit(
+                request?.Context,
+                "UnregisterCommunicationCallbackShadowWorld",
+                authorization,
+                sequence: 0,
+                matchedSubscribers: 0);
+            return Mutation(authorization);
+        }
+        if (!MatchesRuntimeGeneration(request.RuntimeGenerationId))
+        {
+            throw new RpcException(
+                new Status(
+                    StatusCode.FailedPrecondition,
+                    "The callback runtime generation changed before the shadow World route was removed."));
+        }
+
+        WireV1.CommunicationResultCode result =
+            _shadowWorldRegistry.Unregister(request);
+        WriteAudit(
+            request.Context,
+            "UnregisterCommunicationCallbackShadowWorld",
+            result,
+            sequence: 0,
+            matchedSubscribers: 0);
+        return Mutation(result);
+    }
+
     public override async Task SubscribeCommunicationCallbacks(
         WireV1.SubscribeCommunicationCallbacksRequest request,
         IServerStreamWriter<WireV1.CommunicationCallbackEnvelope>
@@ -107,15 +195,20 @@ public sealed class ClusterCommunicationCallbackService
                     StatusCode.InvalidArgument,
                     "The callback runtime generation is invalid."));
         }
-        if (!string.Equals(
-                request.RuntimeGenerationId,
-                _runtimeIdentity.GenerationId.ToString("D"),
-                StringComparison.Ordinal))
+        if (!MatchesRuntimeGeneration(request.RuntimeGenerationId))
         {
             throw new RpcException(
                 new Status(
                     StatusCode.FailedPrecondition,
                     "The callback runtime generation changed before the stream opened."));
+        }
+        if (request.Context.CallerRole == WireV1.ClusterNodeRole.World &&
+            !_shadowWorldRegistry.Owns(request))
+        {
+            throw new RpcException(
+                new Status(
+                    StatusCode.FailedPrecondition,
+                    "The callback subscriber does not own the registered shadow World route."));
         }
 
         CallbackSubscriptionOpenResult openResult =
@@ -334,6 +427,15 @@ public sealed class ClusterCommunicationCallbackService
                _timeProvider.GetUtcNow().ToUnixTimeMilliseconds();
     }
 
+    private bool MatchesRuntimeGeneration(string value)
+    {
+        return IsCanonicalGenerationId(value) &&
+               string.Equals(
+                   value,
+                   _runtimeIdentity.GenerationId.ToString("D"),
+                   StringComparison.Ordinal);
+    }
+
     private static bool IsCanonicalGenerationId(string value)
     {
         return value != null &&
@@ -344,6 +446,16 @@ public sealed class ClusterCommunicationCallbackService
                    parsed.ToString("D"),
                    value,
                    StringComparison.Ordinal);
+    }
+
+    private static Task<WireV1.CommunicationMutationResponse> Mutation(
+        WireV1.CommunicationResultCode result)
+    {
+        return Task.FromResult(
+            new WireV1.CommunicationMutationResponse
+            {
+                Result = result
+            });
     }
 
     private static void ThrowForSetupResult(

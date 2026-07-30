@@ -152,6 +152,22 @@ namespace NosGm.Master.Library.Client
                     endpointPort,
                     accountLimit,
                     worldGroup));
+            if (channelId.HasValue)
+            {
+                try
+                {
+                    CommunicationCallbackSubscriberLifecycle.Instance.StartWorld(
+                        worldId,
+                        channelId.Value,
+                        worldGroup);
+                }
+                catch
+                {
+                    _serviceProxy().UnregisterWorldServer(worldId);
+                    throw;
+                }
+            }
+
             return Task.FromResult(
                 new CommunicationWorldRegistrationResult
                 {
@@ -168,6 +184,7 @@ namespace NosGm.Master.Library.Client
                 CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
+            CommunicationCallbackSubscriberLifecycle.Instance.Stop();
             _serviceProxy().UnregisterWorldServer(worldId);
             return Success();
         }

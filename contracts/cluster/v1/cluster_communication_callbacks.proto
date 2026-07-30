@@ -15,6 +15,14 @@ service ClusterCommunicationCallbacks {
   rpc GetCommunicationCallbackRuntimeInfo(
       GetCommunicationCallbackRuntimeInfoRequest)
       returns (GetCommunicationCallbackRuntimeInfoResponse);
+  // Temporary callback-only route used while authoritative World state still
+  // lives in SCS. It cannot mutate accounts, sessions or channel assignment.
+  rpc RegisterCommunicationCallbackShadowWorld(
+      RegisterCommunicationCallbackShadowWorldRequest)
+      returns (CommunicationMutationResponse);
+  rpc UnregisterCommunicationCallbackShadowWorld(
+      UnregisterCommunicationCallbackShadowWorldRequest)
+      returns (CommunicationMutationResponse);
   rpc SubscribeCommunicationCallbacks(
       SubscribeCommunicationCallbacksRequest)
       returns (stream CommunicationCallbackEnvelope);
@@ -93,6 +101,20 @@ message GetCommunicationCallbackRuntimeInfoResponse {
   string runtime_generation_id = 2;
   int64 started_at_unix_time_ms = 3;
   uint64 current_sequence = 4;
+}
+
+message RegisterCommunicationCallbackShadowWorldRequest {
+  RequestContext context = 1;
+  string runtime_generation_id = 2;
+  string world_id = 3;
+  int32 channel_id = 4;
+  string world_group = 5;
+}
+
+message UnregisterCommunicationCallbackShadowWorldRequest {
+  RequestContext context = 1;
+  string runtime_generation_id = 2;
+  string world_id = 3;
 }
 
 message SubscribeCommunicationCallbacksRequest {

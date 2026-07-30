@@ -153,6 +153,7 @@ namespace NosGm.Login
                         Console.Title = $"NosGm - Login Server [{ClientRegionMap.BaseLoginPort}-{ClientRegionMap.BaseLoginPort + ClientRegionMap.RegionCount - 1}]";
                     }
 
+                    CommunicationCallbackSubscriberLifecycle.Instance.StartLogin();
                     Logger.Info($"Regional Login listeners started | Count={loginPorts.Count} Ports={string.Join(",", loginPorts)}");
                 }
                 catch (Exception ex)
@@ -181,6 +182,15 @@ namespace NosGm.Login
 
         private static void StopLoginServers()
         {
+            try
+            {
+                CommunicationCallbackSubscriberLifecycle.Instance.Stop();
+            }
+            catch (Exception ex)
+            {
+                Logger.Error("Unable to stop the Login callback shadow subscriber", ex);
+            }
+
             foreach (NetworkManager<LoginCryptography> networkManager in NetworkManagers)
             {
                 try { networkManager.StopServer(); }
@@ -208,6 +218,7 @@ namespace NosGm.Login
         {
             Logger.Log.Error("Crash", (Exception)e.ExceptionObject);
             Logger.Debug("Login Server crashed! Rebooting gracefully...");
+            StopLoginServers();
             Process.Start("NosGm.Login.exe", _restartArguments);
             Environment.Exit(1);
         }

@@ -1,6 +1,6 @@
 # Communication callback subscriber
 
-This slice provides the dual-target `net481` / `net10.0` client that consumes typed callbacks from the central .NET 10 runtime. The subscriber lifecycle primitive is available, but production Login and World do not start it yet. The guarded SCS communication cutover remains unchanged.
+This slice provides the dual-target `net481` / `net10.0` client that consumes typed callbacks from the central .NET 10 runtime. Production Login and World can now own the subscriber in an explicit disabled-by-default shadow mode. The guarded SCS communication cutover remains unchanged.
 
 ## Connection identity
 
@@ -126,4 +126,4 @@ Unique test identities prevent the second wire-mode execution from inheriting re
 
 ## Current migration boundary
 
-Production remains on the SCS callback path. The generation handshake, cursor format and lifecycle owner are now available, but a coordinated PR must still start the host only after successful Login or World registration, stop it before teardown, expose process health, disable matching SCS callbacks at the same boundary, resolve the downstream completion boundary and prove full real-client behavior before the communication transport selector can allow gRPC.
+Production remains on the SCS callback path. Login and World may start the gRPC subscriber only in shadow mode, where validated callbacks advance a dedicated cursor without invoking `CommunicationCallbackEnvelopeDispatcher` or any `CommunicationServiceClient.On...` effect. Real application remains blocked until a replay-complete barrier permits an atomic SCS-to-gRPC inbound cutover, downstream completion semantics are resolved and full real-client behavior is proven.
