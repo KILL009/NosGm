@@ -17,6 +17,7 @@ public sealed class ClusterCommunicationCallbackService
     private readonly ILogger<ClusterCommunicationCallbackService> _logger;
     private readonly AuthenticationRequestReplayGuard _replayGuard;
     private readonly ClientCertificateRoleMap _roleMap;
+    private readonly CommunicationCallbackRuntimeIdentity _runtimeIdentity;
     private readonly AuthenticationServerOptions _serverOptions;
     private readonly TimeProvider _timeProvider;
 
@@ -25,6 +26,7 @@ public sealed class ClusterCommunicationCallbackService
         AuthenticationRequestReplayGuard replayGuard,
         ClientCertificateRoleMap roleMap,
         CommunicationCallbackHub hub,
+        CommunicationCallbackRuntimeIdentity runtimeIdentity,
         AuthenticationServerOptions serverOptions,
         TimeProvider timeProvider,
         ILogger<ClusterCommunicationCallbackService> logger)
@@ -33,9 +35,50 @@ public sealed class ClusterCommunicationCallbackService
         _replayGuard = replayGuard;
         _roleMap = roleMap;
         _hub = hub;
+        _runtimeIdentity = runtimeIdentity;
         _serverOptions = serverOptions;
         _timeProvider = timeProvider;
         _logger = logger;
+    }
+
+    public override Task<WireV1.GetCommunicationCallbackRuntimeInfoResponse>
+        GetCommunicationCallbackRuntimeInfo(
+            WireV1.GetCommunicationCallbackRuntimeInfoRequest request,
+            ServerCallContext context)
+    {
+        WireV1.CommunicationResultCode authorization = ValidateAndAuthorize(
+            request?.Context,
+            CommunicationCallbackRuntimeInfoContractValidator.Validate(request),
+            "GetCommunicationCallbackRuntimeInfo",
+            context,
+            requireGrpcDeadline: true,
+            WireV1.ClusterNodeRole.Login,
+            WireV1.ClusterNodeRole.World);
+        WriteAudit(
+            request?.Context,
+            "GetCommunicationCallbackRuntimeInfo",
+            authorization,
+            _hub.CurrentSequence,
+            matchedSubscribers: 0);
+        if (authorization != WireV1.CommunicationResultCode.Success)
+        {
+            return Task.FromResult(
+                new WireV1.GetCommunicationCallbackRuntimeInfoResponse
+                {
+                    Result = authorization
+                });
+        }
+
+        return Task.FromResult(
+            new WireV1.GetCommunicationCallbackRuntimeInfoResponse
+            {
+                Result = WireV1.CommunicationResultCode.Success,
+                RuntimeGenerationId =
+                    _runtimeIdentity.GenerationId.ToString("D"),
+                StartedAtUnixTimeMs =
+                    _runtimeIdentity.StartedAt.ToUnixTimeMilliseconds(),
+                CurrentSequence = _hub.CurrentSequence
+            });
     }
 
     public override async Task SubscribeCommunicationCallbacks(
@@ -56,6 +99,24 @@ public sealed class ClusterCommunicationCallbackService
         ThrowForSetupResult(
             authorization,
             "The callback subscription request was rejected.");
+
+        if (!IsCanonicalGenerationId(request.RuntimeGenerationId))
+        {
+            throw new RpcException(
+                new Status(
+                    StatusCode.InvalidArgument,
+                    "The callback runtime generation is invalid."));
+        }
+        if (!string.Equals(
+                request.RuntimeGenerationId,
+                _runtimeIdentity.GenerationId.ToString("D"),
+                StringComparison.Ordinal))
+        {
+            throw new RpcException(
+                new Status(
+                    StatusCode.FailedPrecondition,
+                    "The callback runtime generation changed before the stream opened."));
+        }
 
         CallbackSubscriptionOpenResult openResult =
             _hub.TryOpenSubscription(request, out var subscription);
@@ -271,6 +332,18 @@ public sealed class ClusterCommunicationCallbackService
     {
         return envelope.ExpiresAtUnixTimeMs <=
                _timeProvider.GetUtcNow().ToUnixTimeMilliseconds();
+    }
+
+    private static bool IsCanonicalGenerationId(string value)
+    {
+        return value != null &&
+               value.Length == 36 &&
+               Guid.TryParseExact(value, "D", out Guid parsed) &&
+               parsed != Guid.Empty &&
+               string.Equals(
+                   parsed.ToString("D"),
+                   value,
+                   StringComparison.Ordinal);
     }
 
     private static void ThrowForSetupResult(
