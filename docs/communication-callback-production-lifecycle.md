@@ -35,7 +35,11 @@ Any later initialization exception stops the subscriber before listeners are tor
 
 The SCS state transport starts the optional World shadow only after Master successfully registers the World and returns its assigned channel ID. The subscriber identity uses the exact registered World GUID, channel ID and World group.
 
-If subscriber configuration or startup throws, the transport immediately unregisters the World again before surfacing the failure. A World therefore cannot remain registered after a failed shadow-lifecycle start.
+Because authoritative World state still lives in SCS, the callback runtime does not learn that assignment through `ClusterCommunicationService`. Before opening its stream, the World subscriber therefore calls `RegisterCommunicationCallbackShadowWorld` using its World certificate, current runtime generation and SCS-assigned identity. This temporary route exists only in `CommunicationCallbackHub`; it cannot create accounts, attach sessions, assign a channel or modify authoritative cluster state.
+
+When a stream ends, the client attempts `UnregisterCommunicationCallbackShadowWorld`. Runtime restart clears the route automatically. Registration conflict or identity mismatch fails the subscriber closed rather than opening an unrouteable stream.
+
+If subscriber configuration or startup throws, the SCS transport immediately unregisters the authoritative World before surfacing the failure. A World therefore cannot remain registered after a synchronous shadow-lifecycle start failure.
 
 Before normal World unregistration, the lifecycle cancels and disposes the callback subscriber. `ProcessExit` provides a final bounded cleanup path for exits that do not reach explicit unregistration.
 
@@ -44,6 +48,12 @@ Before normal World unregistration, the lifecycle cancels and disposes the callb
 The shadow subscriber never constructs `CommunicationCallbackEnvelopeDispatcher` and never invokes `CommunicationServiceClient.On...` handlers. SCS callbacks continue to apply all supported effects, including presence, kicks, lifecycle commands, global events and cache refreshes.
 
 The typed gRPC stream is therefore exercised inside the real Login and World processes without executing an event twice. Its cursor represents successful validation and shadow observation only.
+
+## Publication boundary
+
+Production Master does not yet mirror SCS callback publications into the .NET 10 callback runtime. A shadow subscriber can observe callbacks published by acceptance tests, diagnostics or future guarded mirror work, but a zero observed count does not currently prove that SCS delivered no callbacks.
+
+The next publisher slice must copy typed callback intent into the runtime while SCS remains the sole effect applier. That mirror must use the same semantic event identity and must never invoke a second gameplay handler.
 
 ## Per-process configuration
 
@@ -59,4 +69,4 @@ The launcher or process supervisor must assign these values separately before en
 
 ## Next boundary
 
-The next cutover slice must add a server-issued replay-complete barrier. The process can then keep SCS authoritative while gRPC catches up, observe the barrier, atomically switch the inbound gate and guarantee that every callback is applied exactly once by one transport. Until that barrier exists, application mode remains hard-blocked.
+The next migration steps are a guarded Master publication mirror followed by a server-issued replay-complete barrier. The process can then keep SCS authoritative while gRPC catches up, observe the barrier, atomically switch the inbound gate and guarantee that every callback is applied exactly once by one transport. Until that barrier exists, application mode remains hard-blocked.
