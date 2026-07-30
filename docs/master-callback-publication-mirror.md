@@ -1,6 +1,6 @@
 # Master communication callback publication mirror
 
-The legacy Master process can now publish typed copies of existing SCS callbacks to the central .NET 10 callback runtime. This is an observation and replay-validation stage. SCS remains the only transport allowed to apply gameplay, account or lifecycle effects.
+The legacy Master process can now publish typed copies of selected SCS callbacks to the central .NET 10 callback runtime. This is an observation and replay-validation stage. SCS remains the only transport allowed to apply gameplay, account or lifecycle effects.
 
 ## Activation
 
@@ -32,7 +32,7 @@ The AuthBridge certificate namespace is never read by the callback publisher.
 
 ## SCS-first ordering
 
-Master registers `MirroredCommunicationService` as its SCS communication service. It inherits the complete legacy implementation and reimplements only the ten methods that currently emit supported callbacks.
+Master registers `MirroredCommunicationService` as its SCS communication service. It inherits the complete legacy implementation and reimplements only the eight emitters whose typed destinations already preserve the complete legacy recipient set.
 
 Every reimplemented method follows the same order:
 
@@ -40,7 +40,7 @@ Every reimplemented method follows the same order:
 2. return or propagate its existing SCS result;
 3. enqueue a typed mirror publication without waiting for network I/O.
 
-A mirror construction, queue or publication failure cannot replace the SCS result. `SendMessageToCharacter` is inherited unchanged and is not mirrored.
+A mirror construction, queue or publication failure cannot replace the SCS result. Character presence and `SendMessageToCharacter` are inherited unchanged and are not mirrored in this slice.
 
 ## Bounded asynchronous publication
 
@@ -56,8 +56,6 @@ On shutdown Master completes the queue and allows a bounded drain. When the time
 
 | Legacy emitter | Typed payload | Target |
 | --- | --- | --- |
-| `ConnectCharacter` | character presence connected | World group |
-| `DisconnectCharacter` | character presence disconnected | World group |
 | `KickSession` | kick session | All Worlds |
 | `Restart` | lifecycle restart | All Worlds or World group |
 | `RunGlobalEvent` | global event | All Worlds |
@@ -66,6 +64,8 @@ On shutdown Master completes the queue and allows a bounded drain. When the time
 | `UpdateFamily` | Family refresh | World group |
 | `RefreshPenalty` | Penalty refresh | All Login and World nodes |
 | `UpdateRelation` | Relation refresh | World group |
+
+`ConnectCharacter` and `DisconnectCharacter` remain on SCS only in this slice. Legacy delivery excludes the source World, while the current typed `WORLD_GROUP` target includes every World in that group. The next routing slice must encode and validate the source-World exclusion before presence can produce trustworthy parity evidence.
 
 `UpdateStaticBonus` has a typed request builder for the future `CharacterId` route, but the current `ICommunicationService` exposes no SCS emitter to mirror. It is not fabricated from another operation.
 
@@ -86,4 +86,4 @@ A publication count proves that the central runtime accepted the typed event. It
 
 ## Next cutover boundary
 
-The next stage is parity evidence and a server-issued replay-complete barrier. Login and World must prove that their shadow cursors have consumed every mirrored event up to a declared sequence. Only then can an atomic inbound gate disable the matching SCS callback and enable the typed dispatcher exactly once, without a gap or duplicate effect.
+The next stage first adds exact source-World exclusion for character presence, then collects parity evidence and introduces a server-issued replay-complete barrier. Login and World must prove that their shadow cursors have consumed every mirrored event up to a declared sequence. Only then can an atomic inbound gate disable the matching SCS callback and enable the typed dispatcher exactly once, without a gap or duplicate effect.
