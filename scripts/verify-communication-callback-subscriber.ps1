@@ -250,8 +250,10 @@ Require $liveTest "NOSGM_AUTH_GRPC_LIVE_LOGIN_CERT_PATH" `
     "Live subscriber presents the Login certificate"
 Require $liveTest "NOSGM_AUTH_GRPC_LIVE_MASTER_CERT_PATH" `
     "Live publisher presents the separate Master certificate"
-Require $liveTest "AllLoginNodes" `
-    "Live acceptance exercises role-targeted routing"
+Require $liveTest "CommunicationCallbackTargetKind.AllNodes" `
+    "Live penalty acceptance targets Login and World subscribers"
+Forbid $liveTest "CommunicationCallbackTargetKind.AllLoginNodes" `
+    "Live penalty acceptance never narrows the all-node contract"
 
 Require $legacyClient "Communication gRPC cutover is blocked" `
     "Production communication cutover remains guarded"
