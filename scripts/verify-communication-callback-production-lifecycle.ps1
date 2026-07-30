@@ -63,6 +63,8 @@ $activation = Read-RequiredFile `
     "Data\NosGm.Authentication.Client\Communication\CommunicationCallbackActivationOptions.cs"
 $shadowHandler = Read-RequiredFile `
     "Data\NosGm.Authentication.Client\Communication\CommunicationCallbackShadowEnvelopeHandler.cs"
+$subscriber = Read-RequiredFile `
+    "Data\NosGm.Authentication.Client\Communication\GrpcCommunicationCallbackSubscriber.cs"
 $lifecycle = Read-RequiredFile `
     "Data\NosGm.Master.Library\Client\CommunicationCallbackSubscriberLifecycle.cs"
 $masterProject = Read-RequiredFile `
@@ -71,8 +73,16 @@ $loginProgram = Read-RequiredFile `
     "Data\NosGm.Program\NosGm.Login\Program.cs"
 $scsTransport = Read-RequiredFile `
     "Data\NosGm.Master.Library\Client\ScsClusterCommunicationTransport.cs"
+$protocol = Read-RequiredFile `
+    "contracts\cluster\v1\cluster_communication_callbacks.proto"
+$shadowWorldValidator = Read-RequiredFile `
+    "Data\NosGm.Cluster.Contracts\Communication\V1\CommunicationCallbackShadowWorldContractValidator.cs"
+$callbackService = Read-RequiredFile `
+    "Data\NosGm.Program\NosGm.Authentication.Server\Services\ClusterCommunicationCallbackService.cs"
 $selfTest = Read-RequiredFile `
     "tests\NosGm.Authentication.Runtime.SelfTest\CommunicationCallbackActivationSelfTest.cs"
+$shadowWorldTest = Read-RequiredFile `
+    "tests\NosGm.Authentication.Runtime.SelfTest\CommunicationCallbackShadowWorldSelfTest.cs"
 $documentation = Read-RequiredFile `
     "docs\communication-callback-production-lifecycle.md"
 
@@ -145,6 +155,33 @@ Require-Match $scsTransport `
     'UnregisterWorldServerAsync.*?CommunicationCallbackSubscriberLifecycle\.Instance\.Stop\(\);.*?_serviceProxy\(\)\.UnregisterWorldServer' `
     "World stops callback ownership before unregistering"
 
+Require $protocol "RegisterCommunicationCallbackShadowWorld" `
+    "Callback protocol exposes temporary World shadow registration"
+Require $protocol "UnregisterCommunicationCallbackShadowWorld" `
+    "Callback protocol exposes World shadow cleanup"
+Require $protocol "cannot mutate accounts, sessions or channel assignment" `
+    "Protocol records the callback-only authority boundary"
+Require $shadowWorldValidator "ClusterNodeRole.World" `
+    "Only World may validate a shadow route request"
+Require $shadowWorldValidator "InvalidSubscriberIdentity" `
+    "Malformed shadow World identity fails closed"
+Require $callbackService "_hub.RegisterWorld" `
+    "Shadow registration feeds only the callback routing hub"
+Require $callbackService "_hub.UnregisterWorld" `
+    "Shadow cleanup removes the callback route"
+Forbid $callbackService "_state.RegisterWorldServer" `
+    "Shadow registration cannot mutate authoritative communication state"
+Require-Match $subscriber `
+    'GetRuntimeInfoAsync.*?RegisterShadowWorldAsync.*?SubscribeCommunicationCallbacks' `
+    "World registers its callback-only route before stream setup"
+Require-Match $subscriber `
+    'finally\s*\{.*?TryUnregisterShadowWorldAsync' `
+    "World shadow route cleanup runs after every stream"
+Require $subscriber "RegisterCommunicationCallbackShadowWorldAsync" `
+    "Subscriber uses the typed shadow registration RPC"
+Require $subscriber "UnregisterCommunicationCallbackShadowWorldAsync" `
+    "Subscriber uses the typed shadow cleanup RPC"
+
 Require $selfTest "Production callback subscriber is disabled by default" `
     "Activation default has a regression test"
 Require $selfTest "Explicit callback activation starts only shadow observation" `
@@ -153,14 +190,24 @@ Require $selfTest "Production callback effects remain blocked before atomic cuto
     "Application cutover remains guarded by a regression test"
 Require $selfTest "Shadow callback handler records one validated envelope" `
     "Shadow observation has a runtime test"
+Require $shadowWorldTest "World may register one callback-only shadow route" `
+    "World shadow registration has a contract test"
+Require $shadowWorldTest "Login cannot register a callback-only World route" `
+    "Login shadow-route impersonation has a regression test"
+Require $shadowWorldTest "Shadow World registration requires the assigned channel" `
+    "World shadow registration requires exact assigned identity"
 
 Require $documentation "SCS remains the only callback path allowed to execute" `
     "Documentation preserves one authoritative callback applier"
 Require $documentation 'Setting it to `true` fails process initialization' `
     "Documentation records the application fail-closed boundary"
+Require $documentation "RegisterCommunicationCallbackShadowWorld" `
+    "Documentation records callback-only World routing"
+Require $documentation "Production Master does not yet mirror" `
+    "Documentation does not overstate live shadow coverage"
 Require $documentation "server-issued replay-complete barrier" `
-    "Documentation names the next atomic cutover requirement"
+    "Documentation names the atomic cutover requirement"
 
 Write-Host `
-    "NosGM Login and World callback shadow lifecycle contracts passed." `
+    "NosGM Login and World callback shadow lifecycle and routing contracts passed." `
     -ForegroundColor Green
