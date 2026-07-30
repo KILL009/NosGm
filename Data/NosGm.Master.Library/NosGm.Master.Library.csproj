@@ -69,6 +69,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Client\CommunicationCallbackEnvelopeDispatcher.cs" />
+    <Compile Include="Client\CommunicationCallbackScsObservationLedger.cs" />
     <Compile Include="Client\CommunicationCallbackSubscriberLifecycle.cs" />
     <Compile Include="Client\CommunicationGlobalEventMapper.cs" />
     <Compile Include="Client\CommunicationClient.cs" />
