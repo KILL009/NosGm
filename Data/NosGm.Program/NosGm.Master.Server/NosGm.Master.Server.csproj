@@ -173,7 +173,7 @@
       <Name>NosGm.SCS</Name>
     </ProjectReference>
     <ProjectReference Include="..\..\NosGm.Configuration\NosGm.Configuration.csproj">
-      <Project>{011EE023-E1B8-4645-BBE9-94ac35b55390}</Project>
+      <Project>{011EE023-E1B8-4645-BBE9-94AC35B55390}</Project>
       <Name>NosGm.Configuration</Name>
     </ProjectReference>
     <ProjectReference Include="..\..\NosGm.Core\NosGm.Core.csproj">
