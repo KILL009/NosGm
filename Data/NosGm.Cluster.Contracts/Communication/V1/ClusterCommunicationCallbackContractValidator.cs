@@ -351,7 +351,7 @@ namespace NosGm.Cluster.Contracts.Communication.V1
             };
 
             if (ClusterContractValidator.Validate(contractContext) !=
-                    ClusterContractValidationError.None ||
+                ClusterContractValidationError.None ||
                 contractContext.RequestedService != ClusterService.Communication)
             {
                 return CommunicationCallbackContractValidationError
