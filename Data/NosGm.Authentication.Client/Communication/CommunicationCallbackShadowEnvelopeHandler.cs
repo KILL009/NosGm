@@ -14,6 +14,9 @@ namespace NosGm.Communication.Client
         public const int MaximumObservationCapacity = 16384;
 
         private readonly int _capacity;
+        private readonly Action<CommunicationCallbackReplayEvidence>
+            _replayCompleted;
+        private readonly Action _streamEnded;
         private readonly Queue<CommunicationCallbackShadowObservation>
             _observations;
         private readonly object _syncRoot = new object();
@@ -25,7 +28,9 @@ namespace NosGm.Communication.Client
         private bool _streamActive;
 
         public CommunicationCallbackShadowEnvelopeHandler(
-            int observationCapacity = DefaultObservationCapacity)
+            int observationCapacity = DefaultObservationCapacity,
+            Action<CommunicationCallbackReplayEvidence> replayCompleted = null,
+            Action streamEnded = null)
         {
             if (observationCapacity <= 0 ||
                 observationCapacity > MaximumObservationCapacity)
@@ -37,6 +42,8 @@ namespace NosGm.Communication.Client
             }
 
             _capacity = observationCapacity;
+            _replayCompleted = replayCompleted;
+            _streamEnded = streamEnded;
             _observations =
                 new Queue<CommunicationCallbackShadowObservation>(
                     observationCapacity);
@@ -93,15 +100,24 @@ namespace NosGm.Communication.Client
                 }
                 _phase = CommunicationCallbackObservationPhase.Live;
             }
+
+            _replayCompleted?.Invoke(evidence);
         }
 
         public void EndStream()
         {
+            bool wasActive;
             lock (_syncRoot)
             {
+                wasActive = _streamActive;
                 _runtimeGenerationId = string.Empty;
                 _phase = 0;
                 _streamActive = false;
+            }
+
+            if (wasActive)
+            {
+                _streamEnded?.Invoke();
             }
         }
 
