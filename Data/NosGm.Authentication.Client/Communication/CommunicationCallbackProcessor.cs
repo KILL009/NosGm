@@ -11,6 +11,7 @@ namespace NosGm.Communication.Client
         private readonly ICommunicationCallbackCursorStore _cursorStore;
         private readonly ICommunicationCallbackEnvelopeHandler _handler;
         private ulong _appliedSequence;
+        private string _runtimeGenerationId;
 
         public CommunicationCallbackProcessor(
             ICommunicationCallbackCursorStore cursorStore,
@@ -25,11 +26,44 @@ namespace NosGm.Communication.Client
 
         public ulong AppliedSequence => _appliedSequence;
 
+        public string RuntimeGenerationId =>
+            _runtimeGenerationId ?? string.Empty;
+
+        public bool BindRuntimeGeneration(string runtimeGenerationId)
+        {
+            if (!IsCanonicalNonEmptyGuid(runtimeGenerationId))
+            {
+                throw new InvalidOperationException(
+                    "The callback runtime returned an invalid generation ID.");
+            }
+            if (string.Equals(
+                    _runtimeGenerationId,
+                    runtimeGenerationId,
+                    StringComparison.Ordinal))
+            {
+                return false;
+            }
+
+            _appliedSequence =
+                _cursorStore is ICommunicationCallbackGenerationCursorStore
+                    generationStore
+                    ? generationStore.BindRuntimeGeneration(runtimeGenerationId)
+                    : _cursorStore.Load();
+            _runtimeGenerationId = runtimeGenerationId;
+            return true;
+        }
+
         public async Task<bool> ProcessAsync(
             WireV1.CommunicationCallbackEnvelope envelope,
             DateTimeOffset now,
             CancellationToken cancellationToken)
         {
+            if (_cursorStore is ICommunicationCallbackGenerationCursorStore &&
+                string.IsNullOrEmpty(_runtimeGenerationId))
+            {
+                throw new InvalidOperationException(
+                    "The callback processor has no bound runtime generation.");
+            }
             if (envelope == null || envelope.Sequence == 0)
             {
                 throw new InvalidOperationException(
