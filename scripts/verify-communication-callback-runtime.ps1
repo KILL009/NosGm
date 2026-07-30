@@ -71,7 +71,7 @@ Require $options "NOSGM_COMMUNICATION_MAX_CALLBACK_SUBSCRIBERS" `
     "Subscriber-state capacity is configurable"
 Require $options "DefaultMaximumCallbackSubscribers = 2048" `
     "Subscriber-state capacity has a bounded default"
-Require $options "MaximumCallbackSubscribers = 8192" `
+Require $options "MaximumCallbackSubscriberCapacity = 8192" `
     "Subscriber-state capacity has an absolute ceiling"
 
 Require $hub "MaxPendingEventsPerSubscriber" `
