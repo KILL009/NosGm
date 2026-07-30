@@ -157,6 +157,10 @@ jobs:
             Write-Host "[FOUND] $executable"
           }
 
+      - name: Verify Master callback mirror interface dispatch
+        shell: powershell
+        run: ./scripts/verify-master-callback-mirror-interface-map.ps1
+
       - name: Verify password hashing behavior
         shell: powershell
         run: ./scripts/verify-password-hashing.ps1

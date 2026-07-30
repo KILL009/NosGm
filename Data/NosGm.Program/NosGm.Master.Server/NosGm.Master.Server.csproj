@@ -62,6 +62,8 @@
     <Compile Include="AuthentificationService.cs" />
     <Compile Include="LauncherAuthBridge.cs" />
     <Compile Include="LegacyGameforgeAuthenticationStateTransport.cs" />
+    <Compile Include="MasterCommunicationCallbackMirror.cs" />
+    <Compile Include="MirroredCommunicationService.cs" />
     <Compile Include="MailService.cs" />
     <Compile Include="ConfigurationService.cs" />
     <Compile Include="MallService.cs" />

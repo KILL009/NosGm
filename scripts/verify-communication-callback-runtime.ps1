@@ -187,7 +187,8 @@ Require $documentation "Production `CommunicationServiceClient` still defaults t
 & (Join-Path $PSScriptRoot "verify-communication-callback-generation.ps1")
 & (Join-Path $PSScriptRoot "verify-communication-callback-subscriber.ps1")
 & (Join-Path $PSScriptRoot "verify-communication-callback-production-lifecycle.ps1")
+& (Join-Path $PSScriptRoot "verify-communication-callback-master-mirror.ps1")
 
 Write-Host `
-    "NosGM bounded callback runtime, generation lifecycle, production shadow and EventId contracts passed." `
+    "NosGM bounded callback runtime, generation lifecycle, production shadow, Master mirror and EventId contracts passed." `
     -ForegroundColor Green
