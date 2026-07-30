@@ -2,7 +2,6 @@ using NosGm.Core;
 using NosGm.Domain;
 using NosGm.Master.Library.Interface;
 using System;
-using System.Linq;
 
 namespace NosGm.Master.Server
 {
@@ -10,47 +9,6 @@ namespace NosGm.Master.Server
         : CommunicationService,
           ICommunicationService
     {
-        public new bool ConnectCharacter(Guid worldId, long characterId)
-        {
-            bool connected = base.ConnectCharacter(worldId, characterId);
-            if (connected)
-            {
-                string worldGroup = MSManager.Instance.WorldServers
-                    .Find(world => world.Id == worldId)
-                    ?.WorldGroup;
-                Mirror(
-                    "CharacterConnected",
-                    () => MasterCommunicationCallbackMirror.Instance
-                        .TryCharacterPresence(
-                            worldGroup,
-                            characterId,
-                            true));
-            }
-            return connected;
-        }
-
-        public new void DisconnectCharacter(Guid worldId, long characterId)
-        {
-            bool wasConnected = MSManager.Instance.ConnectedAccounts.Any(
-                account =>
-                    account.CharacterId == characterId &&
-                    account.ConnectedWorld?.Id == worldId);
-            string worldGroup = MSManager.Instance.WorldServers
-                .Find(world => world.Id == worldId)
-                ?.WorldGroup;
-            base.DisconnectCharacter(worldId, characterId);
-            if (wasConnected)
-            {
-                Mirror(
-                    "CharacterDisconnected",
-                    () => MasterCommunicationCallbackMirror.Instance
-                        .TryCharacterPresence(
-                            worldGroup,
-                            characterId,
-                            false));
-            }
-        }
-
         public new void KickSession(long? accountId, int? sessionId)
         {
             base.KickSession(accountId, sessionId);
