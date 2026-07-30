@@ -95,29 +95,35 @@ namespace NosGm.Communication.Client
 
             Task runTask;
             CancellationTokenSource cancellation;
+            bool alreadyInactive;
             lock (_syncRoot)
             {
+                alreadyInactive =
+                    _state == CommunicationCallbackSubscriberHostState.Created ||
+                    _state == CommunicationCallbackSubscriberHostState.Stopped ||
+                    _state == CommunicationCallbackSubscriberHostState.Faulted;
                 if (_state == CommunicationCallbackSubscriberHostState.Created)
                 {
                     _state = CommunicationCallbackSubscriberHostState.Stopped;
-                    DisposeRunner();
-                    return true;
                 }
-                if (_state == CommunicationCallbackSubscriberHostState.Stopped ||
-                    _state == CommunicationCallbackSubscriberHostState.Faulted)
+                else if (!alreadyInactive)
                 {
-                    DisposeRunner();
-                    return true;
+                    _state = CommunicationCallbackSubscriberHostState.Stopping;
                 }
 
-                _state = CommunicationCallbackSubscriberHostState.Stopping;
                 runTask = _runTask;
                 cancellation = _cancellation;
             }
 
+            if (alreadyInactive)
+            {
+                DisposeCancellation(cancellation);
+                DisposeRunner();
+                return true;
+            }
+
             cancellation?.Cancel();
-            bool completed = runTask == null ||
-                             runTask.Wait(timeout);
+            bool completed = runTask == null || runTask.Wait(timeout);
             if (!completed)
             {
                 return false;
@@ -130,7 +136,7 @@ namespace NosGm.Communication.Client
                     _state = CommunicationCallbackSubscriberHostState.Stopped;
                 }
             }
-            cancellation?.Dispose();
+            DisposeCancellation(cancellation);
             DisposeRunner();
             return true;
         }
@@ -142,15 +148,39 @@ namespace NosGm.Communication.Client
                 return;
             }
 
+            bool stopped = false;
             try
             {
-                Stop(TimeSpan.FromSeconds(5));
+                stopped = Stop(TimeSpan.FromSeconds(5));
             }
             catch (AggregateException exception)
                 when (exception.InnerExceptions.Count == 1 &&
                       exception.InnerException is OperationCanceledException)
             {
+                stopped = true;
+            }
+            finally
+            {
+                if (!stopped)
+                {
+                    var timeout = new TimeoutException(
+                        "The communication callback subscriber did not stop within five seconds.");
+                    lock (_syncRoot)
+                    {
+                        _lastException = timeout;
+                        _state =
+                            CommunicationCallbackSubscriberHostState.Faulted;
+                    }
+                    NotifyFault(timeout);
+                }
+
+                // A runner that ignored cancellation still owns network and
+                // certificate resources. Dispose it without aborting its thread.
                 DisposeRunner();
+                if (stopped)
+                {
+                    DisposeCancellation(_cancellation);
+                }
             }
         }
 
@@ -181,7 +211,7 @@ namespace NosGm.Communication.Client
                     _lastException = exception;
                     _state = CommunicationCallbackSubscriberHostState.Faulted;
                 }
-                _faultHandler?.Invoke(exception);
+                NotifyFault(exception);
                 return;
             }
             finally
@@ -194,6 +224,29 @@ namespace NosGm.Communication.Client
                     }
                 }
             }
+        }
+
+        private void NotifyFault(Exception exception)
+        {
+            if (_faultHandler == null)
+            {
+                return;
+            }
+
+            try
+            {
+                _faultHandler(exception);
+            }
+            catch
+            {
+                // Observability code must never replace the subscriber failure.
+            }
+        }
+
+        private static void DisposeCancellation(
+            CancellationTokenSource cancellation)
+        {
+            cancellation?.Dispose();
         }
 
         private void DisposeRunner()
