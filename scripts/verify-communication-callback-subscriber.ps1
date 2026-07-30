@@ -317,7 +317,7 @@ Require-Match $testProgram `
     'if\s*\(args\.Contains\("--live".*?MasterCertificateRoleSelfTest\.RunLiveAsync\(\).*?CommunicationCallbackLiveSubscriberSelfTest\.RunLiveAsync\(\).*?RunLiveGrpcAcceptanceAsync\(\)' `
     "All live network tests run after module initialization completes"
 
-Require $protocol "Native HTTP/2 is the primary Windows 11 transport" `
+Require $protocol "HTTP/2 is the primary Windows 11 transport" `
     "Protocol comments record the current primary transport"
 Require $protocol "Subscriber replay acknowledgement is sequence-based" `
     "Protocol distinguishes publication idempotency from replay acknowledgement"
