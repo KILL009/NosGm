@@ -128,22 +128,24 @@ namespace NosGm.Communication.Client
                 CommunicationCallbackSemanticFingerprint.ResolveKind(envelope);
             string fingerprint =
                 CommunicationCallbackSemanticFingerprint.Compute(envelope);
-            var observation = new CommunicationCallbackShadowObservation(
-                runtimeGenerationId: GetActiveGeneration(),
-                eventId: envelope.EventId,
-                sequence: envelope.Sequence,
-                kind: kind,
-                phase: GetActivePhase(),
-                semanticFingerprint: fingerprint,
-                observedAt: DateTimeOffset.UtcNow);
+            DateTimeOffset observedAt = DateTimeOffset.UtcNow;
 
             lock (_syncRoot)
             {
-                if (!_streamActive)
+                if (!_streamActive || _phase == 0)
                 {
                     throw new InvalidOperationException(
                         "The shadow handler has no active callback stream.");
                 }
+
+                var observation = new CommunicationCallbackShadowObservation(
+                    runtimeGenerationId: _runtimeGenerationId,
+                    eventId: envelope.EventId,
+                    sequence: envelope.Sequence,
+                    kind: kind,
+                    phase: _phase,
+                    semanticFingerprint: fingerprint,
+                    observedAt: observedAt);
                 if (_observations.Count == _capacity)
                 {
                     _observations.Dequeue();
@@ -157,32 +159,6 @@ namespace NosGm.Communication.Client
                 checked((long)envelope.Sequence));
             Interlocked.Increment(ref _observedCallbacks);
             return Task.CompletedTask;
-        }
-
-        private string GetActiveGeneration()
-        {
-            lock (_syncRoot)
-            {
-                if (!_streamActive)
-                {
-                    throw new InvalidOperationException(
-                        "The shadow handler has no active callback stream.");
-                }
-                return _runtimeGenerationId;
-            }
-        }
-
-        private CommunicationCallbackObservationPhase GetActivePhase()
-        {
-            lock (_syncRoot)
-            {
-                if (!_streamActive || _phase == 0)
-                {
-                    throw new InvalidOperationException(
-                        "The shadow handler has no active callback phase.");
-                }
-                return _phase;
-            }
         }
 
         private static bool IsCanonicalNonEmptyGuid(string value)
