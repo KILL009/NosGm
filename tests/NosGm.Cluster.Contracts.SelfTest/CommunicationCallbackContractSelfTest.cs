@@ -58,9 +58,11 @@ internal static class CommunicationCallbackContractSelfTest
                 loginSubscribe),
             "Login cannot subscribe to World-only callbacks");
 
+        string targetWorldId =
+            "22222222-3333-4444-5555-666666666666";
         var presence = CreatePublish(
-            WireV1.CommunicationCallbackTargetKind.WorldGroup);
-        presence.Target.WorldGroup = "S2-Sumeria";
+            WireV1.CommunicationCallbackTargetKind.WorldId);
+        presence.Target.WorldId = targetWorldId;
         presence.CharacterPresence = new WireV1.CharacterPresenceCallback
         {
             CharacterId = 10004,
@@ -70,7 +72,7 @@ internal static class CommunicationCallbackContractSelfTest
             CommunicationCallbackContractValidationError.None,
             ClusterCommunicationCallbackContractValidator.ValidatePublish(
                 presence),
-            "Master may publish typed character presence to a World group");
+            "Master may publish typed character presence to one exact World");
         presence.Context.CallerRole = WireV1.ClusterNodeRole.World;
         AssertEqual(
             CommunicationCallbackContractValidationError.InvalidCallerRole,
@@ -79,13 +81,14 @@ internal static class CommunicationCallbackContractSelfTest
             "World cannot impersonate the callback publisher");
         presence.Context.CallerRole = WireV1.ClusterNodeRole.Master;
         presence.Target.Kind =
-            WireV1.CommunicationCallbackTargetKind.AllWorlds;
-        presence.Target.WorldGroup = string.Empty;
+            WireV1.CommunicationCallbackTargetKind.WorldGroup;
+        presence.Target.WorldId = string.Empty;
+        presence.Target.WorldGroup = "S2-Sumeria";
         AssertEqual(
             CommunicationCallbackContractValidationError.TargetCallbackMismatch,
             ClusterCommunicationCallbackContractValidator.ValidatePublish(
                 presence),
-            "Character presence cannot escape its World group");
+            "Character presence cannot return to ambiguous World-group fan-out");
 
         var kick = CreatePublish(
             WireV1.CommunicationCallbackTargetKind.AllWorlds);
