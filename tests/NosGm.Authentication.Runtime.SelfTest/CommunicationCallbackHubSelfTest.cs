@@ -97,16 +97,16 @@ internal static class CommunicationCallbackHubSelfTest
             CreatePresencePublish(
                 9001,
                 connected: true,
-                "Sumeria",
+                worldA,
                 Guid.NewGuid()));
         AssertEqual(
             (uint)1,
             presence.MatchedSubscribers,
-            "World-group presence excludes Login subscribers");
+            "Exact-World presence excludes Login and other Worlds");
         AssertPendingSequence(
             worldLease,
             presence.Sequence,
-            "The matching World receives presence");
+            "The exact target World receives presence");
         AssertEqual(
             false,
             loginLease.PendingEvents.TryRead(out _),
@@ -293,7 +293,7 @@ internal static class CommunicationCallbackHubSelfTest
         CreatePresencePublish(
             long characterId,
             bool connected,
-            string worldGroup,
+            Guid worldId,
             Guid eventId)
     {
         return new WireV1.PublishCommunicationCallbackRequest
@@ -302,8 +302,8 @@ internal static class CommunicationCallbackHubSelfTest
             TtlSeconds = 30,
             Target = new WireV1.CommunicationCallbackTarget
             {
-                Kind = WireV1.CommunicationCallbackTargetKind.WorldGroup,
-                WorldGroup = worldGroup
+                Kind = WireV1.CommunicationCallbackTargetKind.WorldId,
+                WorldId = worldId.ToString("D")
             },
             CharacterPresence = new WireV1.CharacterPresenceCallback
             {
