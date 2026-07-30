@@ -198,6 +198,11 @@ namespace NosGm.Communication.Client
             {
                 await _runner.RunAsync(cancellationToken)
                     .ConfigureAwait(false);
+                if (!cancellationToken.IsCancellationRequested)
+                {
+                    throw new InvalidOperationException(
+                        "The communication callback subscriber stopped unexpectedly.");
+                }
             }
             catch (OperationCanceledException)
                 when (cancellationToken.IsCancellationRequested)
