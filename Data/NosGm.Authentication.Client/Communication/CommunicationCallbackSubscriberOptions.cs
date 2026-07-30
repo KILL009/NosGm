@@ -171,14 +171,6 @@ namespace NosGm.Communication.Client
                 throw new InvalidOperationException(
                     "Callback certificate and cursor paths must be absolute.");
             }
-            if (string.Equals(
-                    Path.GetFullPath(certificatePath),
-                    Path.GetFullPath(cursorPath),
-                    StringComparison.OrdinalIgnoreCase))
-            {
-                throw new InvalidOperationException(
-                    "The callback cursor path cannot overwrite the client certificate.");
-            }
 
             string trustedRootPath = ReadOptionalText(
                 readVariable(TrustedRootCertificatePathVariable),
@@ -191,14 +183,33 @@ namespace NosGm.Communication.Client
                     TrustedRootCertificatePathVariable +
                     " must be an absolute path.");
             }
-#if !NET10_0_OR_GREATER
+ #if !NET10_0_OR_GREATER
             if (!string.IsNullOrEmpty(trustedRootPath))
             {
                 throw new InvalidOperationException(
                     TrustedRootCertificatePathVariable +
                     " is reserved for the isolated .NET 10 acceptance process.");
             }
-#endif
+ #endif
+
+            certificatePath = Path.GetFullPath(certificatePath);
+            cursorPath = Path.GetFullPath(cursorPath);
+            trustedRootPath = string.IsNullOrEmpty(trustedRootPath)
+                ? string.Empty
+                : Path.GetFullPath(trustedRootPath);
+            if (PathsEqual(certificatePath, cursorPath))
+            {
+                throw new InvalidOperationException(
+                    "The callback cursor path cannot overwrite the client certificate.");
+            }
+            if (!string.IsNullOrEmpty(trustedRootPath) &&
+                (PathsEqual(cursorPath, trustedRootPath) ||
+                 PathsEqual(certificatePath, trustedRootPath)))
+            {
+                throw new InvalidOperationException(
+                    "The callback client certificate, trusted root, and cursor paths must be distinct.");
+            }
+
             string certificatePassword = ReadOptionalText(
                 readVariable(CertificatePasswordVariable),
                 CertificatePasswordVariable,
@@ -230,13 +241,11 @@ namespace NosGm.Communication.Client
 
             return new CommunicationCallbackSubscriberOptions(
                 address,
-                Path.GetFullPath(certificatePath),
+                certificatePath,
                 certificatePassword,
-                string.IsNullOrEmpty(trustedRootPath)
-                    ? string.Empty
-                    : Path.GetFullPath(trustedRootPath),
+                trustedRootPath,
                 callerInstanceId,
-                Path.GetFullPath(cursorPath),
+                cursorPath,
                 setupDeadline,
                 initialReconnect,
                 maximumReconnect,
@@ -337,6 +346,16 @@ namespace NosGm.Communication.Client
                 }
             }
             return true;
+        }
+
+        private static bool PathsEqual(string left, string right)
+        {
+            return string.Equals(
+                Path.GetFullPath(left),
+                Path.GetFullPath(right),
+                Environment.OSVersion.Platform == PlatformID.Win32NT
+                    ? StringComparison.OrdinalIgnoreCase
+                    : StringComparison.Ordinal);
         }
     }
 }
