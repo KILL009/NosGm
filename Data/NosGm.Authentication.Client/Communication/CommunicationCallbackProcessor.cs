@@ -120,7 +120,7 @@ namespace NosGm.Communication.Client
                     .CharacterPresence:
                     return envelope.CharacterPresence.CharacterId > 0 &&
                            targetKind == WireV1
-                               .CommunicationCallbackTargetKind.WorldGroup;
+                               .CommunicationCallbackTargetKind.WorldId;
 
                 case WireV1.CommunicationCallbackEnvelope.CallbackOneofCase
                     .KickSession:
