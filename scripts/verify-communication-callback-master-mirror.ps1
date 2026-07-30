@@ -101,11 +101,11 @@ Require $publisher "request.Context = CreateRequestContext" `
     "Every callback attempt receives a fresh request context"
 Require $publisher 'RequestId = Guid.NewGuid().ToString("D")' `
     "Every callback attempt receives a fresh request ID"
-Require $publisher "MasterCommunicationGrpcIdentityOptions" `
-    "Callback publisher uses the communication-specific Master identity"
 Forbid $publisher "NOSGM_AUTH_GRPC_CLIENT_CERT_PATH" `
     "Callback publisher never reads the AuthBridge certificate namespace"
 
+Require $mirror "MasterCommunicationGrpcIdentityOptions.Load()" `
+    "Mirror lifecycle loads the communication-specific Master identity"
 Require $mirror "new BlockingCollection<MirrorItem>" `
     "Master callback mirror owns one bounded FIFO queue"
 Require $mirror "new ConcurrentQueue<MirrorItem>()" `
