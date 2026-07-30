@@ -163,6 +163,8 @@ Require $selfTest "QueueOverflow" `
 Require $documentation "Production `CommunicationServiceClient` still defaults to SCS" `
     "Documentation preserves the guarded production boundary"
 
+& (Join-Path $PSScriptRoot "verify-communication-callback-subscriber.ps1")
+
 Write-Host `
     "NosGM bounded communication callback runtime contracts passed." `
     -ForegroundColor Green
