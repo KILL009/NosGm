@@ -137,9 +137,7 @@ namespace NosGm.Cluster.Contracts.Communication.V1
                         return InvalidPayload();
                     }
                     return targetKind ==
-                               WireV1.CommunicationCallbackTargetKind.WorldGroup &&
-                           IsCanonicalWorldId(
-                               request.Target.ExcludedWorldId)
+                           WireV1.CommunicationCallbackTargetKind.WorldGroup
                         ? CommunicationCallbackContractValidationError.None
                         : TargetMismatch();
 
@@ -177,10 +175,8 @@ namespace NosGm.Cluster.Contracts.Communication.V1
                     }
                     return targetKind ==
                                WireV1.CommunicationCallbackTargetKind.AllWorlds ||
-                           (targetKind ==
-                                WireV1.CommunicationCallbackTargetKind.WorldGroup &&
-                            string.IsNullOrEmpty(
-                                request.Target.ExcludedWorldId))
+                           targetKind ==
+                               WireV1.CommunicationCallbackTargetKind.WorldGroup
                         ? CommunicationCallbackContractValidationError.None
                         : TargetMismatch();
 
@@ -207,7 +203,8 @@ namespace NosGm.Cluster.Contracts.Communication.V1
                     {
                         return InvalidPayload();
                     }
-                    return IsPlainWorldGroupTarget(request.Target)
+                    return targetKind ==
+                           WireV1.CommunicationCallbackTargetKind.WorldGroup
                         ? CommunicationCallbackContractValidationError.None
                         : TargetMismatch();
 
@@ -217,7 +214,8 @@ namespace NosGm.Cluster.Contracts.Communication.V1
                     {
                         return InvalidPayload();
                     }
-                    return IsPlainWorldGroupTarget(request.Target)
+                    return targetKind ==
+                           WireV1.CommunicationCallbackTargetKind.WorldGroup
                         ? CommunicationCallbackContractValidationError.None
                         : TargetMismatch();
 
@@ -238,7 +236,8 @@ namespace NosGm.Cluster.Contracts.Communication.V1
                     {
                         return InvalidPayload();
                     }
-                    return IsPlainWorldGroupTarget(request.Target)
+                    return targetKind ==
+                           WireV1.CommunicationCallbackTargetKind.WorldGroup
                         ? CommunicationCallbackContractValidationError.None
                         : TargetMismatch();
 
@@ -287,21 +286,17 @@ namespace NosGm.Cluster.Contracts.Communication.V1
                                CommunicationCallbackContractLimits
                                    .MaxWorldGroupLength) &&
                            string.IsNullOrEmpty(target.WorldId) &&
-                           target.CharacterId == 0 &&
-                           (string.IsNullOrEmpty(target.ExcludedWorldId) ||
-                            IsCanonicalWorldId(target.ExcludedWorldId));
+                           target.CharacterId == 0;
 
                 case WireV1.CommunicationCallbackTargetKind.WorldId:
                     return string.IsNullOrEmpty(target.WorldGroup) &&
                            IsCanonicalWorldId(target.WorldId) &&
-                           target.CharacterId == 0 &&
-                           string.IsNullOrEmpty(target.ExcludedWorldId);
+                           target.CharacterId == 0;
 
                 case WireV1.CommunicationCallbackTargetKind.CharacterId:
                     return string.IsNullOrEmpty(target.WorldGroup) &&
                            string.IsNullOrEmpty(target.WorldId) &&
-                           target.CharacterId > 0 &&
-                           string.IsNullOrEmpty(target.ExcludedWorldId);
+                           target.CharacterId > 0;
 
                 default:
                     return false;
@@ -313,16 +308,7 @@ namespace NosGm.Cluster.Contracts.Communication.V1
         {
             return string.IsNullOrEmpty(target.WorldGroup) &&
                    string.IsNullOrEmpty(target.WorldId) &&
-                   target.CharacterId == 0 &&
-                   string.IsNullOrEmpty(target.ExcludedWorldId);
-        }
-
-        private static bool IsPlainWorldGroupTarget(
-            WireV1.CommunicationCallbackTarget target)
-        {
-            return target.Kind ==
-                       WireV1.CommunicationCallbackTargetKind.WorldGroup &&
-                   string.IsNullOrEmpty(target.ExcludedWorldId);
+                   target.CharacterId == 0;
         }
 
         private static bool IsKindAllowedForSubscriber(
