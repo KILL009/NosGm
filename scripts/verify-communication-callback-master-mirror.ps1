@@ -127,7 +127,9 @@ Require $mirror "CALLBACK_MIRROR_FAULTED" `
 Require $mirror "SCS remains authoritative" `
     "Terminal mirror failure cannot claim transport authority"
 Require $mirror "TryCharacterPresence" `
-    "Character-presence builder remains staged for exact routing"
+    "Character presence uses the typed mirror publisher"
+Require $mirror "CommunicationCallbackTargetKind.WorldGroup" `
+    "Character presence and group callbacks preserve legacy group scope"
 Require $mirror "TryStaticBonusRefresh" `
     "Future static-bonus publication already has an exact typed builder"
 Require $mirror "CommunicationCallbackTargetKind.CharacterId" `
@@ -136,8 +138,6 @@ Require $mirror "CommunicationCallbackTargetKind.AllNodes" `
     "Penalty refresh targets Login and World subscribers"
 Require $mirror "CommunicationCallbackTargetKind.AllWorlds" `
     "World-wide callbacks preserve their legacy scope"
-Require $mirror "CommunicationCallbackTargetKind.WorldGroup" `
-    "Group-scoped callbacks preserve their legacy scope"
 
 Require $service ": CommunicationService," `
     "Mirrored service inherits the complete legacy implementation"
@@ -145,12 +145,24 @@ Require $service "ICommunicationService" `
     "Mirrored service reimplements the SCS interface"
 Require $service "CALLBACK_MIRROR_ISOLATED_FAILURE" `
     "Mirror exceptions are isolated from SCS results"
-Forbid $service "ConnectCharacter" `
-    "Character-connected mirroring waits for source-World exclusion"
-Forbid $service "DisconnectCharacter" `
-    "Character-disconnected mirroring waits for source-World exclusion"
+Require $service "IsCurrentClientAuthenticated" `
+    "Void character disconnect preserves the legacy authentication guard"
+Require $service "FindConnectedCharacter" `
+    "Character presence captures the legacy account route"
+Require $service "WORLD_GROUP_NOT_FOUND" `
+    "Unexpected missing presence scope is dropped instead of faulting the worker"
 Forbid $service "SendMessageToCharacter" `
     "Rendered legacy character messaging is not mirrored"
+
+Require-Match $service `
+    'public\s+new\s+bool\s+ConnectCharacter\s*\(.*?base\.ConnectCharacter\s*\(.*?if\s*\(connected\).*?MirrorPresence\s*\(' `
+    "SCS succeeds before connected presence is mirrored"
+Require-Match $service `
+    'public\s+new\s+void\s+DisconnectCharacter\s*\(.*?IsCurrentClientAuthenticated\(\).*?FindConnectedCharacter\s*\(.*?base\.DisconnectCharacter\s*\(.*?if\s*\(authenticated\s*&&\s*account\s*!=\s*null\).*?MirrorPresence\s*\(' `
+    "Authenticated SCS disconnect executes before disconnected presence is mirrored"
+Require-Match $service `
+    'private\s+static\s+void\s+MirrorPresence\s*\(.*?TryCharacterPresence\s*\(\s*worldGroup\s*,\s*characterId\s*,\s*connected\s*\)' `
+    "Presence mirror preserves the legacy World-group target"
 
 $orderedMethods = @(
     @{ Name = "KickSession"; Mirror = "TryKickSession" },
@@ -189,9 +201,9 @@ Require $project '<Compile Include="MirroredCommunicationService.cs" />' `
 Require $interfaceMapTest "GetInterfaceMap" `
     "Compiled mirror verification inspects the CLR interface map"
 Require $interfaceMapTest "NosGm.Master.Server.MirroredCommunicationService" `
-    "Compiled mirror verification expects the eight derived targets"
+    "Compiled mirror verification expects all ten mirrored targets"
 Require $interfaceMapTest "NosGm.Master.Server.CommunicationService" `
-    "Compiled mirror verification preserves deferred legacy targets"
+    "Compiled mirror verification preserves deferred raw messaging"
 Require $windowsWorkflow "Verify Master callback mirror interface dispatch" `
     "Windows CI names the compiled interface-dispatch check"
 Require $windowsWorkflow "./scripts/verify-master-callback-mirror-interface-map.ps1" `
@@ -218,6 +230,10 @@ Require $liveTest "retry.AcceptedSequence" `
 Require $liveTest "IsBackground = false" `
     "Live publisher acceptance cannot be skipped by process exit"
 
+Require $migrationMap '"legacyMethod": "CharacterConnected"' `
+    "Migration inventory contains connected presence"
+Require $migrationMap '"legacyMethod": "CharacterDisconnected"' `
+    "Migration inventory contains disconnected presence"
 Require $migrationMap '"legacyMethod": "SendMessageToCharacter"' `
     "Migration inventory retains the deferred raw-message boundary"
 Require $migrationMap '"targetKind": "ALL_NODES"' `
@@ -226,8 +242,8 @@ Require $documentation "SCS remains the only transport allowed to apply" `
     "Documentation preserves one callback effect authority"
 Require $documentation 'non-blocking `TryAdd`' `
     "Documentation records the non-blocking queue boundary"
-Require $documentation "source World" `
-    "Documentation records the deferred presence exclusion"
+Require $documentation "including the source World" `
+    "Documentation records the actual legacy presence recipient set"
 Require $documentation 'current `ICommunicationService` exposes no SCS emitter' `
     "Documentation does not invent a static-bonus source"
 Require $documentation "server-issued replay-complete barrier" `

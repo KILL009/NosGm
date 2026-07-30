@@ -42,6 +42,8 @@ try {
 
     $interfaceMap = $serviceType.GetInterfaceMap($interfaceType)
     $expectedMirrorTargets = @(
+        "ConnectCharacter",
+        "DisconnectCharacter",
         "KickSession",
         "RefreshPenalty",
         "Restart",
@@ -52,8 +54,6 @@ try {
         "UpdateRelation"
     )
     $expectedLegacyTargets = @(
-        "ConnectCharacter",
-        "DisconnectCharacter",
         "SendMessageToCharacter"
     )
 
