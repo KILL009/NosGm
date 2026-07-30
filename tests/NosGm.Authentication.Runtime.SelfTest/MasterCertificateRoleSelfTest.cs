@@ -1,4 +1,5 @@
 using System.Runtime.CompilerServices;
+using Grpc.Core;
 using Microsoft.Extensions.Configuration;
 using NosGm.Authentication.Client;
 using NosGm.Authentication.Server;
@@ -15,6 +16,12 @@ internal static class MasterCertificateRoleSelfTest
         VerifyMasterFingerprintResolvesOnlyToMaster();
         VerifyMasterCertificateCannotBeReusedAcrossRoles();
         VerifyLegacyAuthenticationOnlyConfigurationRemainsValid();
+
+        if (Environment.GetCommandLineArgs()
+            .Contains("--live", StringComparer.Ordinal))
+        {
+            VerifyLiveMasterCertificateIsAuthenticatedButUnauthorized();
+        }
     }
 
     private static void VerifyMasterClientIdentityCanBeLoaded()
@@ -87,6 +94,78 @@ internal static class MasterCertificateRoleSelfTest
             0,
             options.AllowedFingerprints[WireNodeRole.Master].Count,
             "Authentication-only deployments may omit Master until callbacks activate");
+    }
+
+    private static void VerifyLiveMasterCertificateIsAuthenticatedButUnauthorized()
+    {
+        using var transport = new GrpcGameforgeAuthenticationTransport(
+            LoadLiveMasterOptions());
+        using var timeout =
+            new CancellationTokenSource(TimeSpan.FromSeconds(30));
+
+        try
+        {
+            transport.IssueAuthTicketAsync(
+                    "master-role-probe",
+                    Guid.NewGuid().ToString("D"),
+                    Guid.NewGuid().ToString("D"),
+                    5,
+                    timeout.Token)
+                .GetAwaiter()
+                .GetResult();
+        }
+        catch (RpcException exception)
+            when (exception.StatusCode == StatusCode.PermissionDenied)
+        {
+            Console.WriteLine(
+                "[PASS] Live Master certificate authenticates through mTLS but cannot impersonate AuthBridge");
+            return;
+        }
+
+        throw new InvalidOperationException(
+            "Live Master certificate was not rejected from the AuthBridge-only RPC.");
+    }
+
+    private static AuthenticationGrpcClientOptions LoadLiveMasterOptions()
+    {
+        const string prefix = "NOSGM_AUTH_GRPC_LIVE_MASTER";
+        return AuthenticationGrpcClientOptions.Load(
+            ClusterNodeRole.Master,
+            variableName => variableName switch
+            {
+                AuthenticationGrpcClientOptions.AddressVariable =>
+                    ReadRequiredEnvironment(
+                        AuthenticationGrpcClientOptions.AddressVariable),
+                AuthenticationGrpcClientOptions.CertificatePathVariable =>
+                    ReadRequiredEnvironment(prefix + "_CERT_PATH"),
+                AuthenticationGrpcClientOptions.CertificatePasswordVariable =>
+                    Environment.GetEnvironmentVariable(
+                        prefix + "_CERT_PASSWORD") ?? string.Empty,
+                AuthenticationGrpcClientOptions
+                        .TrustedRootCertificatePathVariable =>
+                    Environment.GetEnvironmentVariable(
+                        AuthenticationGrpcClientOptions
+                            .TrustedRootCertificatePathVariable),
+                AuthenticationGrpcClientOptions.CallerInstanceIdVariable =>
+                    "acceptance-master-callback-publisher-1",
+                AuthenticationGrpcClientOptions.DeadlineVariable => "10000",
+                AuthenticationGrpcClientOptions.WireModeVariable =>
+                    Environment.GetEnvironmentVariable(
+                        AuthenticationGrpcClientOptions.WireModeVariable),
+                _ => null
+            });
+    }
+
+    private static string ReadRequiredEnvironment(string variableName)
+    {
+        string value = Environment.GetEnvironmentVariable(variableName);
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            throw new InvalidOperationException(
+                $"Live Master certificate acceptance requires {variableName}.");
+        }
+
+        return value;
     }
 
     private static AuthenticationServerOptions LoadServerOptions(
