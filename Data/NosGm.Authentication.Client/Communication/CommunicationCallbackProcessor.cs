@@ -120,7 +120,8 @@ namespace NosGm.Communication.Client
                     .CharacterPresence:
                     return envelope.CharacterPresence.CharacterId > 0 &&
                            targetKind == WireV1
-                               .CommunicationCallbackTargetKind.WorldGroup;
+                               .CommunicationCallbackTargetKind
+                               .WorldGroupExceptWorldId;
 
                 case WireV1.CommunicationCallbackEnvelope.CallbackOneofCase
                     .KickSession:
@@ -238,6 +239,15 @@ namespace NosGm.Communication.Client
                     return string.IsNullOrEmpty(target.WorldGroup) &&
                            string.IsNullOrEmpty(target.WorldId) &&
                            target.CharacterId > 0;
+
+                case WireV1.CommunicationCallbackTargetKind
+                    .WorldGroupExceptWorldId:
+                    return IsBoundedText(
+                               target.WorldGroup,
+                               CommunicationCallbackContractLimits
+                                   .MaxWorldGroupLength) &&
+                           IsCanonicalNonEmptyGuid(target.WorldId) &&
+                           target.CharacterId == 0;
 
                 default:
                     return false;
