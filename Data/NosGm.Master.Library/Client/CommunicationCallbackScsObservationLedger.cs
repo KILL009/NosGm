@@ -6,6 +6,12 @@ using WireV1 = global::NosGm.Cluster.Wire.V1;
 
 namespace NosGm.Master.Library.Client
 {
+    public enum CommunicationCallbackScsObservationPhase
+    {
+        Warmup = 1,
+        Live = 2
+    }
+
     public sealed class CommunicationCallbackScsObservation
     {
         internal CommunicationCallbackScsObservation(
@@ -13,6 +19,7 @@ namespace NosGm.Master.Library.Client
             string runtimeGenerationId,
             ulong localOrdinal,
             WireV1.CommunicationCallbackKind kind,
+            CommunicationCallbackScsObservationPhase phase,
             string semanticFingerprint,
             DateTimeOffset observedAt)
         {
@@ -20,6 +27,7 @@ namespace NosGm.Master.Library.Client
             RuntimeGenerationId = runtimeGenerationId;
             LocalOrdinal = localOrdinal;
             Kind = kind;
+            Phase = phase;
             SemanticFingerprint = semanticFingerprint;
             ObservedAt = observedAt;
         }
@@ -31,6 +39,8 @@ namespace NosGm.Master.Library.Client
         public ulong LocalOrdinal { get; }
 
         public WireV1.CommunicationCallbackKind Kind { get; }
+
+        public CommunicationCallbackScsObservationPhase Phase { get; }
 
         public string SemanticFingerprint { get; }
 
@@ -53,6 +63,8 @@ namespace NosGm.Master.Library.Client
         private readonly object _syncRoot = new object();
         private string _processIdentity = string.Empty;
         private string _runtimeGenerationId = string.Empty;
+        private CommunicationCallbackReplayEvidence _replayEvidence;
+        private CommunicationCallbackScsObservationPhase _phase;
         private long _localOrdinal;
         private long _observedCallbacks;
         private long _evictedObservations;
@@ -92,6 +104,28 @@ namespace NosGm.Master.Library.Client
             }
         }
 
+        public bool IsReplayComplete
+        {
+            get
+            {
+                lock (_syncRoot)
+                {
+                    return _replayEvidence != null;
+                }
+            }
+        }
+
+        public CommunicationCallbackReplayEvidence ReplayEvidence
+        {
+            get
+            {
+                lock (_syncRoot)
+                {
+                    return _replayEvidence;
+                }
+            }
+        }
+
         public long ObservedCallbacks =>
             Interlocked.Read(ref _observedCallbacks);
 
@@ -100,15 +134,16 @@ namespace NosGm.Master.Library.Client
 
         public void BeginWindow(
             string processIdentity,
-            CommunicationCallbackReplayEvidence evidence)
+            string runtimeGenerationId,
+            ulong resumeAfterSequence)
         {
             if (string.IsNullOrWhiteSpace(processIdentity) ||
                 !string.Equals(
                     processIdentity,
                     processIdentity.Trim(),
                     StringComparison.Ordinal) ||
-                evidence == null ||
-                !IsCanonicalNonEmptyGuid(evidence.RuntimeGenerationId))
+                !IsCanonicalNonEmptyGuid(runtimeGenerationId) ||
+                resumeAfterSequence > (ulong)long.MaxValue)
             {
                 throw new InvalidOperationException(
                     "The SCS observation window identity is invalid.");
@@ -118,11 +153,38 @@ namespace NosGm.Master.Library.Client
             {
                 _observations.Clear();
                 _processIdentity = processIdentity;
-                _runtimeGenerationId = evidence.RuntimeGenerationId;
+                _runtimeGenerationId = runtimeGenerationId;
+                _replayEvidence = null;
+                _phase = CommunicationCallbackScsObservationPhase.Warmup;
                 Interlocked.Exchange(ref _localOrdinal, 0);
                 Interlocked.Exchange(ref _observedCallbacks, 0);
                 Interlocked.Exchange(ref _evictedObservations, 0);
                 _windowActive = true;
+            }
+        }
+
+        public void CompleteReplay(
+            CommunicationCallbackReplayEvidence evidence)
+        {
+            if (evidence == null)
+            {
+                throw new ArgumentNullException(nameof(evidence));
+            }
+
+            lock (_syncRoot)
+            {
+                if (!_windowActive ||
+                    !string.Equals(
+                        _runtimeGenerationId,
+                        evidence.RuntimeGenerationId,
+                        StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException(
+                        "Replay evidence does not belong to the active SCS observation window.");
+                }
+
+                _replayEvidence = evidence;
+                _phase = CommunicationCallbackScsObservationPhase.Live;
             }
         }
 
@@ -131,6 +193,7 @@ namespace NosGm.Master.Library.Client
             lock (_syncRoot)
             {
                 _windowActive = false;
+                _phase = 0;
             }
         }
 
@@ -147,7 +210,7 @@ namespace NosGm.Master.Library.Client
 
             lock (_syncRoot)
             {
-                if (!_windowActive)
+                if (!_windowActive || _phase == 0)
                 {
                     return false;
                 }
@@ -165,6 +228,7 @@ namespace NosGm.Master.Library.Client
                         _runtimeGenerationId,
                         checked((ulong)next),
                         kind,
+                        _phase,
                         semanticFingerprint,
                         DateTimeOffset.UtcNow));
                 Interlocked.Increment(ref _observedCallbacks);
