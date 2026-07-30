@@ -58,7 +58,7 @@ namespace NosGm.Communication.Client
         private static void ValidateEnvelope(
             WireV1.CommunicationCallbackEnvelope envelope)
         {
-            if (envelope.Sequence > long.MaxValue ||
+            if (envelope.Sequence > (ulong)long.MaxValue ||
                 !IsCanonicalNonEmptyGuid(envelope.EventId) ||
                 envelope.IssuedAtUnixTimeMs <= 0 ||
                 envelope.ExpiresAtUnixTimeMs <=
