@@ -1,7 +1,9 @@
 using NosGm.Core;
 using NosGm.Domain;
+using NosGm.Master.Library.Data;
 using NosGm.Master.Library.Interface;
 using System;
+using System.Linq;
 
 namespace NosGm.Master.Server
 {
@@ -9,6 +11,37 @@ namespace NosGm.Master.Server
         : CommunicationService,
           ICommunicationService
     {
+        public new bool ConnectCharacter(Guid worldId, long characterId)
+        {
+            bool connected = base.ConnectCharacter(worldId, characterId);
+            if (connected)
+            {
+                AccountConnection account = FindConnectedCharacter(
+                    worldId,
+                    characterId);
+                MirrorPresence(
+                    account?.ConnectedWorld?.WorldGroup,
+                    characterId,
+                    true);
+            }
+            return connected;
+        }
+
+        public new void DisconnectCharacter(Guid worldId, long characterId)
+        {
+            bool authenticated = IsCurrentClientAuthenticated();
+            AccountConnection account = authenticated
+                ? FindConnectedCharacter(worldId, characterId)
+                : null;
+            string worldGroup = account?.ConnectedWorld?.WorldGroup;
+
+            base.DisconnectCharacter(worldId, characterId);
+            if (authenticated && account != null)
+            {
+                MirrorPresence(worldGroup, characterId, false);
+            }
+        }
+
         public new void KickSession(long? accountId, int? sessionId)
         {
             base.KickSession(accountId, sessionId);
@@ -85,6 +118,47 @@ namespace NosGm.Master.Server
                 "UpdateRelation",
                 () => MasterCommunicationCallbackMirror.Instance
                     .TryRelationRefresh(worldGroup, relationId));
+        }
+
+        private bool IsCurrentClientAuthenticated()
+        {
+            return MSManager.Instance.AuthentificatedClients.Any(
+                clientId => clientId.Equals(CurrentClient.ClientId));
+        }
+
+        private static AccountConnection FindConnectedCharacter(
+            Guid worldId,
+            long characterId)
+        {
+            return MSManager.Instance.ConnectedAccounts.Find(
+                account =>
+                    account.CharacterId == characterId &&
+                    account.ConnectedWorld?.Id == worldId);
+        }
+
+        private static void MirrorPresence(
+            string worldGroup,
+            long characterId,
+            bool connected)
+        {
+            string operation = connected
+                ? "CharacterConnected"
+                : "CharacterDisconnected";
+            if (string.IsNullOrWhiteSpace(worldGroup))
+            {
+                Logger.Warn(
+                    "[CALLBACK_MIRROR_DROPPED] Operation=" + operation +
+                    " Reason=WORLD_GROUP_NOT_FOUND");
+                return;
+            }
+
+            Mirror(
+                operation,
+                () => MasterCommunicationCallbackMirror.Instance
+                    .TryCharacterPresence(
+                        worldGroup,
+                        characterId,
+                        connected));
         }
 
         private static void Mirror(string operation, Func<bool> enqueue)
