@@ -5,6 +5,7 @@ using NosGm.Authentication.Client;
 using NosGm.Authentication.Server;
 using NosGm.Authentication.Server.Security;
 using NosGm.Cluster.Contracts.V1;
+using NosGm.Communication.Client;
 using WireNodeRole = NosGm.Cluster.Wire.V1.ClusterNodeRole;
 
 internal static class MasterCertificateRoleSelfTest
@@ -28,15 +29,14 @@ internal static class MasterCertificateRoleSelfTest
     {
         var values = new Dictionary<string, string>
         {
-            [AuthenticationGrpcClientOptions.CertificatePathVariable] =
+            [MasterCommunicationGrpcIdentityOptions.CertificatePathVariable] =
                 Path.GetFullPath("master-certificate-self-test.pfx"),
-            [AuthenticationGrpcClientOptions.CallerInstanceIdVariable] =
+            [MasterCommunicationGrpcIdentityOptions.CallerInstanceIdVariable] =
                 "master-callback-publisher-self-test-1"
         };
 
         AuthenticationGrpcClientOptions options =
-            AuthenticationGrpcClientOptions.Load(
-                ClusterNodeRole.Master,
+            MasterCommunicationGrpcIdentityOptions.Load(
                 name => values.TryGetValue(name, out string value)
                     ? value
                     : null);
@@ -45,6 +45,10 @@ internal static class MasterCertificateRoleSelfTest
             ClusterNodeRole.Master,
             options.CallerRole,
             "Master gRPC callers retain the dedicated Master role");
+        AssertEqual(
+            Path.GetFullPath("master-certificate-self-test.pfx"),
+            options.CertificatePath,
+            "Master callback publication uses its separate certificate namespace");
     }
 
     private static void VerifyMasterFingerprintResolvesOnlyToMaster()
