@@ -17,6 +17,8 @@ internal static class CommunicationCallbackLiveSubscriberSelfTest
             "nosgm-live-callback-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(cursorDirectory);
         string cursorPath = Path.Combine(cursorDirectory, "login.cursor");
+        string subscriberInstanceId =
+            "acceptance-login-callback-" + Guid.NewGuid().ToString("N");
         var cursorStore = new SignalingCursorStore();
         var handler = new SignalingHandler();
         CommunicationCallbackSubscriberOptions options =
@@ -25,7 +27,10 @@ internal static class CommunicationCallbackLiveSubscriberSelfTest
                 Guid.Empty,
                 0,
                 string.Empty,
-                name => ReadSubscriberVariable(name, cursorPath));
+                name => ReadSubscriberVariable(
+                    name,
+                    cursorPath,
+                    subscriberInstanceId));
 
         using var subscriber = new GrpcCommunicationCallbackSubscriber(
             options,
@@ -148,7 +153,8 @@ internal static class CommunicationCallbackLiveSubscriberSelfTest
 
     private static string ReadSubscriberVariable(
         string variableName,
-        string cursorPath)
+        string cursorPath,
+        string subscriberInstanceId)
     {
         return variableName switch
         {
@@ -164,7 +170,7 @@ internal static class CommunicationCallbackLiveSubscriberSelfTest
                 Environment.GetEnvironmentVariable(
                     "NOSGM_AUTH_GRPC_TRUSTED_ROOT_CERT_PATH"),
             CommunicationCallbackSubscriberOptions.CallerInstanceIdVariable =>
-                "acceptance-login-callback-subscriber-1",
+                subscriberInstanceId,
             CommunicationCallbackSubscriberOptions.CursorPathVariable =>
                 cursorPath,
             CommunicationCallbackSubscriberOptions.SetupDeadlineVariable =>
