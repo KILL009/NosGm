@@ -137,7 +137,7 @@ namespace NosGm.Cluster.Contracts.Communication.V1
                         return InvalidPayload();
                     }
                     return targetKind ==
-                           WireV1.CommunicationCallbackTargetKind.WorldGroup
+                           WireV1.CommunicationCallbackTargetKind.WorldId
                         ? CommunicationCallbackContractValidationError.None
                         : TargetMismatch();
 
