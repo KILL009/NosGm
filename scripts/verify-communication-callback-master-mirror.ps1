@@ -122,6 +122,8 @@ Require $mirror "CALLBACK_MIRROR_FAULTED" `
     "Terminal mirror failure remains observable"
 Require $mirror "SCS remains authoritative" `
     "Terminal mirror failure cannot claim transport authority"
+Require $mirror "TryCharacterPresence" `
+    "Character-presence builder remains staged for exact routing"
 Require $mirror "TryStaticBonusRefresh" `
     "Future static-bonus publication already has an exact typed builder"
 Require $mirror "CommunicationCallbackTargetKind.CharacterId" `
@@ -139,12 +141,14 @@ Require $service "ICommunicationService" `
     "Mirrored service reimplements the SCS interface"
 Require $service "CALLBACK_MIRROR_ISOLATED_FAILURE" `
     "Mirror exceptions are isolated from SCS results"
+Forbid $service "ConnectCharacter" `
+    "Character-connected mirroring waits for source-World exclusion"
+Forbid $service "DisconnectCharacter" `
+    "Character-disconnected mirroring waits for source-World exclusion"
 Forbid $service "SendMessageToCharacter" `
     "Rendered legacy character messaging is not mirrored"
 
 $orderedMethods = @(
-    @{ Name = "ConnectCharacter"; Mirror = "TryCharacterPresence" },
-    @{ Name = "DisconnectCharacter"; Mirror = "TryCharacterPresence" },
     @{ Name = "KickSession"; Mirror = "TryKickSession" },
     @{ Name = "RefreshPenalty"; Mirror = "TryPenaltyRefresh" },
     @{ Name = "Restart"; Mirror = "TryRestart" },
@@ -192,6 +196,8 @@ Require $liveTest "new GrpcCommunicationCallbackPublisher" `
 Require-Match $liveTest `
     'publisher\.PublishAsync\(template.*?publisher\.PublishAsync\(template' `
     "Live acceptance retries the same semantic publication"
+Require $liveTest "CommunicationGlobalEventType.InstantBattle" `
+    "Live publisher probe uses a valid World-only callback"
 Require $liveTest "retry.AcceptedSequence" `
     "Live acceptance proves EventId idempotency"
 Require $liveTest "IsBackground = false" `
@@ -205,6 +211,8 @@ Require $documentation "SCS remains the only transport allowed to apply" `
     "Documentation preserves one callback effect authority"
 Require $documentation 'non-blocking `TryAdd`' `
     "Documentation records the non-blocking queue boundary"
+Require $documentation "source World" `
+    "Documentation records the deferred presence exclusion"
 Require $documentation 'current `ICommunicationService` exposes no SCS emitter' `
     "Documentation does not invent a static-bonus source"
 Require $documentation "server-issued replay-complete barrier" `
