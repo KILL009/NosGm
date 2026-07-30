@@ -189,6 +189,13 @@ public sealed class CommunicationCallbackHub
         public required DateTimeOffset ExpiresAt { get; init; }
     }
 
+    private sealed class PublishedEventOrderEntry
+    {
+        public required string EventId { get; init; }
+
+        public required ulong Sequence { get; init; }
+    }
+
     private const int MaximumPublishedEventIds =
         CommunicationCallbackContractLimits.MaxRetainedEventsPerSubscriber * 4;
 
@@ -196,7 +203,7 @@ public sealed class CommunicationCallbackHub
     private readonly CommunicationRuntimeOptions _options;
     private readonly Dictionary<string, PublishedEventRecord> _publishedEvents =
         new(StringComparer.Ordinal);
-    private readonly Queue<string> _publishedEventOrder = new();
+    private readonly Queue<PublishedEventOrderEntry> _publishedEventOrder = new();
     private readonly object _syncRoot = new();
     private readonly Dictionary<string, SubscriberState> _subscribers =
         new(StringComparer.Ordinal);
@@ -572,7 +579,12 @@ public sealed class CommunicationCallbackHub
                     MatchedSubscribers = matched,
                     ExpiresAt = expiresAt
                 });
-            _publishedEventOrder.Enqueue(request.EventId);
+            _publishedEventOrder.Enqueue(
+                new PublishedEventOrderEntry
+                {
+                    EventId = request.EventId,
+                    Sequence = sequence
+                });
             TrimPublishedEventIds();
             return new CommunicationCallbackPublishResult
             {
@@ -897,14 +909,40 @@ public sealed class CommunicationCallbackHub
 
     private void TrimPublishedEventIds()
     {
+        if (_publishedEventOrder.Count > MaximumPublishedEventIds * 2)
+        {
+            CompactPublishedEventOrder();
+        }
+
         while (_publishedEvents.Count > MaximumPublishedEventIds &&
                _publishedEventOrder.Count > 0)
         {
-            _publishedEvents.Remove(_publishedEventOrder.Dequeue());
+            PublishedEventOrderEntry candidate =
+                _publishedEventOrder.Dequeue();
+            if (_publishedEvents.TryGetValue(
+                    candidate.EventId,
+                    out PublishedEventRecord current) &&
+                current.Sequence == candidate.Sequence)
+            {
+                _publishedEvents.Remove(candidate.EventId);
+            }
         }
-        while (_publishedEventOrder.Count > MaximumPublishedEventIds * 2)
+    }
+
+    private void CompactPublishedEventOrder()
+    {
+        int candidateCount = _publishedEventOrder.Count;
+        for (int index = 0; index < candidateCount; index++)
         {
-            _publishedEventOrder.Dequeue();
+            PublishedEventOrderEntry candidate =
+                _publishedEventOrder.Dequeue();
+            if (_publishedEvents.TryGetValue(
+                    candidate.EventId,
+                    out PublishedEventRecord current) &&
+                current.Sequence == candidate.Sequence)
+            {
+                _publishedEventOrder.Enqueue(candidate);
+            }
         }
     }
 

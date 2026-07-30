@@ -15,7 +15,7 @@ A routing-index failure during World registration rolls the authoritative World 
 
 ## Subscription model
 
-Login and World processes open `SubscribeCommunicationCallbacks`, a server-streaming RPC supported by binary gRPC-Web on Windows 10.
+Login and World processes open `SubscribeCommunicationCallbacks`, a server-streaming RPC. Native HTTP/2 is the primary Windows 11 transport. Binary gRPC-Web remains an explicit compatibility mode and is not selected automatically.
 
 A subscriber identity consists of:
 
@@ -53,7 +53,10 @@ Global sequence gaps are normal because an event may not target a particular sub
 Master supplies a canonical GUID `event_id`. The runtime fingerprints the target, callback payload and TTL without including transport context.
 
 - publishing the same event ID with the same semantic request returns the original sequence and does not deliver twice;
-- reusing the event ID with another payload returns `Conflict`;
+- reusing the event ID with another payload returns `Conflict` while that generation remains inside the bounded idempotency window;
+- after expiry, the same event ID may begin a new generation with a new accepted sequence;
+- publication order stores both EventId and accepted sequence, so a stale order entry from an expired generation cannot delete a newer generation that reused the same ID;
+- stale publication-order residue is compacted while preserving every live EventId generation;
 - event IDs and replay entries are removed after their bounded TTL;
 - expired events are never sent or replayed.
 
@@ -78,6 +81,6 @@ Subscriptions accept only Login and World certificates. The stream setup request
 
 ## Current migration boundary
 
-The runtime is intentionally isolated. Production `CommunicationServiceClient` still defaults to SCS and the guarded gRPC selector remains blocked. The next slices must add the net481 callback subscriber/client adapter, migrate the legacy callback handlers, and prove coordinated state plus callback cutover before removing that guard.
+The runtime is intentionally isolated. Production `CommunicationServiceClient` still defaults to SCS and the guarded gRPC selector remains blocked. The next slices must bind cursors to the active runtime generation, coordinate Login/World subscriber lifecycle, migrate the legacy callback handlers, and prove state plus callback cutover before removing that guard.
 
 Production CommunicationServiceClient still defaults to SCS.
