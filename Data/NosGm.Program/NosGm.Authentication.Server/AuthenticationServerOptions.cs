@@ -21,6 +21,8 @@ public sealed class AuthenticationServerOptions
         "NOSGM_AUTH_GRPC_LOGIN_CERT_SHA256";
     public const string WorldFingerprintsVariable =
         "NOSGM_AUTH_GRPC_WORLD_CERT_SHA256";
+    public const string MasterFingerprintsVariable =
+        "NOSGM_AUTH_GRPC_MASTER_CERT_SHA256";
     public const string TicketTtlVariable =
         "NOSGM_AUTH_GRPC_TICKET_TTL_SECONDS";
     public const string PermitTtlVariable =
@@ -136,7 +138,10 @@ public sealed class AuthenticationServerOptions
                     LoginFingerprintsVariable),
                 [WireNodeRole.World] = ParseFingerprints(
                     configuration[WorldFingerprintsVariable],
-                    WorldFingerprintsVariable)
+                    WorldFingerprintsVariable),
+                [WireNodeRole.Master] = ParseFingerprints(
+                    configuration[MasterFingerprintsVariable],
+                    MasterFingerprintsVariable)
             };
         RejectCrossRoleCertificateReuse(roles);
 
