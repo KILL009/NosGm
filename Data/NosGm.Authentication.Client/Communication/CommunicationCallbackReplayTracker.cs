@@ -62,6 +62,19 @@ namespace NosGm.Communication.Client
             }
         }
 
+        public void Reset()
+        {
+            lock (_syncRoot)
+            {
+                _runtimeGenerationId = string.Empty;
+                _resumeAfterSequence = 0;
+                _lastReplaySequence = 0;
+                _observedReplayEvents = 0;
+                _evidence = null;
+                _streamStarted = false;
+            }
+        }
+
         public void BeginStream(
             string runtimeGenerationId,
             ulong resumeAfterSequence)
