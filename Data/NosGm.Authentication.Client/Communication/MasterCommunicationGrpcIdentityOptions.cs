@@ -1,6 +1,5 @@
 using System;
 using NosGm.Authentication.Client;
-using NosGm.Cluster.Contracts.V1;
 
 namespace NosGm.Communication.Client
 {
@@ -30,8 +29,7 @@ namespace NosGm.Communication.Client
             Func<string, string> readVariable = null)
         {
             readVariable = readVariable ?? Environment.GetEnvironmentVariable;
-            return AuthenticationGrpcClientOptions.Load(
-                ClusterNodeRole.Master,
+            return AuthenticationGrpcClientOptions.LoadMaster(
                 genericVariable => genericVariable switch
                 {
                     AuthenticationGrpcClientOptions.AddressVariable =>
