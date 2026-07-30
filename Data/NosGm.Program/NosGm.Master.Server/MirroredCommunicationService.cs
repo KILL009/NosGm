@@ -1,12 +1,12 @@
 using NosGm.Domain;
+using NosGm.Master.Library.Interface;
 using System;
-using System.Linq;
 
 namespace NosGm.Master.Server
 {
     internal sealed class MirroredCommunicationService
         : CommunicationService,
-          Master.Library.Interface.ICommunicationService
+          ICommunicationService
     {
         public new bool ConnectCharacter(Guid worldId, long characterId)
         {
