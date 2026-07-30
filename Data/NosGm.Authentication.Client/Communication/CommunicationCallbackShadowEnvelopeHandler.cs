@@ -9,13 +9,13 @@ namespace NosGm.Communication.Client
         : ICommunicationCallbackEnvelopeHandler
     {
         private long _observedCallbacks;
-        private ulong _lastObservedSequence;
+        private long _lastObservedSequence;
 
         public long ObservedCallbacks =>
             Interlocked.Read(ref _observedCallbacks);
 
         public ulong LastObservedSequence =>
-            Volatile.Read(ref _lastObservedSequence);
+            checked((ulong)Interlocked.Read(ref _lastObservedSequence));
 
         public Task ApplyAsync(
             WireV1.CommunicationCallbackEnvelope envelope,
@@ -26,7 +26,9 @@ namespace NosGm.Communication.Client
                 throw new ArgumentNullException(nameof(envelope));
             }
             cancellationToken.ThrowIfCancellationRequested();
-            Volatile.Write(ref _lastObservedSequence, envelope.Sequence);
+            Interlocked.Exchange(
+                ref _lastObservedSequence,
+                checked((long)envelope.Sequence));
             Interlocked.Increment(ref _observedCallbacks);
             return Task.CompletedTask;
         }
