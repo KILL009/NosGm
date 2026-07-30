@@ -24,7 +24,7 @@ public sealed class CommunicationRuntimeOptions
     public const int DefaultGlacernonPort = 5100;
     public const int MaximumChannelsPerGroup = 30;
     public const int GlacernonChannelId = 51;
-    public const int MaximumCallbackSubscribers = 8192;
+    public const int MaximumCallbackSubscriberCapacity = 8192;
 
     private CommunicationRuntimeOptions(
         int maximumAccounts,
@@ -72,7 +72,7 @@ public sealed class CommunicationRuntimeOptions
                 configuration[MaximumCallbackSubscribersVariable],
                 DefaultMaximumCallbackSubscribers,
                 1,
-                MaximumCallbackSubscribers,
+                MaximumCallbackSubscriberCapacity,
                 MaximumCallbackSubscribersVariable),
             ReadInteger(
                 configuration[SessionTtlVariable],
