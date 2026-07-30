@@ -64,4 +64,8 @@ The existing shadow handler continues to report only actual callback envelopes t
 
 Replay completion establishes the start of a trustworthy observation window. It does not itself prove payload parity or authorize typed effect application.
 
-A later slice must compare SCS and typed shadow observations after this boundary and introduce an atomic inbound cutover gate. Only then may a matching SCS callback be disabled and the typed dispatcher be allowed to apply that effect exactly once.
+The legacy SCS receiver now uses this same boundary to divide warmup from live
+observations. A later slice must compare the two bounded ledgers after this
+boundary and introduce an atomic inbound cutover gate. Only then may a matching
+SCS callback be disabled and the typed dispatcher be allowed to apply that
+effect exactly once.
