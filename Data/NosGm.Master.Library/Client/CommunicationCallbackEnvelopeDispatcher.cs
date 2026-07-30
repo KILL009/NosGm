@@ -74,13 +74,8 @@ namespace NosGm.Master.Library.Client
 
                 case WireV1.CommunicationCallbackEnvelope.CallbackOneofCase
                     .GlobalEvent:
-                    EventType eventType =
-                        (EventType)envelope.GlobalEvent.EventType;
-                    if (!Enum.IsDefined(typeof(EventType), eventType))
-                    {
-                        throw new InvalidOperationException(
-                            "The callback global-event type is unsupported.");
-                    }
+                    EventType eventType = CommunicationGlobalEventMapper.ToDomain(
+                        envelope.GlobalEvent.EventType);
                     _owner.OnRunGlobalEvent(
                         eventType,
                         checked((byte)envelope.GlobalEvent.Value));
