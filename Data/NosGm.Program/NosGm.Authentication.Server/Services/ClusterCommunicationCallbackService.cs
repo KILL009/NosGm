@@ -12,6 +12,8 @@ public sealed class ClusterCommunicationCallbackService
     : WireV1.ClusterCommunicationCallbacks
         .ClusterCommunicationCallbacksBase
 {
+    private static readonly object StreamBoundarySync = new();
+
     private readonly AuthenticationDispatchGate _dispatchGate;
     private readonly CommunicationCallbackHub _hub;
     private readonly ILogger<ClusterCommunicationCallbackService> _logger;
@@ -211,11 +213,16 @@ public sealed class ClusterCommunicationCallbackService
                     "The callback subscriber does not own the registered shadow World route."));
         }
 
-        ulong replayThroughSequence = Math.Max(
-            _hub.CurrentSequence,
-            request.ResumeAfterSequence);
-        CallbackSubscriptionOpenResult openResult =
-            _hub.TryOpenSubscription(request, out var subscription);
+        CallbackSubscriptionOpenResult openResult;
+        CommunicationCallbackSubscription subscription;
+        ulong replayThroughSequence;
+        lock (StreamBoundarySync)
+        {
+            openResult = _hub.TryOpenSubscription(
+                request,
+                out subscription);
+            replayThroughSequence = _hub.CurrentSequence;
+        }
         if (openResult != CallbackSubscriptionOpenResult.Success)
         {
             ThrowForSubscriptionOpenResult(openResult);
@@ -237,9 +244,6 @@ public sealed class ClusterCommunicationCallbackService
                 if (!IsExpired(envelope))
                 {
                     await responseStream.WriteAsync(envelope);
-                    replayThroughSequence = Math.Max(
-                        replayThroughSequence,
-                        envelope.Sequence);
                     replayedEvents++;
                 }
             }
@@ -359,8 +363,11 @@ public sealed class ClusterCommunicationCallbackService
                             "Master callback publication is not configured."));
                 }
 
-                CommunicationCallbackPublishResult result =
-                    _hub.Publish(request);
+                CommunicationCallbackPublishResult result;
+                lock (StreamBoundarySync)
+                {
+                    result = _hub.Publish(request);
+                }
                 WriteAudit(
                     request.Context,
                     "PublishCommunicationCallback",
