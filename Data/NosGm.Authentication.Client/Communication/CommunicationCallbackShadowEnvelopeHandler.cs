@@ -14,6 +14,7 @@ namespace NosGm.Communication.Client
         public const int MaximumObservationCapacity = 16384;
 
         private readonly int _capacity;
+        private readonly Action<string, ulong> _streamBegan;
         private readonly Action<CommunicationCallbackReplayEvidence>
             _replayCompleted;
         private readonly Action _streamEnded;
@@ -29,6 +30,7 @@ namespace NosGm.Communication.Client
 
         public CommunicationCallbackShadowEnvelopeHandler(
             int observationCapacity = DefaultObservationCapacity,
+            Action<string, ulong> streamBegan = null,
             Action<CommunicationCallbackReplayEvidence> replayCompleted = null,
             Action streamEnded = null)
         {
@@ -42,6 +44,7 @@ namespace NosGm.Communication.Client
             }
 
             _capacity = observationCapacity;
+            _streamBegan = streamBegan;
             _replayCompleted = replayCompleted;
             _streamEnded = streamEnded;
             _observations =
@@ -77,6 +80,10 @@ namespace NosGm.Communication.Client
                 _phase = CommunicationCallbackObservationPhase.Replay;
                 _streamActive = true;
             }
+
+            _streamBegan?.Invoke(
+                runtimeGenerationId,
+                resumeAfterSequence);
         }
 
         public void CompleteReplay(
