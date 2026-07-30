@@ -10,6 +10,8 @@ public sealed class CommunicationRuntimeOptions
         "NOSGM_COMMUNICATION_MAX_ACCOUNTS";
     public const string MaximumWorldsVariable =
         "NOSGM_COMMUNICATION_MAX_WORLDS";
+    public const string MaximumCallbackSubscribersVariable =
+        "NOSGM_COMMUNICATION_MAX_CALLBACK_SUBSCRIBERS";
     public const string SessionTtlVariable =
         "NOSGM_COMMUNICATION_SESSION_TTL_SECONDS";
     public const string GlacernonPortVariable =
@@ -17,19 +19,23 @@ public sealed class CommunicationRuntimeOptions
 
     public const int DefaultMaximumAccounts = 100000;
     public const int DefaultMaximumWorlds = 1024;
+    public const int DefaultMaximumCallbackSubscribers = 2048;
     public const int DefaultSessionTtlSeconds = 300;
     public const int DefaultGlacernonPort = 5100;
     public const int MaximumChannelsPerGroup = 30;
     public const int GlacernonChannelId = 51;
+    public const int MaximumCallbackSubscriberCapacity = 8192;
 
     private CommunicationRuntimeOptions(
         int maximumAccounts,
         int maximumWorlds,
+        int maximumCallbackSubscribers,
         int sessionTtlSeconds,
         int glacernonPort)
     {
         MaximumAccounts = maximumAccounts;
         MaximumWorlds = maximumWorlds;
+        MaximumCallbackSubscribers = maximumCallbackSubscribers;
         SessionTtlSeconds = sessionTtlSeconds;
         GlacernonPort = glacernonPort;
     }
@@ -37,6 +43,8 @@ public sealed class CommunicationRuntimeOptions
     public int MaximumAccounts { get; }
 
     public int MaximumWorlds { get; }
+
+    public int MaximumCallbackSubscribers { get; }
 
     public int SessionTtlSeconds { get; }
 
@@ -60,6 +68,12 @@ public sealed class CommunicationRuntimeOptions
                 1,
                 CommunicationContractLimits.MaxWorldsPerResponse,
                 MaximumWorldsVariable),
+            ReadInteger(
+                configuration[MaximumCallbackSubscribersVariable],
+                DefaultMaximumCallbackSubscribers,
+                1,
+                MaximumCallbackSubscriberCapacity,
+                MaximumCallbackSubscribersVariable),
             ReadInteger(
                 configuration[SessionTtlVariable],
                 DefaultSessionTtlSeconds,

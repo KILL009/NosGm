@@ -11,6 +11,7 @@ namespace NosGm.Authentication.Server.Services;
 public sealed class ClusterCommunicationService
     : WireV1.ClusterCommunication.ClusterCommunicationBase
 {
+    private readonly CommunicationCallbackHub _callbackHub;
     private readonly AuthenticationDispatchGate _dispatchGate;
     private readonly ILogger<ClusterCommunicationService> _logger;
     private readonly AuthenticationRequestReplayGuard _replayGuard;
@@ -23,6 +24,7 @@ public sealed class ClusterCommunicationService
         AuthenticationRequestReplayGuard replayGuard,
         ClientCertificateRoleMap roleMap,
         ClusterCommunicationState state,
+        CommunicationCallbackHub callbackHub,
         TimeProvider timeProvider,
         ILogger<ClusterCommunicationService> logger)
     {
@@ -30,6 +32,7 @@ public sealed class ClusterCommunicationService
         _replayGuard = replayGuard;
         _roleMap = roleMap;
         _state = state;
+        _callbackHub = callbackHub;
         _timeProvider = timeProvider;
         _logger = logger;
     }
@@ -131,10 +134,21 @@ public sealed class ClusterCommunicationService
                 WireV1.ClusterNodeRole.Login,
                 WireV1.ClusterNodeRole.World
             },
-            () => _state.DisconnectAccount(
-                request.AccountId,
-                request.SessionId,
-                request.PreserveSessionRegistration));
+            () =>
+            {
+                WireV1.CommunicationResultCode result =
+                    _state.DisconnectAccount(
+                        request.AccountId,
+                        request.SessionId,
+                        request.PreserveSessionRegistration);
+                if (result == WireV1.CommunicationResultCode.Success)
+                {
+                    _callbackHub.DisconnectAccount(
+                        request.AccountId,
+                        request.SessionId);
+                }
+                return result;
+            });
     }
 
     public override Task<WireV1.CommunicationMutationResponse> PulseAccount(
@@ -147,9 +161,19 @@ public sealed class ClusterCommunicationService
             "PulseAccount",
             context,
             new[] { WireV1.ClusterNodeRole.World },
-            () => _state.PulseAccount(
-                request.AccountId,
-                request.SessionId));
+            () =>
+            {
+                WireV1.CommunicationResultCode result = _state.PulseAccount(
+                    request.AccountId,
+                    request.SessionId);
+                if (result == WireV1.CommunicationResultCode.Success)
+                {
+                    _callbackHub.PulseAccount(
+                        request.AccountId,
+                        request.SessionId);
+                }
+                return result;
+            });
     }
 
     public override Task<WireV1.CommunicationMutationResponse> ConnectCharacter(
@@ -163,11 +187,25 @@ public sealed class ClusterCommunicationService
             "ConnectCharacter",
             context,
             new[] { WireV1.ClusterNodeRole.World },
-            () => _state.ConnectCharacter(
-                Guid.ParseExact(request.WorldId, "D"),
-                request.AccountId,
-                request.SessionId,
-                request.CharacterId));
+            () =>
+            {
+                Guid worldId = Guid.ParseExact(request.WorldId, "D");
+                WireV1.CommunicationResultCode result =
+                    _state.ConnectCharacter(
+                        worldId,
+                        request.AccountId,
+                        request.SessionId,
+                        request.CharacterId);
+                if (result == WireV1.CommunicationResultCode.Success)
+                {
+                    _callbackHub.BindCharacter(
+                        worldId,
+                        request.AccountId,
+                        request.SessionId,
+                        request.CharacterId);
+                }
+                return result;
+            });
     }
 
     public override Task<WireV1.CommunicationMutationResponse>
@@ -182,11 +220,25 @@ public sealed class ClusterCommunicationService
             "DisconnectCharacter",
             context,
             new[] { WireV1.ClusterNodeRole.World },
-            () => _state.DisconnectCharacter(
-                Guid.ParseExact(request.WorldId, "D"),
-                request.AccountId,
-                request.SessionId,
-                request.CharacterId));
+            () =>
+            {
+                Guid worldId = Guid.ParseExact(request.WorldId, "D");
+                WireV1.CommunicationResultCode result =
+                    _state.DisconnectCharacter(
+                        worldId,
+                        request.AccountId,
+                        request.SessionId,
+                        request.CharacterId);
+                if (result == WireV1.CommunicationResultCode.Success)
+                {
+                    _callbackHub.UnbindCharacter(
+                        worldId,
+                        request.AccountId,
+                        request.SessionId,
+                        request.CharacterId);
+                }
+                return result;
+            });
     }
 
     public override Task<WireV1.RegisterWorldServerResponse> RegisterWorldServer(
@@ -203,10 +255,13 @@ public sealed class ClusterCommunicationService
                     "RegisterWorldServer",
                     context,
                     WireV1.ClusterNodeRole.World);
+                Guid worldId = validation == WireV1.CommunicationResultCode.Success
+                    ? Guid.ParseExact(request.World.WorldId, "D")
+                    : Guid.Empty;
                 ClusterCommunicationState.RegisterWorldResult result =
                     validation == WireV1.CommunicationResultCode.Success
                         ? _state.RegisterWorldServer(
-                            Guid.ParseExact(request.World.WorldId, "D"),
+                            worldId,
                             request.World.EndpointIp,
                             checked((int)request.World.EndpointPort),
                             checked((int)request.World.AccountLimit),
@@ -215,6 +270,22 @@ public sealed class ClusterCommunicationService
                         {
                             Result = validation
                         };
+                if (result.Result == WireV1.CommunicationResultCode.Success)
+                {
+                    WireV1.CommunicationResultCode routeResult =
+                        _callbackHub.RegisterWorld(
+                            worldId,
+                            result.ChannelId,
+                            request.World.WorldGroup);
+                    if (routeResult != WireV1.CommunicationResultCode.Success)
+                    {
+                        _state.UnregisterWorldServer(worldId);
+                        result = new ClusterCommunicationState.RegisterWorldResult
+                        {
+                            Result = routeResult
+                        };
+                    }
+                }
                 WriteAudit(
                     request?.Context,
                     "RegisterWorldServer",
@@ -240,8 +311,17 @@ public sealed class ClusterCommunicationService
             "UnregisterWorldServer",
             context,
             new[] { WireV1.ClusterNodeRole.World },
-            () => _state.UnregisterWorldServer(
-                Guid.ParseExact(request.WorldId, "D")));
+            () =>
+            {
+                Guid worldId = Guid.ParseExact(request.WorldId, "D");
+                WireV1.CommunicationResultCode result =
+                    _state.UnregisterWorldServer(worldId);
+                if (result == WireV1.CommunicationResultCode.Success)
+                {
+                    _callbackHub.UnregisterWorld(worldId);
+                }
+                return result;
+            });
     }
 
     public override Task<WireV1.ListWorldServersResponse> ListWorldServers(

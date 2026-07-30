@@ -50,6 +50,7 @@ builder.Services.AddSingleton(roleMap);
 builder.Services.AddSingleton<TimeProvider>(TimeProvider.System);
 builder.Services.AddSingleton<GameforgeAuthenticationState>();
 builder.Services.AddSingleton<ClusterCommunicationState>();
+builder.Services.AddSingleton<CommunicationCallbackHub>();
 builder.Services.AddSingleton<AuthenticationRequestReplayGuard>();
 builder.Services.AddSingleton<AuthenticationDispatchGate>();
 builder.Services.AddGrpc(grpc =>
@@ -65,6 +66,7 @@ WebApplication app = builder.Build();
 app.UseGrpcWeb();
 app.MapGrpcService<GameforgeAuthenticationService>().EnableGrpcWeb();
 app.MapGrpcService<ClusterCommunicationService>().EnableGrpcWeb();
+app.MapGrpcService<ClusterCommunicationCallbackService>().EnableGrpcWeb();
 app.Lifetime.ApplicationStopped.Register(serverCertificate.Dispose);
 if (trustedRootCertificate != null)
 {
@@ -73,7 +75,7 @@ if (trustedRootCertificate != null)
 }
 
 app.Logger.LogInformation(
-    "NosGM internal cluster runtime {InstanceId} listening on loopback port {Port}; authentication and communication services enabled.",
+    "NosGM internal cluster runtime {InstanceId} listening on loopback port {Port}; authentication, communication state and callback services enabled.",
     options.InstanceId,
     options.Port);
 app.Run();
