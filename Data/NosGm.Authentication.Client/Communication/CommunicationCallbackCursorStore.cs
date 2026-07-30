@@ -12,11 +12,21 @@ namespace NosGm.Communication.Client
         void Save(ulong sequence);
     }
 
-    public sealed class FileCommunicationCallbackCursorStore
-        : ICommunicationCallbackCursorStore
+    public interface ICommunicationCallbackGenerationCursorStore
     {
+        string RuntimeGenerationId { get; }
+
+        ulong BindRuntimeGeneration(string runtimeGenerationId);
+    }
+
+    public sealed class FileCommunicationCallbackCursorStore
+        : ICommunicationCallbackCursorStore,
+          ICommunicationCallbackGenerationCursorStore
+    {
+        private const string CursorHeader = "NOSGM_CALLBACK_CURSOR_V1";
         private readonly object _syncRoot = new object();
         private readonly string _cursorPath;
+        private string _runtimeGenerationId;
 
         public FileCommunicationCallbackCursorStore(string cursorPath)
         {
@@ -31,29 +41,40 @@ namespace NosGm.Communication.Client
             _cursorPath = Path.GetFullPath(cursorPath);
         }
 
+        public string RuntimeGenerationId
+        {
+            get
+            {
+                lock (_syncRoot)
+                {
+                    return _runtimeGenerationId ?? string.Empty;
+                }
+            }
+        }
+
+        public ulong BindRuntimeGeneration(string runtimeGenerationId)
+        {
+            if (!IsCanonicalNonEmptyGuid(runtimeGenerationId))
+            {
+                throw new ArgumentException(
+                    "The callback runtime generation must be a canonical non-empty GUID.",
+                    nameof(runtimeGenerationId));
+            }
+
+            lock (_syncRoot)
+            {
+                _runtimeGenerationId = runtimeGenerationId;
+                return LoadBoundCursor();
+            }
+        }
+
         public ulong Load()
         {
             lock (_syncRoot)
             {
-                if (!File.Exists(_cursorPath))
-                {
-                    return 0;
-                }
-
-                string text = File.ReadAllText(
-                    _cursorPath,
-                    Encoding.ASCII).Trim();
-                if (!ulong.TryParse(
-                        text,
-                        NumberStyles.None,
-                        CultureInfo.InvariantCulture,
-                        out ulong sequence))
-                {
-                    throw new InvalidOperationException(
-                        "The communication callback cursor file is corrupt.");
-                }
-
-                return sequence;
+                return string.IsNullOrEmpty(_runtimeGenerationId)
+                    ? 0
+                    : LoadBoundCursor();
             }
         }
 
@@ -61,6 +82,12 @@ namespace NosGm.Communication.Client
         {
             lock (_syncRoot)
             {
+                if (string.IsNullOrEmpty(_runtimeGenerationId))
+                {
+                    throw new InvalidOperationException(
+                        "The communication callback cursor has no bound runtime generation.");
+                }
+
                 string directory = Path.GetDirectoryName(_cursorPath);
                 if (string.IsNullOrEmpty(directory))
                 {
@@ -75,8 +102,11 @@ namespace NosGm.Communication.Client
                     _cursorPath + "." + Guid.NewGuid().ToString("N") + ".bak";
                 try
                 {
-                    byte[] payload = Encoding.ASCII.GetBytes(
-                        sequence.ToString(CultureInfo.InvariantCulture) + "\n");
+                    string text =
+                        CursorHeader + "\n" +
+                        _runtimeGenerationId + "\n" +
+                        sequence.ToString(CultureInfo.InvariantCulture) + "\n";
+                    byte[] payload = Encoding.ASCII.GetBytes(text);
                     using (var stream = new FileStream(
                                temporaryPath,
                                FileMode.CreateNew,
@@ -115,6 +145,69 @@ namespace NosGm.Communication.Client
                     }
                 }
             }
+        }
+
+        private ulong LoadBoundCursor()
+        {
+            if (!File.Exists(_cursorPath))
+            {
+                return 0;
+            }
+
+            string text = File.ReadAllText(
+                _cursorPath,
+                Encoding.ASCII).Trim();
+            string[] lines = text.Split(
+                new[] { '\r', '\n' },
+                StringSplitOptions.RemoveEmptyEntries);
+
+            // Cursor files created before runtime-generation binding contained
+            // only one unsigned sequence. They cannot be safely associated with
+            // the current runtime, so migrate them by beginning at zero.
+            if (lines.Length == 1 &&
+                ulong.TryParse(
+                    lines[0],
+                    NumberStyles.None,
+                    CultureInfo.InvariantCulture,
+                    out _))
+            {
+                return 0;
+            }
+
+            if (lines.Length != 3 ||
+                !string.Equals(
+                    lines[0],
+                    CursorHeader,
+                    StringComparison.Ordinal) ||
+                !IsCanonicalNonEmptyGuid(lines[1]) ||
+                !ulong.TryParse(
+                    lines[2],
+                    NumberStyles.None,
+                    CultureInfo.InvariantCulture,
+                    out ulong sequence))
+            {
+                throw new InvalidOperationException(
+                    "The communication callback cursor file is corrupt.");
+            }
+
+            return string.Equals(
+                lines[1],
+                _runtimeGenerationId,
+                StringComparison.Ordinal)
+                ? sequence
+                : 0;
+        }
+
+        private static bool IsCanonicalNonEmptyGuid(string value)
+        {
+            return value != null &&
+                   value.Length == 36 &&
+                   Guid.TryParseExact(value, "D", out Guid parsed) &&
+                   parsed != Guid.Empty &&
+                   string.Equals(
+                       parsed.ToString("D"),
+                       value,
+                       StringComparison.Ordinal);
         }
     }
 }
