@@ -54,7 +54,7 @@ namespace NosGm.Master.Server
 
                 string ipAddress = ServerConfiguration.IPAddress;
                 var server = ScsServiceBuilder.CreateService(new ScsTcpEndPoint(ipAddress, port));
-                server.AddService<ICommunicationService, CommunicationService>(new CommunicationService());
+                server.AddService<ICommunicationService, MirroredCommunicationService>(new MirroredCommunicationService());
                 server.AddService<IConfigurationService, ConfigurationService>(new ConfigurationService());
                 server.AddService<IMailService, MailService>(new MailService());
                 server.AddService<IMallService, MallService>(new MallService());
