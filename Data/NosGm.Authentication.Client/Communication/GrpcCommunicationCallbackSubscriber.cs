@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 using System.Net.Http;
 using System.Net.Security;
 using System.Security.Authentication;
@@ -25,8 +24,7 @@ namespace NosGm.Communication.Client
     public sealed class GrpcCommunicationCallbackSubscriber : IDisposable
     {
         private readonly CommunicationCallbackSubscriberOptions _options;
-        private readonly ICommunicationCallbackCursorStore _cursorStore;
-        private readonly ICommunicationCallbackEnvelopeHandler _handler;
+        private readonly CommunicationCallbackProcessor _processor;
         private readonly X509Certificate2 _clientCertificate;
         private readonly HttpMessageHandler _httpHandler;
         private readonly GrpcChannel _channel;
@@ -42,10 +40,10 @@ namespace NosGm.Communication.Client
         {
             _options = options ??
                 throw new ArgumentNullException(nameof(options));
-            _cursorStore = cursorStore ??
-                throw new ArgumentNullException(nameof(cursorStore));
-            _handler = handler ??
-                throw new ArgumentNullException(nameof(handler));
+            _processor = new CommunicationCallbackProcessor(
+                cursorStore ??
+                    throw new ArgumentNullException(nameof(cursorStore)),
+                handler ?? throw new ArgumentNullException(nameof(handler)));
             _clientCertificate = LoadClientCertificate(options);
             try
             {
@@ -95,6 +93,8 @@ namespace NosGm.Communication.Client
                             .ConfigureAwait(false);
                         reconnectDelay =
                             _options.InitialReconnectDelayMilliseconds;
+                        await Task.Delay(reconnectDelay, cancellationToken)
+                            .ConfigureAwait(false);
                     }
                     catch (RpcException exception)
                         when (ShouldReconnect(exception, cancellationToken))
@@ -128,9 +128,8 @@ namespace NosGm.Communication.Client
         private async Task RunSingleStreamAsync(
             CancellationToken cancellationToken)
         {
-            ulong appliedSequence = _cursorStore.Load();
             WireV1.SubscribeCommunicationCallbacksRequest request =
-                CreateSubscribeRequest(appliedSequence);
+                CreateSubscribeRequest(_processor.AppliedSequence);
             using AsyncServerStreamingCall<
                     WireV1.CommunicationCallbackEnvelope> call =
                 _client.SubscribeCommunicationCallbacks(
@@ -141,29 +140,11 @@ namespace NosGm.Communication.Client
                        .MoveNext(cancellationToken)
                        .ConfigureAwait(false))
             {
-                WireV1.CommunicationCallbackEnvelope envelope =
-                    call.ResponseStream.Current;
-                if (envelope == null || envelope.Sequence == 0)
-                {
-                    throw new InvalidOperationException(
-                        "The callback stream returned an invalid envelope.");
-                }
-                if (envelope.Sequence <= appliedSequence)
-                {
-                    continue;
-                }
-
-                if (envelope.ExpiresAtUnixTimeMs >
-                    DateTimeOffset.UtcNow.ToUnixTimeMilliseconds())
-                {
-                    await _handler.ApplyAsync(envelope, cancellationToken)
-                        .ConfigureAwait(false);
-                }
-
-                // The cursor is committed only after the handler completed.
-                // A failed handler therefore leaves the event eligible for replay.
-                _cursorStore.Save(envelope.Sequence);
-                appliedSequence = envelope.Sequence;
+                await _processor.ProcessAsync(
+                        call.ResponseStream.Current,
+                        DateTimeOffset.UtcNow,
+                        cancellationToken)
+                    .ConfigureAwait(false);
             }
         }
 
