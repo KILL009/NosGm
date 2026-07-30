@@ -101,7 +101,7 @@ internal static class CommunicationCallbackLiveSubscriberSelfTest
             AssertEqual(
                 envelope.Sequence,
                 savedSequence,
-                "Live callback cursor commits the delivered accepted sequence");
+                "Live callback cursor commits after handler completion");
             AssertEqual(
                 1,
                 handler.Calls,
