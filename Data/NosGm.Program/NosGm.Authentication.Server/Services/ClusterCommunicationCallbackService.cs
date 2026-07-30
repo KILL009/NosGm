@@ -12,15 +12,6 @@ public sealed class ClusterCommunicationCallbackService
     : WireV1.ClusterCommunicationCallbacks
         .ClusterCommunicationCallbacksBase
 {
-    private sealed class ShadowWorldRegistration
-    {
-        public required Guid WorldId { get; init; }
-        public required int ChannelId { get; init; }
-        public required string WorldGroup { get; init; }
-        public required string CallerInstanceId { get; init; }
-        public required string RuntimeGenerationId { get; init; }
-    }
-
     private readonly AuthenticationDispatchGate _dispatchGate;
     private readonly CommunicationCallbackHub _hub;
     private readonly ILogger<ClusterCommunicationCallbackService> _logger;
@@ -28,9 +19,8 @@ public sealed class ClusterCommunicationCallbackService
     private readonly ClientCertificateRoleMap _roleMap;
     private readonly CommunicationCallbackRuntimeIdentity _runtimeIdentity;
     private readonly AuthenticationServerOptions _serverOptions;
-    private readonly object _shadowWorldSyncRoot = new();
-    private readonly Dictionary<Guid, ShadowWorldRegistration>
-        _shadowWorldRegistrations = new();
+    private readonly CommunicationCallbackShadowWorldRegistry
+        _shadowWorldRegistry;
     private readonly TimeProvider _timeProvider;
 
     public ClusterCommunicationCallbackService(
@@ -39,6 +29,7 @@ public sealed class ClusterCommunicationCallbackService
         ClientCertificateRoleMap roleMap,
         CommunicationCallbackHub hub,
         CommunicationCallbackRuntimeIdentity runtimeIdentity,
+        CommunicationCallbackShadowWorldRegistry shadowWorldRegistry,
         AuthenticationServerOptions serverOptions,
         TimeProvider timeProvider,
         ILogger<ClusterCommunicationCallbackService> logger)
@@ -48,6 +39,7 @@ public sealed class ClusterCommunicationCallbackService
         _roleMap = roleMap;
         _hub = hub;
         _runtimeIdentity = runtimeIdentity;
+        _shadowWorldRegistry = shadowWorldRegistry;
         _serverOptions = serverOptions;
         _timeProvider = timeProvider;
         _logger = logger;
@@ -124,42 +116,8 @@ public sealed class ClusterCommunicationCallbackService
                     "The callback runtime generation changed before the shadow World route was registered."));
         }
 
-        Guid worldId = Guid.ParseExact(request.WorldId, "D");
-        WireV1.CommunicationResultCode result;
-        lock (_shadowWorldSyncRoot)
-        {
-            if (_shadowWorldRegistrations.TryGetValue(
-                    worldId,
-                    out ShadowWorldRegistration existing))
-            {
-                result = MatchesShadowWorldRegistration(existing, request)
-                    ? WireV1.CommunicationResultCode.Success
-                    : WireV1.CommunicationResultCode.Conflict;
-            }
-            else
-            {
-                result = _hub.RegisterWorld(
-                    worldId,
-                    request.ChannelId,
-                    request.WorldGroup);
-                if (result == WireV1.CommunicationResultCode.Success)
-                {
-                    _shadowWorldRegistrations.Add(
-                        worldId,
-                        new ShadowWorldRegistration
-                        {
-                            WorldId = worldId,
-                            ChannelId = request.ChannelId,
-                            WorldGroup = request.WorldGroup,
-                            CallerInstanceId =
-                                request.Context.CallerInstanceId,
-                            RuntimeGenerationId =
-                                request.RuntimeGenerationId
-                        });
-                }
-            }
-        }
-
+        WireV1.CommunicationResultCode result =
+            _shadowWorldRegistry.Register(request);
         WriteAudit(
             request.Context,
             "RegisterCommunicationCallbackShadowWorld",
@@ -200,35 +158,8 @@ public sealed class ClusterCommunicationCallbackService
                     "The callback runtime generation changed before the shadow World route was removed."));
         }
 
-        Guid worldId = Guid.ParseExact(request.WorldId, "D");
-        WireV1.CommunicationResultCode result;
-        lock (_shadowWorldSyncRoot)
-        {
-            if (!_shadowWorldRegistrations.TryGetValue(
-                    worldId,
-                    out ShadowWorldRegistration existing))
-            {
-                result = WireV1.CommunicationResultCode.NotFound;
-            }
-            else if (!string.Equals(
-                         existing.CallerInstanceId,
-                         request.Context.CallerInstanceId,
-                         StringComparison.Ordinal) ||
-                     !string.Equals(
-                         existing.RuntimeGenerationId,
-                         request.RuntimeGenerationId,
-                         StringComparison.Ordinal))
-            {
-                result = WireV1.CommunicationResultCode.Conflict;
-            }
-            else
-            {
-                _shadowWorldRegistrations.Remove(worldId);
-                _hub.UnregisterWorld(worldId);
-                result = WireV1.CommunicationResultCode.Success;
-            }
-        }
-
+        WireV1.CommunicationResultCode result =
+            _shadowWorldRegistry.Unregister(request);
         WriteAudit(
             request.Context,
             "UnregisterCommunicationCallbackShadowWorld",
@@ -272,7 +203,7 @@ public sealed class ClusterCommunicationCallbackService
                     "The callback runtime generation changed before the stream opened."));
         }
         if (request.Context.CallerRole == WireV1.ClusterNodeRole.World &&
-            !OwnsShadowWorldRegistration(request))
+            !_shadowWorldRegistry.Owns(request))
         {
             throw new RpcException(
                 new Status(
@@ -488,50 +419,6 @@ public sealed class ClusterCommunicationCallbackService
             now)
             ? WireV1.CommunicationResultCode.Success
             : WireV1.CommunicationResultCode.Conflict;
-    }
-
-    private bool OwnsShadowWorldRegistration(
-        WireV1.SubscribeCommunicationCallbacksRequest request)
-    {
-        Guid worldId = Guid.ParseExact(request.WorldId, "D");
-        lock (_shadowWorldSyncRoot)
-        {
-            return _shadowWorldRegistrations.TryGetValue(
-                       worldId,
-                       out ShadowWorldRegistration registration) &&
-                   registration.ChannelId == request.ChannelId &&
-                   string.Equals(
-                       registration.WorldGroup,
-                       request.WorldGroup,
-                       StringComparison.Ordinal) &&
-                   string.Equals(
-                       registration.CallerInstanceId,
-                       request.Context.CallerInstanceId,
-                       StringComparison.Ordinal) &&
-                   string.Equals(
-                       registration.RuntimeGenerationId,
-                       request.RuntimeGenerationId,
-                       StringComparison.Ordinal);
-        }
-    }
-
-    private static bool MatchesShadowWorldRegistration(
-        ShadowWorldRegistration existing,
-        WireV1.RegisterCommunicationCallbackShadowWorldRequest request)
-    {
-        return existing.ChannelId == request.ChannelId &&
-               string.Equals(
-                   existing.WorldGroup,
-                   request.WorldGroup,
-                   StringComparison.Ordinal) &&
-               string.Equals(
-                   existing.CallerInstanceId,
-                   request.Context.CallerInstanceId,
-                   StringComparison.Ordinal) &&
-               string.Equals(
-                   existing.RuntimeGenerationId,
-                   request.RuntimeGenerationId,
-                   StringComparison.Ordinal);
     }
 
     private bool IsExpired(WireV1.CommunicationCallbackEnvelope envelope)
