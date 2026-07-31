@@ -94,7 +94,7 @@ namespace NosGm.Communication.Client
                         observedAt);
                 CommunicationCallbackOperatorCutoverCoordinator coordinator =
                     CommunicationCallbackOperatorCutoverCoordinator.Instance;
-                coordinator.Configure(
+                coordinator.EnsureConfigured(
                     evidence.ProcessIdentity,
                     CommunicationCallbackOperatorCutoverOptions.Load());
                 bool appended = _penaltyRefreshEvidence.TryAppend(evidence);
