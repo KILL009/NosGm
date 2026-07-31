@@ -51,6 +51,8 @@ $runtime = Read-RequiredFile `
     "Data\NosGm.Authentication.Client\Communication\CommunicationCallbackQualificationRuntime.cs"
 $ledger = Read-RequiredFile `
     "Data\NosGm.Authentication.Client\Communication\CommunicationCallbackKindParityEvidenceLedger.cs"
+$masterProject = Read-RequiredFile `
+    "Data\NosGm.Master.Library\NosGm.Master.Library.csproj"
 $scs = Read-RequiredFile `
     "Data\NosGm.Master.Library\Client\CommunicationCallbackScsObservationLedger.cs"
 $extensions = Read-RequiredFile `
@@ -112,6 +114,9 @@ Require $extensions "GetPenaltyRefreshQualificationStatus" `
     "Subscriber lifecycle exposes terminal qualification status"
 Require $extensions "GetPenaltyRefreshQualificationEvidenceSnapshot" `
     "Subscriber lifecycle exposes bounded terminal evidence"
+Require $masterProject `
+    "CommunicationCallbackSubscriberLifecycleQualificationExtensions.cs" `
+    "Master.Library compiles lifecycle qualification visibility"
 
 Require $activation "Production gRPC callback application remains blocked" `
     "Production typed callback effects remain blocked"
