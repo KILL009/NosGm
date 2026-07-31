@@ -56,6 +56,8 @@ internal static class CommunicationCallbackKindParityEvidenceLedgerSelfTest
             "The ledger binds to one process identity");
         AssertEqual(false, ledger.IsInvalidated,
             "Canonical terminal evidence keeps qualification valid");
+        AssertEqual(true, ledger.HasCompleteHistory,
+            "Unevicted canonical evidence preserves complete qualification history");
 
         IReadOnlyList<CommunicationCallbackKindParityEvidence> latest =
             ledger.GetLatest(2);
@@ -136,7 +138,17 @@ internal static class CommunicationCallbackKindParityEvidenceLedgerSelfTest
         AssertEqual((long)1, ledger.EvictedEvidence,
             "Qualification evidence eviction remains measurable");
         AssertEqual(false, ledger.IsInvalidated,
-            "Ordinary bounded eviction does not invalidate recent qualification");
+            "Ordinary bounded eviction keeps diagnostic retention available");
+        AssertEqual(false, ledger.HasCompleteHistory,
+            "Any evidence eviction makes authority qualification incomplete");
+
+        var gate = NewGate();
+        AssertEqual(false, ledger.TryArm(gate),
+            "An evicted evidence history cannot arm callback authority");
+        AssertEqual(
+            CommunicationCallbackCutoverState.ScsAuthoritative,
+            gate.State,
+            "Evidence eviction preserves SCS authority");
 
         AssertThrows<ArgumentOutOfRangeException>(
             () => ledger.GetLatest(0),
@@ -235,6 +247,8 @@ internal static class CommunicationCallbackKindParityEvidenceLedgerSelfTest
         string name)
     {
         AssertEqual(true, ledger.IsInvalidated, name);
+        AssertEqual(false, ledger.HasCompleteHistory,
+            name + " has no complete qualification history");
         var gate = NewGate();
         AssertEqual(false, ledger.TryArm(gate),
             name + " cannot arm a fresh gate");
