@@ -12,6 +12,10 @@ namespace NosGm.Communication.Client
             bool operatorRollbackRequested,
             bool effectRoutingEnabled,
             bool typedIngressReady,
+            int pendingOverlapEffects,
+            long overlapEffectsRecorded,
+            long overlapDuplicatesSuppressed,
+            long overlapEffectsExpired,
             string configuredIdentity,
             string armRequestId,
             string lastObservedGeneration,
@@ -26,6 +30,10 @@ namespace NosGm.Communication.Client
             OperatorRollbackRequested = operatorRollbackRequested;
             EffectRoutingEnabled = effectRoutingEnabled;
             TypedIngressReady = typedIngressReady;
+            PendingOverlapEffects = pendingOverlapEffects;
+            OverlapEffectsRecorded = overlapEffectsRecorded;
+            OverlapDuplicatesSuppressed = overlapDuplicatesSuppressed;
+            OverlapEffectsExpired = overlapEffectsExpired;
             ConfiguredIdentity = configuredIdentity ?? string.Empty;
             ArmRequestId = armRequestId ?? string.Empty;
             LastObservedGeneration =
@@ -47,6 +55,14 @@ namespace NosGm.Communication.Client
         public bool EffectRoutingEnabled { get; }
 
         public bool TypedIngressReady { get; }
+
+        public int PendingOverlapEffects { get; }
+
+        public long OverlapEffectsRecorded { get; }
+
+        public long OverlapDuplicatesSuppressed { get; }
+
+        public long OverlapEffectsExpired { get; }
 
         public string ConfiguredIdentity { get; }
 
@@ -77,6 +93,8 @@ namespace NosGm.Communication.Client
 
         private readonly object _syncRoot = new object();
         private readonly CommunicationCallbackCutoverGate _gate;
+        private readonly CommunicationCallbackOverlapDeduplicationLedger
+            _overlapLedger;
         private bool _configured;
         private bool _blocked;
         private bool _operatorRollbackRequested;
@@ -90,14 +108,26 @@ namespace NosGm.Communication.Client
         public CommunicationCallbackOperatorCutoverCoordinator()
             : this(
                 new CommunicationCallbackCutoverGate(
-                    WireV1.CommunicationCallbackKind.PenaltyRefresh))
+                    WireV1.CommunicationCallbackKind.PenaltyRefresh),
+                new CommunicationCallbackOverlapDeduplicationLedger())
         {
         }
 
         internal CommunicationCallbackOperatorCutoverCoordinator(
             CommunicationCallbackCutoverGate gate)
+            : this(
+                gate,
+                new CommunicationCallbackOverlapDeduplicationLedger())
+        {
+        }
+
+        internal CommunicationCallbackOperatorCutoverCoordinator(
+            CommunicationCallbackCutoverGate gate,
+            CommunicationCallbackOverlapDeduplicationLedger overlapLedger)
         {
             _gate = gate ?? throw new ArgumentNullException(nameof(gate));
+            _overlapLedger = overlapLedger ??
+                throw new ArgumentNullException(nameof(overlapLedger));
         }
 
         public static CommunicationCallbackOperatorCutoverCoordinator
@@ -153,43 +183,6 @@ namespace NosGm.Communication.Client
                         "The operator requested PenaltyRefresh callback rollback before activation.");
                 }
                 return true;
-            }
-        }
-
-        public bool EnsureConfigured(
-            string processIdentity,
-            CommunicationCallbackOperatorCutoverOptions options)
-        {
-            ValidateConfiguration(processIdentity, options);
-            lock (_syncRoot)
-            {
-                if (!_configured)
-                {
-                    _configured = true;
-                    _configuredIdentity = processIdentity;
-                    _armRequestId =
-                        options.PenaltyRefreshArmRequestId;
-                    _operatorRollbackRequested =
-                        options.PenaltyRefreshRollbackRequested;
-                    _effectRoutingEnabled = false;
-                    if (_operatorRollbackRequested)
-                    {
-                        _blocked = true;
-                        _lastException = new InvalidOperationException(
-                            "The operator requested PenaltyRefresh callback rollback before activation.");
-                    }
-                    return true;
-                }
-
-                if (IsSameOperatorConfiguration(processIdentity, options))
-                {
-                    return false;
-                }
-
-                var exception = new InvalidOperationException(
-                    "Operator callback cutover configuration changed inside one process.");
-                FailClosed(exception);
-                throw exception;
             }
         }
 
@@ -412,6 +405,19 @@ namespace NosGm.Communication.Client
             WireV1.CommunicationCallbackKind kind,
             Action applyEffect)
         {
+            return TryApply(
+                source,
+                kind,
+                string.Empty,
+                applyEffect);
+        }
+
+        public bool TryApply(
+            CommunicationCallbackParitySource source,
+            WireV1.CommunicationCallbackKind kind,
+            string semanticFingerprint,
+            Action applyEffect)
+        {
             if (applyEffect == null)
             {
                 throw new ArgumentNullException(nameof(applyEffect));
@@ -419,21 +425,66 @@ namespace NosGm.Communication.Client
 
             lock (_syncRoot)
             {
-                if (!ShouldApplyCore(source, kind))
+                if (kind != _gate.TargetKind || !_effectRoutingEnabled)
+                {
+                    if (!ShouldApplyCore(source, kind))
+                    {
+                        return false;
+                    }
+                    applyEffect();
+                    return true;
+                }
+
+                DateTimeOffset observedAt = DateTimeOffset.UtcNow;
+                if (_overlapLedger.TryConsumeOpposite(
+                        source,
+                        semanticFingerprint,
+                        observedAt))
                 {
                     return false;
+                }
+
+                bool typedSelected =
+                    source == CommunicationCallbackParitySource.TypedGrpc &&
+                    !_blocked &&
+                    _typedIngressReady &&
+                    _gate.State ==
+                        CommunicationCallbackCutoverState
+                            .TypedGrpcAuthoritative;
+                bool legacySelected =
+                    source == CommunicationCallbackParitySource.LegacyScs;
+                if (!typedSelected && !legacySelected)
+                {
+                    return false;
+                }
+
+                if (!_overlapLedger.HasCapacity(observedAt))
+                {
+                    FailClosed(
+                        new InvalidOperationException(
+                            "PenaltyRefresh overlap evidence reached its bounded capacity."));
+                    if (source == CommunicationCallbackParitySource.TypedGrpc)
+                    {
+                        return false;
+                    }
+
+                    applyEffect();
+                    return true;
                 }
 
                 try
                 {
                     applyEffect();
+                    _overlapLedger.RecordApplied(
+                        source,
+                        semanticFingerprint,
+                        observedAt);
                     return true;
                 }
                 catch (Exception exception)
                 {
                     if (source ==
-                            CommunicationCallbackParitySource.TypedGrpc &&
-                        kind == _gate.TargetKind)
+                        CommunicationCallbackParitySource.TypedGrpc)
                     {
                         FailClosed(exception);
                     }
@@ -453,6 +504,10 @@ namespace NosGm.Communication.Client
                     _operatorRollbackRequested,
                     _effectRoutingEnabled,
                     _typedIngressReady,
+                    _overlapLedger.PendingCount,
+                    _overlapLedger.Recorded,
+                    _overlapLedger.DuplicatesSuppressed,
+                    _overlapLedger.Expired,
                     _configuredIdentity,
                     _armRequestId,
                     _lastObservedGeneration,
