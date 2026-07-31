@@ -54,6 +54,17 @@ namespace NosGm.Communication.Client
 
         public int ObservationCapacity => _capacity;
 
+        public bool IsStreamActive
+        {
+            get
+            {
+                lock (_syncRoot)
+                {
+                    return _streamActive;
+                }
+            }
+        }
+
         public long ObservedCallbacks =>
             Interlocked.Read(ref _observedCallbacks);
 
@@ -76,8 +87,18 @@ namespace NosGm.Communication.Client
 
             lock (_syncRoot)
             {
+                if (_streamActive)
+                {
+                    throw new InvalidOperationException(
+                        "A shadow observation stream is already active.");
+                }
+
+                _observations.Clear();
                 _runtimeGenerationId = runtimeGenerationId;
                 _phase = CommunicationCallbackObservationPhase.Replay;
+                Interlocked.Exchange(ref _observedCallbacks, 0);
+                Interlocked.Exchange(ref _lastObservedSequence, 0);
+                Interlocked.Exchange(ref _evictedObservations, 0);
                 _streamActive = true;
             }
 
@@ -97,6 +118,7 @@ namespace NosGm.Communication.Client
             lock (_syncRoot)
             {
                 if (!_streamActive ||
+                    _phase != CommunicationCallbackObservationPhase.Replay ||
                     !string.Equals(
                         _runtimeGenerationId,
                         evidence.RuntimeGenerationId,
