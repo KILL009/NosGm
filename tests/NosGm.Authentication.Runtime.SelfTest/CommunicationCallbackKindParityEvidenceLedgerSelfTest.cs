@@ -23,7 +23,9 @@ internal static class CommunicationCallbackKindParityEvidenceLedgerSelfTest
     {
         VerifySuccessfulQualificationRetention();
         VerifyNegativeEvidenceBreaksQualification();
-        VerifyBoundedAndFailClosedBehavior();
+        VerifyBoundedRetention();
+        VerifyIntegrityFailuresInvalidateQualification();
+        VerifyConstructionBounds();
 
         Console.WriteLine(
             "[PASS] Bounded PenaltyRefresh parity qualification ledger self-test");
@@ -32,9 +34,7 @@ internal static class CommunicationCallbackKindParityEvidenceLedgerSelfTest
     private static void VerifySuccessfulQualificationRetention()
     {
         DateTimeOffset start = StartTime();
-        var ledger = new CommunicationCallbackKindParityEvidenceLedger(
-            WireV1.CommunicationCallbackKind.PenaltyRefresh,
-            capacity: 4);
+        var ledger = NewLedger(capacity: 4);
         CommunicationCallbackKindParityEvidence first =
             Evidence(Identity, Generation1, start);
         CommunicationCallbackKindParityEvidence second =
@@ -54,6 +54,8 @@ internal static class CommunicationCallbackKindParityEvidenceLedgerSelfTest
             "Idempotent retries do not advance the evidence counter");
         AssertEqual(Identity, ledger.ProcessIdentity,
             "The ledger binds to one process identity");
+        AssertEqual(false, ledger.IsInvalidated,
+            "Canonical terminal evidence keeps qualification valid");
 
         IReadOnlyList<CommunicationCallbackKindParityEvidence> latest =
             ledger.GetLatest(2);
@@ -64,8 +66,7 @@ internal static class CommunicationCallbackKindParityEvidenceLedgerSelfTest
         AssertEqual(Generation3, latest[1].RuntimeGenerationId,
             "The latest suffix ends with the newest generation");
 
-        var gate = new CommunicationCallbackCutoverGate(
-            WireV1.CommunicationCallbackKind.PenaltyRefresh);
+        var gate = NewGate();
         AssertEqual(true, ledger.TryArm(gate),
             "Three retained parity generations arm the PenaltyRefresh gate");
         AssertEqual(CommunicationCallbackCutoverState.Armed, gate.State,
@@ -81,8 +82,7 @@ internal static class CommunicationCallbackKindParityEvidenceLedgerSelfTest
     private static void VerifyNegativeEvidenceBreaksQualification()
     {
         DateTimeOffset start = StartTime();
-        var ledger = new CommunicationCallbackKindParityEvidenceLedger(
-            WireV1.CommunicationCallbackKind.PenaltyRefresh);
+        var ledger = NewLedger();
         ledger.TryAppend(Evidence(Identity, Generation1, start));
         ledger.TryAppend(
             Evidence(
@@ -93,8 +93,7 @@ internal static class CommunicationCallbackKindParityEvidenceLedgerSelfTest
         ledger.TryAppend(
             Evidence(Identity, Generation3, start.AddMinutes(2)));
 
-        var gate = new CommunicationCallbackCutoverGate(
-            WireV1.CommunicationCallbackKind.PenaltyRefresh);
+        var gate = NewGate();
         AssertEqual(false, ledger.TryArm(gate),
             "A terminal mismatch inside the latest evidence window blocks qualification");
         AssertEqual(
@@ -112,25 +111,17 @@ internal static class CommunicationCallbackKindParityEvidenceLedgerSelfTest
             "Three consecutive later parity generations can qualify after a mismatch");
     }
 
-    private static void VerifyBoundedAndFailClosedBehavior()
+    private static void VerifyBoundedRetention()
     {
         DateTimeOffset start = StartTime();
-        var ledger = new CommunicationCallbackKindParityEvidenceLedger(
-            WireV1.CommunicationCallbackKind.PenaltyRefresh,
-            capacity: 3);
-        CommunicationCallbackKindParityEvidence first =
-            Evidence(Identity, Generation1, start);
-        CommunicationCallbackKindParityEvidence second =
-            Evidence(Identity, Generation2, start.AddMinutes(1));
-        CommunicationCallbackKindParityEvidence third =
-            Evidence(Identity, Generation3, start.AddMinutes(2));
-        CommunicationCallbackKindParityEvidence fourth =
-            Evidence(Identity, Generation4, start.AddMinutes(3));
-
-        ledger.TryAppend(first);
-        ledger.TryAppend(second);
-        ledger.TryAppend(third);
-        ledger.TryAppend(fourth);
+        var ledger = NewLedger(capacity: 3);
+        ledger.TryAppend(Evidence(Identity, Generation1, start));
+        ledger.TryAppend(
+            Evidence(Identity, Generation2, start.AddMinutes(1)));
+        ledger.TryAppend(
+            Evidence(Identity, Generation3, start.AddMinutes(2)));
+        ledger.TryAppend(
+            Evidence(Identity, Generation4, start.AddMinutes(3)));
 
         IReadOnlyList<CommunicationCallbackKindParityEvidence> snapshot =
             ledger.GetSnapshot();
@@ -144,57 +135,89 @@ internal static class CommunicationCallbackKindParityEvidenceLedgerSelfTest
             "The cumulative append counter survives FIFO eviction");
         AssertEqual((long)1, ledger.EvictedEvidence,
             "Qualification evidence eviction remains measurable");
+        AssertEqual(false, ledger.IsInvalidated,
+            "Ordinary bounded eviction does not invalidate recent qualification");
 
-        AssertThrows<InvalidOperationException>(
-            () => ledger.TryAppend(
-                Evidence(
-                    Identity,
-                    Generation4,
-                    start.AddMinutes(4),
-                    CommunicationCallbackParityVerdict.OrderMismatch)),
-            "One runtime generation cannot produce conflicting terminal evidence");
-        AssertThrows<InvalidOperationException>(
-            () => ledger.TryAppend(
-                Evidence(
-                    Identity,
-                    Generation5,
-                    start.AddMinutes(2).AddSeconds(30))),
-            "Terminal evidence cannot arrive out of chronological order");
-        AssertThrows<InvalidOperationException>(
-            () => ledger.TryAppend(
-                Evidence(
-                    OtherIdentity,
-                    Generation5,
-                    start.AddMinutes(5))),
-            "Qualification evidence cannot cross process identities");
-        AssertThrows<InvalidOperationException>(
-            () => ledger.TryAppend(
-                new CommunicationCallbackKindParityEvidence(
-                    Identity,
-                    WireV1.CommunicationCallbackKind.BazaarRefresh,
-                    Generation5,
-                    CommunicationCallbackParityVerdict.Parity,
-                    1,
-                    1,
-                    start.AddMinutes(5))),
-            "Qualification evidence cannot cross callback kinds");
-        AssertThrows<InvalidOperationException>(
-            () => ledger.TryAppend(
-                new CommunicationCallbackKindParityEvidence(
-                    Identity,
-                    WireV1.CommunicationCallbackKind.PenaltyRefresh,
-                    Generation5,
-                    CommunicationCallbackParityVerdict.InProgress,
-                    0,
-                    0,
-                    start.AddMinutes(5))),
-            "A moving observation window cannot enter terminal qualification evidence");
         AssertThrows<ArgumentOutOfRangeException>(
             () => ledger.GetLatest(0),
             "Latest evidence requests reject zero");
         AssertThrows<ArgumentOutOfRangeException>(
             () => ledger.GetLatest(4),
             "Latest evidence requests cannot exceed ledger capacity");
+    }
+
+    private static void VerifyIntegrityFailuresInvalidateQualification()
+    {
+        DateTimeOffset start = StartTime();
+
+        var conflict = NewLedger();
+        conflict.TryAppend(Evidence(Identity, Generation1, start));
+        AssertThrows<InvalidOperationException>(
+            () => conflict.TryAppend(
+                Evidence(
+                    Identity,
+                    Generation1,
+                    start.AddMinutes(1),
+                    CommunicationCallbackParityVerdict.OrderMismatch)),
+            "One runtime generation cannot produce conflicting terminal evidence");
+        AssertInvalidated(conflict,
+            "Conflicting generation evidence permanently blocks this process ledger");
+
+        var chronology = NewLedger();
+        chronology.TryAppend(
+            Evidence(Identity, Generation1, start.AddMinutes(1)));
+        AssertThrows<InvalidOperationException>(
+            () => chronology.TryAppend(
+                Evidence(Identity, Generation2, start)),
+            "Terminal evidence cannot arrive out of chronological order");
+        AssertInvalidated(chronology,
+            "Out-of-order evidence permanently blocks this process ledger");
+
+        var identity = NewLedger();
+        identity.TryAppend(Evidence(Identity, Generation1, start));
+        AssertThrows<InvalidOperationException>(
+            () => identity.TryAppend(
+                Evidence(
+                    OtherIdentity,
+                    Generation2,
+                    start.AddMinutes(1))),
+            "Qualification evidence cannot cross process identities");
+        AssertInvalidated(identity,
+            "Cross-identity evidence permanently blocks this process ledger");
+
+        var kind = NewLedger();
+        AssertThrows<InvalidOperationException>(
+            () => kind.TryAppend(
+                new CommunicationCallbackKindParityEvidence(
+                    Identity,
+                    WireV1.CommunicationCallbackKind.BazaarRefresh,
+                    Generation1,
+                    CommunicationCallbackParityVerdict.Parity,
+                    1,
+                    1,
+                    start)),
+            "Qualification evidence cannot cross callback kinds");
+        AssertInvalidated(kind,
+            "Cross-kind evidence permanently blocks this process ledger");
+
+        var moving = NewLedger();
+        AssertThrows<InvalidOperationException>(
+            () => moving.TryAppend(
+                new CommunicationCallbackKindParityEvidence(
+                    Identity,
+                    WireV1.CommunicationCallbackKind.PenaltyRefresh,
+                    Generation1,
+                    CommunicationCallbackParityVerdict.InProgress,
+                    0,
+                    0,
+                    start)),
+            "A moving observation window cannot enter terminal qualification evidence");
+        AssertInvalidated(moving,
+            "Moving evidence permanently blocks this process ledger");
+    }
+
+    private static void VerifyConstructionBounds()
+    {
         AssertThrows<InvalidOperationException>(
             () => new CommunicationCallbackKindParityEvidenceLedger(
                 WireV1.CommunicationCallbackKind.BazaarRefresh),
@@ -205,6 +228,35 @@ internal static class CommunicationCallbackKindParityEvidenceLedgerSelfTest
                 CommunicationCallbackKindParityEvidenceLedger
                     .MaximumCapacity + 1),
             "Qualification evidence capacity has an absolute ceiling");
+    }
+
+    private static void AssertInvalidated(
+        CommunicationCallbackKindParityEvidenceLedger ledger,
+        string name)
+    {
+        AssertEqual(true, ledger.IsInvalidated, name);
+        var gate = NewGate();
+        AssertEqual(false, ledger.TryArm(gate),
+            name + " cannot arm a fresh gate");
+        AssertEqual(
+            CommunicationCallbackCutoverState.ScsAuthoritative,
+            gate.State,
+            name + " preserves SCS authority");
+    }
+
+    private static CommunicationCallbackKindParityEvidenceLedger NewLedger(
+        int capacity =
+            CommunicationCallbackKindParityEvidenceLedger.DefaultCapacity)
+    {
+        return new CommunicationCallbackKindParityEvidenceLedger(
+            WireV1.CommunicationCallbackKind.PenaltyRefresh,
+            capacity);
+    }
+
+    private static CommunicationCallbackCutoverGate NewGate()
+    {
+        return new CommunicationCallbackCutoverGate(
+            WireV1.CommunicationCallbackKind.PenaltyRefresh);
     }
 
     private static CommunicationCallbackKindParityEvidence Evidence(
