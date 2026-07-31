@@ -1,4 +1,4 @@
-﻿using NosGm.Configuration;
+using NosGm.Configuration;
 using NosGm.Core;
 using NosGm.DAL;
 using NosGm.Data;
@@ -551,7 +551,11 @@ namespace NosGm.GameObject.Networking
         public static double NextDoubleLinear(double minValue = 0.01, double maxValue = 100)
         {
             // TODO: some validation here...
-            double sample = random.NextDouble();
+            double sample;
+            lock (syncLock)
+            {
+                sample = random.NextDouble();
+            }
             return (maxValue * sample) + (minValue * (1d - sample));
         }
 
@@ -1253,6 +1257,8 @@ namespace NosGm.GameObject.Networking
 
         public async void AutoReboot()
         {
+            try
+            {
             foreach (var session in ServerManager.Instance.Sessions)
             {
                 MessageExtension.SendModal(session, GameConfiguration.RebootMessage);
@@ -1299,6 +1305,7 @@ namespace NosGm.GameObject.Networking
             }
 
             Environment.Exit(0);
+            } catch { }
         }
 
         public void BaazarMaintenance()
@@ -1898,6 +1905,8 @@ namespace NosGm.GameObject.Networking
 
         public async void GroupLeave(ClientSession session)
         {
+            try
+            {
             if (Groups != null)
             {
                 var grp = Instance.Groups.Find(s => s.IsMemberOfGroup(session.Character.CharacterId));
@@ -2013,6 +2022,7 @@ namespace NosGm.GameObject.Networking
                     session.Character.Group = null;
                 }
             }
+            } catch { }
         }
 
 

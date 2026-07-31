@@ -1,4 +1,4 @@
-﻿using NosGm.Packets.Packets.CommandPackets;
+using NosGm.Packets.Packets.CommandPackets;
 using NosGm.Core;
 using NosGm.DAL;
 using NosGm.Domain;
@@ -28,6 +28,8 @@ namespace NosGm.Handler.PacketHandler.Command
 
         public async void Unmute(UnmutePacket unmutePacket)
         {
+            try
+            {
             if (unmutePacket != null)
             {
                 if (Session.Account?.Authority < AuthorityType.DEV)
@@ -72,6 +74,7 @@ namespace NosGm.Handler.PacketHandler.Command
             {
                 Session.SendPacket(Session.Character.GenerateSay(UnmutePacket.ReturnHelp(), 10));
             }
+            } catch { }
         }
 
         #endregion

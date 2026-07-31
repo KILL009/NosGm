@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 
 namespace NosGm.PathFinder
 {
@@ -81,14 +81,23 @@ namespace NosGm.PathFinder
         {
             if (ReferenceEquals(this, obj)) return true;
 
-            if (obj is null) return false;
+            if (obj is Node other)
+            {
+                return X == other.X && Y == other.Y;
+            }
 
             return false;
         }
 
         public override int GetHashCode()
         {
-            return GetHashCode();
+            unchecked
+            {
+                int hash = 17;
+                hash = hash * 23 + X.GetHashCode();
+                hash = hash * 23 + Y.GetHashCode();
+                return hash;
+            }
         }
 
         #endregion

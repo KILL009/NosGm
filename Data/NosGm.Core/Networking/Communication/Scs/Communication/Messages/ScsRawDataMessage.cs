@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 
 namespace NosGm.Core.Networking.Communication.Scs.Communication.Messages
 {
@@ -97,14 +97,21 @@ namespace NosGm.Core.Networking.Communication.Scs.Communication.Messages
         {
             if (ReferenceEquals(this, obj)) return true;
 
-            if (obj is null) return false;
+        public override bool Equals(object obj)
+        {
+            if (ReferenceEquals(this, obj)) return true;
+
+            if (obj is ScsRawDataMessage other)
+            {
+                return MessageId == other.MessageId;
+            }
 
             return false;
         }
 
         public override int GetHashCode()
         {
-            return GetHashCode();
+            return MessageId != null ? MessageId.GetHashCode() : base.GetHashCode();
         }
 
         /// <summary>

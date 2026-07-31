@@ -1,4 +1,4 @@
-﻿using NosGm.Packets.Packets.CommandPackets;
+using NosGm.Packets.Packets.CommandPackets;
 using NosGm.Core;
 using NosGm.GameObject;
 using NosGm.GameObject.Extension.Message;
@@ -26,13 +26,17 @@ namespace NosGm.Handler.PacketHandler.Command
 
         public async void AddUserLog(AddUserLogPacket addUserLogPacket)
         {
-            if (addUserLogPacket == null
-                || string.IsNullOrEmpty(addUserLogPacket.Username))
-                return;
-            ClientSession.UserLog.Add(addUserLogPacket.Username);
+            try
+            {
+                if (addUserLogPacket == null
+                    || string.IsNullOrEmpty(addUserLogPacket.Username))
+                    return;
+                ClientSession.UserLog.Add(addUserLogPacket.Username);
 
-            Session.SendPacket(Session.Character.GenerateSay(Language.Instance.GetMessageFromKey("DONE"), 10));
-            MessageExtension.SendGrey(Session, "[Server]: Command executed successfully");
+                Session.SendPacket(Session.Character.GenerateSay(Language.Instance.GetMessageFromKey("DONE"), 10));
+                MessageExtension.SendGrey(Session, "[Server]: Command executed successfully");
+            }
+            catch { }
         }
 
         #endregion

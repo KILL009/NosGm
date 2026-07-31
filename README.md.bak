@@ -4,7 +4,7 @@ NosGM is an open-source NosTale server emulator derived from OpenNos.
 
 The project is under active development. Current work includes login, world and channel communication, client and packet compatibility, character and session stability, performance, memory usage, timers, bug fixing, localization and documentation.
 
-> Current target client: **0.9.3.3256**
+> Current target client: **0.9.3.3255**
 
 ## Project status
 
