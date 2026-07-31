@@ -1,4 +1,4 @@
-﻿using NosGm.Communication.Client;
+using NosGm.Communication.Client;
 using NosGm.Core;
 using NosGm.Domain;
 using NosGm.Master.Library.Data;
@@ -11,6 +11,13 @@ namespace NosGm.Master.Library.Client
 {
     internal class CommunicationClient : ICommunicationClient
     {
+        public CommunicationClient()
+        {
+            CommunicationCallbackTypedEffectHandlerRegistry.Configure(
+                () => new CommunicationCallbackEnvelopeDispatcher(
+                    CommunicationServiceClient.Instance));
+        }
+
         #region Methods
 
         public void CharacterConnected(long characterId)
@@ -106,12 +113,75 @@ namespace NosGm.Master.Library.Client
 
         public void UpdatePenaltyLog(int penaltyLogId)
         {
+            string semanticFingerprint =
+                CommunicationCallbackSemanticFingerprint
+                    .ComputePenaltyRefresh(penaltyLogId);
+            CommunicationCallbackScsObservationLedger observationLedger =
+                CommunicationCallbackScsObservationLedger.Instance;
             Observe(
                 "UpdatePenaltyLog",
                 WireV1.CommunicationCallbackKind.PenaltyRefresh,
-                () => CommunicationCallbackSemanticFingerprint
-                    .ComputePenaltyRefresh(penaltyLogId));
-            Task.Run(() => CommunicationServiceClient.Instance.OnUpdatePenaltyLog(penaltyLogId));
+                () => semanticFingerprint);
+
+            Action applyLegacyEffect =
+                () => CommunicationServiceClient.Instance
+                    .OnUpdatePenaltyLog(penaltyLogId);
+            CommunicationCallbackOperatorCutoverCoordinator coordinator =
+                CommunicationCallbackOperatorCutoverCoordinator.Instance;
+            string processIdentity = observationLedger.ProcessIdentity;
+            if (!string.IsNullOrEmpty(processIdentity))
+            {
+                try
+                {
+                    CommunicationCallbackActivationOptions activation =
+                        CommunicationCallbackActivationOptions.Load();
+                    coordinator.Configure(
+                        processIdentity,
+                        CommunicationCallbackOperatorCutoverOptions.Load(),
+                        activation.IsApplyEnabled);
+                }
+                catch (Exception exception)
+                {
+                    Logger.Error(
+                        "[CALLBACK_PENALTY_CUTOVER_CONFIGURATION_FAILED] " +
+                        "PenaltyLogId=" + penaltyLogId +
+                        " SCS remains authoritative.",
+                        exception);
+                    coordinator.RequestRollback(exception);
+                    try
+                    {
+                        coordinator.TryApply(
+                            CommunicationCallbackParitySource.LegacyScs,
+                            WireV1.CommunicationCallbackKind.PenaltyRefresh,
+                            semanticFingerprint,
+                            applyLegacyEffect);
+                    }
+                    catch (Exception applyException)
+                    {
+                        Logger.Error(
+                            "[CALLBACK_PENALTY_SCS_APPLY_FAILED] " +
+                            "PenaltyLogId=" + penaltyLogId,
+                            applyException);
+                    }
+                    return;
+                }
+            }
+
+            try
+            {
+                coordinator.TryApply(
+                    CommunicationCallbackParitySource.LegacyScs,
+                    WireV1.CommunicationCallbackKind.PenaltyRefresh,
+                    semanticFingerprint,
+                    applyLegacyEffect);
+            }
+            catch (Exception exception)
+            {
+                Logger.Error(
+                    "[CALLBACK_PENALTY_SCS_APPLY_FAILED] PenaltyLogId=" +
+                    penaltyLogId,
+                    exception);
+            }
         }
 
         public void UpdateRelation(long relationId)

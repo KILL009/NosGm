@@ -11,11 +11,17 @@ namespace NosGm.Master.Library.Client
         : ICommunicationCallbackEnvelopeHandler
     {
         private readonly CommunicationServiceClient _owner;
+        private readonly CommunicationCallbackOperatorCutoverCoordinator
+            _cutoverCoordinator;
 
         public CommunicationCallbackEnvelopeDispatcher(
-            CommunicationServiceClient owner)
+            CommunicationServiceClient owner,
+            CommunicationCallbackOperatorCutoverCoordinator
+                cutoverCoordinator = null)
         {
             _owner = owner ?? throw new ArgumentNullException(nameof(owner));
+            _cutoverCoordinator = cutoverCoordinator ??
+                CommunicationCallbackOperatorCutoverCoordinator.Instance;
         }
 
         public Task ApplyAsync(
@@ -28,6 +34,21 @@ namespace NosGm.Master.Library.Client
             }
             cancellationToken.ThrowIfCancellationRequested();
 
+            WireV1.CommunicationCallbackKind kind =
+                CommunicationCallbackSemanticFingerprint.ResolveKind(envelope);
+            string semanticFingerprint =
+                CommunicationCallbackSemanticFingerprint.Compute(envelope);
+            _cutoverCoordinator.TryApply(
+                CommunicationCallbackParitySource.TypedGrpc,
+                kind,
+                semanticFingerprint,
+                () => ApplyCore(envelope));
+            return Task.CompletedTask;
+        }
+
+        private void ApplyCore(
+            WireV1.CommunicationCallbackEnvelope envelope)
+        {
             switch (envelope.CallbackCase)
             {
                 case WireV1.CommunicationCallbackEnvelope.CallbackOneofCase
@@ -116,8 +137,6 @@ namespace NosGm.Master.Library.Client
                     throw new InvalidOperationException(
                         "The callback envelope contains no supported payload.");
             }
-
-            return Task.CompletedTask;
         }
     }
 }

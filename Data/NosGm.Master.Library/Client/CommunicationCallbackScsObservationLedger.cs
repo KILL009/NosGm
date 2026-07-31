@@ -94,6 +94,19 @@ namespace NosGm.Master.Library.Client
 
         public int ObservationCapacity => _capacity;
 
+        public string ProcessIdentity
+        {
+            get
+            {
+                lock (_syncRoot)
+                {
+                    return _windowActive
+                        ? _processIdentity
+                        : string.Empty;
+                }
+            }
+        }
+
         public bool IsWindowActive
         {
             get
