@@ -147,7 +147,22 @@ namespace NosGm.Master.Library.Client
                         "PenaltyLogId=" + penaltyLogId +
                         " SCS remains authoritative.",
                         exception);
-                    applyLegacyEffect();
+                    coordinator.RequestRollback(exception);
+                    try
+                    {
+                        coordinator.TryApply(
+                            CommunicationCallbackParitySource.LegacyScs,
+                            WireV1.CommunicationCallbackKind.PenaltyRefresh,
+                            semanticFingerprint,
+                            applyLegacyEffect);
+                    }
+                    catch (Exception applyException)
+                    {
+                        Logger.Error(
+                            "[CALLBACK_PENALTY_SCS_APPLY_FAILED] " +
+                            "PenaltyLogId=" + penaltyLogId,
+                            applyException);
+                    }
                     return;
                 }
             }
