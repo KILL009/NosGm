@@ -6,20 +6,22 @@ The cutover gate introduced after the SCS-versus-gRPC parity comparator needs a
 small, process-local history of terminal evidence. A single successful stream
 window is not enough to move callback authority.
 
-`CommunicationCallbackKindParityEvidenceLedger` retains the bounded evidence
-that a later lifecycle integration will feed into the `PenaltyRefresh` cutover
-gate.
+`CommunicationCallbackKindParityEvidenceLedger` retains bounded
+`PenaltyRefresh` evidence across typed callback stream reconnects inside one
+Login or World process.
 
-This slice does not collect evidence from production streams and does not wire
-the gate into either callback transport. SCS remains the only callback path that
-applies effects.
+The ledger originally landed as an isolated foundation. The terminal capture
+integration now feeds it from matched production observation windows whenever a
+typed stream and its SCS observation window close. This still does not wire the
+gate into either effect-applying callback path. SCS remains the only callback
+transport that applies effects.
 
 ## Scope
 
 The first ledger accepts only
 `CommunicationCallbackKind.PenaltyRefresh` evidence.
 
-Each retained entry already contains:
+Each retained entry contains:
 
 - one bounded Login or World process identity;
 - one Authentication runtime generation ID;
@@ -65,6 +67,11 @@ Invalidation is deliberate. Once evidence integrity becomes ambiguous, the
 same process cannot arm callback authority from the surviving entries. SCS
 remains authoritative until a clean process starts with an empty ledger.
 
+The terminal capture runtime can also invalidate the ledger explicitly when a
+stream closes without its synchronous typed counterpart or when terminal
+adapter evidence is malformed. It records the exception without fabricating a
+parity verdict.
+
 ## Qualification behavior
 
 `TryArm` takes an atomic snapshot while holding the evidence lock and delegates
@@ -81,9 +88,24 @@ The ledger cannot weaken the gate rules. The gate still requires:
 
 Arming only records qualification. It does not activate typed effects.
 
+## Production observation integration
+
+`CommunicationCallbackQualificationRuntime` receives terminal typed and SCS
+windows from the synchronous stream-closure handoff. It compares only
+`PenaltyRefresh`, appends valid parity or mismatch evidence, and exposes an
+immutable qualification status.
+
+A valid mismatch breaks the three-generation streak but does not invalidate the
+ledger. Missing or structurally ambiguous evidence invalidates it permanently
+for the process. In every case, SCS continues to apply the callback.
+
+The status and bounded evidence snapshot are available through companion
+methods on `CommunicationCallbackSubscriberLifecycle`. They are diagnostic
+views only and cannot change authority.
+
 ## Validation
 
-The compiled .NET 10 self-test covers:
+The compiled .NET 10 self-tests cover:
 
 - three successful terminal generations;
 - idempotent retries;
@@ -93,19 +115,18 @@ The compiled .NET 10 self-test covers:
 - exact FIFO capacity and eviction counters;
 - qualification refusal after evidence eviction;
 - permanent invalidation after conflicting, out-of-order, cross-identity,
-  cross-kind or moving evidence;
+  cross-kind, moving or missing terminal evidence;
 - SCS authority after every failed qualification path.
 
-A dedicated static workflow verifies the bounded constants, invalidation rules,
-atomic `TryArm` snapshot and the continued production application block.
+Dedicated static workflows verify the bounded constants, invalidation rules,
+atomic `TryArm` snapshot, terminal production capture and the continued
+production application block.
 
 ## Next boundary
 
-The next slice will capture a terminal typed observation window before it is
-cleared, compare it with the matching SCS window, append the resulting
-`PenaltyRefresh` evidence to this ledger and expose its state through
-`CommunicationCallbackSubscriberLifecycle`.
+The next slice will add an explicit operator-controlled arming request and a
+fresh-generation activation handshake for `PenaltyRefresh`.
 
-That integration will still leave `NOSGM_COMMUNICATION_GRPC_CALLBACKS_APPLY_ENABLED`
-blocked. Production authority will move only in a later coordinated activation
-slice with an explicit rollback path.
+`NOSGM_COMMUNICATION_GRPC_CALLBACKS_APPLY_ENABLED` remains blocked until that
+coordinated activation slice provides one-authority enforcement and terminal
+rollback to SCS.
