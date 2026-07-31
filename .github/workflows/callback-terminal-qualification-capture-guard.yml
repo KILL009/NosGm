@@ -1,0 +1,73 @@
+name: Callback terminal qualification capture guard
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/callback-terminal-qualification-capture-guard.yml"
+      - "Data/NosGm.Authentication.Client/Communication/CommunicationCallbackTerminalObservationContext.cs"
+      - "Data/NosGm.Authentication.Client/Communication/CommunicationCallbackShadowEnvelopeHandler.cs"
+      - "Data/NosGm.Authentication.Client/Communication/CommunicationCallbackQualificationRuntime.cs"
+      - "Data/NosGm.Authentication.Client/Communication/CommunicationCallbackKindParityEvidenceLedger.cs"
+      - "Data/NosGm.Authentication.Client/Communication/CommunicationCallbackActivationOptions.cs"
+      - "Data/NosGm.Master.Library/NosGm.Master.Library.csproj"
+      - "Data/NosGm.Master.Library/Client/CommunicationCallbackScsObservationLedger.cs"
+      - "Data/NosGm.Master.Library/Client/CommunicationCallbackSubscriberLifecycleQualificationExtensions.cs"
+      - "Data/NosGm.Master.Library/Client/CommunicationClient.cs"
+      - "tests/NosGm.Authentication.Runtime.SelfTest/CommunicationCallbackTerminalObservationContextSelfTest.cs"
+      - "tests/NosGm.Authentication.Runtime.SelfTest/CommunicationCallbackQualificationRuntimeSelfTest.cs"
+      - "docs/communication-callback-terminal-qualification-capture.md"
+      - "scripts/verify-communication-callback-terminal-qualification-capture.ps1"
+  pull_request:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/callback-terminal-qualification-capture-guard.yml"
+      - "Data/NosGm.Authentication.Client/Communication/CommunicationCallbackTerminalObservationContext.cs"
+      - "Data/NosGm.Authentication.Client/Communication/CommunicationCallbackShadowEnvelopeHandler.cs"
+      - "Data/NosGm.Authentication.Client/Communication/CommunicationCallbackQualificationRuntime.cs"
+      - "Data/NosGm.Authentication.Client/Communication/CommunicationCallbackKindParityEvidenceLedger.cs"
+      - "Data/NosGm.Authentication.Client/Communication/CommunicationCallbackActivationOptions.cs"
+      - "Data/NosGm.Master.Library/NosGm.Master.Library.csproj"
+      - "Data/NosGm.Master.Library/Client/CommunicationCallbackScsObservationLedger.cs"
+      - "Data/NosGm.Master.Library/Client/CommunicationCallbackSubscriberLifecycleQualificationExtensions.cs"
+      - "Data/NosGm.Master.Library/Client/CommunicationClient.cs"
+      - "tests/NosGm.Authentication.Runtime.SelfTest/CommunicationCallbackTerminalObservationContextSelfTest.cs"
+      - "tests/NosGm.Authentication.Runtime.SelfTest/CommunicationCallbackQualificationRuntimeSelfTest.cs"
+      - "docs/communication-callback-terminal-qualification-capture.md"
+      - "scripts/verify-communication-callback-terminal-qualification-capture.ps1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: callback-terminal-qualification-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Verify terminal qualification capture
+    runs-on: windows-2022
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Install stable .NET 10 SDK
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Verify static terminal capture boundary
+        shell: powershell
+        run: ./scripts/verify-communication-callback-terminal-qualification-capture.ps1
+
+      - name: Run compiled terminal capture self-tests
+        shell: powershell
+        run: >
+          dotnet run
+          --project tests/NosGm.Authentication.Runtime.SelfTest/NosGm.Authentication.Runtime.SelfTest.csproj
+          -c Release

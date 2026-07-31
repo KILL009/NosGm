@@ -72,7 +72,9 @@ Require $ledger "Interlocked.Increment(ref _evictedEvidence)" `
     "Evidence eviction remains observable"
 Require $ledger "EvidenceEquals" `
     "Exact runtime-generation retries are detected"
-Require $ledger "Volatile.Write(ref _invalidated, 1)" `
+Require $ledger "public bool Invalidate()" `
+    "The terminal capture runtime can invalidate ambiguous evidence"
+Require $ledger "Interlocked.Exchange(ref _invalidated, 1)" `
     "Ambiguous evidence permanently invalidates the process ledger"
 Require $ledger "evidence.ObservedAt <= last.ObservedAt" `
     "Terminal evidence must preserve strict chronology"
@@ -86,11 +88,11 @@ Require $ledger "if (IsInvalidated ||" `
 Require $activation "Production gRPC callback application remains blocked" `
     "Production callback effects remain blocked"
 Forbid $lifecycle "CommunicationCallbackKindParityEvidenceLedger" `
-    "Production lifecycle does not collect qualification evidence yet"
+    "The lifecycle does not mutate the qualification ledger directly"
 Forbid $legacyReceiver "CommunicationCallbackKindParityEvidenceLedger" `
-    "Legacy SCS callback effects are untouched"
+    "Legacy SCS effect dispatch is untouched"
 Forbid $shadowHandler "CommunicationCallbackKindParityEvidenceLedger" `
-    "Typed gRPC callback handling remains observation-only"
+    "Typed gRPC effect handling remains observation-only"
 
 Require $selfTest "Three retained parity generations arm the PenaltyRefresh gate" `
     "Compiled self-test covers successful qualification retention"
@@ -107,11 +109,13 @@ Require $selfTest "SCS authority" `
 
 Require $documentation "intentionally in-memory" `
     "Documentation limits evidence retention to one process"
-Require $documentation "does not collect evidence from production streams" `
-    "Documentation preserves the integration boundary"
+Require $documentation "terminal capture" `
+    "Documentation records production observation capture"
 Require $documentation "after the first eviction" `
     "Documentation records eviction refusal"
-Require $documentation "Production authority will move only" `
+Require $documentation "SCS remains the only callback" `
+    "Documentation preserves SCS effect authority"
+Require $documentation "explicit operator-controlled arming request" `
     "Documentation defers effect activation to a coordinated slice"
 
 Write-Host `
