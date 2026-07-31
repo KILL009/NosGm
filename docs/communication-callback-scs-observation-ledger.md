@@ -98,12 +98,13 @@ dotnet run --project tests/NosGm.Authentication.Runtime.SelfTest/NosGm.Authentic
 The second command expects the Release Master assemblies produced by the
 Windows .NET Framework build.
 
-## Next boundary
+## Parity comparator
 
-The next stage may add a bounded comparator that pairs live typed and SCS
-observations by generation, callback kind, fingerprint and FIFO order. A parity
-report must reject windows with unexplained evictions, missing events or
-reordering.
+The bounded comparator now pairs live typed and SCS observations by process
+identity, generation, replay boundary, callback kind, fingerprint and FIFO
+order. It rejects moving windows, empty windows, evictions, missing events and
+reordering. The complete verdict contract is documented in
+[`communication-callback-parity-comparator.md`](communication-callback-parity-comparator.md).
 
 No successful comparison alone authorizes transport cutover. SCS remains the
 sole effect authority until a separate atomic inbound gate is designed, tested
