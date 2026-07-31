@@ -109,7 +109,7 @@ Require $selfTest "SCS authority" `
 
 Require $documentation "intentionally in-memory" `
     "Documentation limits evidence retention to one process"
-Require $documentation "terminal capture integration" `
+Require $documentation "terminal capture" `
     "Documentation records production observation capture"
 Require $documentation "after the first eviction" `
     "Documentation records eviction refusal"
