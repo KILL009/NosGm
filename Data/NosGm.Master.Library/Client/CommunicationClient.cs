@@ -1,4 +1,4 @@
-﻿using NosGm.Communication.Client;
+using NosGm.Communication.Client;
 using NosGm.Core;
 using NosGm.Domain;
 using NosGm.Master.Library.Data;
@@ -111,7 +111,23 @@ namespace NosGm.Master.Library.Client
                 WireV1.CommunicationCallbackKind.PenaltyRefresh,
                 () => CommunicationCallbackSemanticFingerprint
                     .ComputePenaltyRefresh(penaltyLogId));
-            Task.Run(() => CommunicationServiceClient.Instance.OnUpdatePenaltyLog(penaltyLogId));
+
+            try
+            {
+                CommunicationCallbackOperatorCutoverCoordinator.Instance
+                    .TryApply(
+                        CommunicationCallbackParitySource.LegacyScs,
+                        WireV1.CommunicationCallbackKind.PenaltyRefresh,
+                        () => CommunicationServiceClient.Instance
+                            .OnUpdatePenaltyLog(penaltyLogId));
+            }
+            catch (Exception exception)
+            {
+                Logger.Error(
+                    "[CALLBACK_PENALTY_SCS_APPLY_FAILED] PenaltyLogId=" +
+                    penaltyLogId,
+                    exception);
+            }
         }
 
         public void UpdateRelation(long relationId)
