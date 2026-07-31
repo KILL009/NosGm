@@ -36,9 +36,12 @@ namespace NosGm.Master.Library.Client
 
             WireV1.CommunicationCallbackKind kind =
                 CommunicationCallbackSemanticFingerprint.ResolveKind(envelope);
+            string semanticFingerprint =
+                CommunicationCallbackSemanticFingerprint.Compute(envelope);
             _cutoverCoordinator.TryApply(
                 CommunicationCallbackParitySource.TypedGrpc,
                 kind,
+                semanticFingerprint,
                 () => ApplyCore(envelope));
             return Task.CompletedTask;
         }
