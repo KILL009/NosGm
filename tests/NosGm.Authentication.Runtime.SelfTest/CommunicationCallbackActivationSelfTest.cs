@@ -40,10 +40,29 @@ internal static class CommunicationCallbackActivationSelfTest
             CommunicationCallbackActivationMode.Shadow,
             shadow.Mode,
             "Explicit callback activation starts only shadow observation");
+        AssertEqual(false, shadow.IsApplyEnabled,
+            "Shadow activation cannot apply callback effects");
         AssertEqual(
             7000,
             shadow.StopTimeoutMilliseconds,
             "Callback shadow shutdown accepts a bounded explicit timeout");
+
+        var cutoverValues = new Dictionary<string, string>
+        {
+            [CommunicationCallbackActivationOptions.EnabledVariable] = "true",
+            [CommunicationCallbackActivationOptions.ApplyVariable] = "true"
+        };
+        CommunicationCallbackActivationOptions cutover =
+            CommunicationCallbackActivationOptions.Load(
+                name => cutoverValues.TryGetValue(name, out string value)
+                    ? value
+                    : null);
+        AssertEqual(
+            CommunicationCallbackActivationMode.PenaltyRefreshCutover,
+            cutover.Mode,
+            "Explicit application enables only the guarded PenaltyRefresh cutover mode");
+        AssertEqual(true, cutover.IsApplyEnabled,
+            "PenaltyRefresh cutover mode exposes explicit effect routing authorization");
 
         AssertThrows<InvalidOperationException>(
             () => CommunicationCallbackActivationOptions.Load(
@@ -65,24 +84,7 @@ internal static class CommunicationCallbackActivationSelfTest
                     .ApplyVariable
                     ? "true"
                     : null),
-            "Callback application cannot bypass subscriber activation");
-        AssertThrows<InvalidOperationException>(
-            () => CommunicationCallbackActivationOptions.Load(
-                name =>
-                {
-                    if (name == CommunicationCallbackActivationOptions
-                        .EnabledVariable)
-                    {
-                        return "true";
-                    }
-                    if (name == CommunicationCallbackActivationOptions
-                        .ApplyVariable)
-                    {
-                        return "true";
-                    }
-                    return null;
-                }),
-            "Production callback effects remain blocked before atomic cutover");
+            "Production callback effects remain blocked before atomic cutover activation is enabled");
         AssertThrows<InvalidOperationException>(
             () => CommunicationCallbackActivationOptions.Load(
                 name => name == CommunicationCallbackActivationOptions

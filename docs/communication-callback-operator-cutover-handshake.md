@@ -2,36 +2,46 @@
 
 ## Purpose
 
-NosGM now retains terminal `PenaltyRefresh` parity evidence from the legacy SCS
-callback path and the typed gRPC callback stream. Qualification alone must never
-move production authority.
+NosGM retains terminal `PenaltyRefresh` parity evidence from the legacy SCS
+callback path and the typed gRPC callback stream. Qualification alone never
+moves production authority.
 
-This slice adds the operator-controlled handshake that sits between qualified
-evidence and a later production effect-routing change.
+This slice connects the operator-controlled handshake to the real
+`PenaltyRefresh` effect path. It permits typed production effects only after
+explicit activation, three clean parity generations, a fourth distinct runtime
+generation and replay completion.
 
-It does not route production effects. SCS remains the only production effect
-path, and `NOSGM_COMMUNICATION_GRPC_CALLBACKS_APPLY_ENABLED=true` continues to
-fail closed.
+Master still publishes the temporary SCS and typed copies independently. The
+receiver therefore keeps a bounded overlap ledger. The first-arrival rule is
+simple: whichever copy arrives first applies the logical effect. The matching
+copy from the other transport is suppressed. This closes the cross-transport
+race without assuming that the asynchronous mirror and SCS sockets arrive in
+the same order.
 
-## Operator request
+Every other callback kind remains on SCS. `SendMessageToCharacter` remains
+excluded from the typed callback protocol and from this cutover.
 
-The process reads two strict environment variables when the first terminal
-`PenaltyRefresh` evidence window is captured:
+## Required operator flags
 
-- `NOSGM_COMMUNICATION_GRPC_CALLBACKS_PENALTY_REFRESH_ARM_REQUEST_ID`
-- `NOSGM_COMMUNICATION_GRPC_CALLBACKS_PENALTY_REFRESH_ROLLBACK_REQUESTED`
+The callback subscriber remains disabled by default. A production cutover
+process requires all of the following:
 
-The arm request is disabled by default. Enabling it requires an exact lowercase
-canonical non-empty GUID. The GUID is retained in process-local status so an
-operator can correlate the request with logs, deployment notes or a change
-record.
+- `NOSGM_COMMUNICATION_GRPC_CALLBACKS_ENABLED=true`
+- `NOSGM_COMMUNICATION_GRPC_CALLBACKS_APPLY_ENABLED=true`
+- `NOSGM_COMMUNICATION_GRPC_CALLBACKS_PENALTY_REFRESH_ARM_REQUEST_ID=<guid>`
+- `NOSGM_COMMUNICATION_GRPC_CALLBACKS_PENALTY_REFRESH_ROLLBACK_REQUESTED=false`
 
-Rollback accepts only `true` or `false` and defaults to `false`. Arm and rollback
-cannot be requested together.
+The arm request ID must be an exact lowercase canonical non-empty GUID. It is
+retained in process-local status so the operator can correlate activation with
+a deployment or change record.
 
-The first accepted configuration is immutable for the lifetime of the process.
-Changing the request ID or rollback value requires a process restart. A detected
-configuration mutation permanently blocks cutover and restores SCS authority.
+Rollback accepts only `true` or `false` and defaults to `false`. Arm and
+rollback cannot be requested together.
+
+The first accepted operator and effect-routing configuration is immutable for
+the lifetime of the Login or World process. Changing the request ID, rollback
+value or apply authorization requires a process restart. A detected mutation
+permanently blocks cutover and restores SCS authority.
 
 ## Arming rules
 
@@ -45,36 +55,99 @@ following are true:
 5. all three windows use distinct runtime generations;
 6. the process has not been blocked or rolled back.
 
-Without the operator request, the same qualification evidence remains purely
-diagnostic and SCS stays authoritative.
+Without the operator request, the same evidence remains diagnostic and SCS
+continues applying `PenaltyRefresh`.
 
-## New-generation activation
+## New-generation and replay handshake
 
-Arming does not activate authority immediately. The three qualification
-generations are remembered by the existing cutover gate.
+Arming does not activate typed production effects immediately. The three
+qualification generations are remembered by the cutover gate.
 
 When the typed callback subscriber begins another stream, the coordinator
 observes its Authentication runtime generation. Reusing any of the three
 qualification generations cannot activate the gate. The first acceptable
 activation therefore occurs on a fourth distinct runtime generation.
 
-Activation remains scoped to that exact generation. Seeing another generation
-after modeled typed authority has become active triggers terminal rollback for
-the process. A clean process restart and a new operator request are required to
-try again.
+The new generation initially remains behind a replay barrier:
+
+- replayed typed envelopes are observed but do not execute effects;
+- SCS continues applying effects throughout replay;
+- replayed typed twins consume matching SCS overlap entries;
+- only live envelopes after replay completion may apply through typed gRPC.
+
+`CompleteReplay` opens `TypedIngressReady` while holding the same process-local
+lock used by both effect paths.
+
+## Overlap-safe effect selection
+
+`CommunicationClient.UpdatePenaltyLog` and
+`CommunicationCallbackEnvelopeDispatcher` send the same SHA-256 semantic
+fingerprint to the coordinator.
+
+For the selected callback kind, `TryApply` performs the following atomically:
+
+1. expire overlap entries older than ten minutes;
+2. look for an already-applied matching fingerprint from the other transport;
+3. suppress and consume that matching twin when present;
+4. otherwise verify that the arriving source is currently allowed;
+5. execute the effect;
+6. retain one bounded unmatched entry for the possible later twin.
+
+During the temporary dual-publication period, SCS remains eligible as the
+safety copy even after typed ingress becomes ready. Typed gRPC is eligible only
+in the explicitly armed, fourth-generation, replay-complete state. Therefore:
+
+- SCS first: SCS applies, typed twin is suppressed;
+- typed first: typed applies, SCS twin is suppressed;
+- one transport missing: the available copy still applies;
+- transport order inversion: fingerprints match independently of arrival order;
+- repeated penalty IDs: each occurrence has its own bounded overlap entry.
+
+The overlap ledger retains at most 1,024 unmatched effects by default and never
+more than 4,096. Reaching capacity fails closed, rolls modeled authority back
+and permits SCS to continue. Expiry, retained entries and suppressed duplicates
+are exposed in cutover status.
+
+This is an overlap-safe production bridge. A later Master-side authority lease
+will stop publishing the SCS copy after all intended recipients prove typed
+readiness. At that point typed gRPC will naturally become the only arriving
+copy without changing the receiver effect contract again.
+
+## Effect dispatch
+
+`CommunicationClient.UpdatePenaltyLog` records the SCS observation, configures
+the immutable routing request before the first overlap event and submits the
+legacy effect through the fingerprint-aware coordinator method.
+
+`CommunicationCallbackShadowEnvelopeHandler` always retains the typed
+observation. It resolves the registered production dispatcher lazily and
+passes the validated envelope onward. `CommunicationCallbackEnvelopeDispatcher`
+submits that envelope through the same coordinator and fingerprint ledger.
+
+The production dispatcher is registered through a factory so constructing the
+legacy SCS callback client does not recursively construct
+`CommunicationServiceClient`.
+
+Only `PenaltyRefresh` may execute through typed gRPC. Bazaar, family, relation,
+static bonus, presence, session, lifecycle and global-event callbacks continue
+to execute through SCS.
 
 ## Rollback
 
-Rollback is available through both the strict startup option and the lifecycle
-diagnostic extension `RequestPenaltyRefreshOperatorRollback`.
+Rollback is terminal for modeled typed authority in the process. It occurs when:
 
-Rollback blocks reactivation for the rest of the process and makes the cutover
-gate select SCS for `PenaltyRefresh`. Every callback kind other than
-`PenaltyRefresh` always selects SCS.
+- the operator requests rollback;
+- qualification evidence is corrupted or invalidated;
+- the configured request or apply authorization changes;
+- a fifth or otherwise unapproved runtime generation appears;
+- the active typed stream ends or faults;
+- a typed `PenaltyRefresh` effect throws;
+- overlap retention reaches its bounded capacity.
 
-Malformed request input, qualification corruption, evidence invalidation,
-configuration mutation and generation drift all use the same fail-closed
-rollback boundary.
+The coordinator closes `TypedIngressReady`, moves the cutover gate to
+`RolledBack` and rejects typed reactivation until a clean process restart.
+Pending overlap entries remain long enough to suppress late twins of effects
+that completed immediately before rollback. New callbacks apply through SCS.
 
 ## Observable status
 
@@ -82,6 +155,12 @@ rollback boundary.
 
 - whether the coordinator has been configured;
 - whether the process is blocked;
+- whether production effect routing was authorized;
+- whether the replay-complete typed ingress barrier is open;
+- pending overlap entries;
+- total recorded effects;
+- suppressed cross-transport duplicates;
+- expired overlap entries;
 - the operator request ID;
 - the configured and qualified process identity;
 - the most recently observed runtime generation;
@@ -89,22 +168,13 @@ rollback boundary.
 - the active generation, when present;
 - the last fail-closed exception.
 
-The status is diagnostic only and does not route production effects.
+`RequestPenaltyRefreshOperatorRollback` remains available as an explicit
+lifecycle control.
 
-## Safety boundary
+## Default safety
 
-This slice deliberately does not reference the coordinator from
-`CommunicationClient` or `CommunicationCallbackEnvelopeDispatcher`.
-
-Therefore:
-
-- legacy SCS callback delivery is unchanged;
-- typed gRPC callback handling remains observation-only;
-- no callback can be applied twice through this handshake;
-- `SendMessageToCharacter` remains excluded;
-- SCS remains the only production effect path.
-
-The next slice may connect the modeled authority decision to exactly the
-`PenaltyRefresh` effect path behind the existing blocked application flag. That
-change must atomically suppress SCS before typed dispatch is allowed, preserve
-an immediate rollback path and retain all other callback kinds on SCS.
+With the default environment, the gRPC subscriber is disabled and all callback
+effects use SCS. With only the subscriber flag enabled, the system remains in
+shadow observation mode. Typed production effects require the separate apply
+flag, the operator request, qualified evidence, the fourth generation and the
+replay-complete barrier.
