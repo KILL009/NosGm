@@ -1,0 +1,65 @@
+name: Callback qualification ledger guard
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/callback-qualification-ledger-guard.yml"
+      - "Data/NosGm.Authentication.Client/Communication/CommunicationCallbackKindParityEvidenceLedger.cs"
+      - "Data/NosGm.Authentication.Client/Communication/CommunicationCallbackCutoverGate.cs"
+      - "Data/NosGm.Authentication.Client/Communication/CommunicationCallbackActivationOptions.cs"
+      - "Data/NosGm.Authentication.Client/Communication/CommunicationCallbackShadowEnvelopeHandler.cs"
+      - "Data/NosGm.Master.Library/Client/CommunicationCallbackSubscriberLifecycle.cs"
+      - "Data/NosGm.Master.Library/Client/CommunicationClient.cs"
+      - "tests/NosGm.Authentication.Runtime.SelfTest/CommunicationCallbackKindParityEvidenceLedgerSelfTest.cs"
+      - "docs/communication-callback-qualification-ledger.md"
+      - "scripts/verify-communication-callback-qualification-ledger.ps1"
+  pull_request:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/callback-qualification-ledger-guard.yml"
+      - "Data/NosGm.Authentication.Client/Communication/CommunicationCallbackKindParityEvidenceLedger.cs"
+      - "Data/NosGm.Authentication.Client/Communication/CommunicationCallbackCutoverGate.cs"
+      - "Data/NosGm.Authentication.Client/Communication/CommunicationCallbackActivationOptions.cs"
+      - "Data/NosGm.Authentication.Client/Communication/CommunicationCallbackShadowEnvelopeHandler.cs"
+      - "Data/NosGm.Master.Library/Client/CommunicationCallbackSubscriberLifecycle.cs"
+      - "Data/NosGm.Master.Library/Client/CommunicationClient.cs"
+      - "tests/NosGm.Authentication.Runtime.SelfTest/CommunicationCallbackKindParityEvidenceLedgerSelfTest.cs"
+      - "docs/communication-callback-qualification-ledger.md"
+      - "scripts/verify-communication-callback-qualification-ledger.ps1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: callback-qualification-ledger-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Verify callback qualification retention
+    runs-on: windows-2022
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Install stable .NET 10 SDK
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Verify static qualification boundary
+        shell: powershell
+        run: ./scripts/verify-communication-callback-qualification-ledger.ps1
+
+      - name: Run compiled qualification ledger self-test
+        shell: powershell
+        run: >
+          dotnet run
+          --project tests/NosGm.Authentication.Runtime.SelfTest/NosGm.Authentication.Runtime.SelfTest.csproj
+          -c Release
