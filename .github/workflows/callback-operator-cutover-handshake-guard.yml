@@ -1,0 +1,69 @@
+name: Callback operator cutover handshake guard
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/callback-operator-cutover-handshake-guard.yml"
+      - "Data/NosGm.Authentication.Client/Communication/CommunicationCallbackOperatorCutoverOptions.cs"
+      - "Data/NosGm.Authentication.Client/Communication/CommunicationCallbackOperatorCutoverCoordinator.cs"
+      - "Data/NosGm.Authentication.Client/Communication/CommunicationCallbackQualificationRuntime.cs"
+      - "Data/NosGm.Authentication.Client/Communication/CommunicationCallbackShadowEnvelopeHandler.cs"
+      - "Data/NosGm.Authentication.Client/Communication/CommunicationCallbackActivationOptions.cs"
+      - "Data/NosGm.Master.Library/Client/CommunicationCallbackSubscriberLifecycleQualificationExtensions.cs"
+      - "Data/NosGm.Master.Library/Client/CommunicationClient.cs"
+      - "Data/NosGm.Master.Library/Client/CommunicationCallbackEnvelopeDispatcher.cs"
+      - "tests/NosGm.Authentication.Runtime.SelfTest/CommunicationCallbackOperatorCutoverCoordinatorSelfTest.cs"
+      - "docs/communication-callback-operator-cutover-handshake.md"
+      - "scripts/verify-communication-callback-operator-cutover-handshake.ps1"
+  pull_request:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/callback-operator-cutover-handshake-guard.yml"
+      - "Data/NosGm.Authentication.Client/Communication/CommunicationCallbackOperatorCutoverOptions.cs"
+      - "Data/NosGm.Authentication.Client/Communication/CommunicationCallbackOperatorCutoverCoordinator.cs"
+      - "Data/NosGm.Authentication.Client/Communication/CommunicationCallbackQualificationRuntime.cs"
+      - "Data/NosGm.Authentication.Client/Communication/CommunicationCallbackShadowEnvelopeHandler.cs"
+      - "Data/NosGm.Authentication.Client/Communication/CommunicationCallbackActivationOptions.cs"
+      - "Data/NosGm.Master.Library/Client/CommunicationCallbackSubscriberLifecycleQualificationExtensions.cs"
+      - "Data/NosGm.Master.Library/Client/CommunicationClient.cs"
+      - "Data/NosGm.Master.Library/Client/CommunicationCallbackEnvelopeDispatcher.cs"
+      - "tests/NosGm.Authentication.Runtime.SelfTest/CommunicationCallbackOperatorCutoverCoordinatorSelfTest.cs"
+      - "docs/communication-callback-operator-cutover-handshake.md"
+      - "scripts/verify-communication-callback-operator-cutover-handshake.ps1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: callback-operator-cutover-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Verify operator cutover handshake
+    runs-on: windows-2022
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Install stable .NET 10 SDK
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Verify static operator handshake boundary
+        shell: powershell
+        run: ./scripts/verify-communication-callback-operator-cutover-handshake.ps1
+
+      - name: Run compiled operator handshake self-tests
+        shell: powershell
+        run: >
+          dotnet run
+          --project tests/NosGm.Authentication.Runtime.SelfTest/NosGm.Authentication.Runtime.SelfTest.csproj
+          -c Release

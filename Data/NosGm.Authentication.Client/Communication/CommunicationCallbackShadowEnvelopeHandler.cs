@@ -104,6 +104,8 @@ namespace NosGm.Communication.Client
                 _streamActive = true;
             }
 
+            CommunicationCallbackOperatorCutoverCoordinator.Instance
+                .ObserveRuntimeGeneration(runtimeGenerationId);
             _streamBegan?.Invoke(
                 runtimeGenerationId,
                 resumeAfterSequence);
