@@ -21,7 +21,8 @@ internal static class CommunicationCallbackTerminalObservationContextSelfTest
     {
         CommunicationCallbackTerminalTypedObservationWindow captured = null;
         int callbackCount = 0;
-        var handler = new CommunicationCallbackShadowEnvelopeHandler(
+        CommunicationCallbackShadowEnvelopeHandler handler = null;
+        handler = new CommunicationCallbackShadowEnvelopeHandler(
             streamEnded: () =>
             {
                 callbackCount++;
@@ -30,8 +31,8 @@ internal static class CommunicationCallbackTerminalObservationContextSelfTest
                         .CurrentTypedWindow;
                 AssertEqual(false, captured == null,
                     "Terminal typed evidence is visible during the synchronous end callback");
-                AssertEqual(false, handlerIsActive(handler: null),
-                    "Terminal context assertion placeholder remains unreachable");
+                AssertEqual(false, handler.IsStreamActive,
+                    "The typed stream is terminal before SCS closure runs");
             });
         var tracker = new CommunicationCallbackReplayTracker();
 
@@ -106,12 +107,6 @@ internal static class CommunicationCallbackTerminalObservationContextSelfTest
             "Terminal context cleanup survives callback failure");
         AssertEqual(false, handler.IsStreamActive,
             "Terminal callback failure cannot resurrect the ended stream");
-    }
-
-    private static bool handlerIsActive(
-        CommunicationCallbackShadowEnvelopeHandler handler)
-    {
-        return handler?.IsStreamActive ?? false;
     }
 
     private static WireV1.CommunicationCallbackEnvelope CreatePenaltyEnvelope(
