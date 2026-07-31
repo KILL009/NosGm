@@ -154,6 +154,37 @@ namespace NosGm.Master.Library.Client
             }
         }
 
+        public bool IsScsObservationWindowActive =>
+            CommunicationCallbackScsObservationLedger.Instance
+                .IsWindowActive;
+
+        public bool IsScsReplayComplete =>
+            CommunicationCallbackScsObservationLedger.Instance
+                .IsReplayComplete;
+
+        public CommunicationCallbackReplayEvidence ScsReplayEvidence =>
+            CommunicationCallbackScsObservationLedger.Instance
+                .ReplayEvidence;
+
+        public int ScsObservationCapacity =>
+            CommunicationCallbackScsObservationLedger.Instance
+                .ObservationCapacity;
+
+        public long ScsObservedCallbacks =>
+            CommunicationCallbackScsObservationLedger.Instance
+                .ObservedCallbacks;
+
+        public long ScsEvictedObservations =>
+            CommunicationCallbackScsObservationLedger.Instance
+                .EvictedObservations;
+
+        public IReadOnlyList<CommunicationCallbackScsObservation>
+            GetScsObservationSnapshot()
+        {
+            return CommunicationCallbackScsObservationLedger.Instance
+                .GetObservationSnapshot();
+        }
+
         public Exception LastException
         {
             get
@@ -208,6 +239,7 @@ namespace NosGm.Master.Library.Client
 
             if (host == null)
             {
+                EndScsObservationWindow();
                 return true;
             }
 
@@ -234,6 +266,11 @@ namespace NosGm.Master.Library.Client
                         (shadowHandler?.GetObservationSnapshot().Count ?? 0) +
                         " EvictedObservations=" +
                         (shadowHandler?.EvictedObservations ?? 0) +
+                        " ScsObserved=" + ScsObservedCallbacks +
+                        " ScsRetained=" +
+                        GetScsObservationSnapshot().Count +
+                        " ScsEvicted=" + ScsEvictedObservations +
+                        " ScsReplayComplete=" + IsScsReplayComplete +
                         " LastSequence=" +
                         (shadowHandler?.LastObservedSequence ?? 0) +
                         " ReplayComplete=" +
@@ -247,6 +284,7 @@ namespace NosGm.Master.Library.Client
             }
             finally
             {
+                EndScsObservationWindow();
                 host.Dispose();
             }
         }
@@ -299,6 +337,7 @@ namespace NosGm.Master.Library.Client
                     activation.StopTimeoutMilliseconds;
                 if (!activation.IsEnabled)
                 {
+                    EndScsObservationWindow();
                     Logger.Info(
                         "[CALLBACK_SHADOW_DISABLED] Identity=" + identity +
                         " EnableWith=" +
@@ -317,7 +356,14 @@ namespace NosGm.Master.Library.Client
                     new FileCommunicationCallbackCursorStore(
                         subscriberOptions.CursorPath);
                 var shadowHandler =
-                    new CommunicationCallbackShadowEnvelopeHandler();
+                    new CommunicationCallbackShadowEnvelopeHandler(
+                        streamBegan: (runtimeGenerationId, resumeAfterSequence) =>
+                            BeginScsObservationWindow(
+                                identity,
+                                runtimeGenerationId,
+                                resumeAfterSequence),
+                        replayCompleted: CompleteScsObservationReplay,
+                        streamEnded: EndScsObservationWindow);
                 var subscriber =
                     new GrpcCommunicationCallbackSubscriber(
                         subscriberOptions,
@@ -342,6 +388,7 @@ namespace NosGm.Master.Library.Client
                     _subscriber = null;
                     _shadowHandler = null;
                     _identity = string.Empty;
+                    EndScsObservationWindow();
                     host.Dispose();
                     throw;
                 }
@@ -352,8 +399,73 @@ namespace NosGm.Master.Library.Client
                     " WireMode=" + subscriberOptions.WireMode +
                     " Endpoint=" + subscriberOptions.Address +
                     " ObservationCapacity=" +
-                    shadowHandler.ObservationCapacity);
+                    shadowHandler.ObservationCapacity +
+                    " ScsObservationCapacity=" +
+                    ScsObservationCapacity);
                 return true;
+            }
+        }
+
+        private static void BeginScsObservationWindow(
+            string identity,
+            string runtimeGenerationId,
+            ulong resumeAfterSequence)
+        {
+            try
+            {
+                CommunicationCallbackScsObservationLedger.Instance
+                    .BeginWindow(
+                        identity,
+                        runtimeGenerationId,
+                        resumeAfterSequence);
+                Logger.Info(
+                    "[CALLBACK_SCS_OBSERVATION_WARMUP] Identity=" +
+                    identity +
+                    " Generation=" + runtimeGenerationId +
+                    " ResumeAfter=" + resumeAfterSequence);
+            }
+            catch (Exception exception)
+            {
+                Logger.Error(
+                    "[CALLBACK_SCS_OBSERVATION_START_FAILED] Identity=" +
+                    identity,
+                    exception);
+            }
+        }
+
+        private static void CompleteScsObservationReplay(
+            CommunicationCallbackReplayEvidence evidence)
+        {
+            try
+            {
+                CommunicationCallbackScsObservationLedger.Instance
+                    .CompleteReplay(evidence);
+                Logger.Info(
+                    "[CALLBACK_SCS_OBSERVATION_LIVE] Generation=" +
+                    evidence.RuntimeGenerationId +
+                    " ReplayThrough=" +
+                    evidence.ReplayThroughSequence);
+            }
+            catch (Exception exception)
+            {
+                Logger.Error(
+                    "[CALLBACK_SCS_OBSERVATION_REPLAY_FAILED]",
+                    exception);
+            }
+        }
+
+        private static void EndScsObservationWindow()
+        {
+            try
+            {
+                CommunicationCallbackScsObservationLedger.Instance
+                    .EndWindow();
+            }
+            catch (Exception exception)
+            {
+                Logger.Error(
+                    "[CALLBACK_SCS_OBSERVATION_STOP_FAILED]",
+                    exception);
             }
         }
 
