@@ -1,0 +1,63 @@
+name: Callback cutover guard
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/callback-cutover-guard.yml"
+      - "Data/NosGm.Authentication.Client/Communication/CommunicationCallbackCutoverGate.cs"
+      - "Data/NosGm.Authentication.Client/Communication/CommunicationCallbackParityComparator.cs"
+      - "Data/NosGm.Authentication.Client/Communication/CommunicationCallbackActivationOptions.cs"
+      - "Data/NosGm.Authentication.Client/Communication/CommunicationCallbackShadowEnvelopeHandler.cs"
+      - "Data/NosGm.Master.Library/Client/CommunicationClient.cs"
+      - "tests/NosGm.Authentication.Runtime.SelfTest/CommunicationCallbackCutoverGateSelfTest.cs"
+      - "docs/communication-callback-cutover-gate.md"
+      - "scripts/verify-communication-callback-cutover-gate.ps1"
+  pull_request:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/callback-cutover-guard.yml"
+      - "Data/NosGm.Authentication.Client/Communication/CommunicationCallbackCutoverGate.cs"
+      - "Data/NosGm.Authentication.Client/Communication/CommunicationCallbackParityComparator.cs"
+      - "Data/NosGm.Authentication.Client/Communication/CommunicationCallbackActivationOptions.cs"
+      - "Data/NosGm.Authentication.Client/Communication/CommunicationCallbackShadowEnvelopeHandler.cs"
+      - "Data/NosGm.Master.Library/Client/CommunicationClient.cs"
+      - "tests/NosGm.Authentication.Runtime.SelfTest/CommunicationCallbackCutoverGateSelfTest.cs"
+      - "docs/communication-callback-cutover-gate.md"
+      - "scripts/verify-communication-callback-cutover-gate.ps1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: callback-cutover-guard-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Verify callback cutover authority
+    runs-on: windows-2022
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Install stable .NET 10 SDK
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Verify static cutover boundary
+        shell: powershell
+        run: ./scripts/verify-communication-callback-cutover-gate.ps1
+
+      - name: Run compiled callback cutover self-test
+        shell: powershell
+        run: >
+          dotnet run
+          --project tests/NosGm.Authentication.Runtime.SelfTest/NosGm.Authentication.Runtime.SelfTest.csproj
+          -c Release
