@@ -24,7 +24,8 @@ internal static class CommunicationCallbackOperatorCutoverCoordinatorSelfTest
     {
         VerifyOperatorOptions();
         VerifyNoRequestLeavesScsAuthoritative();
-        VerifyExplicitArmAndNewGenerationActivation();
+        VerifyExplicitArmAndReplayBarrierRouting();
+        VerifyGenerationDriftAndTypedFailureRollback();
         VerifyOperatorRollbackAndConfigurationMutation();
 
         Console.WriteLine(
@@ -67,7 +68,10 @@ internal static class CommunicationCallbackOperatorCutoverCoordinatorSelfTest
     {
         var coordinator =
             new CommunicationCallbackOperatorCutoverCoordinator();
-        coordinator.Configure(Identity, Options(string.Empty, false));
+        coordinator.Configure(
+            Identity,
+            Options(string.Empty, false),
+            effectRoutingEnabled: true);
         CommunicationCallbackKindParityEvidenceLedger ledger =
             QualifiedLedger();
 
@@ -75,6 +79,8 @@ internal static class CommunicationCallbackOperatorCutoverCoordinatorSelfTest
             "Qualification alone cannot arm without an operator request");
         AssertEqual(false, coordinator.ObserveRuntimeGeneration(Generation4),
             "A new generation cannot activate an unrequested cutover");
+        AssertEqual(false, coordinator.CompleteReplay(Generation4),
+            "Replay cannot open typed ingress without an armed request");
         AssertEqual(
             CommunicationCallbackCutoverState.ScsAuthoritative,
             coordinator.GetStatus().State,
@@ -93,11 +99,14 @@ internal static class CommunicationCallbackOperatorCutoverCoordinatorSelfTest
             "Typed gRPC cannot apply PenaltyRefresh while cutover is unrequested");
     }
 
-    private static void VerifyExplicitArmAndNewGenerationActivation()
+    private static void VerifyExplicitArmAndReplayBarrierRouting()
     {
         var coordinator =
             new CommunicationCallbackOperatorCutoverCoordinator();
-        coordinator.Configure(Identity, Options(RequestId, false));
+        coordinator.Configure(
+            Identity,
+            Options(RequestId, false),
+            effectRoutingEnabled: true);
         CommunicationCallbackKindParityEvidenceLedger ledger =
             QualifiedLedger();
 
@@ -116,30 +125,56 @@ internal static class CommunicationCallbackOperatorCutoverCoordinatorSelfTest
 
         AssertEqual(true, coordinator.ObserveRuntimeGeneration(Generation4),
             "The first new runtime generation completes activation handshake");
-        CommunicationCallbackOperatorCutoverStatus active =
+        CommunicationCallbackOperatorCutoverStatus awaitingReplay =
             coordinator.GetStatus();
         AssertEqual(
             CommunicationCallbackCutoverState.TypedGrpcAuthoritative,
-            active.State,
+            awaitingReplay.State,
             "The modeled PenaltyRefresh authority becomes typed gRPC");
+        AssertEqual(true, awaitingReplay.EffectRoutingEnabled,
+            "Production effect routing retains explicit apply authorization");
+        AssertEqual(false, awaitingReplay.TypedIngressReady,
+            "Typed effects remain closed until replay completion");
+        AssertEqual(
+            true,
+            coordinator.ShouldApply(
+                CommunicationCallbackParitySource.LegacyScs,
+                WireV1.CommunicationCallbackKind.PenaltyRefresh),
+            "SCS remains authoritative while the new generation replays");
+
+        AssertEqual(true, coordinator.CompleteReplay(Generation4),
+            "Replay completion atomically opens typed PenaltyRefresh ingress");
+        CommunicationCallbackOperatorCutoverStatus active =
+            coordinator.GetStatus();
+        AssertEqual(true, active.TypedIngressReady,
+            "Active status exposes the live typed ingress barrier");
         AssertEqual(RequestId, active.ArmRequestId,
             "Active authority retains the exact operator request ID");
         AssertEqual(Identity, active.QualifiedIdentity,
             "Active authority remains bound to the qualified process identity");
         AssertEqual(Generation4, active.ActiveGeneration,
             "Activation is scoped to the new runtime generation");
-        AssertEqual(
-            true,
-            coordinator.ShouldApply(
-                CommunicationCallbackParitySource.TypedGrpc,
-                WireV1.CommunicationCallbackKind.PenaltyRefresh),
-            "Activated PenaltyRefresh selects typed gRPC in the authority model");
+
+        int legacyEffects = 0;
+        int typedEffects = 0;
         AssertEqual(
             false,
-            coordinator.ShouldApply(
+            coordinator.TryApply(
                 CommunicationCallbackParitySource.LegacyScs,
-                WireV1.CommunicationCallbackKind.PenaltyRefresh),
-            "Activated PenaltyRefresh excludes SCS in the authority model");
+                WireV1.CommunicationCallbackKind.PenaltyRefresh,
+                () => legacyEffects++),
+            "Atomic cutover suppresses the legacy PenaltyRefresh effect");
+        AssertEqual(
+            true,
+            coordinator.TryApply(
+                CommunicationCallbackParitySource.TypedGrpc,
+                WireV1.CommunicationCallbackKind.PenaltyRefresh,
+                () => typedEffects++),
+            "Activated PenaltyRefresh applies exactly once through typed gRPC");
+        AssertEqual(0, legacyEffects,
+            "Suppressed SCS ingress cannot execute the selected effect");
+        AssertEqual(1, typedEffects,
+            "Typed ingress executes one selected PenaltyRefresh effect");
         AssertEqual(
             true,
             coordinator.ShouldApply(
@@ -147,24 +182,59 @@ internal static class CommunicationCallbackOperatorCutoverCoordinatorSelfTest
                 WireV1.CommunicationCallbackKind.BazaarRefresh),
             "Every unselected callback kind remains on SCS");
 
-        AssertEqual(false, coordinator.ObserveRuntimeGeneration(Generation4),
-            "Repeating the active generation is idempotent");
-        AssertEqual(false, coordinator.ObserveRuntimeGeneration(Generation5),
-            "A later unapproved generation fails closed");
-        CommunicationCallbackOperatorCutoverStatus rolledBack =
-            coordinator.GetStatus();
+        AssertEqual(true,
+            coordinator.ObserveStreamEnded(Generation4),
+            "Ending the active typed stream closes ingress immediately");
         AssertEqual(
             CommunicationCallbackCutoverState.RolledBack,
-            rolledBack.State,
-            "Generation drift makes rollback terminal for the process");
-        AssertEqual(true, rolledBack.IsBlocked,
-            "Generation drift blocks reactivation in the same process");
+            coordinator.GetStatus().State,
+            "Stream loss restores PenaltyRefresh authority to SCS");
         AssertEqual(
             true,
-            coordinator.ShouldApply(
+            coordinator.TryApply(
+                CommunicationCallbackParitySource.LegacyScs,
+                WireV1.CommunicationCallbackKind.PenaltyRefresh,
+                () => legacyEffects++),
+            "Rollback immediately restores PenaltyRefresh to SCS");
+        AssertEqual(1, legacyEffects,
+            "SCS executes the first effect after typed stream rollback");
+    }
+
+    private static void VerifyGenerationDriftAndTypedFailureRollback()
+    {
+        var driftCoordinator =
+            ActivatedCoordinator();
+        AssertEqual(false,
+            driftCoordinator.ObserveRuntimeGeneration(Generation5),
+            "A later unapproved generation fails closed");
+        CommunicationCallbackOperatorCutoverStatus drift =
+            driftCoordinator.GetStatus();
+        AssertEqual(
+            CommunicationCallbackCutoverState.RolledBack,
+            drift.State,
+            "Generation drift makes rollback terminal for the process");
+        AssertEqual(true, drift.IsBlocked,
+            "Generation drift blocks reactivation in the same process");
+
+        var failureCoordinator =
+            ActivatedCoordinator();
+        AssertThrows<InvalidOperationException>(
+            () => failureCoordinator.TryApply(
+                CommunicationCallbackParitySource.TypedGrpc,
+                WireV1.CommunicationCallbackKind.PenaltyRefresh,
+                () => throw new InvalidOperationException(
+                    "typed effect failure")),
+            "A typed PenaltyRefresh effect failure is observable");
+        AssertEqual(
+            CommunicationCallbackCutoverState.RolledBack,
+            failureCoordinator.GetStatus().State,
+            "Typed effect failure rolls authority back before another callback");
+        AssertEqual(
+            true,
+            failureCoordinator.ShouldApply(
                 CommunicationCallbackParitySource.LegacyScs,
                 WireV1.CommunicationCallbackKind.PenaltyRefresh),
-            "Rollback immediately restores PenaltyRefresh authority to SCS");
+            "Typed effect failure restores SCS selection");
     }
 
     private static void VerifyOperatorRollbackAndConfigurationMutation()
@@ -173,7 +243,8 @@ internal static class CommunicationCallbackOperatorCutoverCoordinatorSelfTest
             new CommunicationCallbackOperatorCutoverCoordinator();
         rollbackCoordinator.Configure(
             Identity,
-            Options(string.Empty, true));
+            Options(string.Empty, true),
+            effectRoutingEnabled: true);
         AssertEqual(false,
             rollbackCoordinator.ObserveQualification(QualifiedLedger()),
             "An operator rollback request blocks qualification arming");
@@ -205,6 +276,34 @@ internal static class CommunicationCallbackOperatorCutoverCoordinatorSelfTest
             "Operator configuration cannot change inside one process");
         AssertEqual(true, mutationCoordinator.GetStatus().IsBlocked,
             "Configuration mutation permanently blocks cutover");
+
+        var routingMutation =
+            new CommunicationCallbackOperatorCutoverCoordinator();
+        routingMutation.Configure(
+            Identity,
+            Options(RequestId, false),
+            effectRoutingEnabled: false);
+        AssertThrows<InvalidOperationException>(
+            () => routingMutation.Configure(
+                Identity,
+                Options(RequestId, false),
+                effectRoutingEnabled: true),
+            "Effect routing authorization cannot change inside one process");
+    }
+
+    private static CommunicationCallbackOperatorCutoverCoordinator
+        ActivatedCoordinator()
+    {
+        var coordinator =
+            new CommunicationCallbackOperatorCutoverCoordinator();
+        coordinator.Configure(
+            Identity,
+            Options(RequestId, false),
+            effectRoutingEnabled: true);
+        coordinator.ObserveQualification(QualifiedLedger());
+        coordinator.ObserveRuntimeGeneration(Generation4);
+        coordinator.CompleteReplay(Generation4);
+        return coordinator;
     }
 
     private static CommunicationCallbackKindParityEvidenceLedger
