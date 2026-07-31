@@ -116,20 +116,49 @@ namespace NosGm.Master.Library.Client
             string semanticFingerprint =
                 CommunicationCallbackSemanticFingerprint
                     .ComputePenaltyRefresh(penaltyLogId);
+            CommunicationCallbackScsObservationLedger observationLedger =
+                CommunicationCallbackScsObservationLedger.Instance;
             Observe(
                 "UpdatePenaltyLog",
                 WireV1.CommunicationCallbackKind.PenaltyRefresh,
                 () => semanticFingerprint);
 
+            Action applyLegacyEffect =
+                () => CommunicationServiceClient.Instance
+                    .OnUpdatePenaltyLog(penaltyLogId);
+            CommunicationCallbackOperatorCutoverCoordinator coordinator =
+                CommunicationCallbackOperatorCutoverCoordinator.Instance;
+            string processIdentity = observationLedger.ProcessIdentity;
+            if (!string.IsNullOrEmpty(processIdentity))
+            {
+                try
+                {
+                    CommunicationCallbackActivationOptions activation =
+                        CommunicationCallbackActivationOptions.Load();
+                    coordinator.Configure(
+                        processIdentity,
+                        CommunicationCallbackOperatorCutoverOptions.Load(),
+                        activation.IsApplyEnabled);
+                }
+                catch (Exception exception)
+                {
+                    Logger.Error(
+                        "[CALLBACK_PENALTY_CUTOVER_CONFIGURATION_FAILED] " +
+                        "PenaltyLogId=" + penaltyLogId +
+                        " SCS remains authoritative.",
+                        exception);
+                    applyLegacyEffect();
+                    return;
+                }
+            }
+
             try
             {
-                CommunicationCallbackOperatorCutoverCoordinator.Instance
-                    .TryApply(
-                        CommunicationCallbackParitySource.LegacyScs,
-                        WireV1.CommunicationCallbackKind.PenaltyRefresh,
-                        semanticFingerprint,
-                        () => CommunicationServiceClient.Instance
-                            .OnUpdatePenaltyLog(penaltyLogId));
+                coordinator.TryApply(
+                    CommunicationCallbackParitySource.LegacyScs,
+                    WireV1.CommunicationCallbackKind.PenaltyRefresh,
+                    semanticFingerprint,
+                    applyLegacyEffect);
             }
             catch (Exception exception)
             {
