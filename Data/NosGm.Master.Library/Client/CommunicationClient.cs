@@ -113,11 +113,13 @@ namespace NosGm.Master.Library.Client
 
         public void UpdatePenaltyLog(int penaltyLogId)
         {
+            string semanticFingerprint =
+                CommunicationCallbackSemanticFingerprint
+                    .ComputePenaltyRefresh(penaltyLogId);
             Observe(
                 "UpdatePenaltyLog",
                 WireV1.CommunicationCallbackKind.PenaltyRefresh,
-                () => CommunicationCallbackSemanticFingerprint
-                    .ComputePenaltyRefresh(penaltyLogId));
+                () => semanticFingerprint);
 
             try
             {
@@ -125,6 +127,7 @@ namespace NosGm.Master.Library.Client
                     .TryApply(
                         CommunicationCallbackParitySource.LegacyScs,
                         WireV1.CommunicationCallbackKind.PenaltyRefresh,
+                        semanticFingerprint,
                         () => CommunicationServiceClient.Instance
                             .OnUpdatePenaltyLog(penaltyLogId));
             }
