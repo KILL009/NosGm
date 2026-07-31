@@ -18,6 +18,9 @@ namespace NosGm.Communication.Client
         private readonly Action<CommunicationCallbackReplayEvidence>
             _replayCompleted;
         private readonly Action _streamEnded;
+        private readonly ICommunicationCallbackEnvelopeHandler _effectHandler;
+        private readonly CommunicationCallbackOperatorCutoverCoordinator
+            _cutoverCoordinator;
         private readonly Queue<CommunicationCallbackShadowObservation>
             _observations;
         private readonly object _syncRoot = new object();
@@ -33,7 +36,10 @@ namespace NosGm.Communication.Client
             int observationCapacity = DefaultObservationCapacity,
             Action<string, ulong> streamBegan = null,
             Action<CommunicationCallbackReplayEvidence> replayCompleted = null,
-            Action streamEnded = null)
+            Action streamEnded = null,
+            ICommunicationCallbackEnvelopeHandler effectHandler = null,
+            CommunicationCallbackOperatorCutoverCoordinator
+                cutoverCoordinator = null)
         {
             if (observationCapacity <= 0 ||
                 observationCapacity > MaximumObservationCapacity)
@@ -48,6 +54,9 @@ namespace NosGm.Communication.Client
             _streamBegan = streamBegan;
             _replayCompleted = replayCompleted;
             _streamEnded = streamEnded;
+            _effectHandler = effectHandler;
+            _cutoverCoordinator = cutoverCoordinator ??
+                CommunicationCallbackOperatorCutoverCoordinator.Instance;
             _observations =
                 new Queue<CommunicationCallbackShadowObservation>(
                     observationCapacity);
@@ -104,7 +113,7 @@ namespace NosGm.Communication.Client
                 _streamActive = true;
             }
 
-            CommunicationCallbackOperatorCutoverCoordinator.Instance
+            _cutoverCoordinator
                 .ObserveRuntimeGeneration(runtimeGenerationId);
             _streamBegan?.Invoke(
                 runtimeGenerationId,
@@ -136,6 +145,8 @@ namespace NosGm.Communication.Client
             }
 
             _replayCompleted?.Invoke(evidence);
+            _cutoverCoordinator.CompleteReplay(
+                evidence.RuntimeGenerationId);
         }
 
         public void EndStream()
@@ -162,7 +173,14 @@ namespace NosGm.Communication.Client
                 _streamActive = false;
             }
 
-            if (!wasActive || _streamEnded == null)
+            if (!wasActive)
+            {
+                return;
+            }
+
+            _cutoverCoordinator.ObserveStreamEnded(
+                runtimeGenerationId);
+            if (_streamEnded == null)
             {
                 return;
             }
@@ -233,7 +251,12 @@ namespace NosGm.Communication.Client
                 ref _lastObservedSequence,
                 checked((long)envelope.Sequence));
             Interlocked.Increment(ref _observedCallbacks);
-            return Task.CompletedTask;
+
+            return _effectHandler == null
+                ? Task.CompletedTask
+                : _effectHandler.ApplyAsync(
+                    envelope,
+                    cancellationToken);
         }
 
         private static bool IsCanonicalNonEmptyGuid(string value)
