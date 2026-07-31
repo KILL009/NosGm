@@ -84,13 +84,13 @@ namespace NosGm.Communication.Client
                 }
                 if (evidence.Kind != _targetKind)
                 {
-                    Invalidate(
+                    InvalidateAndThrow(
                         "Callback qualification evidence belongs to a different callback kind.");
                 }
                 if (evidence.Verdict ==
                     CommunicationCallbackParityVerdict.InProgress)
                 {
-                    Invalidate(
+                    InvalidateAndThrow(
                         "Moving callback windows cannot enter terminal qualification evidence.");
                 }
 
@@ -103,7 +103,7 @@ namespace NosGm.Communication.Client
                              evidence.ProcessIdentity,
                              StringComparison.Ordinal))
                 {
-                    Invalidate(
+                    InvalidateAndThrow(
                         "Callback qualification evidence crosses process identities.");
                 }
 
@@ -125,14 +125,14 @@ namespace NosGm.Communication.Client
                         return false;
                     }
 
-                    Invalidate(
+                    InvalidateAndThrow(
                         "A runtime generation cannot produce conflicting callback qualification evidence.");
                 }
 
                 if (last != null &&
                     evidence.ObservedAt <= last.ObservedAt)
                 {
-                    Invalidate(
+                    InvalidateAndThrow(
                         "Callback qualification evidence must be appended in terminal observation order.");
                 }
 
@@ -145,6 +145,11 @@ namespace NosGm.Communication.Client
                 Interlocked.Increment(ref _appendedEvidence);
                 return true;
             }
+        }
+
+        public bool Invalidate()
+        {
+            return Interlocked.Exchange(ref _invalidated, 1) == 0;
         }
 
         public IReadOnlyList<CommunicationCallbackKindParityEvidence>
@@ -206,9 +211,9 @@ namespace NosGm.Communication.Client
             }
         }
 
-        private void Invalidate(string message)
+        private void InvalidateAndThrow(string message)
         {
-            Volatile.Write(ref _invalidated, 1);
+            Invalidate();
             throw new InvalidOperationException(message);
         }
 
