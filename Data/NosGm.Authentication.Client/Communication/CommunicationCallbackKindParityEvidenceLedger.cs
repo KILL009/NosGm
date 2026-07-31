@@ -16,7 +16,7 @@ namespace NosGm.Communication.Client
         private readonly Queue<CommunicationCallbackKindParityEvidence>
             _evidence;
         private string _processIdentity = string.Empty;
-        private long _retainedEvidence;
+        private long _appendedEvidence;
         private long _evictedEvidence;
 
         public CommunicationCallbackKindParityEvidenceLedger(
@@ -54,8 +54,8 @@ namespace NosGm.Communication.Client
             }
         }
 
-        public long RetainedEvidence =>
-            Interlocked.Read(ref _retainedEvidence);
+        public long AppendedEvidence =>
+            Interlocked.Read(ref _appendedEvidence);
 
         public long EvictedEvidence =>
             Interlocked.Read(ref _evictedEvidence);
@@ -129,7 +129,7 @@ namespace NosGm.Communication.Client
                     Interlocked.Increment(ref _evictedEvidence);
                 }
                 _evidence.Enqueue(evidence);
-                Interlocked.Increment(ref _retainedEvidence);
+                Interlocked.Increment(ref _appendedEvidence);
                 return true;
             }
         }
