@@ -12,10 +12,11 @@ explicit activation, three clean parity generations, a fourth distinct runtime
 generation and replay completion.
 
 Master still publishes the temporary SCS and typed copies independently. The
-receiver therefore keeps a bounded overlap ledger so whichever copy arrives
-first applies the logical effect and the matching copy from the other transport
-is suppressed. This closes the cross-transport race without assuming that the
-asynchronous mirror and SCS sockets arrive in the same order.
+receiver therefore keeps a bounded overlap ledger. The first-arrival rule is
+simple: whichever copy arrives first applies the logical effect. The matching
+copy from the other transport is suppressed. This closes the cross-transport
+race without assuming that the asynchronous mirror and SCS sockets arrive in
+the same order.
 
 Every other callback kind remains on SCS. `SendMessageToCharacter` remains
 excluded from the typed callback protocol and from this cutover.
