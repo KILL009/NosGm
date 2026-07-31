@@ -22,6 +22,7 @@ namespace NosGm.Communication.Client
             _observations;
         private readonly object _syncRoot = new object();
         private string _runtimeGenerationId = string.Empty;
+        private CommunicationCallbackReplayEvidence _replayEvidence;
         private CommunicationCallbackObservationPhase _phase;
         private long _observedCallbacks;
         private long _lastObservedSequence;
@@ -95,6 +96,7 @@ namespace NosGm.Communication.Client
 
                 _observations.Clear();
                 _runtimeGenerationId = runtimeGenerationId;
+                _replayEvidence = null;
                 _phase = CommunicationCallbackObservationPhase.Replay;
                 Interlocked.Exchange(ref _observedCallbacks, 0);
                 Interlocked.Exchange(ref _lastObservedSequence, 0);
@@ -127,6 +129,7 @@ namespace NosGm.Communication.Client
                     throw new InvalidOperationException(
                         "Replay evidence does not belong to the active shadow stream.");
                 }
+                _replayEvidence = evidence;
                 _phase = CommunicationCallbackObservationPhase.Live;
             }
 
@@ -136,18 +139,43 @@ namespace NosGm.Communication.Client
         public void EndStream()
         {
             bool wasActive;
+            string runtimeGenerationId;
+            CommunicationCallbackReplayEvidence replayEvidence;
+            long observedCallbacks;
+            long evictedObservations;
+            CommunicationCallbackShadowObservation[] observations;
             lock (_syncRoot)
             {
                 wasActive = _streamActive;
+                runtimeGenerationId = _runtimeGenerationId;
+                replayEvidence = _replayEvidence;
+                observedCallbacks =
+                    Interlocked.Read(ref _observedCallbacks);
+                evictedObservations =
+                    Interlocked.Read(ref _evictedObservations);
+                observations = _observations.ToArray();
                 _runtimeGenerationId = string.Empty;
+                _replayEvidence = null;
                 _phase = 0;
                 _streamActive = false;
             }
 
-            if (wasActive)
+            if (!wasActive || _streamEnded == null)
             {
-                _streamEnded?.Invoke();
+                return;
             }
+
+            var terminalWindow =
+                new CommunicationCallbackTerminalTypedObservationWindow(
+                    runtimeGenerationId,
+                    replayEvidence,
+                    observedCallbacks,
+                    evictedObservations,
+                    observations,
+                    DateTimeOffset.UtcNow);
+            CommunicationCallbackTerminalObservationContext.Invoke(
+                terminalWindow,
+                _streamEnded);
         }
 
         public IReadOnlyList<CommunicationCallbackShadowObservation>
