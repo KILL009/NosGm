@@ -18,6 +18,7 @@ namespace NosGm.Communication.Client
         private string _processIdentity = string.Empty;
         private long _appendedEvidence;
         private long _evictedEvidence;
+        private int _invalidated;
 
         public CommunicationCallbackKindParityEvidenceLedger(
             WireV1.CommunicationCallbackKind targetKind,
@@ -60,6 +61,9 @@ namespace NosGm.Communication.Client
         public long EvictedEvidence =>
             Interlocked.Read(ref _evictedEvidence);
 
+        public bool IsInvalidated =>
+            Volatile.Read(ref _invalidated) != 0;
+
         public bool TryAppend(
             CommunicationCallbackKindParityEvidence evidence)
         {
@@ -67,20 +71,26 @@ namespace NosGm.Communication.Client
             {
                 throw new ArgumentNullException(nameof(evidence));
             }
-            if (evidence.Kind != _targetKind)
-            {
-                throw new InvalidOperationException(
-                    "Callback qualification evidence belongs to a different callback kind.");
-            }
-            if (evidence.Verdict ==
-                CommunicationCallbackParityVerdict.InProgress)
-            {
-                throw new InvalidOperationException(
-                    "Moving callback windows cannot enter terminal qualification evidence.");
-            }
 
             lock (_syncRoot)
             {
+                if (IsInvalidated)
+                {
+                    throw new InvalidOperationException(
+                        "The callback qualification ledger is invalidated for this process.");
+                }
+                if (evidence.Kind != _targetKind)
+                {
+                    Invalidate(
+                        "Callback qualification evidence belongs to a different callback kind.");
+                }
+                if (evidence.Verdict ==
+                    CommunicationCallbackParityVerdict.InProgress)
+                {
+                    Invalidate(
+                        "Moving callback windows cannot enter terminal qualification evidence.");
+                }
+
                 if (string.IsNullOrEmpty(_processIdentity))
                 {
                     _processIdentity = evidence.ProcessIdentity;
@@ -90,7 +100,7 @@ namespace NosGm.Communication.Client
                              evidence.ProcessIdentity,
                              StringComparison.Ordinal))
                 {
-                    throw new InvalidOperationException(
+                    Invalidate(
                         "Callback qualification evidence crosses process identities.");
                 }
 
@@ -112,14 +122,14 @@ namespace NosGm.Communication.Client
                         return false;
                     }
 
-                    throw new InvalidOperationException(
+                    Invalidate(
                         "A runtime generation cannot produce conflicting callback qualification evidence.");
                 }
 
                 if (last != null &&
                     evidence.ObservedAt <= last.ObservedAt)
                 {
-                    throw new InvalidOperationException(
+                    Invalidate(
                         "Callback qualification evidence must be appended in terminal observation order.");
                 }
 
@@ -182,7 +192,20 @@ namespace NosGm.Communication.Client
                     "The callback cutover gate and qualification ledger target different callback kinds.");
             }
 
-            return gate.Arm(GetSnapshot());
+            lock (_syncRoot)
+            {
+                if (IsInvalidated)
+                {
+                    return false;
+                }
+                return gate.Arm(_evidence.ToArray());
+            }
+        }
+
+        private void Invalidate(string message)
+        {
+            Volatile.Write(ref _invalidated, 1);
+            throw new InvalidOperationException(message);
         }
 
         private static bool EvidenceEquals(
