@@ -173,18 +173,18 @@ namespace NosGm.Communication.Client
                 _streamActive = false;
             }
 
-            if (!wasActive)
+            if (!wasActive || _streamEnded == null)
             {
+                if (wasActive)
+                {
+                    _cutoverCoordinator.ObserveStreamEnded(
+                        runtimeGenerationId);
+                }
                 return;
             }
 
             _cutoverCoordinator.ObserveStreamEnded(
                 runtimeGenerationId);
-            if (_streamEnded == null)
-            {
-                return;
-            }
-
             var terminalWindow =
                 new CommunicationCallbackTerminalTypedObservationWindow(
                     runtimeGenerationId,
