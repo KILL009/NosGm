@@ -405,11 +405,34 @@ namespace NosGm.Communication.Client
             WireV1.CommunicationCallbackKind kind,
             Action applyEffect)
         {
-            return TryApply(
-                source,
-                kind,
-                string.Empty,
-                applyEffect);
+            if (applyEffect == null)
+            {
+                throw new ArgumentNullException(nameof(applyEffect));
+            }
+
+            lock (_syncRoot)
+            {
+                if (!ShouldApplyCore(source, kind))
+                {
+                    return false;
+                }
+
+                try
+                {
+                    applyEffect();
+                    return true;
+                }
+                catch (Exception exception)
+                {
+                    if (source ==
+                            CommunicationCallbackParitySource.TypedGrpc &&
+                        kind == _gate.TargetKind)
+                    {
+                        FailClosed(exception);
+                    }
+                    throw;
+                }
+            }
         }
 
         public bool TryApply(
