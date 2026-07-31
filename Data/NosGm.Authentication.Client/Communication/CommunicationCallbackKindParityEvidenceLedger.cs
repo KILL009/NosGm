@@ -64,6 +64,9 @@ namespace NosGm.Communication.Client
         public bool IsInvalidated =>
             Volatile.Read(ref _invalidated) != 0;
 
+        public bool HasCompleteHistory =>
+            !IsInvalidated && EvictedEvidence == 0;
+
         public bool TryAppend(
             CommunicationCallbackKindParityEvidence evidence)
         {
@@ -194,7 +197,8 @@ namespace NosGm.Communication.Client
 
             lock (_syncRoot)
             {
-                if (IsInvalidated)
+                if (IsInvalidated ||
+                    Interlocked.Read(ref _evictedEvidence) != 0)
                 {
                     return false;
                 }
