@@ -47,8 +47,8 @@ This allows a later SCS observer to construct the same semantic payload fingerpr
 The ledger defaults to 4,096 observations and has an absolute ceiling of 16,384. It uses a FIFO queue:
 
 - when capacity is reached, the oldest observation is evicted;
-- total callback count remains cumulative;
-- eviction count is cumulative and visible;
+- total callback count remains cumulative within the active stream generation;
+- eviction count is generation-local and visible;
 - snapshots copy the queue and never expose the mutable collection.
 
 Any parity report built from a ledger with nonzero evictions must declare the observation window incomplete unless its requested window begins after all evicted entries.
@@ -79,10 +79,12 @@ handlers. Its lifecycle is bound to the typed stream:
 The complete SCS-side contract and inventory are documented in
 [`communication-callback-scs-observation-ledger.md`](communication-callback-scs-observation-ledger.md).
 
-## Next boundary
+## Parity comparator
 
-The next slice can compare typed and SCS live observations by process identity,
-runtime generation, callback kind, semantic fingerprint and FIFO order after
-the replay boundary.
+The typed and SCS live ledgers now feed a bounded FIFO comparator after the
+replay boundary. Moving, empty, evicted, generation-mismatched, missing or
+reordered evidence fails closed. See
+[`communication-callback-parity-comparator.md`](communication-callback-parity-comparator.md)
+for the complete report contract.
 
 No transport cutover is permitted merely because fingerprints exist. Parity must first prove complete, non-evicted observation windows and explain every unmatched or reordered callback.
