@@ -41,9 +41,11 @@ coordinated activation boundary, not to this diagnostic retention layer.
 - defensive array snapshots;
 - a bounded latest-evidence suffix for diagnostics.
 
-Ordinary capacity eviction does not make the recent suffix unusable. The gate
-still evaluates only its latest required evidence window, currently three
-terminal generations.
+Eviction keeps recent diagnostic evidence available, but it makes the complete
+process history unavailable. `TryArm` therefore refuses authority qualification
+after the first eviction. A clean process must collect a new complete history
+instead of trusting a suffix that could hide a reused or conflicting runtime
+generation.
 
 ## Identity and generation integrity
 
@@ -74,7 +76,8 @@ The ledger cannot weaken the gate rules. The gate still requires:
 - equal non-zero SCS and typed counts;
 - one process identity;
 - three distinct runtime generations;
-- strict terminal time ordering.
+- strict terminal time ordering;
+- no qualification-history eviction.
 
 Arming only records qualification. It does not activate typed effects.
 
@@ -88,6 +91,7 @@ The compiled .NET 10 self-test covers:
 - a mismatch breaking the qualification streak;
 - later clean generations recovering qualification;
 - exact FIFO capacity and eviction counters;
+- qualification refusal after evidence eviction;
 - permanent invalidation after conflicting, out-of-order, cross-identity,
   cross-kind or moving evidence;
 - SCS authority after every failed qualification path.
