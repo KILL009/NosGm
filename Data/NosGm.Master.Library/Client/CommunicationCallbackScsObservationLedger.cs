@@ -201,10 +201,76 @@ namespace NosGm.Master.Library.Client
 
         public void EndWindow()
         {
+            string processIdentity;
+            string runtimeGenerationId;
+            CommunicationCallbackReplayEvidence replayEvidence;
+            long observedCallbacks;
+            long evictedObservations;
+            CommunicationCallbackScsObservation[] observations;
             lock (_syncRoot)
             {
+                if (!_windowActive)
+                {
+                    return;
+                }
+
+                processIdentity = _processIdentity;
+                runtimeGenerationId = _runtimeGenerationId;
+                replayEvidence = _replayEvidence;
+                observedCallbacks =
+                    Interlocked.Read(ref _observedCallbacks);
+                evictedObservations =
+                    Interlocked.Read(ref _evictedObservations);
+                observations = _observations.ToArray();
                 _windowActive = false;
                 _phase = 0;
+            }
+
+            CommunicationCallbackQualificationRuntime qualification =
+                CommunicationCallbackQualificationRuntime.Instance;
+            try
+            {
+                CommunicationCallbackTerminalTypedObservationWindow
+                    typedTerminal =
+                        CommunicationCallbackTerminalObservationContext
+                            .CurrentTypedWindow;
+                if (typedTerminal == null)
+                {
+                    qualification.Invalidate(
+                        new InvalidOperationException(
+                            "The terminal SCS observation window has no synchronous typed counterpart."));
+                    return;
+                }
+
+                CommunicationCallbackParityWindow typedWindow =
+                    CommunicationCallbackParityEvidenceAdapter
+                        .CreateTypedWindow(
+                            processIdentity,
+                            typedTerminal.RuntimeGenerationId,
+                            false,
+                            typedTerminal.ReplayEvidence,
+                            typedTerminal.ObservedCallbacks,
+                            typedTerminal.EvictedObservations,
+                            typedTerminal.GetObservationSnapshot());
+                CommunicationCallbackParityWindow scsWindow =
+                    CommunicationCallbackParityEvidenceAdapter
+                        .CreateScsWindow(
+                            processIdentity,
+                            runtimeGenerationId,
+                            false,
+                            replayEvidence,
+                            observedCallbacks,
+                            evictedObservations,
+                            observations);
+                qualification.TryCapturePenaltyRefresh(
+                    typedWindow,
+                    scsWindow,
+                    typedTerminal.EndedAt,
+                    out _);
+            }
+            catch (Exception exception)
+            {
+                qualification.Invalidate(exception);
             }
         }
 
