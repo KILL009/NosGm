@@ -120,11 +120,14 @@ namespace NosGm.Communication.Client
         {
             DateTimeOffset cutoff = observedAt.ToUniversalTime() - _retention;
             LinkedListNode<AppliedEffect> node = _pending.First;
-            while (node != null && node.Value.AppliedAt <= cutoff)
+            while (node != null)
             {
                 LinkedListNode<AppliedEffect> next = node.Next;
-                _pending.Remove(node);
-                _expired++;
+                if (node.Value.AppliedAt <= cutoff)
+                {
+                    _pending.Remove(node);
+                    _expired++;
+                }
                 node = next;
             }
         }
@@ -134,10 +137,8 @@ namespace NosGm.Communication.Client
             string semanticFingerprint,
             DateTimeOffset observedAt)
         {
-            if (!Enum.IsDefined(
-                    typeof(CommunicationCallbackParitySource),
-                    source) ||
-                source == CommunicationCallbackParitySource.Unspecified ||
+            if ((source != CommunicationCallbackParitySource.TypedGrpc &&
+                 source != CommunicationCallbackParitySource.LegacyScs) ||
                 string.IsNullOrWhiteSpace(semanticFingerprint) ||
                 semanticFingerprint.Length > 256 ||
                 !string.Equals(
