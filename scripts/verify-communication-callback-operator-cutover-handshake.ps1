@@ -51,6 +51,8 @@ $qualification = Read-RequiredFile `
     "Data\NosGm.Authentication.Client\Communication\CommunicationCallbackQualificationRuntime.cs"
 $shadow = Read-RequiredFile `
     "Data\NosGm.Authentication.Client\Communication\CommunicationCallbackShadowEnvelopeHandler.cs"
+$registry = Read-RequiredFile `
+    "Data\NosGm.Authentication.Client\Communication\CommunicationCallbackTypedEffectHandlerRegistry.cs"
 $extensions = Read-RequiredFile `
     "Data\NosGm.Master.Library\Client\CommunicationCallbackSubscriberLifecycleQualificationExtensions.cs"
 $activation = Read-RequiredFile `
@@ -75,12 +77,27 @@ Require $options "IsCanonicalNonEmptyGuid" `
 Require $options "cannot be requested together" `
     "Arm and rollback requests are mutually exclusive"
 
+Require $activation "PenaltyRefreshCutover" `
+    "Explicit apply mode is restricted to PenaltyRefresh cutover"
+Require $activation "IsApplyEnabled" `
+    "Effect routing requires a separate explicit apply flag"
+Require $activation "apply && !enabled" `
+    "Effect routing cannot bypass callback subscriber activation"
+
 Require $coordinator "CommunicationCallbackCutoverState.Armed" `
     "The coordinator preserves the armed intermediate state"
 Require $coordinator "_gate.Activate" `
     "Activation delegates to the generation-safe cutover gate"
-Require $coordinator "_gate.ActiveGeneration" `
-    "Active authority is scoped to one runtime generation"
+Require $coordinator "EffectRoutingEnabled" `
+    "Operator status exposes effect-routing authorization"
+Require $coordinator "TypedIngressReady" `
+    "Operator status exposes the replay-complete ingress barrier"
+Require $coordinator "CompleteReplay" `
+    "Typed authority cannot apply before replay completion"
+Require $coordinator "TryApply" `
+    "Both transports use one atomic effect-selection method"
+Require $coordinator "ObserveStreamEnded" `
+    "Typed stream loss restores SCS authority"
 Require $coordinator "FailClosed" `
     "Coordinator anomalies use one fail-closed path"
 Require $coordinator "_gate.Rollback()" `
@@ -90,50 +107,73 @@ Require $coordinator "string.IsNullOrEmpty(_armRequestId)" `
 Require $coordinator "Operator callback cutover configuration changed inside one process" `
     "Operator configuration is immutable inside one process"
 
-Require $qualification "CommunicationCallbackOperatorCutoverOptions.Load()" `
-    "Terminal qualification loads the operator request"
+Require $qualification "CommunicationCallbackActivationOptions.Load()" `
+    "Terminal qualification reads explicit effect authorization"
+Require $qualification "activation.IsApplyEnabled" `
+    "Qualification binds the process to immutable routing authorization"
 Require $qualification "coordinator.ObserveQualification" `
     "Terminal evidence can arm only through the coordinator"
 Require $qualification ".RequestRollback(exception)" `
     "Qualification corruption rolls callback authority back"
+
+Require $registry "Func<ICommunicationCallbackEnvelopeHandler>" `
+    "The production typed dispatcher is resolved lazily"
+Require $registry "The typed callback effect handler factory returned no handler" `
+    "Missing typed effect dispatch fails closed"
 Require $shadow "ObserveRuntimeGeneration(runtimeGenerationId)" `
     "A fresh typed stream performs the generation activation handshake"
+Require $shadow "CompleteReplay(" `
+    "The replay barrier opens typed ingress"
+Require $shadow "ObserveStreamEnded" `
+    "Stream closure closes typed ingress before terminal cleanup"
+Require $shadow "CommunicationCallbackTypedEffectHandlerRegistry.Resolve()" `
+    "Validated envelopes reach the registered effect router"
 Require $extensions "GetPenaltyRefreshOperatorCutoverStatus" `
     "Lifecycle diagnostics expose immutable operator cutover state"
 Require $extensions "RequestPenaltyRefreshOperatorRollback" `
     "Lifecycle diagnostics expose an explicit rollback control"
 
-Require $activation "Production gRPC callback application remains blocked" `
-    "Production typed callback effects remain blocked"
-Forbid $legacyReceiver "CommunicationCallbackOperatorCutoverCoordinator" `
-    "Legacy SCS effect dispatch is not gated in this slice"
-Forbid $typedDispatcher "CommunicationCallbackOperatorCutoverCoordinator" `
-    "Typed effect dispatch is not enabled in this slice"
-Forbid $legacyReceiver "ShouldApply(" `
-    "Legacy effects do not consume modeled authority yet"
-Forbid $typedDispatcher "ShouldApply(" `
-    "Typed effects do not consume modeled authority yet"
+Require $legacyReceiver "CommunicationCallbackTypedEffectHandlerRegistry.Configure" `
+    "The legacy process registers the typed effect dispatcher lazily"
+Require $legacyReceiver "CommunicationCallbackParitySource.LegacyScs" `
+    "Legacy PenaltyRefresh consumes the shared authority decision"
+Require $legacyReceiver ".TryApply(" `
+    "Legacy PenaltyRefresh is suppressed atomically after cutover"
+Require $typedDispatcher "CommunicationCallbackParitySource.TypedGrpc" `
+    "Typed PenaltyRefresh consumes the shared authority decision"
+Require $typedDispatcher ".TryApply(" `
+    "Typed dispatch cannot bypass the atomic authority gate"
+Forbid $legacyReceiver "SendMessageToCharacter(message));\n            CommunicationCallback" `
+    "SendMessageToCharacter remains outside typed cutover routing"
 
 Require $selfTest "Qualification alone cannot arm without an operator request" `
     "Compiled self-test covers missing operator authorization"
 Require $selfTest "The first new runtime generation completes activation handshake" `
     "Compiled self-test covers new-generation activation"
-Require $selfTest "Generation drift makes rollback terminal for the process" `
-    "Compiled self-test covers generation-scoped rollback"
-Require $selfTest "Operator configuration cannot change inside one process" `
-    "Compiled self-test covers immutable operator configuration"
+Require $selfTest "Typed effects remain closed until replay completion" `
+    "Compiled self-test covers the replay barrier"
+Require $selfTest "Atomic cutover suppresses the legacy PenaltyRefresh effect" `
+    "Compiled self-test proves legacy suppression"
+Require $selfTest "Activated PenaltyRefresh applies exactly once through typed gRPC" `
+    "Compiled self-test proves one typed effect"
+Require $selfTest "Stream loss restores PenaltyRefresh authority to SCS" `
+    "Compiled self-test covers immediate stream-loss rollback"
+Require $selfTest "Typed effect failure rolls authority back before another callback" `
+    "Compiled self-test covers effect failure rollback"
 Require $selfTest "Every unselected callback kind remains on SCS" `
     "Compiled self-test preserves unselected callback authority"
 
-Require $documentation "does not route production effects" `
-    "Documentation preserves the effect-routing boundary"
+Require $documentation "routes production effects" `
+    "Documentation records the production routing boundary"
+Require $documentation "replay completion" `
+    "Documentation records the replay-complete ingress barrier"
 Require $documentation "fourth distinct runtime generation" `
     "Documentation records the new-generation activation rule"
 Require $documentation "process restart" `
     "Documentation records the immutable operator request lifecycle"
-Require $documentation "SCS remains the only production effect path" `
-    "Documentation preserves SCS authority"
+Require $documentation "SendMessageToCharacter" `
+    "Documentation preserves the excluded callback"
 
 Write-Host `
-    "NosGM operator PenaltyRefresh cutover handshake passed." `
+    "NosGM operator PenaltyRefresh production cutover routing passed." `
     -ForegroundColor Green
