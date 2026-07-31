@@ -252,9 +252,12 @@ namespace NosGm.Communication.Client
                 checked((long)envelope.Sequence));
             Interlocked.Increment(ref _observedCallbacks);
 
-            return _effectHandler == null
+            ICommunicationCallbackEnvelopeHandler effectHandler =
+                _effectHandler ??
+                CommunicationCallbackTypedEffectHandlerRegistry.Resolve();
+            return effectHandler == null
                 ? Task.CompletedTask
-                : _effectHandler.ApplyAsync(
+                : effectHandler.ApplyAsync(
                     envelope,
                     cancellationToken);
         }
