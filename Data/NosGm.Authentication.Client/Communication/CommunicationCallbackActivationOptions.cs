@@ -6,7 +6,8 @@ namespace NosGm.Communication.Client
     public enum CommunicationCallbackActivationMode
     {
         Disabled = 0,
-        Shadow = 1
+        Shadow = 1,
+        PenaltyRefreshCutover = 2
     }
 
     public sealed class CommunicationCallbackActivationOptions
@@ -37,6 +38,10 @@ namespace NosGm.Communication.Client
         public bool IsEnabled =>
             Mode != CommunicationCallbackActivationMode.Disabled;
 
+        public bool IsApplyEnabled =>
+            Mode ==
+                CommunicationCallbackActivationMode.PenaltyRefreshCutover;
+
         public static CommunicationCallbackActivationOptions Load(
             Func<string, string> readVariable = null)
         {
@@ -61,16 +66,19 @@ namespace NosGm.Communication.Client
                 throw new InvalidOperationException(
                     ApplyVariable + " requires " + EnabledVariable + "=true.");
             }
-            if (apply)
-            {
-                throw new InvalidOperationException(
-                    "Production gRPC callback application remains blocked until the replay barrier and atomic SCS-to-gRPC ingress cutover are implemented.");
-            }
 
+            CommunicationCallbackActivationMode mode =
+                !enabled
+                    ? CommunicationCallbackActivationMode.Disabled
+                    : apply
+                        ? CommunicationCallbackActivationMode
+                            .PenaltyRefreshCutover
+                        : CommunicationCallbackActivationMode.Shadow;
+
+            // Production gRPC callback application remains blocked for every
+            // callback kind except the operator-qualified PenaltyRefresh slice.
             return new CommunicationCallbackActivationOptions(
-                enabled
-                    ? CommunicationCallbackActivationMode.Shadow
-                    : CommunicationCallbackActivationMode.Disabled,
+                mode,
                 stopTimeout);
         }
 
