@@ -19,6 +19,7 @@ namespace NosGm.Master.Library.Client
         private CommunicationCallbackSubscriberHost _host;
         private GrpcCommunicationCallbackSubscriber _subscriber;
         private CommunicationCallbackShadowEnvelopeHandler _shadowHandler;
+        private CommunicationCallbackParityReport _lastParityReport;
         private string _identity = string.Empty;
         private int _stopTimeoutMilliseconds =
             CommunicationCallbackActivationOptions
@@ -185,6 +186,26 @@ namespace NosGm.Master.Library.Client
                 .GetObservationSnapshot();
         }
 
+        public CommunicationCallbackParityReport ParityReport
+        {
+            get
+            {
+                lock (_syncRoot)
+                {
+                    if (_shadowHandler == null)
+                    {
+                        return _lastParityReport;
+                    }
+
+                    return CreateParityReport(
+                        _identity,
+                        _subscriber?.RuntimeGenerationId ?? string.Empty,
+                        _subscriber?.ReplayEvidence,
+                        _shadowHandler);
+                }
+            }
+        }
+
         public Exception LastException
         {
             get
@@ -245,11 +266,26 @@ namespace NosGm.Master.Library.Client
 
             CommunicationCallbackReplayEvidence replayEvidence =
                 subscriber?.ReplayEvidence;
+            string runtimeGenerationId =
+                subscriber?.RuntimeGenerationId ??
+                replayEvidence?.RuntimeGenerationId ??
+                string.Empty;
             bool stopped = false;
             try
             {
                 stopped = host.Stop(
                     TimeSpan.FromMilliseconds(timeoutMilliseconds));
+                CommunicationCallbackParityReport parityReport =
+                    CreateParityReport(
+                        identity,
+                        runtimeGenerationId,
+                        replayEvidence,
+                        shadowHandler);
+                lock (_syncRoot)
+                {
+                    _lastParityReport = parityReport;
+                }
+                LogParityReport(parityReport);
                 if (!stopped)
                 {
                     Logger.Error(
@@ -335,6 +371,7 @@ namespace NosGm.Master.Library.Client
                 _activationMode = activation.Mode;
                 _stopTimeoutMilliseconds =
                     activation.StopTimeoutMilliseconds;
+                _lastParityReport = null;
                 if (!activation.IsEnabled)
                 {
                     EndScsObservationWindow();
@@ -467,6 +504,92 @@ namespace NosGm.Master.Library.Client
                     "[CALLBACK_SCS_OBSERVATION_STOP_FAILED]",
                     exception);
             }
+        }
+
+        private static CommunicationCallbackParityReport CreateParityReport(
+            string identity,
+            string runtimeGenerationId,
+            CommunicationCallbackReplayEvidence typedReplayEvidence,
+            CommunicationCallbackShadowEnvelopeHandler shadowHandler)
+        {
+            try
+            {
+                CommunicationCallbackScsObservationLedger scsLedger =
+                    CommunicationCallbackScsObservationLedger.Instance;
+                CommunicationCallbackReplayEvidence scsReplayEvidence =
+                    scsLedger.ReplayEvidence;
+                string generation = !string.IsNullOrEmpty(runtimeGenerationId)
+                    ? runtimeGenerationId
+                    : typedReplayEvidence?.RuntimeGenerationId ??
+                      scsReplayEvidence?.RuntimeGenerationId ??
+                      string.Empty;
+                if ((shadowHandler?.IsStreamActive ?? false) ||
+                    scsLedger.IsWindowActive)
+                {
+                    return CommunicationCallbackParityReport.InProgress(
+                        identity,
+                        generation);
+                }
+
+                CommunicationCallbackParityWindow typedWindow =
+                    CommunicationCallbackParityEvidenceAdapter
+                        .CreateTypedWindow(
+                            identity,
+                            generation,
+                            false,
+                            typedReplayEvidence,
+                            shadowHandler?.ObservedCallbacks ?? 0,
+                            shadowHandler?.EvictedObservations ?? 0,
+                            shadowHandler?.GetObservationSnapshot() ??
+                                Array.Empty<
+                                    CommunicationCallbackShadowObservation>());
+                CommunicationCallbackParityWindow scsWindow =
+                    CommunicationCallbackParityEvidenceAdapter
+                        .CreateScsWindow(
+                            identity,
+                            generation,
+                            false,
+                            scsReplayEvidence,
+                            scsLedger.ObservedCallbacks,
+                            scsLedger.EvictedObservations,
+                            scsLedger.GetObservationSnapshot());
+                return CommunicationCallbackParityComparator.Compare(
+                    typedWindow,
+                    scsWindow);
+            }
+            catch (Exception exception)
+            {
+                Logger.Error(
+                    "[CALLBACK_PARITY_INVALID_EVIDENCE] Identity=" +
+                    identity,
+                    exception);
+                return CommunicationCallbackParityReport.InvalidEvidence(
+                    identity);
+            }
+        }
+
+        private static void LogParityReport(
+            CommunicationCallbackParityReport report)
+        {
+            if (report == null)
+            {
+                return;
+            }
+
+            Logger.Info(
+                "[CALLBACK_PARITY_REPORT] Identity=" +
+                report.ProcessIdentity +
+                " Verdict=" + report.Verdict +
+                " Generation=" + report.RuntimeGenerationId +
+                " TypedLive=" + report.TypedLiveCount +
+                " ScsLive=" + report.ScsLiveCount +
+                " TypedEvicted=" + report.TypedEvictions +
+                " ScsEvicted=" + report.ScsEvictions +
+                " FirstMismatch=" +
+                (report.FirstMismatchIndex?.ToString() ?? "none") +
+                " TypedSequence=" + report.TypedSequence +
+                " ScsOrdinal=" + report.ScsOrdinal +
+                " SCS remains authoritative");
         }
 
         private void RegisterProcessExitOnce()

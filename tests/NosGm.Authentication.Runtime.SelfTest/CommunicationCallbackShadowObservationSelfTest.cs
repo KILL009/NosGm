@@ -14,6 +14,13 @@ internal static class CommunicationCallbackShadowObservationSelfTest
 
         handler.BeginStream(generation, 0);
         tracker.BeginStream(generation, 0);
+        AssertEqual(
+            true,
+            handler.IsStreamActive,
+            "Typed observation stream reports its active state");
+        AssertThrows<InvalidOperationException>(
+            () => handler.BeginStream(generation, 0),
+            "An active typed observation stream cannot be replaced silently");
 
         WireV1.CommunicationCallbackEnvelope replay =
             CreatePenaltyEnvelope(1, 7);
@@ -100,6 +107,10 @@ internal static class CommunicationCallbackShadowObservationSelfTest
         AssertEqual((ulong)3, handler.LastObservedSequence, "Last sequence tracks the newest callback");
 
         handler.EndStream();
+        AssertEqual(
+            false,
+            handler.IsStreamActive,
+            "Ending typed observation clears its active state");
         AssertThrows<InvalidOperationException>(
             () => handler.ApplyAsync(
                     CreatePenaltyEnvelope(4, 9),
@@ -111,6 +122,28 @@ internal static class CommunicationCallbackShadowObservationSelfTest
             () => CommunicationCallbackSemanticFingerprint.Compute(
                 CreateBarrier(generation, 3, 3, 0)),
             "Replay barrier cannot enter semantic observation fingerprints");
+
+        const string nextGeneration =
+            "22222222-3333-4444-5555-666666666666";
+        handler.BeginStream(nextGeneration, 3);
+        AssertEqual(
+            0,
+            handler.GetObservationSnapshot().Count,
+            "A new typed stream clears evidence from the prior generation");
+        AssertEqual(
+            (long)0,
+            handler.ObservedCallbacks,
+            "A new typed stream resets cumulative window observations");
+        AssertEqual(
+            (long)0,
+            handler.EvictedObservations,
+            "A new typed stream resets cumulative window evictions");
+        AssertEqual(
+            (ulong)0,
+            handler.LastObservedSequence,
+            "A new typed stream resets the prior sequence");
+        handler.EndStream();
+
         AssertThrows<ArgumentOutOfRangeException>(
             () => new CommunicationCallbackShadowEnvelopeHandler(0),
             "Observation capacity rejects zero");
