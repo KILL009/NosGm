@@ -109,7 +109,7 @@ Require $documentation "intentionally in-memory" `
     "Documentation limits evidence retention to one process"
 Require $documentation "does not collect evidence from production streams" `
     "Documentation preserves the integration boundary"
-Require $documentation "refuses authority qualification after the first eviction" `
+Require $documentation "after the first eviction" `
     "Documentation records eviction refusal"
 Require $documentation "Production authority will move only" `
     "Documentation defers effect activation to a coordinated slice"
