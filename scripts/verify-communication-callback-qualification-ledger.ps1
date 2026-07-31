@@ -76,9 +76,11 @@ Require $ledger "Volatile.Write(ref _invalidated, 1)" `
     "Ambiguous evidence permanently invalidates the process ledger"
 Require $ledger "evidence.ObservedAt <= last.ObservedAt" `
     "Terminal evidence must preserve strict chronology"
+Require $ledger "Interlocked.Read(ref _evictedEvidence) != 0" `
+    "Evicted qualification history cannot arm callback authority"
 Require $ledger "return gate.Arm(_evidence.ToArray())" `
     "Gate qualification uses one atomic retained snapshot"
-Require $ledger "if (IsInvalidated)" `
+Require $ledger "if (IsInvalidated ||" `
     "Invalidated evidence cannot arm callback authority"
 
 Require $activation "Production gRPC callback application remains blocked" `
@@ -96,6 +98,8 @@ Require $selfTest "A terminal mismatch inside the latest evidence window blocks 
     "Compiled self-test covers a broken parity streak"
 Require $selfTest "Capacity eviction removes the oldest terminal generation" `
     "Compiled self-test covers FIFO eviction"
+Require $selfTest "An evicted evidence history cannot arm callback authority" `
+    "Compiled self-test refuses incomplete qualification history"
 Require $selfTest "Conflicting generation evidence permanently blocks this process ledger" `
     "Compiled self-test covers evidence conflict invalidation"
 Require $selfTest "SCS authority" `
@@ -105,6 +109,8 @@ Require $documentation "intentionally in-memory" `
     "Documentation limits evidence retention to one process"
 Require $documentation "does not collect evidence from production streams" `
     "Documentation preserves the integration boundary"
+Require $documentation "refuses authority qualification after the first eviction" `
+    "Documentation records eviction refusal"
 Require $documentation "Production authority will move only" `
     "Documentation defers effect activation to a coordinated slice"
 
