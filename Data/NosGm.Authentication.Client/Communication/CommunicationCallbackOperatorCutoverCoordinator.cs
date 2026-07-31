@@ -10,6 +10,8 @@ namespace NosGm.Communication.Client
             bool isConfigured,
             bool isBlocked,
             bool operatorRollbackRequested,
+            bool effectRoutingEnabled,
+            bool typedIngressReady,
             string configuredIdentity,
             string armRequestId,
             string lastObservedGeneration,
@@ -22,6 +24,8 @@ namespace NosGm.Communication.Client
             IsConfigured = isConfigured;
             IsBlocked = isBlocked;
             OperatorRollbackRequested = operatorRollbackRequested;
+            EffectRoutingEnabled = effectRoutingEnabled;
+            TypedIngressReady = typedIngressReady;
             ConfiguredIdentity = configuredIdentity ?? string.Empty;
             ArmRequestId = armRequestId ?? string.Empty;
             LastObservedGeneration =
@@ -39,6 +43,10 @@ namespace NosGm.Communication.Client
         public bool IsBlocked { get; }
 
         public bool OperatorRollbackRequested { get; }
+
+        public bool EffectRoutingEnabled { get; }
+
+        public bool TypedIngressReady { get; }
 
         public string ConfiguredIdentity { get; }
 
@@ -72,6 +80,8 @@ namespace NosGm.Communication.Client
         private bool _configured;
         private bool _blocked;
         private bool _operatorRollbackRequested;
+        private bool _effectRoutingEnabled;
+        private bool _typedIngressReady;
         private string _configuredIdentity = string.Empty;
         private string _armRequestId = string.Empty;
         private string _lastObservedGeneration = string.Empty;
@@ -97,32 +107,27 @@ namespace NosGm.Communication.Client
             string processIdentity,
             CommunicationCallbackOperatorCutoverOptions options)
         {
-            if (!CommunicationCallbackKindParityEvidence
-                    .IsValidIdentity(processIdentity))
-            {
-                throw new InvalidOperationException(
-                    "The operator cutover process identity is invalid.");
-            }
-            if (options == null)
-            {
-                throw new ArgumentNullException(nameof(options));
-            }
+            return Configure(
+                processIdentity,
+                options,
+                effectRoutingEnabled: false);
+        }
 
+        public bool Configure(
+            string processIdentity,
+            CommunicationCallbackOperatorCutoverOptions options,
+            bool effectRoutingEnabled)
+        {
+            ValidateConfiguration(processIdentity, options);
             lock (_syncRoot)
             {
                 if (_configured)
                 {
                     bool sameConfiguration =
-                        string.Equals(
-                            _configuredIdentity,
+                        IsSameOperatorConfiguration(
                             processIdentity,
-                            StringComparison.Ordinal) &&
-                        string.Equals(
-                            _armRequestId,
-                            options.PenaltyRefreshArmRequestId,
-                            StringComparison.Ordinal) &&
-                        _operatorRollbackRequested ==
-                            options.PenaltyRefreshRollbackRequested;
+                            options) &&
+                        _effectRoutingEnabled == effectRoutingEnabled;
                     if (sameConfiguration)
                     {
                         return false;
@@ -140,6 +145,7 @@ namespace NosGm.Communication.Client
                     options.PenaltyRefreshArmRequestId;
                 _operatorRollbackRequested =
                     options.PenaltyRefreshRollbackRequested;
+                _effectRoutingEnabled = effectRoutingEnabled;
                 if (_operatorRollbackRequested)
                 {
                     _blocked = true;
@@ -147,6 +153,43 @@ namespace NosGm.Communication.Client
                         "The operator requested PenaltyRefresh callback rollback before activation.");
                 }
                 return true;
+            }
+        }
+
+        public bool EnsureConfigured(
+            string processIdentity,
+            CommunicationCallbackOperatorCutoverOptions options)
+        {
+            ValidateConfiguration(processIdentity, options);
+            lock (_syncRoot)
+            {
+                if (!_configured)
+                {
+                    _configured = true;
+                    _configuredIdentity = processIdentity;
+                    _armRequestId =
+                        options.PenaltyRefreshArmRequestId;
+                    _operatorRollbackRequested =
+                        options.PenaltyRefreshRollbackRequested;
+                    _effectRoutingEnabled = false;
+                    if (_operatorRollbackRequested)
+                    {
+                        _blocked = true;
+                        _lastException = new InvalidOperationException(
+                            "The operator requested PenaltyRefresh callback rollback before activation.");
+                    }
+                    return true;
+                }
+
+                if (IsSameOperatorConfiguration(processIdentity, options))
+                {
+                    return false;
+                }
+
+                var exception = new InvalidOperationException(
+                    "Operator callback cutover configuration changed inside one process.");
+                FailClosed(exception);
+                throw exception;
             }
         }
 
@@ -198,6 +241,7 @@ namespace NosGm.Communication.Client
 
             lock (_syncRoot)
             {
+                _typedIngressReady = false;
                 _lastObservedGeneration = runtimeGenerationId;
                 if (!_configured || _blocked)
                 {
@@ -250,12 +294,102 @@ namespace NosGm.Communication.Client
             }
         }
 
+        public bool CompleteReplay(string runtimeGenerationId)
+        {
+            if (!CommunicationCallbackKindParityEvidence
+                    .IsCanonicalNonEmptyGuid(runtimeGenerationId))
+            {
+                throw new InvalidOperationException(
+                    "The completed callback replay generation is invalid.");
+            }
+
+            lock (_syncRoot)
+            {
+                if (!_configured ||
+                    _blocked ||
+                    !_effectRoutingEnabled ||
+                    _gate.State !=
+                        CommunicationCallbackCutoverState
+                            .TypedGrpcAuthoritative)
+                {
+                    return false;
+                }
+                if (!string.Equals(
+                        _gate.ActiveGeneration,
+                        runtimeGenerationId,
+                        StringComparison.Ordinal))
+                {
+                    FailClosed(
+                        new InvalidOperationException(
+                            "Replay completion does not belong to the active PenaltyRefresh generation."));
+                    return false;
+                }
+
+                _typedIngressReady = true;
+                _lastException = null;
+                return true;
+            }
+        }
+
+        public bool ObserveStreamEnded(
+            string runtimeGenerationId,
+            Exception reason = null)
+        {
+            if (!string.IsNullOrEmpty(runtimeGenerationId) &&
+                !CommunicationCallbackKindParityEvidence
+                    .IsCanonicalNonEmptyGuid(runtimeGenerationId))
+            {
+                throw new InvalidOperationException(
+                    "The ended callback stream generation is invalid.");
+            }
+
+            lock (_syncRoot)
+            {
+                bool wasReady = _typedIngressReady;
+                _typedIngressReady = false;
+                if (_effectRoutingEnabled &&
+                    _gate.State ==
+                        CommunicationCallbackCutoverState
+                            .TypedGrpcAuthoritative)
+                {
+                    FailClosed(
+                        reason ??
+                        new InvalidOperationException(
+                            "The active typed PenaltyRefresh callback stream ended."));
+                }
+                return wasReady;
+            }
+        }
+
+        public bool ObserveSubscriberFault(Exception exception)
+        {
+            if (exception == null)
+            {
+                throw new ArgumentNullException(nameof(exception));
+            }
+
+            lock (_syncRoot)
+            {
+                if (!_effectRoutingEnabled ||
+                    _gate.State !=
+                        CommunicationCallbackCutoverState
+                            .TypedGrpcAuthoritative)
+                {
+                    return false;
+                }
+
+                FailClosed(exception);
+                return true;
+            }
+        }
+
         public bool RequestRollback(Exception reason = null)
         {
             lock (_syncRoot)
             {
                 _operatorRollbackRequested = true;
                 _blocked = true;
+                _typedIngressReady = false;
                 _lastException = reason ??
                     new InvalidOperationException(
                         "The operator requested PenaltyRefresh callback rollback.");
@@ -267,7 +401,45 @@ namespace NosGm.Communication.Client
             CommunicationCallbackParitySource source,
             WireV1.CommunicationCallbackKind kind)
         {
-            return _gate.ShouldApply(source, kind);
+            lock (_syncRoot)
+            {
+                return ShouldApplyCore(source, kind);
+            }
+        }
+
+        public bool TryApply(
+            CommunicationCallbackParitySource source,
+            WireV1.CommunicationCallbackKind kind,
+            Action applyEffect)
+        {
+            if (applyEffect == null)
+            {
+                throw new ArgumentNullException(nameof(applyEffect));
+            }
+
+            lock (_syncRoot)
+            {
+                if (!ShouldApplyCore(source, kind))
+                {
+                    return false;
+                }
+
+                try
+                {
+                    applyEffect();
+                    return true;
+                }
+                catch (Exception exception)
+                {
+                    if (source ==
+                            CommunicationCallbackParitySource.TypedGrpc &&
+                        kind == _gate.TargetKind)
+                    {
+                        FailClosed(exception);
+                    }
+                    throw;
+                }
+            }
         }
 
         public CommunicationCallbackOperatorCutoverStatus GetStatus()
@@ -279,6 +451,8 @@ namespace NosGm.Communication.Client
                     _configured,
                     _blocked,
                     _operatorRollbackRequested,
+                    _effectRoutingEnabled,
+                    _typedIngressReady,
                     _configuredIdentity,
                     _armRequestId,
                     _lastObservedGeneration,
@@ -289,9 +463,58 @@ namespace NosGm.Communication.Client
             }
         }
 
+        private bool ShouldApplyCore(
+            CommunicationCallbackParitySource source,
+            WireV1.CommunicationCallbackKind kind)
+        {
+            if (kind != _gate.TargetKind ||
+                !_effectRoutingEnabled ||
+                !_typedIngressReady ||
+                _blocked)
+            {
+                return source ==
+                    CommunicationCallbackParitySource.LegacyScs;
+            }
+
+            return _gate.ShouldApply(source, kind);
+        }
+
+        private bool IsSameOperatorConfiguration(
+            string processIdentity,
+            CommunicationCallbackOperatorCutoverOptions options)
+        {
+            return string.Equals(
+                       _configuredIdentity,
+                       processIdentity,
+                       StringComparison.Ordinal) &&
+                   string.Equals(
+                       _armRequestId,
+                       options.PenaltyRefreshArmRequestId,
+                       StringComparison.Ordinal) &&
+                   _operatorRollbackRequested ==
+                       options.PenaltyRefreshRollbackRequested;
+        }
+
+        private static void ValidateConfiguration(
+            string processIdentity,
+            CommunicationCallbackOperatorCutoverOptions options)
+        {
+            if (!CommunicationCallbackKindParityEvidence
+                    .IsValidIdentity(processIdentity))
+            {
+                throw new InvalidOperationException(
+                    "The operator cutover process identity is invalid.");
+            }
+            if (options == null)
+            {
+                throw new ArgumentNullException(nameof(options));
+            }
+        }
+
         private void FailClosed(Exception exception)
         {
             _blocked = true;
+            _typedIngressReady = false;
             _lastException = exception;
             _gate.Rollback();
         }
