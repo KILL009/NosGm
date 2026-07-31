@@ -11,6 +11,13 @@ namespace NosGm.Master.Library.Client
 {
     internal class CommunicationClient : ICommunicationClient
     {
+        public CommunicationClient()
+        {
+            CommunicationCallbackTypedEffectHandlerRegistry.Configure(
+                () => new CommunicationCallbackEnvelopeDispatcher(
+                    CommunicationServiceClient.Instance));
+        }
+
         #region Methods
 
         public void CharacterConnected(long characterId)
