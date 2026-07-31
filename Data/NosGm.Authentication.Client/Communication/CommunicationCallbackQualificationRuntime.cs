@@ -92,7 +92,13 @@ namespace NosGm.Communication.Client
                         typedWindow,
                         scsWindow,
                         observedAt);
+                CommunicationCallbackOperatorCutoverCoordinator coordinator =
+                    CommunicationCallbackOperatorCutoverCoordinator.Instance;
+                coordinator.Configure(
+                    evidence.ProcessIdentity,
+                    CommunicationCallbackOperatorCutoverOptions.Load());
                 bool appended = _penaltyRefreshEvidence.TryAppend(evidence);
+                coordinator.ObserveQualification(_penaltyRefreshEvidence);
                 lock (_syncRoot)
                 {
                     _lastEvidence = evidence;
@@ -116,6 +122,8 @@ namespace NosGm.Communication.Client
             }
 
             _penaltyRefreshEvidence.Invalidate();
+            CommunicationCallbackOperatorCutoverCoordinator.Instance
+                .RequestRollback(exception);
             lock (_syncRoot)
             {
                 _lastException = exception;
