@@ -97,10 +97,6 @@ namespace NosGm.Core.Networking.Communication.Scs.Communication.Messages
         {
             if (ReferenceEquals(this, obj)) return true;
 
-        public override bool Equals(object obj)
-        {
-            if (ReferenceEquals(this, obj)) return true;
-
             if (obj is ScsRawDataMessage other)
             {
                 return MessageId == other.MessageId;
