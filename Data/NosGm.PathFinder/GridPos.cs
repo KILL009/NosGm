@@ -13,7 +13,7 @@ namespace NosGm.PathFinder
             if (other == null) return 0;
             int dx = Math.Abs(X - other.X);
             int dy = Math.Abs(Y - other.Y);
-            return Math.Max(dx, dy) * 1.41421356 + (1 - 1.41421356) * Math.Min(dx, dy);
+            return Math.Max(dx, dy) + (1.41421356 - 1) * Math.Min(dx, dy);
         }
 
         public bool Equals(GridPos other)

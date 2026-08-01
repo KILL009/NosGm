@@ -23,7 +23,7 @@ namespace NosGm.PathFinder
 
         public static double Octile(int dx, int dy)
         {
-            return Math.Max(dx, dy) * SQRT_2 + (1 - SQRT_2) * Math.Min(dx, dy);
+            return Math.Max(dx, dy) + (SQRT_2 - 1) * Math.Min(dx, dy);
         }
     }
 }

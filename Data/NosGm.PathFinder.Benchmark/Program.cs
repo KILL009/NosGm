@@ -28,11 +28,11 @@ namespace NosGm.PathFinder.Benchmark
 
         static void SetWall(GridPos[][] grid, int x, int y) => grid[x][y].Value = 1; // 1 = blocked
 
-        static (long ElapsedMs, long MemBefore, long MemAfter, int PathLen) RunTest(
+        static (long ElapsedMs, long TotalAllocated, int PathLen) RunTest(
             string name, GridPos[][] grid, GridPos start, GridPos end, int repetitions = 1)
         {
             GC.Collect(); GC.WaitForPendingFinalizers(); GC.Collect();
-            long memBefore = GC.GetTotalMemory(false);
+            long memBefore = GC.GetAllocatedBytesForCurrentThread();
             var sw = Stopwatch.StartNew();
 
             List<GridPos> result = null;
@@ -40,40 +40,45 @@ namespace NosGm.PathFinder.Benchmark
                 result = AStarPathFinder.FindPath(start, end, grid);
 
             sw.Stop();
-            long memAfter = GC.GetTotalMemory(false);
+            long totalAllocated = GC.GetAllocatedBytesForCurrentThread() - memBefore;
 
             Console.WriteLine($"  [{name}]");
             Console.WriteLine($"    Repeticiones : {repetitions}");
             Console.WriteLine($"    Tiempo total : {sw.ElapsedMilliseconds} ms");
             Console.WriteLine($"    Tiempo/iter  : {(double)sw.ElapsedMilliseconds / repetitions:F3} ms");
             Console.WriteLine($"    Longitud ruta: {result?.Count ?? 0} celdas");
-            Console.WriteLine($"    ΔMem (bytes) : {(memAfter - memBefore):+#;-#;0}");
+            Console.WriteLine($"    ΔMem (bytes) : +{totalAllocated}");
+            if (start != end && (result == null || result.Count == 0))
+                Console.WriteLine($"    [!] ERROR: La ruta devuelta está vacía.");
             Console.WriteLine();
 
-            return (sw.ElapsedMilliseconds, memBefore, memAfter, result?.Count ?? 0);
+            return (sw.ElapsedMilliseconds, totalAllocated, result?.Count ?? 0);
         }
 
-        static async Task<(long ElapsedMs, long MemBefore, long MemAfter)> RunConcurrentTest(
+        static async Task<(long ElapsedMs, long TotalAllocated)> RunConcurrentTest(
             string name, GridPos[][] grid, GridPos start, GridPos end, int monsterCount)
         {
             GC.Collect(); GC.WaitForPendingFinalizers(); GC.Collect();
-            long memBefore = GC.GetTotalMemory(false);
             var sw = Stopwatch.StartNew();
 
-            var tasks = new Task[monsterCount];
+            var tasks = new Task<long>[monsterCount];
             for (int i = 0; i < monsterCount; i++)
-                tasks[i] = Task.Run(() => AStarPathFinder.FindPath(start, end, grid));
+                tasks[i] = Task.Run(() => {
+                    long bBefore = GC.GetAllocatedBytesForCurrentThread();
+                    AStarPathFinder.FindPath(start, end, grid);
+                    return GC.GetAllocatedBytesForCurrentThread() - bBefore;
+                });
 
-            await Task.WhenAll(tasks);
+            long[] allocs = await Task.WhenAll(tasks);
             sw.Stop();
-            long memAfter = GC.GetTotalMemory(false);
+            long totalAllocated = allocs.Sum();
 
             Console.WriteLine($"  [{name}] — {monsterCount} monstruos concurrentes");
             Console.WriteLine($"    Tiempo total : {sw.ElapsedMilliseconds} ms");
-            Console.WriteLine($"    ΔMem (bytes) : {(memAfter - memBefore):+#;-#;0}  ({(memAfter - memBefore) / 1024.0 / 1024.0:F2} MB)");
+            Console.WriteLine($"    ΔMem (bytes) : +{totalAllocated}  ({totalAllocated / 1024.0 / 1024.0:F2} MB)");
             Console.WriteLine();
 
-            return (sw.ElapsedMilliseconds, memBefore, memAfter);
+            return (sw.ElapsedMilliseconds, totalAllocated);
         }
 
         // =====================================================================
@@ -188,8 +193,10 @@ namespace NosGm.PathFinder.Benchmark
                 var grid   = BuildGrid(150, 150);
                 var start  = grid[0][0];
                 var rnd    = new Random(42);
+                
+                GC.Collect(); GC.WaitForPendingFinalizers(); GC.Collect();
+                long memBefore = GC.GetAllocatedBytesForCurrentThread();
                 var sw     = Stopwatch.StartNew();
-                long memBefore = GC.GetTotalMemory(true);
                 int totalCells = 0;
 
                 for (int i = 0; i < 20; i++)
@@ -200,12 +207,12 @@ namespace NosGm.PathFinder.Benchmark
                 }
 
                 sw.Stop();
-                long memAfter = GC.GetTotalMemory(false);
+                long totalAllocated = GC.GetAllocatedBytesForCurrentThread() - memBefore;
                 Console.WriteLine($"  [Objetivo en movimiento — 20 recalculos]");
                 Console.WriteLine($"    Tiempo total : {sw.ElapsedMilliseconds} ms");
                 Console.WriteLine($"    Tiempo/iter  : {(double)sw.ElapsedMilliseconds / 20:F1} ms");
                 Console.WriteLine($"    Celdas total : {totalCells}");
-                Console.WriteLine($"    ΔMem (bytes) : {(memAfter - memBefore):+#;-#;0}  ({(memAfter - memBefore) / 1024.0:F1} KB)");
+                Console.WriteLine($"    ΔMem (bytes) : +{totalAllocated}  ({totalAllocated / 1024.0:F1} KB)");
                 Console.WriteLine();
             }
 
@@ -224,8 +231,7 @@ namespace NosGm.PathFinder.Benchmark
             Console.WriteLine("  Las únicas asignaciones restantes provienen del BinaryHeap");
             Console.WriteLine("  y de la Lista<GridPos> devuelta como resultado.");
             Console.WriteLine("═══════════════════════════════════════════════════════════");
-            Console.WriteLine("  Benchmark finalizado. Presiona cualquier tecla para salir.");
-            Console.ReadKey();
+            Console.WriteLine("  Benchmark finalizado.");
         }
     }
 }
