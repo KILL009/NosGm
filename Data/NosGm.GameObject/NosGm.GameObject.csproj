@@ -561,6 +561,7 @@
       <Project>{ce1bcbe7-edb7-4564-a11e-8d90868df9d0}</Project>
       <Name>NosGm.XMLModel</Name>
     </ProjectReference>
+    <ProjectReference Include="..\NosGm.AI\NosGm.AI.csproj" />
   </ItemGroup>
   <ItemGroup>
     <None Include="app.config" />

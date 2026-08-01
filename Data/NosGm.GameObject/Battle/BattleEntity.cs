@@ -961,7 +961,7 @@ namespace NosGm.GameObject.Battle
 
         public ThreadSafeGenericLockedList<BCard> BCards { get; }
 
-        public Node[][] BrushFireJagged
+        public GridPos[][] BrushFireJagged
         {
             get
             {

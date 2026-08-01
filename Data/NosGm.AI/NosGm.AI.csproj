@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net481</TargetFramework>
+    <RootNamespace>NosGm.AI</RootNamespace>
+    <AssemblyName>NosGm.AI</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\NosGm.Core\NosGm.Core.csproj" />
+    <ProjectReference Include="..\NosGm.Domain\NosGm.Domain.csproj" />
+    <ProjectReference Include="..\NosGm.PathFinder\NosGm.PathFinder.csproj" />
+  </ItemGroup>
+
+</Project>

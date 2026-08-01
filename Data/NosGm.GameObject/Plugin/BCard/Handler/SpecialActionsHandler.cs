@@ -1,4 +1,4 @@
-﻿using Game.Configuration.BCards;
+using Game.Configuration.BCards;
 using NosGm.Domain;
 using NosGm.GameObject;
 using NosGm.GameObject.Networking;
@@ -88,7 +88,7 @@ namespace Game.Configuration
                 {
                     if (target.MapMonster.Target != null)
                     {
-                        (target.MapMonster.Path ?? (target.MapMonster.Path = new List<Node>())).Clear();
+                        (target.MapMonster.Path ?? (target.MapMonster.Path = new List<GridPos>())).Clear();
                         target.MapMonster.Target = null;
 
                         short RunToX = target.MapMonster.FirstX;

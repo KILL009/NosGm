@@ -128,7 +128,7 @@ namespace NosGm.GameObject
 
         public ItemInstance BootsInstance { get; set; }
 
-        public Node[][] BrushFireJagged { get; set; }
+        public GridPos[][] BrushFireJagged { get; set; }
 
         public ThreadSafeSortedList<short, Buff> Buff => BattleEntity.Buffs;
 

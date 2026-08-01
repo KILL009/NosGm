@@ -83,7 +83,7 @@ namespace NosGm.GameObject
 
         public BattleEntity BattleEntity { get; set; }
 
-        public Node[][] BrushFireJagged { get; set; }
+        public GridPos[][] BrushFireJagged { get; set; }
 
         public ThreadSafeSortedList<short, Buff> Buff => BattleEntity.Buffs;
 
@@ -164,7 +164,7 @@ namespace NosGm.GameObject
 
         public BattleEntity Owner { get; set; }
 
-        public List<Node> Path { get; set; }
+        public List<GridPos> Path { get; set; }
 
         public object PVELockObject { get; set; }
 
@@ -439,7 +439,7 @@ namespace NosGm.GameObject
             FirstX = MapX;
             FirstY = MapY;
             LastSkill = LastMove = LastEffect = new DateTime();
-            Path = new List<Node>();
+            Path = new List<GridPos>();
             IsAlive = true;
             ShouldRespawn = ShouldRespawn ?? true;
             Monster = ServerManager.GetNpcMonster(MonsterVNum);
@@ -3513,7 +3513,7 @@ namespace NosGm.GameObject
                     }
                 }
 
-                Path = new List<Node>();
+                Path = new List<GridPos>();
                 MapInstance.Broadcast(GenerateIn());
                 Monster.BCards.Where(s => s.Type != 25).ToList()
                     .ForEach(s => s.ApplyBCards(BattleEntity, BattleEntity));

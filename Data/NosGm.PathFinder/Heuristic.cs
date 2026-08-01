@@ -1,35 +1,29 @@
-﻿using System;
+using System;
 
 namespace NosGm.PathFinder
 {
     public static class Heuristic
     {
-        #region Members
+        private const double SQRT_2 = 1.4142135623730950488016887242097;
 
-        public static readonly double SQRT_2 = Math.Sqrt(2);
-
-        #endregion
-
-        #region Methods
-
-        public static double Chebyshev(int iDx, int iDy) => Math.Max(iDx, iDy);
-
-        public static double Euclidean(int iDx, int iDy)
+        public static double Chebyshev(int dx, int dy)
         {
-            float tFdx = iDx;
-            float tFdy = iDy;
-            return Math.Sqrt(tFdx * tFdx + tFdy * tFdy);
+            return Math.Max(dx, dy);
         }
 
-        public static double Manhattan(int iDx, int iDy) => iDx + iDy;
-
-        public static double Octile(int iDx, int iDy)
+        public static double Euclidean(int dx, int dy)
         {
-            var min = Math.Min(iDx, iDy);
-            var max = Math.Max(iDx, iDy);
-            return min * SQRT_2 + max - min;
+            return Math.Sqrt(dx * dx + dy * dy);
         }
 
-        #endregion
+        public static double Manhattan(int dx, int dy)
+        {
+            return dx + dy;
+        }
+
+        public static double Octile(int dx, int dy)
+        {
+            return Math.Max(dx, dy) * SQRT_2 + (1 - SQRT_2) * Math.Min(dx, dy);
+        }
     }
 }

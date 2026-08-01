@@ -1,4 +1,4 @@
-﻿
+
 using NosGm.Core;
 using NosGm.Data;
 using NosGm.Domain;
@@ -68,7 +68,7 @@ namespace NosGm.GameObject
 
         public EventEntity Event { get; set; }
 
-        public Node[][] BrushFireJagged { get; set; }
+        public GridPos[][] BrushFireJagged { get; set; }
 
         public ThreadSafeSortedList<short, Buff> Buff => BattleEntity.Buffs;
 
@@ -130,7 +130,7 @@ namespace NosGm.GameObject
 
         public Character OwnerZ { get; set; }
 
-        public List<Node> Path { get; set; }
+        public List<GridPos> Path { get; set; }
 
         public object PVELockObject { get; set; }
 
@@ -257,7 +257,7 @@ namespace NosGm.GameObject
             FirstY = MapY;
             EffectActivated = true;
             _movetime = ServerManager.RandomNumber(500, 3000);
-            Path = new List<Node>();
+            Path = new List<GridPos>();
             Recipes = ServerManager.Instance.GetRecipesByMapNpcId(MapNpcId);
             Target = -1;
             Teleporters = ServerManager.Instance.GetTeleportersByNpcVNum(MapNpcId);
@@ -398,7 +398,7 @@ namespace NosGm.GameObject
                 Target = -1;
 
                 //return to origin
-                Path = BestFirstSearch.FindPathJagged(new Node { X = MapX, Y = MapY }, new Node { X = FirstX, Y = FirstY },
+                Path = BestFirstSearch.FindPathJagged(new GridPos { X = MapX, Y = MapY }, new GridPos { X = FirstX, Y = FirstY },
                     MapInstance.Map.JaggedGrid);
             }
         }
@@ -810,7 +810,7 @@ namespace NosGm.GameObject
                     }
                 }
 
-                Path = new List<Node>();
+                Path = new List<GridPos>();
                 MapInstance.Broadcast(GenerateIn());
                 Npc.BCards.Where(s => s.Type != 25).ToList().ForEach(s => s.ApplyBCards(BattleEntity, BattleEntity));
             }

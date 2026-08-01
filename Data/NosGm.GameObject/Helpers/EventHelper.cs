@@ -1,4 +1,4 @@
-﻿using NosGm.Core;
+using NosGm.Core;
 using NosGm.DAL;
 using NosGm.Data;
 using NosGm.Domain;
@@ -218,7 +218,7 @@ namespace NosGm.GameObject.Helpers
                             if (monster.MoveEvent?.InZone(monster.MapX, monster.MapY) == true)
                             {
                                 monster.MoveEvent = null;
-                                monster.Path = new List<Node>();
+                                monster.Path = new List<GridPos>();
                                 ((List<EventContainer>)evt.Parameter).ForEach(s => RunEvent(s, monster: monster));
                             }
 
@@ -230,7 +230,7 @@ namespace NosGm.GameObject.Helpers
                             {
                                 monster.MoveEvent = evt4;
                                 monster.Path = BestFirstSearch.FindPathJagged(
-                                        new Node { X = monster.MapX, Y = monster.MapY }, new Node { X = evt4.X, Y = evt4.Y },
+                                        new GridPos { X = monster.MapX, Y = monster.MapY }, new GridPos { X = evt4.X, Y = evt4.Y },
                                         evt.MapInstance?.Map.JaggedGrid);
                                 monster.RunToX = evt4.X;
                                 monster.RunToY = evt4.Y;
@@ -238,8 +238,8 @@ namespace NosGm.GameObject.Helpers
                             else if (npc != null)
                             {
                                 //npc.MoveEvent = evt4;
-                                npc.Path = BestFirstSearch.FindPathJagged(new Node { X = npc.MapX, Y = npc.MapY },
-                                        new Node { X = evt4.X, Y = evt4.Y }, evt.MapInstance?.Map.JaggedGrid);
+                                npc.Path = BestFirstSearch.FindPathJagged(new GridPos { X = npc.MapX, Y = npc.MapY },
+                                        new GridPos { X = evt4.X, Y = evt4.Y }, evt.MapInstance?.Map.JaggedGrid);
                                 npc.RunToX = evt4.X;
                                 npc.RunToY = evt4.Y;
                             }

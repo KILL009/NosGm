@@ -348,7 +348,7 @@ namespace NosGm.GameObject
 
         public byte BeforeDirection { get; set; }
 
-        public Node[][] BrushFireJagged { get; set; }
+        public GridPos[][] BrushFireJagged { get; set; }
         public int SheepScore1 { get; set; }
 
         public bool IsWaitingForGift { get; set; }
