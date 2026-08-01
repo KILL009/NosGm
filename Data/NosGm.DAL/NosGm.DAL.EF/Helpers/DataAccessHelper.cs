@@ -68,12 +68,54 @@ namespace NosGm.DAL.EF.Helpers
                 }
                 catch (Exception ex)
                 {
-                    LoggerService.LogServer.Logger.LogAsync($"There was an issue while loading the Database. It may not be up to date or non-existent.", Domain.LogType.ERROR);
+                    string diagnostic = CreateInitializationDiagnostic(ex);
+                    Console.Error.WriteLine(diagnostic);
+                    try
+                    {
+                        LoggerService.LogServer.Logger.LogAsync(
+                            diagnostic,
+                            Domain.LogType.ERROR);
+                    }
+                    catch
+                    {
+                        // Database diagnostics must still reach the local process
+                        // when the remote Log Server is unavailable.
+                    }
                     return false;
                 }
 
                 return true;
             }
+        }
+
+        private static string CreateInitializationDiagnostic(Exception exception)
+        {
+            Exception root = exception?.GetBaseException() ?? exception;
+            string outerMessage = NormalizeDiagnosticText(exception?.Message);
+            string rootMessage = NormalizeDiagnosticText(root?.Message);
+            string outerType = exception?.GetType().FullName ?? "UnknownException";
+            string rootType = root?.GetType().FullName ?? outerType;
+            int hResult = root?.HResult ?? exception?.HResult ?? 0;
+
+            return "[DATABASE_INIT_FAILED] " +
+                   "OuterType=" + outerType +
+                   " OuterMessage=" + outerMessage +
+                   " RootType=" + rootType +
+                   " RootHResult=0x" + hResult.ToString("X8") +
+                   " RootMessage=" + rootMessage;
+        }
+
+        private static string NormalizeDiagnosticText(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                return "<empty>";
+            }
+
+            return value
+                .Replace('\r', ' ')
+                .Replace('\n', ' ')
+                .Trim();
         }
 
         #endregion
