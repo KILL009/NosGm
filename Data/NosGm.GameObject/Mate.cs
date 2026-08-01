@@ -8,8 +8,10 @@ using NosGm.GameObject.Event;
 using NosGm.GameObject.Extension;
 using NosGm.GameObject.Helpers;
 using NosGm.GameObject.Networking;
+using NosGm.GameObject.AI.Profiles;
 using NosGm.PathFinder;
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reactive.Linq;
@@ -64,6 +66,7 @@ namespace NosGm.GameObject
             GenerateMateTransportId();
             IsAlive = true;
             BattleEntity = new BattleEntity(this);
+            AI = new PetAIProfile(this);
             if (IsTeamMember) AddTeamMember();
         }
 
@@ -100,6 +103,7 @@ namespace NosGm.GameObject
             IsAlive = true;
             BattleEntity = new BattleEntity(this);
             Event = new EventEntity(this);
+            AI = new PetAIProfile(this);
             if (IsTeamMember) AddTeamMember();
         }
 
@@ -112,6 +116,9 @@ namespace NosGm.GameObject
         public ItemInstance ArmorInstance { get; set; }
 
         public BattleEntity BattleEntity { get; set; }
+        
+        public PetAIProfile AI { get; set; }
+
         public Skill BasicSkill => new Skill
         {
             SkillVNum = 0,
@@ -320,6 +327,20 @@ namespace NosGm.GameObject
 
             Hp = MaxHp;
             Mp = MaxMp;
+
+            if (AI == null)
+            {
+                AI = new PetAIProfile(this);
+            }
+
+            MateLifeDisposable?.Dispose();
+            MateLifeDisposable = Observable.Interval(TimeSpan.FromMilliseconds(400)).Subscribe(s =>
+            {
+                if (IsAlive && IsTeamMember)
+                {
+                    AI?.Tick();
+                }
+            });
 
             Observable.Timer(TimeSpan.FromSeconds(2)).Subscribe(s =>
             {

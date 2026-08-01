@@ -4,6 +4,7 @@ using global::NosGm.AI.Decorators;
 using NosGm.GameObject;
 using NosGm.GameObject.AI.Actions;
 using NosGm.GameObject.AI.Conditions;
+using System.Collections.Generic;
 
 namespace NosGm.GameObject.AI.Profiles
 {
@@ -16,11 +17,25 @@ namespace NosGm.GameObject.AI.Profiles
             var blackboard = new Blackboard();
             blackboard.Set("Self", pet);
 
-            // Pets follow the owner and attack owner's target
-            // To be implemented: Follow Owner -> Assist Target -> Defend
-            Tree = new BehaviorTree(new global::NosGm.AI.Decorators.InverterNode(null), blackboard); // Placeholder
+            // 1. Defend Owner if targeted
+            var defendOwnerSequence = new global::NosGm.AI.Composites.SequenceNode(new List<IBehaviorNode>
+            {
+                new OwnerIsTargetedCondition(),
+                new MateAttackTargetNode()
+            });
+
+            // 2. Follow Owner (fallback)
+            var followOwnerNode = new FollowOwnerNode();
+
+            var rootSelector = new global::NosGm.AI.Composites.SelectorNode(new List<IBehaviorNode>
+            {
+                defendOwnerSequence,
+                followOwnerNode
+            });
+
+            Tree = new BehaviorTree(rootSelector, blackboard);
         }
 
         public void Tick() => Tree.Tick();
     }
-}
+}}

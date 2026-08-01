@@ -10,6 +10,12 @@ namespace NosGm.GameObject.AI.Actions
     {
         private DateTime? _castStartTime;
         private int _castTimeMs;
+        private readonly int _skillIndex;
+
+        public AttackTargetNode(int skillIndex = 0)
+        {
+            _skillIndex = skillIndex;
+        }
 
         public BehaviorStatus Tick(Blackboard blackboard)
         {
@@ -18,7 +24,7 @@ namespace NosGm.GameObject.AI.Actions
 
             if (entity == null || target == null || target.Hp <= 0) return BehaviorStatus.Failure;
 
-            var skill = entity.Skills?.FirstOrDefault();
+            var skill = entity.Skills != null && entity.Skills.Count > _skillIndex ? entity.Skills[_skillIndex] : entity.Skills?.FirstOrDefault();
 
             if (_castStartTime == null)
             {

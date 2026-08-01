@@ -417,6 +417,22 @@ namespace NosGm.GameObject
             Initialize();
         }
 
+        public void InitializeAI()
+        {
+            if (MonsterType == MonsterType.Boss)
+            {
+                AI = new BossAIProfile(this);
+            }
+            else if (MapInstance?.MapInstanceType == MapInstanceType.RaidInstance)
+            {
+                AI = new RaidAIProfile(this);
+            }
+            else
+            {
+                AI = new MobAIProfile(this);
+            }
+        }
+
         public void Initialize()
         {
             if (MapInstance.MapInstanceType == MapInstanceType.BaseMapInstance &&
@@ -3453,7 +3469,7 @@ namespace NosGm.GameObject
             {
                 if (!Path.Any() && (DateTime.Now - LastMove).TotalMilliseconds > _movetime && Target == null) // Basic Move
                 {
-                    Path = BestFirstSearch.FindPathJagged(new Node { X = MapX, Y = MapY }, new Node { X = (short)(FirstX + ServerManager.RandomNumber(-2, 2)), Y = (short)(FirstY + ServerManager.RandomNumber(-2, 2)) }, MapInstance.Map.JaggedGrid);
+                    Path = AStarPathFinder.FindPath(new GridPos { X = MapX, Y = MapY }, new GridPos { X = (short)(FirstX + ServerManager.RandomNumber(-2, 2)), Y = (short)(FirstY + ServerManager.RandomNumber(-2, 2)) }, MapInstance.Map.JaggedGrid);
                 }
                 else if (DateTime.Now > LastMove && Path.Any()) // Follow target || move back to original pos
                 {
