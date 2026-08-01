@@ -1,0 +1,14 @@
+<Project>
+  <PropertyGroup>
+    <WorldValueTupleAssembly>$(NuGetPackageRoot)system.valuetuple\4.6.2\lib\net47\System.ValueTuple.dll</WorldValueTupleAssembly>
+  </PropertyGroup>
+
+  <Target Name="CopyWorldValueTupleRuntime"
+          BeforeTargets="VerifyWorldRuntimeDependencies">
+    <Error Condition="!Exists('$(WorldValueTupleAssembly)')"
+           Text="System.ValueTuple runtime assembly was not restored at $(WorldValueTupleAssembly)." />
+    <Copy SourceFiles="$(WorldValueTupleAssembly)"
+          DestinationFiles="$(TargetDir)System.ValueTuple.dll"
+          SkipUnchangedFiles="true" />
+  </Target>
+</Project>
