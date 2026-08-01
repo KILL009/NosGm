@@ -1,11 +1,15 @@
 <Project>
   <PropertyGroup>
-    <LoginValueTupleAssembly>$(NuGetPackageRoot)system.valuetuple\4.6.2\lib\net47\System.ValueTuple.dll</LoginValueTupleAssembly>
+    <LoginValueTupleAssembly Condition="'$(PkgSystem_ValueTuple)' != '' and Exists('$(PkgSystem_ValueTuple)\lib\net47\System.ValueTuple.dll')">$(PkgSystem_ValueTuple)\lib\net47\System.ValueTuple.dll</LoginValueTupleAssembly>
+    <LoginValueTupleAssembly Condition="'$(LoginValueTupleAssembly)' == '' and '$(NuGetPackageRoot)' != '' and Exists('$(NuGetPackageRoot)system.valuetuple\4.6.2\lib\net47\System.ValueTuple.dll')">$(NuGetPackageRoot)system.valuetuple\4.6.2\lib\net47\System.ValueTuple.dll</LoginValueTupleAssembly>
+    <LoginValueTupleAssembly Condition="'$(LoginValueTupleAssembly)' == '' and '$(NUGET_PACKAGES)' != '' and Exists('$(NUGET_PACKAGES)\system.valuetuple\4.6.2\lib\net47\System.ValueTuple.dll')">$(NUGET_PACKAGES)\system.valuetuple\4.6.2\lib\net47\System.ValueTuple.dll</LoginValueTupleAssembly>
+    <LoginValueTupleAssembly Condition="'$(LoginValueTupleAssembly)' == '' and Exists('$(MSBuildProjectDirectory)\..\..\..\packages\System.ValueTuple.4.6.2\lib\net47\System.ValueTuple.dll')">$(MSBuildProjectDirectory)\..\..\..\packages\System.ValueTuple.4.6.2\lib\net47\System.ValueTuple.dll</LoginValueTupleAssembly>
+    <LoginValueTupleAssembly Condition="'$(LoginValueTupleAssembly)' == '' and '$(USERPROFILE)' != ''">$(USERPROFILE)\.nuget\packages\system.valuetuple\4.6.2\lib\net47\System.ValueTuple.dll</LoginValueTupleAssembly>
   </PropertyGroup>
 
   <Target Name="PrepareLoginValueTupleRuntime" AfterTargets="Build">
-    <Error Condition="!Exists('$(LoginValueTupleAssembly)')"
-           Text="System.ValueTuple runtime assembly was not restored at $(LoginValueTupleAssembly)." />
+    <Error Condition="'$(LoginValueTupleAssembly)' == '' or !Exists('$(LoginValueTupleAssembly)')"
+           Text="System.ValueTuple runtime assembly was not found. Restore NuGet packages and rebuild. Resolved path: $(LoginValueTupleAssembly)" />
     <Error Condition="!Exists('$(TargetPath).config')"
            Text="The Login runtime configuration was not generated at $(TargetPath).config." />
 
