@@ -16,6 +16,8 @@ on:
       - "Data/NosGm.ChickenAPI/ChickenAPI.DAL/**"
       - "Data/NosGm.Configuration/**"
       - "Data/NosGm.DAL/NosGm.Data/**"
+      - "Data/NosGm.PathFinder/**"
+      - "Data/NosGm.PathFinder.Benchmark/**"
       - "Data/NosGm.Cluster.Contracts/**"
       - "Data/NosGm.Authentication.Client/**"
       - "Data/NosGm.Master.Library/**"
@@ -50,6 +52,8 @@ on:
       - "Data/NosGm.ChickenAPI/ChickenAPI.DAL/**"
       - "Data/NosGm.Configuration/**"
       - "Data/NosGm.DAL/NosGm.Data/**"
+      - "Data/NosGm.PathFinder/**"
+      - "Data/NosGm.PathFinder.Benchmark/**"
       - "Data/NosGm.Cluster.Contracts/**"
       - "Data/NosGm.Authentication.Client/**"
       - "Data/NosGm.Master.Library/**"
@@ -98,6 +102,10 @@ jobs:
         run: |
           dotnet --version
           dotnet --info
+
+      - name: Build Pathfinder benchmark through the production project
+        shell: pwsh
+        run: dotnet build "Data/NosGm.PathFinder.Benchmark/PathFinderBenchmark.csproj" --configuration Release --nologo
 
       - name: Verify inventory and build waves 0-2B
         shell: powershell

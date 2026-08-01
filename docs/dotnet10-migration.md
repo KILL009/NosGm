@@ -37,9 +37,10 @@ as migrated if the real client can no longer reach the same state.
 | Cluster contract bridge and self-test | 2 | Versioned SCS replacement foundation in wave 2B |
 | Authentication gRPC runtime, caller bridge, and self-test | 3 | Isolated .NET 10 host plus dual-target mTLS caller adapters and SCS rollback |
 | Experimental behavior-tree AI library | 1 | SDK-style `net481`; defer migration until GameObject and PathFinder contracts stabilize |
+| Production Pathfinder benchmark | 1 | SDK-style `net481`; references the live Pathfinder project and builds directly with `dotnet` |
 | Modern game modules | 2 | Temporarily remain on .NET 7 because they reference the legacy server graph |
 | Remaining classic server and libraries | 22 | .NET Framework 4.8.1 only; migrate in dependency order |
-| Total | 51 | Migration tracked by waves below |
+| Total | 52 | Migration tracked by waves below |
 
 Of the 15 wave-0 projects, 14 moved from .NET 9 to .NET 10 and the
 `NosGM.SteamAuthStub` project was already on .NET 10.
@@ -65,16 +66,20 @@ Wave 1 deliberately keeps a dual-target bridge. The legacy solution passes
 `NosGmLegacyBuild=true` and receives the `net481` assemblies, while the .NET 10
 foundation workflow compiles the same sources as `net10.0`. This preserves the
 known-good server while proving that the migrated leaf libraries are ready for
-the modern dependency graph. `PathFinder` moved to wave 2 after the inventory
-confirmed that it directly references `NosGm.Core` and is not a leaf library.
+the modern dependency graph. `PathFinder` no longer carries an unused reference
+to `NosGm.Core`; its permanent benchmark now builds directly against the live
+production project. It remains in wave 2B because movement behavior is a
+client-visible gameplay contract that requires benchmark and in-game parity,
+not because of a Core dependency.
 
 Wave 2A extends that bridge to `NosGm.Configuration` and `NosGm.Data`. Both
 depend only on the already migrated Domain library. Their SDK conversions
 explicitly exclude `ServerConfiguration.local-backup.cs` and
 `Base/MappingBaseDTO.cs`, because the legacy project files never compiled those
-two stale sources. `Packets` and `PathFinder` remain in wave 2B because they
-depend on `NosGm.Core`; Core still contains the SCS serialization and dynamic
-proxy blockers described below.
+two stale sources. `Packets` remains in wave 2B because it depends on
+`NosGm.Core`. `PathFinder` remains in the same wave so its SDK conversion can be
+accepted together with the production benchmark, movement tests, and real-client
+behavior checks.
 
 Wave 2B begins with a separate `NosGm.Cluster.Contracts` bridge and a .NET 10
 self-test. It establishes protocol version 1, typed negotiation and health

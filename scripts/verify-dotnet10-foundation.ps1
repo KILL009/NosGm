@@ -153,8 +153,8 @@ foreach ($project in $deferredModern) {
     Write-Host "[DEFERRED] $project" -ForegroundColor Yellow
 }
 
-if ($allProjects.Count -ne 51) {
-    throw "Project inventory changed: expected 51 projects but found $($allProjects.Count). Review the migration matrix."
+if ($allProjects.Count -ne 52) {
+    throw "Project inventory changed: expected 52 projects but found $($allProjects.Count). Review the migration matrix."
 }
 
 if ($bridgeCount -ne 8) {
