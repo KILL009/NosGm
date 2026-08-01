@@ -1,0 +1,33 @@
+<Project>
+  <PropertyGroup>
+    <MasterValueTupleAssembly>$(NuGetPackageRoot)system.valuetuple\4.6.2\lib\net47\System.ValueTuple.dll</MasterValueTupleAssembly>
+  </PropertyGroup>
+
+  <Target Name="PrepareMasterValueTupleRuntime" AfterTargets="Build">
+    <Error Condition="!Exists('$(MasterValueTupleAssembly)')"
+           Text="System.ValueTuple runtime assembly was not restored at $(MasterValueTupleAssembly)." />
+    <Error Condition="!Exists('$(TargetPath).config')"
+           Text="The Master runtime configuration was not generated at $(TargetPath).config." />
+
+    <Copy SourceFiles="$(MasterValueTupleAssembly)"
+          DestinationFiles="$(TargetDir)System.ValueTuple.dll"
+          SkipUnchangedFiles="true" />
+
+    <XmlPoke XmlInputPath="$(TargetPath).config"
+             Query="/configuration/runtime/*[local-name()='assemblyBinding']/*[local-name()='dependentAssembly'][*[local-name()='assemblyIdentity']/@name='System.ValueTuple']/*[local-name()='bindingRedirect']/@oldVersion"
+             Value="0.0.0.0-4.0.5.0" />
+    <XmlPoke XmlInputPath="$(TargetPath).config"
+             Query="/configuration/runtime/*[local-name()='assemblyBinding']/*[local-name()='dependentAssembly'][*[local-name()='assemblyIdentity']/@name='System.ValueTuple']/*[local-name()='bindingRedirect']/@newVersion"
+             Value="4.0.5.0" />
+
+    <XmlPeek XmlInputPath="$(TargetPath).config"
+             Query="/configuration/runtime/*[local-name()='assemblyBinding']/*[local-name()='dependentAssembly'][*[local-name()='assemblyIdentity']/@name='System.ValueTuple']/*[local-name()='bindingRedirect']/@newVersion">
+      <Output TaskParameter="Result" PropertyName="MasterValueTupleRedirectVersion" />
+    </XmlPeek>
+
+    <Error Condition="!Exists('$(TargetDir)System.ValueTuple.dll')"
+           Text="System.ValueTuple.dll was not copied to the Master output directory." />
+    <Error Condition="'$(MasterValueTupleRedirectVersion)' != '4.0.5.0'"
+           Text="The Master System.ValueTuple binding redirect was not aligned to assembly version 4.0.5.0." />
+  </Target>
+</Project>
