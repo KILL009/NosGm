@@ -25,7 +25,7 @@ using static System.Collections.Specialized.BitVector32;
 
 namespace NosGm.GameObject
 {
-    public class MapMonster : MapMonsterDTO
+    public partial class MapMonster : MapMonsterDTO
     {
         #region Members
 
@@ -442,6 +442,8 @@ namespace NosGm.GameObject
             Path = new List<GridPos>();
             IsAlive = true;
             ShouldRespawn = ShouldRespawn ?? true;
+            
+            InitializeAI();
             Monster = ServerManager.GetNpcMonster(MonsterVNum);
             Faction = MonsterHelper.GetFaction(MonsterVNum);
             
@@ -3210,12 +3212,25 @@ namespace NosGm.GameObject
                 // normal movement
                 else if (Target == null)
                 {
-                    Move();
+                    if (AiProfile != null && !IsBoss)
+                    {
+                        AiProfile.Tick();
+                    }
+                    else
+                    {
+                        Move();
+                    }
                 }
 
                 // target following
                 else if (MapInstance != null)
                 {
+                    if (AiProfile != null && !IsBoss)
+                    {
+                        AiProfile.Tick();
+                        return; // Bypass old target logic for standard mobs
+                    }
+                    
                     HostilityTarget();
                     NpcMonsterSkill npcMonsterSkill = null;
                     BattleEntity targetEntity = null;

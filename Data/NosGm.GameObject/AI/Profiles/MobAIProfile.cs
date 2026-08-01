@@ -1,6 +1,6 @@
-using NosGm.AI.Core;
-using NosGm.AI.Composites;
-using NosGm.AI.Decorators;
+using global::NosGm.AI.Core;
+using global::NosGm.AI.Composites;
+using global::NosGm.AI.Decorators;
 using NosGm.GameObject;
 using NosGm.GameObject.AI.Actions;
 using NosGm.GameObject.AI.Conditions;
@@ -26,8 +26,9 @@ namespace NosGm.GameObject.AI.Profiles
                 new HasTargetCondition(),
                 new SelectorNode(
                     new SequenceNode(
-                        new IsTargetInRangeCondition(monster.Monster.AttackRange),
-                        new AttackTargetNode()
+                        new IsTargetInRangeCondition(monster.Monster.BasicRange),
+                        new AttackTargetNode(),
+                        new global::NosGm.AI.Actions.WaitNode(System.TimeSpan.FromMilliseconds(1500)) // Cooldown de ataque
                     ),
                     new MoveToTargetNode()
                 )

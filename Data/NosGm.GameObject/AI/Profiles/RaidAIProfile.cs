@@ -1,5 +1,9 @@
-using NosGm.AI.Core;
+using global::NosGm.AI.Core;
+using global::NosGm.AI.Composites;
+using global::NosGm.AI.Decorators;
 using NosGm.GameObject;
+using NosGm.GameObject.AI.Actions;
+using NosGm.GameObject.AI.Conditions;
 
 namespace NosGm.GameObject.AI.Profiles
 {
@@ -13,7 +17,7 @@ namespace NosGm.GameObject.AI.Profiles
             blackboard.Set("Self", raidBoss);
 
             // Raid AI: Button mechanics, spawns, invulnerability phases
-            Tree = new BehaviorTree(new NosGm.AI.Decorators.InverterNode(null), blackboard); // Placeholder
+            Tree = new BehaviorTree(new global::NosGm.AI.Decorators.InverterNode(null), blackboard); // Placeholder
         }
 
         public void Tick() => Tree.Tick();

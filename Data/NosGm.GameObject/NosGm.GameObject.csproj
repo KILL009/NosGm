@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="14.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
   <PropertyGroup>
@@ -429,6 +429,18 @@
     <Compile Include="Map\MapCell.cs" />
     <Compile Include="Map\MapInstance.cs" />
     <Compile Include="Map\MapMonster.cs" />
+    <Compile Include="Map\MapMonster.AI.cs" />
+    <Compile Include="AI\Actions\AttackTargetNode.cs" />
+    <Compile Include="AI\Actions\FindTargetNode.cs" />
+    <Compile Include="AI\Actions\MoveToTargetNode.cs" />
+    <Compile Include="AI\Conditions\HasTargetCondition.cs" />
+    <Compile Include="AI\Conditions\IsHealthBelowCondition.cs" />
+    <Compile Include="AI\Conditions\IsTargetInRangeCondition.cs" />
+    <Compile Include="AI\Profiles\BossAIProfile.cs" />
+    <Compile Include="AI\Profiles\CompanionAIProfile.cs" />
+    <Compile Include="AI\Profiles\MobAIProfile.cs" />
+    <Compile Include="AI\Profiles\PetAIProfile.cs" />
+    <Compile Include="AI\Profiles\RaidAIProfile.cs" />
     <Compile Include="MonsterMapItem.cs" />
     <Compile Include="Networking\BroadcastableBase.cs" />
     <Compile Include="Battle\HitRequest.cs" />

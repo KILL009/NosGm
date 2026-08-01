@@ -1,6 +1,6 @@
 using NosGm.AI.Core;
 using NosGm.GameObject;
-using NosGm.GameObject.Helpers;
+using NosGm.GameObject.Battle;
 
 namespace NosGm.GameObject.AI.Conditions
 {
@@ -20,10 +20,7 @@ namespace NosGm.GameObject.AI.Conditions
 
             if (entity == null || target == null) return BehaviorStatus.Failure;
 
-            int dist = MapHelper.GetDistance(
-                new MapHelper.Location { X = entity.MapX, Y = entity.MapY },
-                new MapHelper.Location { X = target.PositionX, Y = target.PositionY }
-            );
+            int dist = Map.GetDistance(entity.GetPos(), target.GetPos());
 
             return dist <= _range ? BehaviorStatus.Success : BehaviorStatus.Failure;
         }
