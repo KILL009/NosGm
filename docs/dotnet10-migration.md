@@ -36,9 +36,10 @@ as migrated if the real client can no longer reach the same state.
 | Foundation bridge libraries | 6 | SDK style; target both `net481` and `net10.0` through wave 2A |
 | Cluster contract bridge and self-test | 2 | Versioned SCS replacement foundation in wave 2B |
 | Authentication gRPC runtime, caller bridge, and self-test | 3 | Isolated .NET 10 host plus dual-target mTLS caller adapters and SCS rollback |
+| Experimental behavior-tree AI library | 1 | SDK-style `net481`; defer migration until GameObject and PathFinder contracts stabilize |
 | Modern game modules | 2 | Temporarily remain on .NET 7 because they reference the legacy server graph |
 | Remaining classic server and libraries | 22 | .NET Framework 4.8.1 only; migrate in dependency order |
-| Total | 50 | Migration tracked by waves below |
+| Total | 51 | Migration tracked by waves below |
 
 Of the 15 wave-0 projects, 14 moved from .NET 9 to .NET 10 and the
 `NosGM.SteamAuthStub` project was already on .NET 10.
@@ -52,7 +53,7 @@ Of the 15 wave-0 projects, 14 moved from .NET 9 to .NET 10 and the
 | 2A | Configuration and Data DTO libraries | SDK-style projects build for both `net481` rollback and `net10.0` migration targets |
 | 2B | Cluster contracts, Packets, PathFinder, Core, and SCS transport | Typed gRPC/Protobuf adapters replace `BinaryFormatter` and .NET Remoting |
 | 3 | DAL Interface, Mapper, DAO, EF6, and Extension | SQL Server CRUD and migrations pass against a test database |
-| 4 | GameObject, Handler, plugins, Bazaar, and modules | Module loading, commands, inventory, combat, SP, and packet tests pass |
+| 4 | AI, GameObject, Handler, plugins, Bazaar, and modules | Module loading, commands, inventory, combat, SP, and packet tests pass |
 | 5 | Logger, Parser, ServiceManager, Master, Login, and World | Full regional login and real-client acceptance suite passes |
 | 6 | Cross-platform hardening and deployment | Windows production build passes; Linux-supported services are explicitly identified and tested |
 
