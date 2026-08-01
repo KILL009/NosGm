@@ -1,11 +1,15 @@
 <Project>
   <PropertyGroup>
-    <MasterValueTupleAssembly>$(NuGetPackageRoot)system.valuetuple\4.6.2\lib\net47\System.ValueTuple.dll</MasterValueTupleAssembly>
+    <MasterValueTupleAssembly Condition="'$(PkgSystem_ValueTuple)' != '' and Exists('$(PkgSystem_ValueTuple)\lib\net47\System.ValueTuple.dll')">$(PkgSystem_ValueTuple)\lib\net47\System.ValueTuple.dll</MasterValueTupleAssembly>
+    <MasterValueTupleAssembly Condition="'$(MasterValueTupleAssembly)' == '' and '$(NuGetPackageRoot)' != '' and Exists('$(NuGetPackageRoot)system.valuetuple\4.6.2\lib\net47\System.ValueTuple.dll')">$(NuGetPackageRoot)system.valuetuple\4.6.2\lib\net47\System.ValueTuple.dll</MasterValueTupleAssembly>
+    <MasterValueTupleAssembly Condition="'$(MasterValueTupleAssembly)' == '' and '$(NUGET_PACKAGES)' != '' and Exists('$(NUGET_PACKAGES)\system.valuetuple\4.6.2\lib\net47\System.ValueTuple.dll')">$(NUGET_PACKAGES)\system.valuetuple\4.6.2\lib\net47\System.ValueTuple.dll</MasterValueTupleAssembly>
+    <MasterValueTupleAssembly Condition="'$(MasterValueTupleAssembly)' == '' and Exists('$(MSBuildProjectDirectory)\..\..\..\packages\System.ValueTuple.4.6.2\lib\net47\System.ValueTuple.dll')">$(MSBuildProjectDirectory)\..\..\..\packages\System.ValueTuple.4.6.2\lib\net47\System.ValueTuple.dll</MasterValueTupleAssembly>
+    <MasterValueTupleAssembly Condition="'$(MasterValueTupleAssembly)' == '' and '$(USERPROFILE)' != ''">$(USERPROFILE)\.nuget\packages\system.valuetuple\4.6.2\lib\net47\System.ValueTuple.dll</MasterValueTupleAssembly>
   </PropertyGroup>
 
   <Target Name="PrepareMasterValueTupleRuntime" AfterTargets="Build">
-    <Error Condition="!Exists('$(MasterValueTupleAssembly)')"
-           Text="System.ValueTuple runtime assembly was not restored at $(MasterValueTupleAssembly)." />
+    <Error Condition="'$(MasterValueTupleAssembly)' == '' or !Exists('$(MasterValueTupleAssembly)')"
+           Text="System.ValueTuple runtime assembly was not found. Restore NuGet packages and rebuild. Resolved path: $(MasterValueTupleAssembly)" />
     <Error Condition="!Exists('$(TargetPath).config')"
            Text="The Master runtime configuration was not generated at $(TargetPath).config." />
 
