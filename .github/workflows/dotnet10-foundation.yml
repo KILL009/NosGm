@@ -107,6 +107,14 @@ jobs:
         shell: pwsh
         run: dotnet build "Data/NosGm.PathFinder.Benchmark/PathFinderBenchmark.csproj" --configuration Release --nologo
 
+      - name: Run Pathfinder regression suite
+        shell: pwsh
+        run: >
+          dotnet run
+          --project "Data/NosGm.PathFinder.Benchmark/PathFinderBenchmark.csproj"
+          --configuration Release
+          --no-build
+
       - name: Verify inventory and build waves 0-2B
         shell: powershell
         run: ./scripts/verify-dotnet10-foundation.ps1

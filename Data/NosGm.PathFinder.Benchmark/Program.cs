@@ -50,7 +50,7 @@ namespace NosGm.PathFinder.Benchmark
             Console.WriteLine($"    ΔMem (bytes) : +{totalAllocated}");
             Console.WriteLine();
 
-            if (start != end && expectPath && (result == null || result.Count == 0))
+            if (expectPath && (result == null || result.Count == 0))
                 throw new InvalidOperationException($"[{name}] ERROR: Se esperaba una ruta pero se devolvió vacía.");
             if (!expectPath && result != null && result.Count > 0)
                 throw new InvalidOperationException($"[{name}] ERROR: El destino debía ser inaccesible pero se encontró ruta.");
@@ -210,6 +210,8 @@ namespace NosGm.PathFinder.Benchmark
                 {
                     var end = grid[rnd.Next(100, 149)][rnd.Next(100, 149)];
                     var path = AStarPathFinder.FindPath(start, end, grid);
+                    if (path == null || path.Count == 0)
+                        throw new InvalidOperationException($"[Objetivo en movimiento] La ruta {i + 1} quedó vacía.");
                     totalCells += path.Count;
                 }
 
