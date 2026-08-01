@@ -1,5 +1,6 @@
 using NosGm.AI.Core;
 using NosGm.GameObject;
+using NosGm.GameObject.Networking;
 using NosGm.GameObject.Battle;
 using System.Linq;
 using System;

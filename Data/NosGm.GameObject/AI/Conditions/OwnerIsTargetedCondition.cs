@@ -1,6 +1,6 @@
 using NosGm.AI.Core;
 using NosGm.GameObject;
-using NosGm.GameObject.Map;
+
 using System.Linq;
 
 namespace NosGm.GameObject.AI.Conditions
@@ -15,10 +15,10 @@ namespace NosGm.GameObject.AI.Conditions
             // Check if owner is targeted by any monsters
             var target = mate.Owner.BattleEntity.TargettedByMonstersList(false).FirstOrDefault();
             
-            if (target != null && target.IsAlive)
+            if (target != null && target.Hp > 0)
             {
                 // Set pet's target to the monster attacking the owner
-                blackboard.Set("Target", target.BattleEntity);
+                blackboard.Set("Target", target);
                 return BehaviorStatus.Success;
             }
 

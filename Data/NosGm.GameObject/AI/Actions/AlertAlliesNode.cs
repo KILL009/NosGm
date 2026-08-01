@@ -1,6 +1,6 @@
 using NosGm.AI.Core;
 using NosGm.GameObject;
-using NosGm.GameObject.Map;
+
 using NosGm.GameObject.Battle;
 using System.Linq;
 
@@ -26,7 +26,7 @@ namespace NosGm.GameObject.AI.Actions
             if (!entity.BattleEntity.CanAttackEntity(target)) return BehaviorStatus.Failure;
 
             // Find nearby monsters (allies)
-            var allies = entity.MapInstance.GetMonsterInRangeList(entity.PositionX, entity.PositionY, _radius);
+            var allies = entity.MapInstance.GetMonsterInRangeList(entity.MapX, entity.MapY, (byte)_radius);
 
             foreach (var ally in allies)
             {
@@ -38,7 +38,7 @@ namespace NosGm.GameObject.AI.Actions
                         // Set their AI Target through Blackboard if they have AI initialized
                         // OR just set ally.Target and they will pick it up on their next Tick
                         ally.Target = target;
-                        ally.AI?.Tree?.Blackboard.Set("Target", target);
+                        ally.AiProfile?.Tree?.Blackboard.Set("Target", target);
                     }
                 }
             }

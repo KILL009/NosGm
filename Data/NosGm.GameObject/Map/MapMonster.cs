@@ -417,21 +417,7 @@ namespace NosGm.GameObject
             Initialize();
         }
 
-        public void InitializeAI()
-        {
-            if (MonsterType == MonsterType.Boss)
-            {
-                AI = new BossAIProfile(this);
-            }
-            else if (MapInstance?.MapInstanceType == MapInstanceType.RaidInstance)
-            {
-                AI = new RaidAIProfile(this);
-            }
-            else
-            {
-                AI = new MobAIProfile(this);
-            }
-        }
+
 
         public void Initialize()
         {

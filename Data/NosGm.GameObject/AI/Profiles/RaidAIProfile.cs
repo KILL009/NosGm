@@ -8,7 +8,7 @@ using System.Collections.Generic;
 
 namespace NosGm.GameObject.AI.Profiles
 {
-    public class RaidAIProfile
+    public class RaidAIProfile : IAIProfile
     {
         public BehaviorTree Tree { get; }
 
@@ -17,43 +17,31 @@ namespace NosGm.GameObject.AI.Profiles
             var blackboard = new Blackboard();
             blackboard.Set("Self", mob);
 
-            // Raid AI Logic:
-            // 1. Am I out of my zone (Anti-kite)? If YES -> ReturnToSpawn (Returns Success when healed/reached)
-            // 2. Am I in my zone? 
-            //    2a. Do I have a target? -> Alert Allies -> Is target in range? -> Attack
-            //    2b. If not in range -> Move To Target
-            //    2c. No target -> Acquire Target -> Idle
-
-            var returnToSpawnSequence = new global::NosGm.AI.Composites.SequenceNode(new List<IBehaviorNode>
-            {
-                new global::NosGm.AI.Decorators.InverterNode(new IsMonsterInZoneCondition(15)), // If NOT in zone (distance > 15)
+            var returnToSpawnSequence = new global::NosGm.AI.Composites.SequenceNode(
+                new global::NosGm.AI.Decorators.InverterNode(new IsMonsterInZoneCondition(15)), 
                 new ReturnToSpawnNode()
-            });
+            );
 
-            var attackSequence = new global::NosGm.AI.Composites.SequenceNode(new List<IBehaviorNode>
-            {
-                new AlertAlliesNode(10), // Radius 10
+            var attackSequence = new global::NosGm.AI.Composites.SequenceNode(
+                new AlertAlliesNode(10),
                 new IsTargetInRangeCondition(mob.Monster.BasicRange),
                 new AttackTargetNode()
-            });
+            );
 
-            var combatSelector = new global::NosGm.AI.Composites.SelectorNode(new List<IBehaviorNode>
-            {
+            var combatSelector = new global::NosGm.AI.Composites.SelectorNode(
                 attackSequence,
                 new MoveToTargetNode()
-            });
+            );
 
-            var engageSequence = new global::NosGm.AI.Composites.SequenceNode(new List<IBehaviorNode>
-            {
-                new AcquireTargetNode(),
+            var engageSequence = new global::NosGm.AI.Composites.SequenceNode(
+                new FindTargetNode(),
                 combatSelector
-            });
+            );
 
-            var rootSelector = new global::NosGm.AI.Composites.SelectorNode(new List<IBehaviorNode>
-            {
+            var rootSelector = new global::NosGm.AI.Composites.SelectorNode(
                 returnToSpawnSequence,
                 engageSequence
-            });
+            );
 
             Tree = new BehaviorTree(rootSelector, blackboard);
         }

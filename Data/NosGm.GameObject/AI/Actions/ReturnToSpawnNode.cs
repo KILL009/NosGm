@@ -1,7 +1,7 @@
 using NosGm.AI.Core;
 using NosGm.GameObject;
 using System.Linq;
-using NosGm.GameObject.Map;
+
 using NosGm.GameObject.Battle;
 
 namespace NosGm.GameObject.AI.Actions
@@ -16,13 +16,13 @@ namespace NosGm.GameObject.AI.Actions
             // Clear aggro completely
             blackboard.Remove("Target");
             entity.Target = null;
-            entity.ClearDamageList();
+            entity.DamageList.Clear();
 
             // Desactivar el objetivo para que no ataque a nadie
             if (entity.IsAlive)
             {
                 var spawnPos = new MapCell { X = entity.FirstX, Y = entity.FirstY };
-                int dist = Map.Map.GetDistance(entity.GetPos(), spawnPos);
+                int dist = Map.GetDistance(new MapCell { X = entity.MapX, Y = entity.MapY }, spawnPos);
 
                 if (dist <= 2)
                 {
@@ -34,13 +34,13 @@ namespace NosGm.GameObject.AI.Actions
                     int healAmount = (int)(entity.BattleEntity.HpMax * 0.30);
                     if (entity.CurrentHp + healAmount > entity.BattleEntity.HpMax)
                     {
-                        healAmount = entity.BattleEntity.HpMax - entity.CurrentHp;
+                        healAmount = (int)(entity.BattleEntity.HpMax - entity.CurrentHp);
                     }
 
                     if (healAmount > 0)
                     {
                         entity.CurrentHp += healAmount;
-                        entity.MapInstance.Broadcast(entity.GenerateRc(healAmount));
+                        entity.MapInstance.Broadcast(entity.BattleEntity.GenerateRc(healAmount));
                     }
 
                     return BehaviorStatus.Success;

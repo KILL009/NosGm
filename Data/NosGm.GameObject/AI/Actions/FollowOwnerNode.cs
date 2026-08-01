@@ -1,6 +1,6 @@
 using NosGm.AI.Core;
 using NosGm.GameObject;
-using NosGm.GameObject.Map;
+
 
 namespace NosGm.GameObject.AI.Actions
 {
@@ -19,9 +19,12 @@ namespace NosGm.GameObject.AI.Actions
             // However, if the server needs to forcefully pull the pet (e.g. teleported),
             // it can just teleport it if it's too far.
             
-            if (Map.Map.GetDistance(mate.BattleEntity.GetPos(), mate.Owner.GetPos()) > 20)
+            var matePos = new MapCell { X = mate.BattleEntity.PositionX, Y = mate.BattleEntity.PositionY };
+            var ownerPos = new MapCell { X = mate.Owner.PositionX, Y = mate.Owner.PositionY };
+
+            if (Map.GetDistance(matePos, ownerPos) > 20)
             {
-                mate.BattleEntity.TeleportTo(mate.Owner.GetPos(), 1);
+                mate.BattleEntity.TeleportTo(new MapCell { X = mate.Owner.PositionX, Y = mate.Owner.PositionY }, 1);
                 return BehaviorStatus.Success;
             }
 

@@ -8,7 +8,7 @@ using System;
 
 namespace NosGm.GameObject.AI.Profiles
 {
-    public class MobAIProfile
+    public class MobAIProfile : IAIProfile
     {
         public BehaviorTree Tree { get; }
 

@@ -1,6 +1,6 @@
 using NosGm.AI.Core;
 using NosGm.GameObject;
-using NosGm.GameObject.Map;
+
 using System;
 
 namespace NosGm.GameObject.AI.Conditions
@@ -20,7 +20,7 @@ namespace NosGm.GameObject.AI.Conditions
             if (entity == null) return BehaviorStatus.Failure;
 
             var spawnPos = new MapCell { X = entity.FirstX, Y = entity.FirstY };
-            var distance = Map.Map.GetDistance(entity.GetPos(), spawnPos);
+            int distance = Map.GetDistance(new MapCell { X = entity.MapX, Y = entity.MapY }, spawnPos);
 
             if (distance <= _maxDistance)
             {

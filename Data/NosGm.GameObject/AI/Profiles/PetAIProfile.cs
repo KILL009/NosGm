@@ -8,7 +8,7 @@ using System.Collections.Generic;
 
 namespace NosGm.GameObject.AI.Profiles
 {
-    public class PetAIProfile
+    public class PetAIProfile : IAIProfile
     {
         public BehaviorTree Tree { get; }
 
@@ -18,24 +18,22 @@ namespace NosGm.GameObject.AI.Profiles
             blackboard.Set("Self", pet);
 
             // 1. Defend Owner if targeted
-            var defendOwnerSequence = new global::NosGm.AI.Composites.SequenceNode(new List<IBehaviorNode>
-            {
+            var defendOwnerSequence = new global::NosGm.AI.Composites.SequenceNode(
                 new OwnerIsTargetedCondition(),
                 new MateAttackTargetNode()
-            });
+            );
 
             // 2. Follow Owner (fallback)
             var followOwnerNode = new FollowOwnerNode();
 
-            var rootSelector = new global::NosGm.AI.Composites.SelectorNode(new List<IBehaviorNode>
-            {
+            var rootSelector = new global::NosGm.AI.Composites.SelectorNode(
                 defendOwnerSequence,
                 followOwnerNode
-            });
+            );
 
             Tree = new BehaviorTree(rootSelector, blackboard);
         }
 
         public void Tick() => Tree.Tick();
     }
-}}
+}

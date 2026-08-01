@@ -10,7 +10,7 @@ namespace NosGm.GameObject
 {
     public partial class MapMonster
     {
-        public MobAIProfile AiProfile { get; set; }
+        public IAIProfile AiProfile { get; set; }
 
         public void InitializeAI()
         {
@@ -25,7 +25,18 @@ namespace NosGm.GameObject
                     $"Cannot initialize AI for map monster {MapMonsterId} on map {MapId}: NPC/monster definition {MonsterVNum} was not loaded.");
             }
 
-            AiProfile = new MobAIProfile(this);
+            if (IsBoss)
+            {
+                AiProfile = new BossAIProfile(this);
+            }
+            else if (MapInstance?.MapInstanceType == MapInstanceType.RaidInstance)
+            {
+                AiProfile = new RaidAIProfile(this);
+            }
+            else
+            {
+                AiProfile = new MobAIProfile(this);
+            }
         }
 
         public int StartAttackInstantly(BattleEntity target, NpcMonsterSkill npcMonsterSkill)
