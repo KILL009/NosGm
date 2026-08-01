@@ -1793,7 +1793,7 @@ namespace NosGm.GameObject
                             (int)(target.Hp / target.HPLoad() * 100), damage,
                             hitmode, 0)
                         : StaticPacketHelper.SkillUsed(UserType.Monster, MapMonsterId, (byte)target.UserType, target.MapEntityId, 0,
-                            Monster.BasicCooldown, 11, Monster.BasicSkill, 0, 0, target.Hp > 0,
+                            Monster.BasicCooldown, (short)(Monster.BasicSkill != 0 ? Monster.BasicSkill : 1), 0, 0, 0, target.Hp > 0,
                             (int)(target.Hp / target.HPLoad() * 100), damage,
                             hitmode, 0));
 
@@ -2189,7 +2189,7 @@ namespace NosGm.GameObject
                                             hitmode, 0)
                                     : StaticPacketHelper.SkillUsed(UserType.Monster, MapMonsterId, (byte)UserType.Player,
                                             characterInRange.CharacterId, 0,
-                                            Monster.BasicCooldown, 11, Monster.BasicSkill, 0, 0, characterInRange.Hp > 0,
+                                            Monster.BasicCooldown, (short)(Monster.BasicSkill != 0 ? Monster.BasicSkill : 1), 0, 0, 0, characterInRange.Hp > 0,
                                             (int)(characterInRange.Hp / characterInRange.HPLoad() * 100), dmg,
                                             hitmode, 0));
 
@@ -2465,7 +2465,7 @@ namespace NosGm.GameObject
                                             hitmode, 0)
                                     : StaticPacketHelper.SkillUsed(UserType.Monster, MapMonsterId, (byte)UserType.Monster,
                                             monsterInRange.MapMonsterId, 0,
-                                            Monster.BasicCooldown, 11, Monster.BasicSkill, 0, 0, monsterInRange.CurrentHp > 0,
+                                            Monster.BasicCooldown, (short)(Monster.BasicSkill != 0 ? Monster.BasicSkill : 1), 0, 0, 0, monsterInRange.CurrentHp > 0,
                                             (int)(monsterInRange.CurrentHp / monsterInRange.MaxHp * 100), dmg,
                                             hitmode, 0));
 
@@ -2659,7 +2659,7 @@ namespace NosGm.GameObject
                                             hitmode, 0)
                                     : StaticPacketHelper.SkillUsed(UserType.Monster, MapMonsterId, (byte)UserType.Npc,
                                             npcInRange.MapNpcId, 0,
-                                            Monster.BasicCooldown, 11, Monster.BasicSkill, 0, 0, npcInRange.CurrentHp > 0,
+                                            Monster.BasicCooldown, (short)(Monster.BasicSkill != 0 ? Monster.BasicSkill : 1), 0, 0, 0, npcInRange.CurrentHp > 0,
                                             (int)(npcInRange.CurrentHp / npcInRange.MaxHp * 100), dmg,
                                             hitmode, 0));
 
@@ -3186,7 +3186,11 @@ namespace NosGm.GameObject
                 if (!IsAlive && ShouldRespawn != null && ShouldRespawn.Value)
                 {
                     var timeDeath = (DateTime.Now - Death).TotalSeconds;
-                    if (timeDeath >= Monster.RespawnTime / 10d)
+                    // RespawnTime from DB is in tenths of a second (e.g. 80 = 8s).
+                    // Use full seconds and enforce a minimum of 8s to avoid instant respawns
+                    // that would cause drops to pile up and cause server lag.
+                    double respawnSeconds = Math.Max(Monster.RespawnTime / 10d, 8d);
+                    if (timeDeath >= respawnSeconds)
                     {
                         Respawn();
                     }
@@ -3512,6 +3516,14 @@ namespace NosGm.GameObject
 
                 IsAlive = true;
                 Target = null;
+
+                // CRITICAL: Reset the entire AI Blackboard so the mob doesn't remember
+                // its old target from before death and resume chasing on respawn.
+                if (AiProfile != null)
+                {
+                    AiProfile.Tree?.Blackboard.Remove("Target");
+                }
+
                 MaxHp = BaseMaxHp;
                 MaxMp = BaseMaxMp;
                 CurrentHp = MaxHp;

@@ -1,6 +1,7 @@
 using NosGm.AI.Core;
 using NosGm.GameObject;
 using NosGm.GameObject.Battle;
+using System;
 using System.Linq;
 
 namespace NosGm.GameObject.AI.Actions
@@ -14,8 +15,16 @@ namespace NosGm.GameObject.AI.Actions
 
             if (entity.MapInstance == null) return BehaviorStatus.Failure;
 
-            // Simplified Target Finding (Gets closest player in notice range)
-            var target = entity.MapInstance.GetCharactersInRange(entity.MapX, entity.MapY, (byte)entity.Monster.NoticeRange)
+            // Non-hostile mobs (passive animals, town NPCs, etc.) NEVER seek targets
+            // on their own — they only fight back when hit (handled by aggro system).
+            if (!entity.IsHostile) return BehaviorStatus.Failure;
+
+            // Cap the detection radius to 3 cells max (matches retail NosTale feel).
+            // If the DB value is 0 (undefined) use 3 as a safe default.
+            byte noticeRange = (byte)Math.Min(entity.Monster.NoticeRange == 0 ? 3 : entity.Monster.NoticeRange, 3);
+
+            // Get closest alive, visible player within notice range
+            var target = entity.MapInstance.GetCharactersInRange(entity.MapX, entity.MapY, noticeRange)
                 .Where(c => c.Hp > 0 && !c.Invisible && !c.InvisibleGm)
                 .FirstOrDefault();
 

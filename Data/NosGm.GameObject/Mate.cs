@@ -2184,7 +2184,7 @@ namespace NosGm.GameObject
                                 (int)(target.Hp / target.HPLoad() * 100), damage,
                                 hitmode, 0)
                             : StaticPacketHelper.SkillUsed(BattleEntity.UserType, BattleEntity.MapEntityId, (byte)target.UserType, target.MapEntityId, 0,
-                                Monster.BasicCooldown, 11, Monster.BasicSkill, 0, 0, target.Hp > 0,
+                                Monster.BasicCooldown, (short)(Monster.BasicSkill != 0 ? Monster.BasicSkill : 1), 0, 0, 0, target.Hp > 0,
                                 (int)(target.Hp / target.HPLoad() * 100), damage,
                                 hitmode, 0));
 
@@ -2597,7 +2597,7 @@ namespace NosGm.GameObject
                                     (int)(characterInRange.Hp / characterInRange.HPLoad() * 100), dmg,
                                     hitmode, 0)
                                 : StaticPacketHelper.SkillUsed(BattleEntity.UserType, BattleEntity.MapEntityId, (byte)UserType.Player, characterInRange.CharacterId, 0,
-                                    Monster.BasicCooldown, 11, Monster.BasicSkill, 0, 0, characterInRange.Hp > 0,
+                                    Monster.BasicCooldown, (short)(Monster.BasicSkill != 0 ? Monster.BasicSkill : 1), 0, 0, 0, characterInRange.Hp > 0,
                                     (int)(characterInRange.Hp / characterInRange.HPLoad() * 100), dmg,
                                     hitmode, 0));
 
