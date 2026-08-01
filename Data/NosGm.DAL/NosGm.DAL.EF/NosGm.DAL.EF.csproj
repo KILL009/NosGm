@@ -205,6 +205,14 @@
       <Project>{a09a8666-2598-4f86-8f5e-9a2708354f37}</Project>
       <Name>NosGm.LogServer</Name>
     </ProjectReference>
+    <ProjectReference Include="..\NosGm.DAL.Interface\NosGm.DAL.Interface.csproj">
+      <Project>{175C851B-8DC8-43A5-AF93-AF32D106CD77}</Project>
+      <Name>NosGm.DAL.Interface</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\NosGm.Data\NosGm.Data.csproj">
+      <Project>{f1071ded-3d92-4416-9b9c-8664441ade64}</Project>
+      <Name>NosGm.Data</Name>
+    </ProjectReference>
   </ItemGroup>
   <ItemGroup>
     <EmbeddedResource Include="Migrations\202607021732163_inicio.resx">
