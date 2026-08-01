@@ -85,12 +85,6 @@
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\NosGm.Core\NosGm.Core.csproj">
-      <Project>{C93A0A40-0551-4732-B594-171B87679AC1}</Project>
-      <Name>NosGm.Core</Name>
-    </ProjectReference>
-  </ItemGroup>
-  <ItemGroup>
     <None Include="app.config" />
   </ItemGroup>
   <ItemGroup>
