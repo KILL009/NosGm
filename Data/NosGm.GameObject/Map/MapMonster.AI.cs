@@ -14,6 +14,17 @@ namespace NosGm.GameObject
 
         public void InitializeAI()
         {
+            if (Monster == null)
+            {
+                Monster = Networking.ServerManager.GetNpcMonster(MonsterVNum);
+            }
+
+            if (Monster == null)
+            {
+                throw new InvalidOperationException(
+                    $"Cannot initialize AI for map monster {MapMonsterId} on map {MapId}: NPC/monster definition {MonsterVNum} was not loaded.");
+            }
+
             AiProfile = new MobAIProfile(this);
         }
 
