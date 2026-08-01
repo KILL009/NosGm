@@ -51,10 +51,10 @@ namespace NosGm.GameObject.AI.Profiles
                 new FindTargetNode()
             );
 
-            // Using dummy nodes for Roaming for now
             var root = new SelectorNode(
                 attackSequence,
-                findTargetSequence
+                findTargetSequence,
+                new RoamNode()
             );
 
             Tree = new BehaviorTree(root, blackboard);
