@@ -29,7 +29,7 @@ namespace NosGm.PathFinder.Benchmark
         static void SetWall(GridPos[][] grid, int x, int y) => grid[x][y].Value = 1; // 1 = blocked
 
         static (long ElapsedMs, long TotalAllocated, int PathLen) RunTest(
-            string name, GridPos[][] grid, GridPos start, GridPos end, int repetitions = 1)
+            string name, GridPos[][] grid, GridPos start, GridPos end, int repetitions = 1, bool expectPath = true)
         {
             GC.Collect(); GC.WaitForPendingFinalizers(); GC.Collect();
             long memBefore = GC.GetAllocatedBytesForCurrentThread();
@@ -48,9 +48,12 @@ namespace NosGm.PathFinder.Benchmark
             Console.WriteLine($"    Tiempo/iter  : {(double)sw.ElapsedMilliseconds / repetitions:F3} ms");
             Console.WriteLine($"    Longitud ruta: {result?.Count ?? 0} celdas");
             Console.WriteLine($"    ΔMem (bytes) : +{totalAllocated}");
-            if (start != end && (result == null || result.Count == 0))
-                Console.WriteLine($"    [!] ERROR: La ruta devuelta está vacía.");
             Console.WriteLine();
+
+            if (start != end && expectPath && (result == null || result.Count == 0))
+                throw new InvalidOperationException($"[{name}] ERROR: Se esperaba una ruta pero se devolvió vacía.");
+            if (!expectPath && result != null && result.Count > 0)
+                throw new InvalidOperationException($"[{name}] ERROR: El destino debía ser inaccesible pero se encontró ruta.");
 
             return (sw.ElapsedMilliseconds, totalAllocated, result?.Count ?? 0);
         }
@@ -61,17 +64,21 @@ namespace NosGm.PathFinder.Benchmark
             GC.Collect(); GC.WaitForPendingFinalizers(); GC.Collect();
             var sw = Stopwatch.StartNew();
 
-            var tasks = new Task<long>[monsterCount];
+            var tasks = new Task<(long Allocated, int PathLength)>[monsterCount];
             for (int i = 0; i < monsterCount; i++)
                 tasks[i] = Task.Run(() => {
                     long bBefore = GC.GetAllocatedBytesForCurrentThread();
-                    AStarPathFinder.FindPath(start, end, grid);
-                    return GC.GetAllocatedBytesForCurrentThread() - bBefore;
+                    var path = AStarPathFinder.FindPath(start, end, grid);
+                    return (GC.GetAllocatedBytesForCurrentThread() - bBefore, path?.Count ?? 0);
                 });
 
-            long[] allocs = await Task.WhenAll(tasks);
+            var results = await Task.WhenAll(tasks);
             sw.Stop();
-            long totalAllocated = allocs.Sum();
+            long totalAllocated = results.Sum(x => x.Allocated);
+            int failures = results.Count(x => x.PathLength == 0);
+
+            if (failures > 0)
+                throw new InvalidOperationException($"[{name}] ERROR: {failures} búsquedas concurrentes fallaron (ruta vacía).");
 
             Console.WriteLine($"  [{name}] — {monsterCount} monstruos concurrentes");
             Console.WriteLine($"    Tiempo total : {sw.ElapsedMilliseconds} ms");
@@ -126,7 +133,7 @@ namespace NosGm.PathFinder.Benchmark
                 SetWall(grid, 51, 49); SetWall(grid, 51, 50); SetWall(grid, 51, 51);
                 var start = grid[0][0];
                 var end   = grid[50][50];
-                RunTest("Destino imposible (encerrado)", grid, start, end, repetitions: 10);
+                RunTest("Destino imposible (encerrado)", grid, start, end, repetitions: 10, expectPath: false);
             }
 
             // -----------------------------------------------------------------
