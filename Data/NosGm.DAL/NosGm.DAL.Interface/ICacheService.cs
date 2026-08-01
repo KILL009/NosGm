@@ -4,6 +4,17 @@ using System.Threading.Tasks;
 
 namespace NosGm.DAL.Interface
 {
+    public class CacheStatisticsSnapshot
+    {
+        public long CacheHits { get; set; }
+        public long CacheMisses { get; set; }
+        public long StoredItems { get; set; }
+        public long ExpiredItems { get; set; }
+        public long RemovedItems { get; set; }
+        public double HitRate { get; set; }
+        public long EvictionRuns { get; set; }
+    }
+
     public interface ICacheService<TKey, TValue>
     {
         TValue Get(TKey key);
@@ -14,5 +25,7 @@ namespace NosGm.DAL.Interface
         void Clear();
         IEnumerable<TValue> GetAll();
         bool ContainsKey(TKey key);
+
+        CacheStatisticsSnapshot GetStatistics();
     }
 }

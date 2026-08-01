@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
   <PropertyGroup>
@@ -9,11 +9,13 @@
     <RootNamespace>NosGm.Master.Server</RootNamespace>
     <AssemblyName>NosGm.Master.Server</AssemblyName>
     <TargetFrameworkVersion>v4.8.1</TargetFrameworkVersion>
+    <RuntimeIdentifiers>win;win-x64;win-x86</RuntimeIdentifiers>
     <FileAlignment>512</FileAlignment>
     <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
     <TargetFrameworkProfile />
     <NuGetPackageImportStamp>
     </NuGetPackageImportStamp>
+
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
     <PlatformTarget>AnyCPU</PlatformTarget>
@@ -42,9 +44,11 @@
   </PropertyGroup>
   <PropertyGroup>
     <ApplicationIcon>nosgm-emulator-icon.ico</ApplicationIcon>
+
   </PropertyGroup>
   <PropertyGroup>
     <StartupObject>NosGm.Master.Server.Program</StartupObject>
+
   </PropertyGroup>
   <ItemGroup>
     <Reference Include="System" />
@@ -220,9 +224,11 @@
   <PropertyGroup>
     <PreBuildEvent>
     </PreBuildEvent>
+
   </PropertyGroup>
   <PropertyGroup>
     <PostBuildEvent>
     </PostBuildEvent>
+
   </PropertyGroup>
 </Project>

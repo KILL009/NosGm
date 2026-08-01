@@ -7,11 +7,26 @@ namespace NosGm.DAL.EF.Interceptors
 {
     public class SlowQueryInterceptor : DbCommandInterceptor
     {
-        private const int _slowQueryThresholdMs = 50;
+        private readonly int _slowQueryThresholdMs;
+        private const string StopwatchKey = "NosGm.DAL.EF.SlowQueryInterceptor.Stopwatch";
+        private const string OperationTypeKey = "NosGm.DAL.EF.SlowQueryInterceptor.OperationType";
+
+        public SlowQueryInterceptor()
+        {
+            if (int.TryParse(System.Configuration.ConfigurationManager.AppSettings["SlowQueryThresholdMs"], out int threshold))
+            {
+                _slowQueryThresholdMs = threshold;
+            }
+            else
+            {
+                _slowQueryThresholdMs = 50;
+            }
+        }
 
         public override void ReaderExecuting(DbCommand command, DbCommandInterceptionContext<DbDataReader> interceptionContext)
         {
-            interceptionContext.UserState = Stopwatch.StartNew();
+            interceptionContext.SetUserState(StopwatchKey, Stopwatch.StartNew());
+            interceptionContext.SetUserState(OperationTypeKey, "Reader");
             base.ReaderExecuting(command, interceptionContext);
         }
 
@@ -23,7 +38,8 @@ namespace NosGm.DAL.EF.Interceptors
 
         public override void NonQueryExecuting(DbCommand command, DbCommandInterceptionContext<int> interceptionContext)
         {
-            interceptionContext.UserState = Stopwatch.StartNew();
+            interceptionContext.SetUserState(StopwatchKey, Stopwatch.StartNew());
+            interceptionContext.SetUserState(OperationTypeKey, "NonQuery");
             base.NonQueryExecuting(command, interceptionContext);
         }
 
@@ -35,7 +51,8 @@ namespace NosGm.DAL.EF.Interceptors
 
         public override void ScalarExecuting(DbCommand command, DbCommandInterceptionContext<object> interceptionContext)
         {
-            interceptionContext.UserState = Stopwatch.StartNew();
+            interceptionContext.SetUserState(StopwatchKey, Stopwatch.StartNew());
+            interceptionContext.SetUserState(OperationTypeKey, "Scalar");
             base.ScalarExecuting(command, interceptionContext);
         }
 
@@ -47,13 +64,14 @@ namespace NosGm.DAL.EF.Interceptors
 
         private void LogIfSlow<TResult>(DbCommand command, DbCommandInterceptionContext<TResult> interceptionContext)
         {
-            if (interceptionContext.UserState is Stopwatch sw)
+            if (interceptionContext.FindUserState(StopwatchKey) is Stopwatch sw)
             {
                 sw.Stop();
                 if (sw.ElapsedMilliseconds > _slowQueryThresholdMs)
                 {
-                    string message = $"[SLOW QUERY] Execution Time: {sw.ElapsedMilliseconds}ms. Command: {command.CommandText}";
-                    _ = NosGm.LoggerService.LogServer.Logger.LogAsync(message, NosGm.Domain.LogType.ERROR);
+                    string opType = interceptionContext.FindUserState(OperationTypeKey) as string ?? "Unknown";
+                    string message = $"[Op: {opType}] Execution Time: {sw.ElapsedMilliseconds}ms. Command: {command.CommandText}";
+                    SlowQueryLogWriter.Log(message);
                 }
             }
         }

@@ -2,16 +2,50 @@ using NosGm.DAL.Interface;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Threading;
 
 namespace NosGm.DAL.EF.Cache
 {
     public class MemoryCacheService<TKey, TValue> : ICacheService<TKey, TValue>
     {
         private readonly ConcurrentDictionary<TKey, CacheItem> _cache = new ConcurrentDictionary<TKey, CacheItem>();
+        private readonly Timer _cleanupTimer;
+
+        private long _cacheHits;
+        private long _cacheMisses;
+        private long _expiredItems;
+        private long _removedItems;
+        private long _evictionRuns;
+
+        public MemoryCacheService()
+        {
+            // Run cleanup every 10 minutes
+            _cleanupTimer = new Timer(CleanupExpiredItems, null, TimeSpan.FromMinutes(10), TimeSpan.FromMinutes(10));
+        }
+
+        public CacheStatisticsSnapshot GetStatistics()
+        {
+            long hits = Interlocked.Read(ref _cacheHits);
+            long misses = Interlocked.Read(ref _cacheMisses);
+            long total = hits + misses;
+
+            return new CacheStatisticsSnapshot
+            {
+                CacheHits = hits,
+                CacheMisses = misses,
+                StoredItems = _cache.Count,
+                ExpiredItems = Interlocked.Read(ref _expiredItems),
+                RemovedItems = Interlocked.Read(ref _removedItems),
+                HitRate = total > 0 ? (double)hits / total : 0,
+                EvictionRuns = Interlocked.Read(ref _evictionRuns)
+            };
+        }
 
         public void Clear()
         {
+            var count = _cache.Count;
             _cache.Clear();
+            Interlocked.Add(ref _removedItems, count);
         }
 
         public bool ContainsKey(TKey key)
@@ -35,11 +69,15 @@ namespace NosGm.DAL.EF.Cache
             {
                 if (!kvp.Value.IsExpired)
                 {
+                    kvp.Value.Renew();
                     results.Add(kvp.Value.Value);
                 }
                 else
                 {
-                    _cache.TryRemove(kvp.Key, out _);
+                    if (_cache.TryRemove(kvp.Key, out _))
+                    {
+                        Interlocked.Increment(ref _expiredItems);
+                    }
                 }
             }
             return results;
@@ -47,7 +85,10 @@ namespace NosGm.DAL.EF.Cache
 
         public void Remove(TKey key)
         {
-            _cache.TryRemove(key, out _);
+            if (_cache.TryRemove(key, out _))
+            {
+                Interlocked.Increment(ref _removedItems);
+            }
         }
 
         public void Set(TKey key, TValue value)
@@ -57,7 +98,7 @@ namespace NosGm.DAL.EF.Cache
 
         public void Set(TKey key, TValue value, TimeSpan expirationTime)
         {
-            _cache[key] = new CacheItem(value, DateTime.UtcNow.Add(expirationTime));
+            _cache[key] = new CacheItem(value, expirationTime);
         }
 
         public bool TryGetValue(TKey key, out TValue value)
@@ -66,27 +107,62 @@ namespace NosGm.DAL.EF.Cache
             {
                 if (!item.IsExpired)
                 {
+                    item.Renew();
+                    Interlocked.Increment(ref _cacheHits);
                     value = item.Value;
                     return true;
                 }
-                _cache.TryRemove(key, out _);
+                
+                if (_cache.TryRemove(key, out _))
+                {
+                    Interlocked.Increment(ref _expiredItems);
+                }
             }
             
+            Interlocked.Increment(ref _cacheMisses);
             value = default;
             return false;
+        }
+
+        private void CleanupExpiredItems(object state)
+        {
+            Interlocked.Increment(ref _evictionRuns);
+            foreach (var kvp in _cache)
+            {
+                if (kvp.Value.IsExpired)
+                {
+                    if (_cache.TryRemove(kvp.Key, out _))
+                    {
+                        Interlocked.Increment(ref _expiredItems);
+                    }
+                }
+            }
         }
 
         private class CacheItem
         {
             public TValue Value { get; }
-            public DateTime? Expiration { get; }
+            public TimeSpan? SlidingExpiration { get; }
+            public DateTime? AbsoluteExpiration { get; private set; }
 
-            public bool IsExpired => Expiration.HasValue && DateTime.UtcNow >= Expiration.Value;
+            public bool IsExpired => AbsoluteExpiration.HasValue && DateTime.UtcNow >= AbsoluteExpiration.Value;
 
-            public CacheItem(TValue value, DateTime? expiration)
+            public CacheItem(TValue value, TimeSpan? slidingExpiration)
             {
                 Value = value;
-                Expiration = expiration;
+                SlidingExpiration = slidingExpiration;
+                if (slidingExpiration.HasValue)
+                {
+                    AbsoluteExpiration = DateTime.UtcNow.Add(slidingExpiration.Value);
+                }
+            }
+
+            public void Renew()
+            {
+                if (SlidingExpiration.HasValue)
+                {
+                    AbsoluteExpiration = DateTime.UtcNow.Add(SlidingExpiration.Value);
+                }
             }
         }
     }

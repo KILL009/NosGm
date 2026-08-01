@@ -10,9 +10,11 @@
     <RootNamespace>NosGm.Extension</RootNamespace>
     <AssemblyName>NosGm.Extension</AssemblyName>
     <TargetFrameworkVersion>v4.8.1</TargetFrameworkVersion>
+    <RuntimeIdentifiers>win;win-x64;win-x86</RuntimeIdentifiers>
     <FileAlignment>512</FileAlignment>
     <Deterministic>true</Deterministic>
     <TargetFrameworkProfile />
+
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
     <DebugSymbols>true</DebugSymbols>
@@ -33,6 +35,7 @@
   </PropertyGroup>
   <PropertyGroup>
     <ApplicationIcon>nosgm-emulator-icon.ico</ApplicationIcon>
+
   </PropertyGroup>
   <ItemGroup>
     <Reference Include="System" />

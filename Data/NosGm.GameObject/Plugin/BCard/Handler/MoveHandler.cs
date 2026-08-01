@@ -1,11 +1,11 @@
-﻿using Game.Configuration.BCards;
+using Game.Configuration.BCards;
 using NosGm.Domain;
 using System;
 using System.Threading.Tasks;
 
 namespace NosGm.GameObject._plugins.BCards.Handler
 {
-    public class AddBuffHandler : IBCardHandler
+    public class MoveHandler : IBCardHandler
     {
         public BCardType.CardType ActionType => BCardType.CardType.Move;
 

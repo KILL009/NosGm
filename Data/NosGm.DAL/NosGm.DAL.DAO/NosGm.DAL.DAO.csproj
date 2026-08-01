@@ -128,12 +128,21 @@
     <None Include="App.config" />
   </ItemGroup>
   <ItemGroup>
-    <PackageReference Include="EntityFramework">
-      <Version>6.5.2</Version>
-    </PackageReference>
-    <PackageReference Include="Z.EntityFramework.Extensions">
-      <Version>10.105.7</Version>
-    </PackageReference>
+    <None Include="packages.config" />
+  </ItemGroup>
+  <ItemGroup>
+    <Reference Include="EntityFramework">
+      <HintPath>..\..\..\packages\EntityFramework.6.3.0\lib\net45\EntityFramework.dll</HintPath>
+    </Reference>
+    <Reference Include="EntityFramework.SqlServer">
+      <HintPath>..\..\..\packages\EntityFramework.6.3.0\lib\net45\EntityFramework.SqlServer.dll</HintPath>
+    </Reference>
+    <Reference Include="Z.EntityFramework.Extensions">
+      <HintPath>..\..\..\packages\Z.EntityFramework.Extensions.10.105.7\lib\net45\Z.EntityFramework.Extensions.dll</HintPath>
+    </Reference>
+    <Reference Include="log4net">
+      <HintPath>..\..\..\packages\log4net.3.3.2\lib\net462\log4net.dll</HintPath>
+    </Reference>
   </ItemGroup>
   <ItemGroup>
     <Content Include="favicon.ico" />

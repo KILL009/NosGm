@@ -1,4 +1,4 @@
-﻿using NosGm.Core;
+using NosGm.Core;
 using NosGm.DAL.EF;
 using NosGm.DAL.EF.Helpers;
 using NosGm.DAL.Interface;
@@ -12,6 +12,8 @@ namespace NosGm.DAL.DAO
 {
     public class ItemDAO : IItemDAO
     {
+        private static readonly ICacheService<short, ItemDTO> _cache = new NosGm.DAL.EF.Cache.MemoryCacheService<short, ItemDTO>();
+
         #region Methods
 
         public IEnumerable<ItemDTO> FindByName(string name)
@@ -80,10 +82,11 @@ namespace NosGm.DAL.DAO
             using (var context = DataAccessHelper.CreateContext())
             {
                 var result = new List<ItemDTO>();
-                foreach (var item in context.Item)
+                foreach (var item in context.Item.AsNoTracking())
                 {
                     var dto = new ItemDTO();
                     ItemMapper.ToItemDTO(item, dto);
+                    _cache.Set(dto.VNum, dto, TimeSpan.FromHours(24));
                     result.Add(dto);
                 }
 
@@ -95,10 +98,19 @@ namespace NosGm.DAL.DAO
         {
             try
             {
+                if (_cache.TryGetValue(vNum, out var cachedDto))
+                {
+                    return cachedDto;
+                }
+
                 using (var context = DataAccessHelper.CreateContext())
                 {
                     var dto = new ItemDTO();
-                    if (ItemMapper.ToItemDTO(context.Item.FirstOrDefault(i => i.VNum.Equals(vNum)), dto)) return dto;
+                    if (ItemMapper.ToItemDTO(context.Item.AsNoTracking().FirstOrDefault(i => i.VNum.Equals(vNum)), dto))
+                    {
+                        _cache.Set(vNum, dto, TimeSpan.FromHours(24));
+                        return dto;
+                    }
 
                     return null;
                 }
