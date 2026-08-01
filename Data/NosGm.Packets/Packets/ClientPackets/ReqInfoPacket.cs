@@ -11,9 +11,12 @@ namespace NosGm.Packets.Packets.ClientPackets
 
         [PacketIndex(0)] public byte Type { get; set; }
 
-        [PacketIndex(1)] public long TargetVNum { get; set; }
+        // Legacy requests use this field as a target VNum/slot/character id.
+        // Modern type 6 requests use it as the entity type (1 character, 2 NPC/mate, 3 monster).
+        [PacketIndex(1)] public long TargetTypeOrVNum { get; set; }
 
-        [PacketIndex(2)] public int? MateVNum { get; set; }
+        // Present on modern type 6 requests and contains the entity transport id in the current map.
+        [PacketIndex(2)] public int? TargetId { get; set; }
 
         #endregion
     }
