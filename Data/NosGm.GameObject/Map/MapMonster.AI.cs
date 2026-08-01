@@ -57,17 +57,27 @@ namespace NosGm.GameObject
                 _previousSkillVNum = npcMonsterSkill.SkillVNum;
                 npcMonsterSkill.LastSkillUse = DateTime.Now;
                 DecreaseMp(npcMonsterSkill.Skill.MpCost);
-                
-                MapInstance.Broadcast(StaticPacketHelper.CastOnTarget(UserType.Monster, MapMonsterId,
-                    target.UserType, target.MapEntityId,
-                    npcMonsterSkill.Skill.CastAnimation, npcMonsterSkill.Skill.CastEffect,
-                    npcMonsterSkill.Skill.SkillVNum));
 
-                if (npcMonsterSkill.Skill.CastEffect != 0)
+                // Si CastAnimation == -1 significa que es un golpe instantáneo (sin barra de cast).
+                // NO enviamos el paquete 'ct' para evitar que el cliente intente reproducir
+                // una animación inválida que causa que el modelo 3D del mob desaparezca.
+                // En ese caso, castTime queda en 0 y el ataque se ejecuta inmediatamente.
+                if (npcMonsterSkill.Skill.CastAnimation >= 0)
                 {
-                    MapInstance.Broadcast(
-                        StaticPacketHelper.GenerateEff(UserType.Monster, MapMonsterId,
-                            npcMonsterSkill.Skill.CastEffect), MapX, MapY);
+                    short castAnim = npcMonsterSkill.Skill.CastAnimation;
+                    short castEff = npcMonsterSkill.Skill.CastEffect < 0 ? (short)0 : npcMonsterSkill.Skill.CastEffect;
+
+                    MapInstance.Broadcast(StaticPacketHelper.CastOnTarget(UserType.Monster, MapMonsterId,
+                        target.UserType, target.MapEntityId,
+                        castAnim, castEff,
+                        npcMonsterSkill.Skill.SkillVNum));
+
+                    if (castEff != 0)
+                    {
+                        MapInstance.Broadcast(
+                            StaticPacketHelper.GenerateEff(UserType.Monster, MapMonsterId, castEff), MapX, MapY);
+                    }
+
                     castTime = npcMonsterSkill.Skill.CastTime * 100;
                 }
             }

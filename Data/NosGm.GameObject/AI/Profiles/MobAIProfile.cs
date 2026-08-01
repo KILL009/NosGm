@@ -34,11 +34,16 @@ namespace NosGm.GameObject.AI.Profiles
             // 2. Sequence: Find Target
             // 3. Sequence: Roam / Return Home
             
+            // Ajustar el rango de ataque: si BasicRange es 0 usar 1, si es 1 usar 2.
+            // Esto garantiza que los mobs cuerpo a cuerpo puedan atacar desde celdas adyacentes
+            // sin necesitar estar en la misma celda exacta que el jugador.
+            int attackRange = monster.Monster.BasicRange <= 0 ? 1 : monster.Monster.BasicRange + 1;
+
             var attackSequence = new SequenceNode(
                 new HasTargetCondition(),
                 new SelectorNode(
                     new SequenceNode(
-                        new IsTargetInRangeCondition(monster.Monster.BasicRange),
+                        new IsTargetInRangeCondition(attackRange),
                         new AttackTargetNode(),
                         new global::NosGm.AI.Actions.WaitNode(System.TimeSpan.FromMilliseconds(1500)) // Cooldown de ataque
                     ),

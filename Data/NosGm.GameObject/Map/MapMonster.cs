@@ -718,11 +718,23 @@ namespace NosGm.GameObject
                     moveToPosition = new MapCell { X = Target.PositionX, Y = Target.PositionY };
                 }
 
+                // Prevent moving EXACTLY to the player's cell to avoid client NaN rotation on attack
+                short targetX = (short)moveToPosition.X;
+                short targetY = (short)moveToPosition.Y;
+                if (Target != null && Map.GetDistance(new MapCell { X = MapX, Y = MapY }, moveToPosition) > 1)
+                {
+                    // Move to 1 cell away from the target, on the axis where we are furthest
+                    if (Math.Abs(MapX - targetX) >= Math.Abs(MapY - targetY))
+                        targetX += (short)(MapX > targetX ? 1 : -1);
+                    else
+                        targetY += (short)(MapY > targetY ? 1 : -1);
+                }
+
                 var nextStep = Map.GetNextStep(new MapCell { X = MapX, Y = MapY },
                     new MapCell
                     {
-                        X = (short)ServerManager.RandomNumber(moveToPosition.X - 3, moveToPosition.X + 3),
-                        Y = (short)ServerManager.RandomNumber(moveToPosition.Y - 3, moveToPosition.Y + 3)
+                        X = Target != null ? targetX : (short)ServerManager.RandomNumber(moveToPosition.X - 3, moveToPosition.X + 3),
+                        Y = Target != null ? targetY : (short)ServerManager.RandomNumber(moveToPosition.Y - 3, moveToPosition.Y + 3)
                     }, Speed / 2.5f);
 
                 short tries = 0;
@@ -1394,8 +1406,10 @@ namespace NosGm.GameObject
                     {
                         MapInstance?.Broadcast(StaticPacketHelper.SkillUsed(attackerBattleEntity.UserType,
                                 attackerBattleEntity.MapEntityId, (byte)BattleEntity.UserType, BattleEntity.MapEntityId,
-                                0, (short)(hitRequest.Mate != null ? hitRequest.Mate.Monster.BasicCooldown : 12), 11,
-                                (short)(hitRequest.Mate != null ? hitRequest.Mate.Monster.BasicSkill : 12), 0, 0, IsAlive,
+                                (short)(hitRequest.Mate != null ? hitRequest.Mate.Monster.BasicSkill : attackerBattleEntity.MapMonster?.Monster.BasicSkill ?? 0),
+                                (short)(hitRequest.Mate != null ? hitRequest.Mate.Monster.BasicCooldown : 12),
+                                (short)(attackerBattleEntity.MapMonster?.Monster.AttackClass ?? attackerBattleEntity.Mate?.Monster.AttackClass ?? 11),
+                                0, attackerBattleEntity.PositionX, attackerBattleEntity.PositionY, IsAlive,
                                 (int)(CurrentHp / MaxHp * 100), damage, hitmode, 0));
                     }
                 }
@@ -1785,17 +1799,29 @@ namespace NosGm.GameObject
                             target.MapMonster.AddToDamageList(Owner, damage);
                         }
                     }
-                    MapInstance.Broadcast(npcMonsterSkill != null
-                        ? StaticPacketHelper.SkillUsed(UserType.Monster, MapMonsterId, (byte)target.UserType, target.MapEntityId,
-                            npcMonsterSkill.SkillVNum, npcMonsterSkill.Skill.Cooldown,
-                            npcMonsterSkill.Skill.AttackAnimation, npcMonsterSkill.Skill.Effect, MapX, MapY,
-                            target.Hp > 0,
-                            (int)(target.Hp / target.HPLoad() * 100), damage,
-                            hitmode, 0)
-                        : StaticPacketHelper.SkillUsed(UserType.Monster, MapMonsterId, (byte)target.UserType, target.MapEntityId, 0,
-                            Monster.BasicCooldown, (short)(Monster.BasicSkill != 0 ? Monster.BasicSkill : 1), 0, 0, 0, target.Hp > 0,
-                            (int)(target.Hp / target.HPLoad() * 100), damage,
-                            hitmode, 0));
+                    short anim = npcMonsterSkill != null ? npcMonsterSkill.Skill.AttackAnimation : (short)11;
+                    short packetSkillVNum = npcMonsterSkill != null ? npcMonsterSkill.SkillVNum : (short)0;
+                    short packetEffect = npcMonsterSkill != null ? npcMonsterSkill.Skill.Effect : Monster.BasicSkill;
+
+                    // Si la animacion de la habilidad es de jugador (>10), usar el patron original
+                    // de OpenNos para ataque basico de monstruo: skillVNum=0, anim=11, effect=BasicSkill
+                    // Esto evita que el cliente intente cargar assets de jugador en el modelo del mob
+                    // lo que causaba que el mob desapareciera visualmente durante el ataque.
+                    if (anim > 10)
+                    {
+                        anim = 11;
+                        packetSkillVNum = 0;
+                        packetEffect = Monster.BasicSkill;
+                    }
+
+                    Console.WriteLine($"[DEBUG-MOB] Atacante: {Monster.Name} (VNum: {MonsterVNum}), SkillVNum: {packetSkillVNum}, Anim: {anim}, Effect: {packetEffect}, HitMode: {hitmode}, Damage: {damage}");
+
+                    MapInstance.Broadcast(StaticPacketHelper.SkillUsed(UserType.Monster, MapMonsterId, (byte)target.UserType, target.MapEntityId,
+                        packetSkillVNum, npcMonsterSkill != null ? npcMonsterSkill.Skill.Cooldown : Monster.BasicCooldown,
+                        anim, packetEffect, MapX, MapY,
+                        target.Hp > 0,
+                        (int)(target.Hp / target.HPLoad() * 100), damage,
+                        hitmode, 0));
 
                     if (hitmode != 4 && hitmode != 2)
                     {
@@ -2188,8 +2214,8 @@ namespace NosGm.GameObject
                                             (int)(characterInRange.Hp / characterInRange.HPLoad() * 100), dmg,
                                             hitmode, 0)
                                     : StaticPacketHelper.SkillUsed(UserType.Monster, MapMonsterId, (byte)UserType.Player,
-                                            characterInRange.CharacterId, 0,
-                                            Monster.BasicCooldown, (short)(Monster.BasicSkill != 0 ? Monster.BasicSkill : 1), 0, 0, 0, characterInRange.Hp > 0,
+                                            characterInRange.CharacterId, Monster.BasicSkill,
+                                            Monster.BasicCooldown, Monster.AttackClass, 0, MapX, MapY, characterInRange.Hp > 0,
                                             (int)(characterInRange.Hp / characterInRange.HPLoad() * 100), dmg,
                                             hitmode, 0));
 
@@ -2464,8 +2490,8 @@ namespace NosGm.GameObject
                                             (int)(monsterInRange.CurrentHp / monsterInRange.MaxHp * 100), dmg,
                                             hitmode, 0)
                                     : StaticPacketHelper.SkillUsed(UserType.Monster, MapMonsterId, (byte)UserType.Monster,
-                                            monsterInRange.MapMonsterId, 0,
-                                            Monster.BasicCooldown, (short)(Monster.BasicSkill != 0 ? Monster.BasicSkill : 1), 0, 0, 0, monsterInRange.CurrentHp > 0,
+                                            monsterInRange.MapMonsterId, Monster.BasicSkill,
+                                            Monster.BasicCooldown, Monster.AttackClass, 0, MapX, MapY, monsterInRange.CurrentHp > 0,
                                             (int)(monsterInRange.CurrentHp / monsterInRange.MaxHp * 100), dmg,
                                             hitmode, 0));
 
@@ -2658,8 +2684,8 @@ namespace NosGm.GameObject
                                             (int)(npcInRange.CurrentHp / npcInRange.MaxHp * 100), dmg,
                                             hitmode, 0)
                                     : StaticPacketHelper.SkillUsed(UserType.Monster, MapMonsterId, (byte)UserType.Npc,
-                                            npcInRange.MapNpcId, 0,
-                                            Monster.BasicCooldown, (short)(Monster.BasicSkill != 0 ? Monster.BasicSkill : 1), 0, 0, 0, npcInRange.CurrentHp > 0,
+                                            npcInRange.MapNpcId, Monster.BasicSkill,
+                                            Monster.BasicCooldown, Monster.AttackClass, 0, MapX, MapY, npcInRange.CurrentHp > 0,
                                             (int)(npcInRange.CurrentHp / npcInRange.MaxHp * 100), dmg,
                                             hitmode, 0));
 

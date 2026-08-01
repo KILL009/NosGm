@@ -121,14 +121,14 @@ namespace NosGm.GameObject
 
         public Skill BasicSkill => new Skill
         {
-            SkillVNum = 0,
+            SkillVNum = Monster.BasicSkill,
             Cooldown = Monster.BasicCooldown,
-            AttackAnimation = 11,
+            AttackAnimation = Monster.AttackClass,
             Range = Monster.BasicRange,
             Class = IsUsingSp && Sp != null ? (byte)PartnerHelper.GetAttackType(Sp.Instance.ItemVNum) : Monster.AttackClass,
             CastAnimation = -1,
             CastEffect = -1,
-            Effect = Monster.BasicSkill
+            Effect = 0
         };
 
         public IDisposable Life { get; set; }
@@ -2183,8 +2183,8 @@ namespace NosGm.GameObject
                                 target.Hp > 0,
                                 (int)(target.Hp / target.HPLoad() * 100), damage,
                                 hitmode, 0)
-                            : StaticPacketHelper.SkillUsed(BattleEntity.UserType, BattleEntity.MapEntityId, (byte)target.UserType, target.MapEntityId, 0,
-                                Monster.BasicCooldown, (short)(Monster.BasicSkill != 0 ? Monster.BasicSkill : 1), 0, 0, 0, target.Hp > 0,
+                            : StaticPacketHelper.SkillUsed(BattleEntity.UserType, BattleEntity.MapEntityId, (byte)target.UserType, target.MapEntityId, Monster.BasicSkill,
+                                Monster.BasicCooldown, Monster.AttackClass, 0, MapX, MapY, target.Hp > 0,
                                 (int)(target.Hp / target.HPLoad() * 100), damage,
                                 hitmode, 0));
 
@@ -2596,8 +2596,8 @@ namespace NosGm.GameObject
                                     characterInRange.Hp > 0,
                                     (int)(characterInRange.Hp / characterInRange.HPLoad() * 100), dmg,
                                     hitmode, 0)
-                                : StaticPacketHelper.SkillUsed(BattleEntity.UserType, BattleEntity.MapEntityId, (byte)UserType.Player, characterInRange.CharacterId, 0,
-                                    Monster.BasicCooldown, (short)(Monster.BasicSkill != 0 ? Monster.BasicSkill : 1), 0, 0, 0, characterInRange.Hp > 0,
+                                : StaticPacketHelper.SkillUsed(BattleEntity.UserType, BattleEntity.MapEntityId, (byte)UserType.Player, characterInRange.CharacterId, Monster.BasicSkill,
+                                    Monster.BasicCooldown, Monster.AttackClass, 0, MapX, MapY, characterInRange.Hp > 0,
                                     (int)(characterInRange.Hp / characterInRange.HPLoad() * 100), dmg,
                                     hitmode, 0));
 
