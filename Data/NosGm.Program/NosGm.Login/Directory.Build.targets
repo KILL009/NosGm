@@ -1,0 +1,33 @@
+<Project>
+  <PropertyGroup>
+    <LoginValueTupleAssembly>$(NuGetPackageRoot)system.valuetuple\4.6.2\lib\net47\System.ValueTuple.dll</LoginValueTupleAssembly>
+  </PropertyGroup>
+
+  <Target Name="PrepareLoginValueTupleRuntime" AfterTargets="Build">
+    <Error Condition="!Exists('$(LoginValueTupleAssembly)')"
+           Text="System.ValueTuple runtime assembly was not restored at $(LoginValueTupleAssembly)." />
+    <Error Condition="!Exists('$(TargetPath).config')"
+           Text="The Login runtime configuration was not generated at $(TargetPath).config." />
+
+    <Copy SourceFiles="$(LoginValueTupleAssembly)"
+          DestinationFiles="$(TargetDir)System.ValueTuple.dll"
+          SkipUnchangedFiles="true" />
+
+    <XmlPoke XmlInputPath="$(TargetPath).config"
+             Query="/configuration/runtime/*[local-name()='assemblyBinding']/*[local-name()='dependentAssembly'][*[local-name()='assemblyIdentity']/@name='System.ValueTuple']/*[local-name()='bindingRedirect']/@oldVersion"
+             Value="0.0.0.0-4.0.5.0" />
+    <XmlPoke XmlInputPath="$(TargetPath).config"
+             Query="/configuration/runtime/*[local-name()='assemblyBinding']/*[local-name()='dependentAssembly'][*[local-name()='assemblyIdentity']/@name='System.ValueTuple']/*[local-name()='bindingRedirect']/@newVersion"
+             Value="4.0.5.0" />
+
+    <XmlPeek XmlInputPath="$(TargetPath).config"
+             Query="/configuration/runtime/*[local-name()='assemblyBinding']/*[local-name()='dependentAssembly'][*[local-name()='assemblyIdentity']/@name='System.ValueTuple']/*[local-name()='bindingRedirect']/@newVersion">
+      <Output TaskParameter="Result" PropertyName="LoginValueTupleRedirectVersion" />
+    </XmlPeek>
+
+    <Error Condition="!Exists('$(TargetDir)System.ValueTuple.dll')"
+           Text="System.ValueTuple.dll was not copied to the Login output directory." />
+    <Error Condition="'$(LoginValueTupleRedirectVersion)' != '4.0.5.0'"
+           Text="The Login System.ValueTuple binding redirect was not aligned to assembly version 4.0.5.0." />
+  </Target>
+</Project>
