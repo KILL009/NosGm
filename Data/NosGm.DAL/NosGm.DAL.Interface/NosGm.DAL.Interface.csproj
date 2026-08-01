@@ -140,6 +140,7 @@
     <Compile Include="PropertiesMapping\IModuleMapper.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="IMinigameLogDAO.cs" />
+    <Compile Include="ICacheService.cs" />
   </ItemGroup>
   <ItemGroup>
     <None Include="app.config">

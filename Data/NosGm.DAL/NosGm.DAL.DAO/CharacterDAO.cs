@@ -1,4 +1,4 @@
-﻿using NosGm.Core;
+using NosGm.Core;
 using NosGm.DAL.EF;
 using NosGm.DAL.EF.Helpers;
 using NosGm.DAL.Interface;
@@ -62,7 +62,7 @@ namespace NosGm.DAL.DAO
             using (var context = DataAccessHelper.CreateContext())
             {
                 var result = new List<CharacterDTO>();
-                foreach (var entity in context.Character
+                foreach (var entity in context.Character.AsNoTracking()
                     .Where(c => c.State == (byte)CharacterState.Active && c.Account.Authority == AuthorityType.User &&
                                 !c.Account.PenaltyLog.Any(l =>
                                     l.Penalty == PenaltyType.Banned && l.DateEnd > DateTime.Now))
@@ -86,7 +86,7 @@ namespace NosGm.DAL.DAO
             using (var context = DataAccessHelper.CreateContext())
             {
                 var result = new List<CharacterDTO>();
-                foreach (var entity in context.Character
+                foreach (var entity in context.Character.AsNoTracking()
                     .Where(c => c.State == (byte)CharacterState.Active && c.Account.Authority == AuthorityType.User &&
                                 !c.Account.PenaltyLog.Any(l =>
                                     l.Penalty == PenaltyType.Banned && l.DateEnd > DateTime.Now))
@@ -110,7 +110,7 @@ namespace NosGm.DAL.DAO
             using (var context = DataAccessHelper.CreateContext())
             {
                 var result = new List<CharacterDTO>();
-                foreach (var entity in context.Character
+                foreach (var entity in context.Character.AsNoTracking()
                     .Where(c => c.State == (byte)CharacterState.Active && c.Account.Authority <= AuthorityType.GS &&
                                 !c.Account.PenaltyLog.Any(l =>
                                     l.Penalty == PenaltyType.Banned && l.DateEnd > DateTime.Now))
@@ -134,7 +134,7 @@ namespace NosGm.DAL.DAO
             using (var context = DataAccessHelper.CreateContext())
             {
                 var result = new List<CharacterDTO>();
-                foreach (var entity in context.Character
+                foreach (var entity in context.Character.AsNoTracking()
                     .Where(c => c.State == (byte)CharacterState.Active && c.Account.Authority <= AuthorityType.GS &&
                                 !c.Account.PenaltyLog.Any(l =>
                                     l.Penalty == PenaltyType.Banned && l.DateEnd > DateTime.Now))
@@ -158,7 +158,7 @@ namespace NosGm.DAL.DAO
             using (var context = DataAccessHelper.CreateContext())
             {
                 var result = new List<CharacterDTO>();
-                foreach (var entity in context.Character
+                foreach (var entity in context.Character.AsNoTracking()
                     .Where(c => c.State == (byte)CharacterState.Active && c.Account.Authority <= AuthorityType.GS &&
                                 !c.Account.PenaltyLog.Any(l =>
                                     l.Penalty == PenaltyType.Banned && l.DateEnd > DateTime.Now))
@@ -216,7 +216,7 @@ namespace NosGm.DAL.DAO
             using (var context = DataAccessHelper.CreateContext())
             {
                 var result = new List<CharacterDTO>();
-                foreach (var chara in context.Character)
+                foreach (var chara in context.Character.AsNoTracking())
                 {
                     var dto = new CharacterDTO();
                     CharacterMapper.ToCharacterDTO(chara, dto);
@@ -232,7 +232,7 @@ namespace NosGm.DAL.DAO
             using (var context = DataAccessHelper.CreateContext())
             {
                 var result = new List<CharacterDTO>();
-                foreach (var entity in context.Character.Where(c => c.AccountId.Equals(accountId))
+                foreach (var entity in context.Character.AsNoTracking().Where(c => c.AccountId.Equals(accountId))
                     .OrderByDescending(c => c.Slot))
                 {
                     var dto = new CharacterDTO();
@@ -249,7 +249,7 @@ namespace NosGm.DAL.DAO
             using (var context = DataAccessHelper.CreateContext())
             {
                 var result = new List<CharacterDTO>();
-                foreach (var entity in context.Character
+                foreach (var entity in context.Character.AsNoTracking()
                     .Where(c => c.AccountId.Equals(accountId) && c.State.Equals((byte)CharacterState.Active))
                     .OrderByDescending(c => c.Slot))
                 {
@@ -270,7 +270,7 @@ namespace NosGm.DAL.DAO
                 {
                     var dto = new CharacterDTO();
                     if (CharacterMapper.ToCharacterDTO(
-                        context.Character.FirstOrDefault(c => c.CharacterId.Equals(characterId)), dto)) return dto;
+                        context.Character.AsNoTracking().FirstOrDefault(c => c.CharacterId.Equals(characterId)), dto)) return dto;
 
                     return null;
                 }
@@ -289,7 +289,7 @@ namespace NosGm.DAL.DAO
                 using (var context = DataAccessHelper.CreateContext())
                 {
                     var dto = new CharacterDTO();
-                    if (CharacterMapper.ToCharacterDTO(context.Character.SingleOrDefault(c => c.Name.Equals(name)), dto)
+                    if (CharacterMapper.ToCharacterDTO(context.Character.AsNoTracking().SingleOrDefault(c => c.Name.Equals(name)), dto)
                     ) return dto;
 
                     return null;
@@ -311,7 +311,7 @@ namespace NosGm.DAL.DAO
                 {
                     var dto = new CharacterDTO();
                     if (CharacterMapper.ToCharacterDTO(
-                        context.Character.SingleOrDefault(c =>
+                        context.Character.AsNoTracking().SingleOrDefault(c =>
                             c.AccountId.Equals(accountId) && c.Slot.Equals(slot) &&
                             c.State.Equals((byte)CharacterState.Active)), dto)) return dto;
 

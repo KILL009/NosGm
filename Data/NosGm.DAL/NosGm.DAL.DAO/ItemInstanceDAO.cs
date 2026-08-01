@@ -1,4 +1,4 @@
-﻿using NosGm.Core;
+using NosGm.Core;
 using NosGm.DAL.EF;
 using NosGm.DAL.EF.Helpers;
 using NosGm.DAL.Interface;
@@ -189,7 +189,7 @@ namespace NosGm.DAL.DAO
             using (var context = DataAccessHelper.CreateContext())
             {
                 var result = new List<ItemInstanceDTO>();
-                foreach (var itemInstance in context.ItemInstance.Where(i => i.CharacterId.Equals(characterId)))
+                foreach (var itemInstance in context.ItemInstance.AsNoTracking().Where(i => i.CharacterId.Equals(characterId)))
                 {
                     var output = new ItemInstanceDTO();
                     map(itemInstance, output);
@@ -205,7 +205,7 @@ namespace NosGm.DAL.DAO
             using (var context = DataAccessHelper.CreateContext())
             {
                 var ItemInstanceDTO = new ItemInstanceDTO();
-                if (map(context.ItemInstance.FirstOrDefault(i => i.Id.Equals(id)), ItemInstanceDTO))
+                if (map(context.ItemInstance.AsNoTracking().FirstOrDefault(i => i.Id.Equals(id)), ItemInstanceDTO))
                     return ItemInstanceDTO;
 
                 return null;
@@ -218,7 +218,7 @@ namespace NosGm.DAL.DAO
             {
                 using (var context = DataAccessHelper.CreateContext())
                 {
-                    var entity = context.ItemInstance.FirstOrDefault(i =>
+                    var entity = context.ItemInstance.AsNoTracking().FirstOrDefault(i =>
                         i.CharacterId == characterId && i.Slot == slot && i.Type == type);
                     var output = new ItemInstanceDTO();
                     if (map(entity, output)) return output;
@@ -238,7 +238,7 @@ namespace NosGm.DAL.DAO
             using (var context = DataAccessHelper.CreateContext())
             {
                 var result = new List<ItemInstanceDTO>();
-                foreach (var itemInstance in context.ItemInstance.Where(i =>
+                foreach (var itemInstance in context.ItemInstance.AsNoTracking().Where(i =>
                     i.CharacterId == characterId && i.Type == type))
                 {
                     var output = new ItemInstanceDTO();
@@ -256,7 +256,7 @@ namespace NosGm.DAL.DAO
             {
                 using (var context = DataAccessHelper.CreateContext())
                 {
-                    return context.ItemInstance.Where(i => i.CharacterId.Equals(characterId)).Select(i => i.Id)
+                    return context.ItemInstance.AsNoTracking().Where(i => i.CharacterId.Equals(characterId)).Select(i => i.Id)
                         .ToList();
                 }
             }

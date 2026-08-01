@@ -1,4 +1,4 @@
-﻿using NosGm.DAL.EF;
+using NosGm.DAL.EF;
 using NosGm.DAL.EF.Helpers;
 using NosGm.DAL.Interface;
 using NosGm.Data;
@@ -115,7 +115,7 @@ namespace NosGm.DAL.DAO
             {
                 using (var context = DataAccessHelper.CreateContext())
                 {
-                    var account = context.Account.FirstOrDefault(a => a.AccountId.Equals(accountId));
+                    var account = context.Account.AsNoTracking().FirstOrDefault(a => a.AccountId.Equals(accountId));
                     if (account != null)
                     {
                         var accountDTO = new AccountDTO();
@@ -140,7 +140,7 @@ namespace NosGm.DAL.DAO
             {
                 using (var context = DataAccessHelper.CreateContext())
                 {
-                    var account = context.Account.FirstOrDefault(a => a.Name.Equals(name));
+                    var account = context.Account.AsNoTracking().FirstOrDefault(a => a.Name.Equals(name));
                     if (account != null)
                     {
                         var accountDTO = new AccountDTO();
