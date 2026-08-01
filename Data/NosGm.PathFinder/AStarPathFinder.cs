@@ -5,6 +5,66 @@ namespace NosGm.PathFinder
 {
     public static class AStarPathFinder
     {
+        private class PathfinderState
+        {
+            public int Generation;
+            public int[,] NodeGen;
+            public bool[,] Closed;
+            public double[,] GScore;
+            public GridPos[,] Parent;
+            public int CapacityX;
+            public int CapacityY;
+
+            public PathfinderState(int capacityX, int capacityY)
+            {
+                CapacityX = capacityX;
+                CapacityY = capacityY;
+                NodeGen = new int[capacityX, capacityY];
+                Closed = new bool[capacityX, capacityY];
+                GScore = new double[capacityX, capacityY];
+                Parent = new GridPos[capacityX, capacityY];
+            }
+
+            public void EnsureCapacity(int sizeX, int sizeY)
+            {
+                if (sizeX > CapacityX || sizeY > CapacityY)
+                {
+                    CapacityX = Math.Max(CapacityX * 2, sizeX);
+                    CapacityY = Math.Max(CapacityY * 2, sizeY);
+                    NodeGen = new int[CapacityX, CapacityY];
+                    Closed = new bool[CapacityX, CapacityY];
+                    GScore = new double[CapacityX, CapacityY];
+                    Parent = new GridPos[CapacityX, CapacityY];
+                    Generation = 0;
+                }
+            }
+
+            public double GetGScore(int x, int y) => NodeGen[x, y] == Generation ? GScore[x, y] : double.MaxValue;
+            public bool IsClosed(int x, int y) => NodeGen[x, y] == Generation && Closed[x, y];
+
+            public void SetGScore(int x, int y, double score)
+            {
+                if (NodeGen[x, y] != Generation)
+                {
+                    NodeGen[x, y] = Generation;
+                    Closed[x, y] = false;
+                }
+                GScore[x, y] = score;
+            }
+
+            public void SetClosed(int x, int y)
+            {
+                if (NodeGen[x, y] != Generation)
+                {
+                    NodeGen[x, y] = Generation;
+                    GScore[x, y] = double.MaxValue;
+                }
+                Closed[x, y] = true;
+            }
+        }
+
+        [ThreadStatic]
+        private static PathfinderState _state;
         private static readonly short[] dx = { 0, 1, 1, 1, 0, -1, -1, -1 };
         private static readonly short[] dy = { -1, -1, 0, 1, 1, 1, 0, -1 };
 
@@ -22,17 +82,21 @@ namespace NosGm.PathFinder
             if (start.X == end.X && start.Y == end.Y)
                 return new List<GridPos> { start };
 
-            bool[,] closed = new bool[maxX, maxY];
-            double[,] gScore = new double[maxX, maxY];
-            GridPos[,] parent = new GridPos[maxX, maxY];
+            if (_state == null) _state = new PathfinderState(256, 256);
+            _state.EnsureCapacity(maxX, maxY);
+
+            _state.Generation++;
+            if (_state.Generation == int.MaxValue)
+            {
+                _state.NodeGen = new int[_state.CapacityX, _state.CapacityY];
+                _state.Generation = 1;
+            }
             
-            for(int i = 0; i < maxX; i++)
-                for(int j = 0; j < maxY; j++)
-                    gScore[i,j] = double.MaxValue;
+            var parent = _state.Parent;
 
             var openSet = new BinaryHeap<PathNode>(128);
             
-            gScore[start.X, start.Y] = 0;
+            _state.SetGScore(start.X, start.Y, 0);
             openSet.Push(new PathNode(start.X, start.Y) { F = Heuristic.Octile(Math.Abs(start.X - end.X), Math.Abs(start.Y - end.Y)) });
 
             int expansions = 0;
@@ -41,8 +105,8 @@ namespace NosGm.PathFinder
             {
                 var current = openSet.Pop();
                 
-                if (closed[current.X, current.Y]) continue;
-                closed[current.X, current.Y] = true;
+                if (_state.IsClosed(current.X, current.Y)) continue;
+                _state.SetClosed(current.X, current.Y);
 
                 if (current.X == end.X && current.Y == end.Y)
                 {
@@ -57,7 +121,7 @@ namespace NosGm.PathFinder
                     short ny = (short)(current.Y + dy[i]);
 
                     if (nx < 0 || ny < 0 || nx >= maxX || ny >= maxY) continue;
-                    if (closed[nx, ny] || !grid[nx][ny].IsWalkable()) continue;
+                    if (_state.IsClosed(nx, ny) || !grid[nx][ny].IsWalkable()) continue;
 
                     // Corner cutting prevention
                     if (i % 2 != 0) 
@@ -65,12 +129,12 @@ namespace NosGm.PathFinder
                         if (!grid[current.X][ny].IsWalkable() || !grid[nx][current.Y].IsWalkable()) continue;
                     }
 
-                    double tentativeG = gScore[current.X, current.Y] + (i % 2 == 0 ? 1 : 1.41421356);
+                    double tentativeG = _state.GetGScore(current.X, current.Y) + (i % 2 == 0 ? 1 : 1.41421356);
 
-                    if (tentativeG < gScore[nx, ny])
+                    if (tentativeG < _state.GetGScore(nx, ny))
                     {
                         parent[nx, ny] = grid[current.X][current.Y];
-                        gScore[nx, ny] = tentativeG;
+                        _state.SetGScore(nx, ny, tentativeG);
                         double f = tentativeG + Heuristic.Octile(Math.Abs(nx - end.X), Math.Abs(ny - end.Y));
                         openSet.Push(new PathNode(nx, ny) { F = f });
                     }
