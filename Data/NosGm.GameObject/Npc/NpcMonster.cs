@@ -89,10 +89,14 @@ namespace NosGm.GameObject
 
         #region Methods
 
-        public string GenerateEInfo()
+        public string GenerateEInfo(bool useClientLocalizedName = false)
         {
+            var displayName = useClientLocalizedName || string.IsNullOrWhiteSpace(Name)
+                ? "@"
+                : Name.Replace(' ', '^');
+
             return
-                $"e_info 10 {(OriginalNpcMonsterVNum > 0 ? OriginalNpcMonsterVNum : NpcMonsterVNum)} {Level} {Element} {AttackClass} {ElementRate} {AttackUpgrade} {DamageMinimum} {DamageMaximum} {Concentrate} {CriticalChance} {CriticalRate} {DefenceUpgrade} {CloseDefence} {DefenceDodge} {DistanceDefence} {DistanceDefenceDodge} {MagicDefence} {FireResistance} {WaterResistance} {LightResistance} {DarkResistance} {MaxHP} {MaxMP} -1 {Name.Replace(' ', '^')}";
+                $"e_info 10 {(OriginalNpcMonsterVNum > 0 ? OriginalNpcMonsterVNum : NpcMonsterVNum)} {Level} {Element} {AttackClass} {ElementRate} {AttackUpgrade} {DamageMinimum} {DamageMaximum} {Concentrate} {CriticalChance} {CriticalRate} {DefenceUpgrade} {CloseDefence} {DefenceDodge} {DistanceDefence} {DistanceDefenceDodge} {MagicDefence} {FireResistance} {WaterResistance} {LightResistance} {DarkResistance} {MaxHP} {MaxMP} -1 {displayName} 0 0";
         }
 
         public float GetRes(int skillelement)

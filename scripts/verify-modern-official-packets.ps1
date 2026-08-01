@@ -38,14 +38,39 @@ function Get-PacketFields([string]$Packet) {
 }
 
 $equipmentPacket = Read-Source "Data/NosGm.Packets/Packets/ClientPackets/EquipmentInfoPacket.cs"
+$reqInfoPacketDefinition = Read-Source "Data/NosGm.Packets/Packets/ClientPackets/ReqInfoPacket.cs"
 $character = Read-Source "Data/NosGm.GameObject/Character.cs"
 $mate = Read-Source "Data/NosGm.GameObject/Mate.cs"
+$npcMonster = Read-Source "Data/NosGm.GameObject/Npc/NpcMonster.cs"
 $ncifHandler = Read-Source "Data/NosGm.Handler/PacketHandler/Basic/NcifPacketHandler.cs"
+$reqInfoHandler = Read-Source "Data/NosGm.Handler/PacketHandler/Basic/ReqInfoPacketHandler.cs"
 $itemInstance = Read-Source "Data/NosGm.GameObject/Item/Instance/ItemInstance.cs"
 
 Assert-True `
     ($equipmentPacket.Contains('[PacketHeader("eqinfo", "eginfo")]')) `
     "Both legacy eqinfo and current eginfo requests are accepted"
+
+Assert-True `
+    ($reqInfoPacketDefinition.Contains('[PacketIndex(1)] public long TargetTypeOrVNum')) `
+    "req_info field 1 supports the modern entity type"
+Assert-True `
+    ($reqInfoPacketDefinition.Contains('[PacketIndex(2)] public int? TargetId')) `
+    "req_info field 2 supports the modern map entity id"
+Assert-True `
+    ($reqInfoHandler.Contains('switch (reqInfoPacket.TargetTypeOrVNum)')) `
+    "Modern req_info dispatches by entity type"
+Assert-True `
+    ($reqInfoHandler.Contains('GetMonsterById(targetId)')) `
+    "Modern monster req_info resolves the map monster transport id"
+Assert-True `
+    ($reqInfoHandler.Contains('monsterInfo.GenerateEInfo(useClientLocalizedName: true)')) `
+    "Modern monster req_info requests the client-localized e_info layout"
+Assert-True `
+    ($npcMonster.Contains('public string GenerateEInfo(bool useClientLocalizedName = false)')) `
+    "Monster e_info supports the official client name marker"
+Assert-True `
+    ($npcMonster.Contains('{displayName} 0 0";')) `
+    "Monster e_info emits the two modern reserved tail fields"
 
 $statSources = @($character, $mate, $ncifHandler)
 $modernStatMarkers = 0
@@ -112,6 +137,21 @@ Assert-Equal $officialCInfo[19] "-1" "Official c_info field 19 is the modern sen
 $officialStat = Get-PacketFields "st 3 2887 1 0 100 100 156 10 156 10 0"
 Assert-Equal $officialStat.Count 11 "Official st has 11 base fields"
 Assert-Equal $officialStat[10] "0" "Official st field 10 is reserved"
+
+$officialMonsterReqInfo = Get-PacketFields "req_info 6 3 3464"
+Assert-Equal $officialMonsterReqInfo.Count 3 "Official monster req_info has three fields"
+Assert-Equal $officialMonsterReqInfo[0] "6" "Official monster req_info uses modern request type 6"
+Assert-Equal $officialMonsterReqInfo[1] "3" "Official monster req_info entity type is 3"
+Assert-Equal $officialMonsterReqInfo[2] "3464" "Official monster req_info carries the map monster id"
+
+$officialMonsterInfo = Get-PacketFields `
+    "e_info 10 27 14 2 0 15 0 86 116 92 4 70 0 61 96 54 96 50 -10 15 0 0 481 108 -1 @ 0 0"
+Assert-Equal $officialMonsterInfo.Count 28 "Official monster e_info has 28 fields"
+Assert-Equal $officialMonsterInfo[0] "10" "Official monster e_info uses entity layout 10"
+Assert-Equal $officialMonsterInfo[1] "27" "Official monster e_info exposes the resolved monster VNum"
+Assert-Equal $officialMonsterInfo[25] "@" "Official monster e_info delegates the name to client data"
+Assert-Equal $officialMonsterInfo[26] "0" "Official monster e_info reserved field 26 is zero"
+Assert-Equal $officialMonsterInfo[27] "0" "Official monster e_info reserved field 27 is zero"
 
 $officialArmor = Get-PacketFields "e_info 2 769 2 0 0 74 152 198 184 335 103156 -1 0 0 0 0"
 Assert-Equal $officialArmor.Count 16 "Official armor e_info has the expected empty-option layout"
