@@ -443,10 +443,9 @@ namespace NosGm.GameObject
             IsAlive = true;
             ShouldRespawn = ShouldRespawn ?? true;
             
-            InitializeAI();
             Monster = ServerManager.GetNpcMonster(MonsterVNum);
             Faction = MonsterHelper.GetFaction(MonsterVNum);
-            
+            InitializeAI();
 
 
             if (BaseMaxHp <= 0)
