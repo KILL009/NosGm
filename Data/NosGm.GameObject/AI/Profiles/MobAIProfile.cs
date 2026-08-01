@@ -4,6 +4,7 @@ using global::NosGm.AI.Decorators;
 using NosGm.GameObject;
 using NosGm.GameObject.AI.Actions;
 using NosGm.GameObject.AI.Conditions;
+using System;
 
 namespace NosGm.GameObject.AI.Profiles
 {
@@ -13,6 +14,17 @@ namespace NosGm.GameObject.AI.Profiles
 
         public MobAIProfile(MapMonster monster)
         {
+            if (monster == null)
+            {
+                throw new ArgumentNullException(nameof(monster));
+            }
+
+            if (monster.Monster == null)
+            {
+                throw new InvalidOperationException(
+                    $"Cannot build the AI profile for map monster {monster.MapMonsterId}: NPC/monster definition {monster.MonsterVNum} is missing.");
+            }
+
             var blackboard = new Blackboard();
             blackboard.Set("Self", monster);
 
