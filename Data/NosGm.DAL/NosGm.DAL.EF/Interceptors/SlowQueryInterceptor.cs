@@ -1,5 +1,3 @@
-using NosGm.Data.Enums;
-using NosGm.LoggerService;
 using System;
 using System.Data.Common;
 using System.Data.Entity.Infrastructure.Interception;
@@ -55,7 +53,7 @@ namespace NosGm.DAL.EF.Interceptors
                 if (sw.ElapsedMilliseconds > _slowQueryThresholdMs)
                 {
                     string message = $"[SLOW QUERY] Execution Time: {sw.ElapsedMilliseconds}ms. Command: {command.CommandText}";
-                    _ = LogServer.Logger.LogAsync(message, LogType.ERROR);
+                    _ = NosGm.LoggerService.LogServer.Logger.LogAsync(message, NosGm.Domain.LogType.ERROR);
                 }
             }
         }
