@@ -8,5 +8,6 @@
     <Optimize>true</Optimize>
   </PropertyGroup>
   <ItemGroup>
+    <ProjectReference Include="..\NosGm.PathFinder\NosGm.PathFinder.csproj" />
   </ItemGroup>
 </Project>
