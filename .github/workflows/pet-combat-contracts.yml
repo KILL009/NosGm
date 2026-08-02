@@ -1,0 +1,33 @@
+name: Pet combat contracts
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - Data/NosGm.GameObject/AI/**
+      - Data/NosGm.GameObject/Character.cs
+      - Data/NosGm.GameObject/Mate.cs
+      - scripts/verify-pet-combat-contracts.ps1
+  push:
+    branches:
+      - main
+    paths:
+      - Data/NosGm.GameObject/AI/**
+      - Data/NosGm.GameObject/Character.cs
+      - Data/NosGm.GameObject/Mate.cs
+      - scripts/verify-pet-combat-contracts.ps1
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: windows-2022
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Verify pet combat, tanking and experience contracts
+        shell: pwsh
+        run: ./scripts/verify-pet-combat-contracts.ps1
