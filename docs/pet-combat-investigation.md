@@ -6,7 +6,7 @@
 - Monsters keep attacking the owner instead of the pet.
 - The pet remains at level 1 and 0% experience.
 
-## Root causes
+## Confirmed combat root causes
 
 ### Behavior-tree and legacy target state were disconnected
 
@@ -20,9 +20,14 @@ The new mob AI stored its target only in the behavior-tree blackboard. Pet defen
 
 Pet attacks were executed, but the target monster was not explicitly given the pet as an aggro target. This allowed the owner to remain the preferred target.
 
-### Experience forwarding already existed
+## Experience findings
 
-`Character.GenerateXp` already forwards the calculated combat XP to every living active mate through `mate.GenerateXp(xp)`. The visible 0% was therefore downstream of the combat failure: a pet that never participates in working combat does not exercise the expected progression path.
+`Character.GenerateXp` already forwards calculated combat XP to every living active mate through `mate.GenerateXp(xp)`. Therefore the 0% display is not explained solely by the missing forwarding call.
+
+Runtime validation must distinguish between two cases:
+
+1. The internal `Experience` value remains unchanged. Check whether the kill produced eligible character XP, whether the pet is alive and an active team member, and whether the pet is below the owner level.
+2. The internal `Experience` value increases but the client still displays 0%. Capture and compare the `sc_p` packet because its current field layout has not yet been verified against the same official client version.
 
 ## Implemented correction
 
@@ -31,15 +36,16 @@ Pet attacks were executed, but the target monster was not explicitly given the p
 - Prefer valid entries from the monster aggro list before acquiring a new player target.
 - Let pets detect monsters targeting the owner or active team mates.
 - Add the pet itself to monster aggro and switch the monster target when the pet attacks.
-- Add regression contracts for combat targeting, pet threat and mate XP forwarding.
+- Add regression contracts for combat targeting, pet threat and the existing mate XP forwarding path.
 
 ## Runtime acceptance test
 
-1. Summon one pet below the character's level.
-2. Record its current level and experience percentage.
-3. Let a hostile monster attack the character without manually ordering the pet.
+1. Summon one living pet whose level is below the character level.
+2. Record the pet level, percentage and the `Experience` field from `sc_p`.
+3. Let a hostile monster attack the character without repeatedly ordering the pet.
 4. Confirm that the pet attacks the monster.
-5. Confirm that the monster can switch its attacks to the pet.
-6. Kill several monsters with the pet active and alive.
-7. Reopen the pet information window and confirm that experience increases.
-8. Continue until the pet levels, provided its level remains below the owner's level.
+5. Confirm that the monster can switch its attacks to the pet and reduce its HP.
+6. Kill an eligible monster that awards non-zero character XP.
+7. Capture `sc_p` again and compare the raw `Experience` field.
+8. Reopen the pet information window and confirm that the percentage increases.
+9. Continue until the pet levels, while its level remains below the owner level.
