@@ -3,7 +3,8 @@
   <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
   <PropertyGroup>
     <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
-    <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
+    <Platform Condition=" '$(Platform)' == '' ">x64</Platform>
+    <PlatformTarget>x64</PlatformTarget>
     <ProjectGuid>{9AA91BF5-88E7-4130-9F42-73AE206E2916}</ProjectGuid>
     <OutputType>Exe</OutputType>
     <RootNamespace>NosGm.Master.Server</RootNamespace>
@@ -228,3 +229,4 @@
 
   </PropertyGroup>
 </Project>
+

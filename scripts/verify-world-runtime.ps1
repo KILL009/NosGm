@@ -13,11 +13,11 @@ $namespace = New-Object System.Xml.XmlNamespaceManager($project.NameTable)
 $namespace.AddNamespace("msb", "http://schemas.microsoft.com/developer/msbuild/2003")
 
 $releaseGroup = $project.SelectSingleNode(
-    "//msb:PropertyGroup[contains(@Condition, 'Release|AnyCPU')]",
+    "//msb:PropertyGroup[contains(@Condition, 'Release|x64')]",
     $namespace)
 
 if ($null -eq $releaseGroup) {
-    throw "Release|AnyCPU property group was not found in $ProjectPath"
+    throw "Release|x64 property group was not found in $ProjectPath"
 }
 
 $platformTarget = [string]$releaseGroup.PlatformTarget

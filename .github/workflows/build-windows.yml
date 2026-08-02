@@ -1,4 +1,4 @@
-﻿name: Windows .NET Framework build
+name: Windows .NET Framework build
 
 on:
   push:
@@ -91,8 +91,7 @@ jobs:
             /v:minimal `
             /p:RestorePackagesConfig=true `
             /p:NosGmLegacyBuild=true `
-            /p:Configuration="$env:CONFIGURATION" `
-            /p:Platform="$env:PLATFORM"
+            /p:Configuration="$env:CONFIGURATION"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Restore NuGet packages
@@ -115,7 +114,7 @@ jobs:
             /v:minimal `
             /p:NosGmLegacyBuild=true `
             /p:Configuration="$env:CONFIGURATION" `
-            /p:Platform=x64 `
+            /p:Platform="$env:PLATFORM" `
             /bl:"$env:ARTIFACTS\resx.binlog" `
             /fl `
             /flp:"logfile=$env:ARTIFACTS\resx.log;verbosity=normal" 2>&1
@@ -134,7 +133,6 @@ jobs:
             /v:minimal `
             /p:NosGmLegacyBuild=true `
             /p:Configuration="$env:CONFIGURATION" `
-            /p:Platform="$env:PLATFORM" `
             /bl:"$env:ARTIFACTS\build.binlog" `
             /fl `
             /flp:"logfile=$env:ARTIFACTS\build.log;verbosity=normal" 2>&1
