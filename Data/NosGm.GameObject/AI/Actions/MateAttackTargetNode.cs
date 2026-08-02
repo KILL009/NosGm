@@ -28,7 +28,7 @@ namespace NosGm.GameObject.AI.Actions
                 IEnumerable<NpcMonsterSkill> mateSkills = mate.PSkills;
                 if (mateSkills == null || !mateSkills.Any()) return BehaviorStatus.Failure;
 
-                List<NpcMonsterSkill> PossibleSkills = mateSkills.Where(s => (DateTime.Now - s.LastSkillUse).TotalMilliseconds >= 1000 * s.Skill.Cooldown || s.Rate == 0).ToList();
+                List<NpcMonsterSkill> PossibleSkills = mateSkills.Where(s => s.Skill != null && ((DateTime.Now - s.LastSkillUse).TotalMilliseconds >= 1000 * s.Skill.Cooldown || s.Rate == 0)).ToList();
 
                 _skill = null;
                 foreach (NpcMonsterSkill ski in PossibleSkills.OrderBy(rnd => ServerManager.RandomNumber()))

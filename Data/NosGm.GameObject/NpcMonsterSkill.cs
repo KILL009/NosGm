@@ -1,4 +1,4 @@
-﻿using NosGm.Data;
+using NosGm.Data;
 using NosGm.GameObject.Networking;
 using System;
 
@@ -42,6 +42,15 @@ namespace NosGm.GameObject
         #region Methods
 
         public bool CanBeUsed() => Skill != null && LastSkillUse.AddMilliseconds(Skill.Cooldown * 100) < DateTime.Now;
+
+        public void SetSkill(Skill skill)
+        {
+            _skill = skill;
+            if (skill != null)
+            {
+                SkillVNum = skill.SkillVNum;
+            }
+        }
 
         #endregion
 

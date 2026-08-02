@@ -1,4 +1,4 @@
-﻿using NosGm.Packets.Packets.ClientPackets;
+using NosGm.Packets.Packets.ClientPackets;
 using NosGm.Core;
 using NosGm.Domain;
 using NosGm.GameObject;
@@ -66,7 +66,7 @@ namespace NosGm.Handler.PacketHandler.Mate
                 {
                     NpcMonsterSkill skill = null;
 
-                    List<NpcMonsterSkill> PossibleSkills = mateSkills.Where(s => (DateTime.Now - s.LastSkillUse).TotalMilliseconds >= 1000 * s.Skill.Cooldown || s.Rate == 0).ToList();
+                    List<NpcMonsterSkill> PossibleSkills = mateSkills.Where(s => s.Skill != null && ((DateTime.Now - s.LastSkillUse).TotalMilliseconds >= 1000 * s.Skill.Cooldown || s.Rate == 0)).ToList();
 
                     foreach (NpcMonsterSkill ski in PossibleSkills.OrderBy(rnd => ServerManager.RandomNumber()))
                     {
