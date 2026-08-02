@@ -54,7 +54,7 @@ jobs:
         shell: pwsh
         run: nuget restore ./NosGm.sln -NonInteractive -Verbosity quiet
 
-      - name: Supply isolated fallback output paths
+      - name: Supply isolated build compatibility settings
         shell: pwsh
         run: |
           @'
@@ -65,6 +65,26 @@ jobs:
             </PropertyGroup>
           </Project>
           '@ | Set-Content -LiteralPath ./Directory.Build.props -Encoding utf8
+
+          $log4net = Get-ChildItem `
+            -LiteralPath "$env:USERPROFILE\.nuget\packages\log4net\3.3.2\lib" `
+            -Filter log4net.dll `
+            -File `
+            -Recurse | Select-Object -First 1
+          if ($null -eq $log4net) {
+            throw "Restored log4net 3.3.2 assembly was not found."
+          }
+          $escapedPath = [Security.SecurityElement]::Escape($log4net.FullName)
+          @"
+          <Project>
+            <ItemGroup Condition="'`$(MSBuildProjectName)' == 'NosGm.Core'">
+              <Reference Include="log4net">
+                <HintPath>$escapedPath</HintPath>
+                <Private>true</Private>
+              </Reference>
+            </ItemGroup>
+          </Project>
+          "@ | Set-Content -LiteralPath ./Directory.Build.targets -Encoding utf8
 
       - name: Build GameObject project
         shell: pwsh
