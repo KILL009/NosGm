@@ -77,7 +77,7 @@ jobs:
           $escapedPath = [Security.SecurityElement]::Escape($log4net.FullName)
           @"
           <Project>
-            <ItemGroup Condition="'`$(MSBuildProjectName)' == 'NosGm.Core'">
+            <ItemGroup>
               <Reference Include="log4net">
                 <HintPath>$escapedPath</HintPath>
                 <Private>true</Private>
