@@ -5,6 +5,7 @@ on:
     branches:
       - main
     paths:
+      - .github/workflows/pet-combat-contracts.yml
       - Data/NosGm.GameObject/AI/**
       - Data/NosGm.GameObject/Character.cs
       - Data/NosGm.GameObject/Mate.cs
@@ -13,6 +14,7 @@ on:
     branches:
       - main
     paths:
+      - .github/workflows/pet-combat-contracts.yml
       - Data/NosGm.GameObject/AI/**
       - Data/NosGm.GameObject/Character.cs
       - Data/NosGm.GameObject/Mate.cs
@@ -31,3 +33,23 @@ jobs:
       - name: Verify pet combat, tanking and experience contracts
         shell: pwsh
         run: ./scripts/verify-pet-combat-contracts.ps1
+
+  compile:
+    name: Compile pet AI project
+    runs-on: windows-2022
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install .NET 10 SDK
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Restore GameObject project
+        shell: pwsh
+        run: dotnet restore ./Data/NosGm.GameObject/NosGm.GameObject.csproj
+
+      - name: Build GameObject project
+        shell: pwsh
+        run: dotnet build ./Data/NosGm.GameObject/NosGm.GameObject.csproj --configuration Release --no-restore --property:Platform=AnyCPU
