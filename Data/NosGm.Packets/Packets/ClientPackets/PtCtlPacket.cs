@@ -4,7 +4,7 @@ using NosGm.Core;
 
 namespace NosGm.Packets.Packets.ClientPackets
 {
-    [PacketHeader("pt_ctl")]
+    [PacketHeader("ptctl")]
     public class PtCtlPacket : PacketDefinition
     {
         #region Properties

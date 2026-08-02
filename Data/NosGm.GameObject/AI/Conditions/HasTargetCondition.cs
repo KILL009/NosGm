@@ -31,6 +31,7 @@ namespace NosGm.GameObject.AI.Conditions
             }
 
             blackboard.Remove("Target");
+            if (entity != null) entity.Target = null;
             return BehaviorStatus.Failure;
         }
     }
