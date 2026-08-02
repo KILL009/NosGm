@@ -20,53 +20,81 @@ namespace NosGm.GameObject.AI.Actions
             var mate = blackboard.Get<Mate>("Self");
             var target = blackboard.Get<BattleEntity>("Target");
 
-            if (mate == null || target == null || target.Hp <= 0 || mate.BattleEntity.Hp <= 0) return BehaviorStatus.Failure;
+            if (mate?.BattleEntity == null ||
+                target == null ||
+                target.Hp <= 0 ||
+                mate.BattleEntity.Hp <= 0 ||
+                target.MapInstance != mate.BattleEntity.MapInstance)
+            {
+                _castStartTime = null;
+                blackboard.Remove("Target");
+                return BehaviorStatus.Failure;
+            }
 
             if (_castStartTime == null)
             {
-                // Select a skill like SuctlPacketHandler does
                 IEnumerable<NpcMonsterSkill> mateSkills = mate.PSkills;
-                if (mateSkills == null || !mateSkills.Any()) return BehaviorStatus.Failure;
+                if (mateSkills == null || !mateSkills.Any())
+                {
+                    return BehaviorStatus.Failure;
+                }
 
-                List<NpcMonsterSkill> PossibleSkills = mateSkills.Where(s => s.Skill != null && ((DateTime.Now - s.LastSkillUse).TotalMilliseconds >= 1000 * s.Skill.Cooldown || s.Rate == 0)).ToList();
+                List<NpcMonsterSkill> possibleSkills = mateSkills
+                    .Where(skill => skill?.Skill != null &&
+                                    ((DateTime.Now - skill.LastSkillUse).TotalMilliseconds >=
+                                     1000 * skill.Skill.Cooldown || skill.Rate == 0))
+                    .ToList();
 
                 _skill = null;
-                foreach (NpcMonsterSkill ski in PossibleSkills.OrderBy(rnd => ServerManager.RandomNumber()))
+                foreach (NpcMonsterSkill skill in possibleSkills.OrderBy(_ => ServerManager.RandomNumber()))
                 {
-                    if (ski.Rate == 0)
+                    if (skill.Rate == 0)
                     {
-                        _skill = ski;
+                        _skill = skill;
                     }
-                    else if (ServerManager.RandomNumber() < ski.Rate)
+                    else if (ServerManager.RandomNumber() < skill.Rate)
                     {
-                        _skill = ski;
+                        _skill = skill;
                         break;
                     }
                 }
 
-                if (_skill == null) return BehaviorStatus.Running; // Wait for cooldown
+                if (_skill == null)
+                {
+                    return BehaviorStatus.Running;
+                }
 
-                // Mates just attack instantly, there isn't a complex cast time like monsters usually have, but let's check distance
-                if (!mate.BattleEntity.CanAttackEntity(target)) return BehaviorStatus.Failure;
+                if (!mate.BattleEntity.CanAttackEntity(target))
+                {
+                    blackboard.Remove("Target");
+                    return BehaviorStatus.Failure;
+                }
 
-                // Move if needed? Mate usually moves client-side, but if we enforce server side attack:
-                // Actually, SuctlPacketHandler just calls TargetHit directly.
+                // A mate attack must create threat for the mate itself. Previously all
+                // pet damage was effectively associated with the owner, so monsters
+                // ignored the pet and it could never tank.
+                if (target.MapMonster != null)
+                {
+                    target.MapMonster.AddToAggroList(mate.BattleEntity);
+                    target.MapMonster.Target = mate.BattleEntity;
+                }
+
                 mate.TargetHit(target, _skill);
-                
-                // Add a small cooldown/delay based on skill cast time to avoid spamming
-                _castTimeMs = _skill.Skill.CastTime > 0 ? _skill.Skill.CastTime * 100 : 1000;
+
+                _castTimeMs = _skill.Skill.CastTime > 0
+                    ? _skill.Skill.CastTime * 100
+                    : Math.Max(1000, _skill.Skill.Cooldown * 100);
                 _castStartTime = DateTime.Now;
                 return BehaviorStatus.Running;
             }
-            else
+
+            if ((DateTime.Now - _castStartTime.Value).TotalMilliseconds < _castTimeMs)
             {
-                if ((DateTime.Now - _castStartTime.Value).TotalMilliseconds >= _castTimeMs)
-                {
-                    _castStartTime = null; // reset
-                    return BehaviorStatus.Success;
-                }
                 return BehaviorStatus.Running;
             }
+
+            _castStartTime = null;
+            return BehaviorStatus.Success;
         }
     }
 }
