@@ -1,4 +1,4 @@
-name: Windows .NET Framework build
+﻿name: Windows .NET Framework build
 
 on:
   push:
@@ -18,14 +18,14 @@ concurrency:
 
 jobs:
   build:
-    name: MSBuild Release / Any CPU
+    name: MSBuild Release / x64
     runs-on: windows-2022
     timeout-minutes: 45
 
     env:
       SOLUTION: NosGm.sln
       CONFIGURATION: Release
-      PLATFORM: Any CPU
+      PLATFORM: x64
       ARTIFACTS: artifacts
 
     steps:
@@ -115,7 +115,7 @@ jobs:
             /v:minimal `
             /p:NosGmLegacyBuild=true `
             /p:Configuration="$env:CONFIGURATION" `
-            /p:Platform=AnyCPU `
+            /p:Platform=x64 `
             /bl:"$env:ARTIFACTS\resx.binlog" `
             /fl `
             /flp:"logfile=$env:ARTIFACTS\resx.log;verbosity=normal" 2>&1
