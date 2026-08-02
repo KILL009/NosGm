@@ -9,7 +9,12 @@ namespace NosGm.GameObject.AI.Conditions
         public BehaviorStatus Tick(Blackboard blackboard)
         {
             var entity = blackboard.Get<MapMonster>("Self");
-            var target = blackboard.Get<BattleEntity>("Target");
+            var target = entity?.Target ?? blackboard.Get<BattleEntity>("Target");
+
+            if (target != null && blackboard.Get<BattleEntity>("Target") == null)
+            {
+                blackboard.Set("Target", target);
+            }
 
             if (target != null &&
                 target.Hp > 0 &&

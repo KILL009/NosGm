@@ -9816,8 +9816,9 @@ namespace NosGm.GameObject
                     if (mate.IsUsingSp)
                     {
                         mate.Sp.AddXp(xp);
-                        mate.Owner?.Session?.SendPacket(mate.GenerateScPacket());
                     }
+
+                    mate.Owner?.Session?.SendPacket(mate.GenerateScPacket());
                 }
 
                 if ((Class == 0 && JobLevel < 20) || (Class != 0 && JobLevel < GameConfiguration.MaxJobLevel))

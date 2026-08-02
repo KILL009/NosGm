@@ -22,7 +22,7 @@ namespace NosGm.GameObject.AI.Actions
             var matePos = new MapCell { X = mate.BattleEntity.PositionX, Y = mate.BattleEntity.PositionY };
             var ownerPos = new MapCell { X = mate.Owner.PositionX, Y = mate.Owner.PositionY };
 
-            if (Map.GetDistance(matePos, ownerPos) > 20)
+            if (Map.GetDistance(matePos, ownerPos) > 45)
             {
                 mate.BattleEntity.TeleportTo(new MapCell { X = mate.Owner.PositionX, Y = mate.Owner.PositionY }, 1);
                 return BehaviorStatus.Success;

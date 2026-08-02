@@ -806,7 +806,7 @@ namespace NosGm.GameObject
             return $"out 2 {MateTransportId}";
         }
 
-        public string GeneratePst() => $"pst 2 {MateTransportId} {(int)MateType} {(int)(Hp / (float)MaxHp * 100)} {(int)(Mp / (float)MaxMp * 100)} {Hp} {Mp} 0 0 0";
+        public string GeneratePst() => $"pst 2 {MateTransportId} {(int)MateType} {(int)(Hp / (float)MaxHp * 100)} {(int)(Mp / (float)MaxMp * 100)} {Hp} {Mp} 0 0 0 {Buff.GetAllItems().Aggregate("", (current, buff) => current + $" {buff.Card.CardId}")}";
 
         public string GenerateRc(int characterHealth)
         {
@@ -1167,7 +1167,10 @@ namespace NosGm.GameObject
                         Owner.MapInstance?.Broadcast(StaticPacketHelper.GenerateEff(UserType.Npc, MateTransportId, 198), PositionX, PositionY);
                         RefreshStats();
                     }
-
+                    else
+                    {
+                        Experience = (long)XpLoad();
+                    }
                 }
 
             }

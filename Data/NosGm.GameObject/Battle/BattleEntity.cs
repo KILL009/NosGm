@@ -1952,31 +1952,33 @@ namespace NosGm.GameObject.Battle
                         case 2160:
                             buffTime = ServerManager.RandomNumber(100, 200);
                             break;
-
                     }
+                } // End of if (Character != null)
 
-                    indicator.RemainingTime = indicator.Card.Duration == 0 ? buffTime : indicator.Card.Duration;
+                indicator.RemainingTime = indicator.Card.Duration == 0 ? buffTime : indicator.Card.Duration;
 
-                    // Amulet remaining time
-                    if (indicator.Card.CardId == 62)
+                // Amulet remaining time
+                if (Character != null && indicator.Card.CardId == 62)
+                {
+                    var amulet =
+                        Character.Inventory.LoadBySlotAndType((byte)EquipmentType.Amulet, InventoryType.Wear);
+                    if (amulet?.ItemDeleteTime != null)
                     {
-                        var amulet =
-                            Character.Inventory.LoadBySlotAndType((byte)EquipmentType.Amulet, InventoryType.Wear);
-                        if (amulet?.ItemDeleteTime != null)
-                        {
-                            buffTime = (int)amulet.ItemDeleteTime.Value.Subtract(DateTime.Now).TotalSeconds * 10;
-                            indicator.RemainingTime = buffTime;
-                        }
-                        else if (amulet?.DurabilityPoint > 0)
-                        {
-                            amuletMaxDurability = amulet.Item.EffectValue;
-                            buffTime = amulet.DurabilityPoint;
-                            indicator.RemainingTime = buffTime;
-                        }
+                        buffTime = (int)amulet.ItemDeleteTime.Value.Subtract(DateTime.Now).TotalSeconds * 10;
+                        indicator.RemainingTime = buffTime;
                     }
+                    else if (amulet?.DurabilityPoint > 0)
+                    {
+                        amuletMaxDurability = amulet.Item.EffectValue;
+                        buffTime = amulet.DurabilityPoint;
+                        indicator.RemainingTime = buffTime;
+                    }
+                }
 
-                    indicator.Start = DateTime.Now;
+                indicator.Start = DateTime.Now;
 
+                if (Character != null)
+                {
                     Character.Session.SendPacket(
                         $"bf 1 {MapEntityId} {(indicator.Card.CardId == 0 ? Character.ChargeValue > 7000 ? 7000 : Character.ChargeValue : amuletMaxDurability > 0 ? buffTime : 0)}.{indicator.Card.CardId}.{(indicator.Card.Duration == 0 || indicator.Card.CardId == 62 ? amuletMaxDurability > 0 ? amuletMaxDurability : buffTime : indicator.Card.Duration)} {sender.Level}");
 
@@ -1988,11 +1990,11 @@ namespace NosGm.GameObject.Battle
                     }
 
                     Character.Session.SendPacket(Character.GenerateStat());
+                }
 
-                    if (Mate != null)
-                    {
-                        Mate.Owner.Session.SendPackets(Mate.Owner.GeneratePst());
-                    }
+                if (Mate != null)
+                {
+                    Mate.Owner?.Session?.SendPackets(Mate.Owner.GeneratePst());
                 }
 
                 if (BuffObservables.ContainsKey(indicator.Card.CardId))
@@ -3392,6 +3394,11 @@ namespace NosGm.GameObject.Battle
                     }
 
                     MapInstance?.Broadcast($"bf_e {(short)UserType} {MapEntityId} {indicator.Card.CardId} 0");
+
+                    if (Mate != null)
+                    {
+                        Mate.Owner?.Session?.SendPackets(Mate.Owner.GeneratePst());
+                    }
 
                     if (Character != null)
                     {

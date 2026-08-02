@@ -61,7 +61,12 @@ namespace NosGm.GameObject.AI.Actions
 
                 if (_skill == null)
                 {
-                    return BehaviorStatus.Running;
+                    // Fallback to the basic skill (easiest way is to pick the first one with rate 0, or just the first skill)
+                    _skill = mateSkills.FirstOrDefault(s => s != null && s.Rate == 0) ?? mateSkills.FirstOrDefault(s => s != null);
+                    if (_skill == null)
+                    {
+                        return BehaviorStatus.Running;
+                    }
                 }
 
                 if (!mate.BattleEntity.CanAttackEntity(target))
