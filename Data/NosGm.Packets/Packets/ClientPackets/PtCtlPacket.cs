@@ -9,11 +9,9 @@ namespace NosGm.Packets.Packets.ClientPackets
     {
         #region Properties
 
-        [PacketIndex(0)] public short MapType { get; set; }
+        [PacketIndex(0)] public short Amount { get; set; }
 
-        [PacketIndex(1)] public short Amount { get; set; }
-
-        [PacketIndex(2, SerializeToEnd = true)]
+        [PacketIndex(1, SerializeToEnd = true)]
         public string PacketEnd { get; set; }
 
         /*

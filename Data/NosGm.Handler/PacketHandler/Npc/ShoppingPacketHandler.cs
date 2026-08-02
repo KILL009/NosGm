@@ -141,19 +141,6 @@ namespace NosGm.Handler.PacketHandler.Npc
                 }
             }
 
-            var shopItemsList = mapnpc.Shop.ShopItems.Where(s => s.Type.Equals(type)).ToList();
-            if (shopItemsList.Count > 0 && mapnpc.Recipes != null && mapnpc.Recipes.Count > 0)
-            {
-                if (shopItemsList.All(s => mapnpc.Recipes.Any(r => r.ItemVNum == s.ItemVNum)))
-                {
-                    string recipelist = "m_list 2";
-                    recipelist = mapnpc.Recipes.Where(s => s.Amount > 0).Aggregate(recipelist, (current, s) => current + $" {s.ItemVNum}");
-                    recipelist += " -100";
-                    Session.SendPacket(recipelist);
-                    return;
-                }
-            }
-
             if (mapnpc.Shop.ShopType == 48)
             {
                 Session.SendPacket($"n_inv 2 {mapnpc.MapNpcId} 0 {shoplist2}");
