@@ -1,4 +1,4 @@
-﻿/*
+/*
  * This file is part of the NosGm Emulator Project. See AUTHORS file for Copyright information
  *
  * This program is free software; you can redistribute it and/or modify
@@ -364,7 +364,7 @@ namespace NosGm.GameObject
                     break;
 
                 case 14:
-                    Session.SendPacket("wopen 27 0");
+                    Session.SendPacket("wopen 27 0 0 0");
                     string recipelist = "m_list 2";
                     if (npc != null)
                     {

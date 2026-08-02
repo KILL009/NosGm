@@ -67,7 +67,7 @@ namespace NosGm.GameObject
             {
                 foreach (var ski in Monster.Skills)
                 {
-                    PSkills.Add(new NpcMonsterSkill { SkillVNum = ski.SkillVNum, Rate = ski.Rate, Skill = ski.Skill, LastSkillUse = DateTime.MinValue });
+                    PSkills.Add(new NpcMonsterSkill { SkillVNum = ski.SkillVNum, Rate = ski.Rate, LastSkillUse = DateTime.MinValue });
                 }
             }
             GenerateMateTransportId();
@@ -110,7 +110,7 @@ namespace NosGm.GameObject
             {
                 foreach (var ski in npcMonster.Skills)
                 {
-                    PSkills.Add(new NpcMonsterSkill { SkillVNum = ski.SkillVNum, Rate = ski.Rate, Skill = ski.Skill, LastSkillUse = DateTime.MinValue });
+                    PSkills.Add(new NpcMonsterSkill { SkillVNum = ski.SkillVNum, Rate = ski.Rate, LastSkillUse = DateTime.MinValue });
                 }
             }
             GenerateMateTransportId();

@@ -1,4 +1,4 @@
-﻿using NosGm.Packets.Packets.ClientPackets;
+using NosGm.Packets.Packets.ClientPackets;
 using NosGm.Core;
 using NosGm.Data;
 using NosGm.Domain;
@@ -90,7 +90,7 @@ namespace NosGm.Handler.PacketHandler.Npc
                         }
                     }
 
-                    recipePacket += " -1";
+                    recipePacket += " 0";
                     Session.SendPacket(recipePacket);
                 }
             }
