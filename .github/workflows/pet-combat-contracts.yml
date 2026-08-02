@@ -46,9 +46,13 @@ jobs:
         with:
           dotnet-version: 10.0.x
 
-      - name: Restore GameObject project
+      - name: Restore SDK projects
         shell: pwsh
         run: dotnet restore ./Data/NosGm.GameObject/NosGm.GameObject.csproj
+
+      - name: Restore legacy packages.config projects
+        shell: pwsh
+        run: nuget restore ./NosGm.sln -NonInteractive -Verbosity quiet
 
       - name: Supply isolated fallback output paths
         shell: pwsh
