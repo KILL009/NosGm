@@ -55,8 +55,11 @@ namespace NosGm.DAL.DAO
                     context.SaveChanges();
                 }
                 
-                _cache.Clear();
-                Volatile.Write(ref _isFullyLoaded, 0);
+                lock (_loadLock)
+                {
+                    Volatile.Write(ref _isFullyLoaded, 0);
+                    _cache.Clear();
+                }
             }
             catch (Exception e)
             {
@@ -76,7 +79,10 @@ namespace NosGm.DAL.DAO
                     context.SaveChanges();
                     if (NpcMonsterMapper.ToNpcMonsterDTO(entity, npc))
                     {
-                        _cache.Set(npc.NpcMonsterVNum, npc);
+                        lock (_loadLock)
+                        {
+                            _cache.Set(npc.NpcMonsterVNum, npc);
+                        }
                         return npc;
                     }
 
@@ -102,12 +108,24 @@ namespace NosGm.DAL.DAO
                     if (entity == null)
                     {
                         npcMonster = insert(npcMonster, context);
-                        if (npcMonster != null) _cache.Set(npcMonster.NpcMonsterVNum, npcMonster);
+                        if (npcMonster != null)
+                        {
+                            lock (_loadLock)
+                            {
+                                _cache.Set(npcMonster.NpcMonsterVNum, npcMonster);
+                            }
+                        }
                         return SaveResult.Inserted;
                     }
 
                     npcMonster = update(entity, npcMonster, context);
-                    if (npcMonster != null) _cache.Set(npcMonster.NpcMonsterVNum, npcMonster);
+                    if (npcMonster != null)
+                    {
+                        lock (_loadLock)
+                        {
+                            _cache.Set(npcMonster.NpcMonsterVNum, npcMonster);
+                        }
+                    }
                     return SaveResult.Updated;
                 }
             }
@@ -153,6 +171,8 @@ namespace NosGm.DAL.DAO
             }
         }
 
+        public CacheStatisticsSnapshot GetCacheStatistics() => _cache.GetStatistics();
+
         public NpcMonsterDTO LoadByVNum(short npcMonsterVNum)
         {
             try
@@ -168,7 +188,10 @@ namespace NosGm.DAL.DAO
                     if (NpcMonsterMapper.ToNpcMonsterDTO(
                         context.NpcMonster.AsNoTracking().FirstOrDefault(i => i.NpcMonsterVNum.Equals(npcMonsterVNum)), dto))
                     {
-                        _cache.Set(npcMonsterVNum, dto);
+                        lock (_loadLock)
+                        {
+                            _cache.Set(npcMonsterVNum, dto);
+                        }
                         return dto;
                     }
 

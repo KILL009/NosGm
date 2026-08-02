@@ -32,7 +32,10 @@ namespace NosGm.DAL.DAO
                     context.SaveChanges();
                     if (CardMapper.ToCardDTO(entity, card))
                     {
-                        _cache.Set(card.CardId, card);
+                        lock (_loadLock)
+                        {
+                            _cache.Set(card.CardId, card);
+                        }
                         return card;
                     }
 
@@ -58,8 +61,11 @@ namespace NosGm.DAL.DAO
                     context.SaveChanges();
                 }
 
-                _cache.Clear();
-                Volatile.Write(ref _isFullyLoaded, 0);
+                lock (_loadLock)
+                {
+                    Volatile.Write(ref _isFullyLoaded, 0);
+                    _cache.Clear();
+                }
             }
             catch (Exception e)
             {
@@ -79,12 +85,24 @@ namespace NosGm.DAL.DAO
                     if (entity == null)
                     {
                         card = insert(card, context);
-                        if (card != null) _cache.Set(card.CardId, card);
+                        if (card != null)
+                        {
+                            lock (_loadLock)
+                            {
+                                _cache.Set(card.CardId, card);
+                            }
+                        }
                         return SaveResult.Inserted;
                     }
 
                     card = update(entity, card, context);
-                    if (card != null) _cache.Set(card.CardId, card);
+                    if (card != null)
+                    {
+                        lock (_loadLock)
+                        {
+                            _cache.Set(card.CardId, card);
+                        }
+                    }
                     return SaveResult.Updated;
                 }
             }
@@ -129,6 +147,8 @@ namespace NosGm.DAL.DAO
             }
         }
 
+        public CacheStatisticsSnapshot GetCacheStatistics() => _cache.GetStatistics();
+
         public CardDTO LoadById(short cardId)
         {
             try
@@ -143,7 +163,10 @@ namespace NosGm.DAL.DAO
                     var dto = new CardDTO();
                     if (CardMapper.ToCardDTO(context.Card.AsNoTracking().FirstOrDefault(s => s.CardId.Equals(cardId)), dto))
                     {
-                        _cache.Set(cardId, dto);
+                        lock (_loadLock)
+                        {
+                            _cache.Set(cardId, dto);
+                        }
                         return dto;
                     }
 

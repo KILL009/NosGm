@@ -7,12 +7,15 @@ using NosGm.Mapper.Mappers;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
 
 namespace NosGm.DAL.DAO
 {
     public class RecipeDAO : IRecipeDAO
     {
-        private static readonly ICacheService<short, RecipeDTO> _cache = new NosGm.DAL.EF.Cache.MemoryCacheService<short, RecipeDTO>();
+        private static readonly ICacheService<short, RecipeDTO> _cache = new NosGm.DAL.EF.Cache.MemoryCacheService<short, RecipeDTO>(dto => dto.Clone());
+        private static int _isFullyLoaded;
+        private static readonly object _loadLock = new object();
 
         #region Methods
 
@@ -26,7 +29,14 @@ namespace NosGm.DAL.DAO
                     RecipeMapper.ToRecipe(recipe, entity);
                     context.Recipe.Add(entity);
                     context.SaveChanges();
-                    if (RecipeMapper.ToRecipeDTO(entity, recipe)) return recipe;
+                    if (RecipeMapper.ToRecipeDTO(entity, recipe))
+                    {
+                        lock (_loadLock)
+                        {
+                            _cache.Set(recipe.RecipeId, recipe);
+                        }
+                        return recipe;
+                    }
 
                     return null;
                 }
@@ -40,20 +50,38 @@ namespace NosGm.DAL.DAO
 
         public IEnumerable<RecipeDTO> LoadAll()
         {
-            using (var context = DataAccessHelper.CreateContext())
+            if (Volatile.Read(ref _isFullyLoaded) == 1)
             {
-                var result = new List<RecipeDTO>();
-                foreach (var Recipe in context.Recipe.AsNoTracking())
+                return _cache.GetAll();
+            }
+
+            lock (_loadLock)
+            {
+                if (Volatile.Read(ref _isFullyLoaded) == 1)
                 {
-                    var dto = new RecipeDTO();
-                    RecipeMapper.ToRecipeDTO(Recipe, dto);
-                    _cache.Set(dto.RecipeId, dto, TimeSpan.FromHours(24));
-                    result.Add(dto);
+                    return _cache.GetAll();
                 }
 
-                return result;
+                using (var context = DataAccessHelper.CreateContext())
+                {
+                    var result = new List<RecipeDTO>();
+                    var cacheItems = new List<KeyValuePair<short, RecipeDTO>>();
+                    foreach (var Recipe in context.Recipe.AsNoTracking())
+                    {
+                        var dto = new RecipeDTO();
+                        RecipeMapper.ToRecipeDTO(Recipe, dto);
+                        cacheItems.Add(new KeyValuePair<short, RecipeDTO>(dto.RecipeId, dto));
+                        result.Add(dto);
+                    }
+
+                    _cache.ReplaceAll(cacheItems);
+                    Volatile.Write(ref _isFullyLoaded, 1);
+                    return result;
+                }
             }
         }
+
+        public CacheStatisticsSnapshot GetCacheStatistics() => _cache.GetStatistics();
 
         public RecipeDTO LoadById(short recipeId)
         {
@@ -69,7 +97,10 @@ namespace NosGm.DAL.DAO
                     var dto = new RecipeDTO();
                     if (RecipeMapper.ToRecipeDTO(context.Recipe.AsNoTracking().SingleOrDefault(s => s.RecipeId.Equals(recipeId)), dto))
                     {
-                        _cache.Set(recipeId, dto, TimeSpan.FromHours(24));
+                        lock (_loadLock)
+                        {
+                            _cache.Set(recipeId, dto);
+                        }
                         return dto;
                     }
 
@@ -90,7 +121,7 @@ namespace NosGm.DAL.DAO
                 using (var context = DataAccessHelper.CreateContext())
                 {
                     var dto = new RecipeDTO();
-                    if (RecipeMapper.ToRecipeDTO(context.Recipe.SingleOrDefault(s => s.ItemVNum.Equals(itemVNum)), dto))
+                    if (RecipeMapper.ToRecipeDTO(context.Recipe.AsNoTracking().SingleOrDefault(s => s.ItemVNum.Equals(itemVNum)), dto))
                         return dto;
 
                     return null;
@@ -115,6 +146,13 @@ namespace NosGm.DAL.DAO
                         recipe.RecipeId = result.RecipeId;
                         RecipeMapper.ToRecipe(recipe, result);
                         context.SaveChanges();
+                        if (RecipeMapper.ToRecipeDTO(result, recipe))
+                        {
+                            lock (_loadLock)
+                            {
+                                _cache.Set(recipe.RecipeId, recipe);
+                            }
+                        }
                     }
                 }
             }

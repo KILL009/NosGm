@@ -1,4 +1,4 @@
-﻿using NosGm.Data;
+using NosGm.Data;
 using NosGm.Data.Enums;
 using System.Collections.Generic;
 
@@ -40,6 +40,8 @@ namespace NosGm.DAL.Interface
         /// </summary>
         /// <returns></returns>
         IEnumerable<NpcMonsterDTO> LoadAll();
+
+        CacheStatisticsSnapshot GetCacheStatistics();
 
         /// <summary>
         ///     Used for loading monsters with specified VNum

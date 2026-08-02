@@ -1,4 +1,4 @@
-﻿using NosGm.Data;
+using NosGm.Data;
 using NosGm.Data.Enums;
 using System.Collections.Generic;
 
@@ -15,6 +15,8 @@ namespace NosGm.DAL.Interface
         SaveResult InsertOrUpdate(CardDTO card);
 
         IEnumerable<CardDTO> LoadAll();
+
+        CacheStatisticsSnapshot GetCacheStatistics();
 
         CardDTO LoadById(short cardId);
 

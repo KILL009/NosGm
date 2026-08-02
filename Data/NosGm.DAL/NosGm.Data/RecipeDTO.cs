@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 
 namespace NosGm.Data
 {
@@ -14,5 +14,7 @@ namespace NosGm.Data
         public short RecipeId { get; set; }
 
         #endregion
+
+        public RecipeDTO Clone() => (RecipeDTO)this.MemberwiseClone();
     }
 }

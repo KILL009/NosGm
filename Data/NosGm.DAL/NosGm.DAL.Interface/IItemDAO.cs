@@ -1,4 +1,4 @@
-﻿using NosGm.Data;
+using NosGm.Data;
 using System.Collections.Generic;
 
 namespace NosGm.DAL.Interface
@@ -14,6 +14,8 @@ namespace NosGm.DAL.Interface
         void Insert(IEnumerable<ItemDTO> items);
 
         IEnumerable<ItemDTO> LoadAll();
+
+        CacheStatisticsSnapshot GetCacheStatistics();
 
         ItemDTO LoadById(short vNum);
 

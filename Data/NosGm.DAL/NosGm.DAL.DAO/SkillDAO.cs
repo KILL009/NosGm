@@ -32,8 +32,11 @@ namespace NosGm.DAL.DAO
                     context.SaveChanges();
                 }
 
-                _cache.Clear();
-                Volatile.Write(ref _isFullyLoaded, 0);
+                lock (_loadLock)
+                {
+                    Volatile.Write(ref _isFullyLoaded, 0);
+                    _cache.Clear();
+                }
             }
             catch (Exception e)
             {
@@ -53,7 +56,10 @@ namespace NosGm.DAL.DAO
                     context.SaveChanges();
                     if (SkillMapper.ToSkillDTO(entity, skill))
                     {
-                        _cache.Set(skill.SkillVNum, skill);
+                        lock (_loadLock)
+                        {
+                            _cache.Set(skill.SkillVNum, skill);
+                        }
                         return skill;
                     }
 
@@ -79,12 +85,24 @@ namespace NosGm.DAL.DAO
                     if (entity == null)
                     {
                         skill = insert(skill, context);
-                        if (skill != null) _cache.Set(skill.SkillVNum, skill);
+                        if (skill != null)
+                        {
+                            lock (_loadLock)
+                            {
+                                _cache.Set(skill.SkillVNum, skill);
+                            }
+                        }
                         return SaveResult.Inserted;
                     }
 
                     skill = update(entity, skill, context);
-                    if (skill != null) _cache.Set(skill.SkillVNum, skill);
+                    if (skill != null)
+                    {
+                        lock (_loadLock)
+                        {
+                            _cache.Set(skill.SkillVNum, skill);
+                        }
+                    }
                     return SaveResult.Updated;
                 }
             }
@@ -130,6 +148,8 @@ namespace NosGm.DAL.DAO
             }
         }
 
+        public CacheStatisticsSnapshot GetCacheStatistics() => _cache.GetStatistics();
+
         public SkillDTO LoadById(short skillId)
         {
             try
@@ -144,7 +164,10 @@ namespace NosGm.DAL.DAO
                     var dto = new SkillDTO();
                     if (SkillMapper.ToSkillDTO(context.Skill.AsNoTracking().FirstOrDefault(s => s.SkillVNum.Equals(skillId)), dto))
                     {
-                        _cache.Set(skillId, dto);
+                        lock (_loadLock)
+                        {
+                            _cache.Set(skillId, dto);
+                        }
                         return dto;
                     }
 

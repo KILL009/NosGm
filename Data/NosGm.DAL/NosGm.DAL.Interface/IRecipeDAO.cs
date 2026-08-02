@@ -1,4 +1,4 @@
-﻿using NosGm.Data;
+using NosGm.Data;
 using System.Collections.Generic;
 
 namespace NosGm.DAL.Interface
@@ -10,6 +10,8 @@ namespace NosGm.DAL.Interface
         RecipeDTO Insert(RecipeDTO recipe);
 
         IEnumerable<RecipeDTO> LoadAll();
+
+        CacheStatisticsSnapshot GetCacheStatistics();
 
         RecipeDTO LoadById(short recipeId);
 

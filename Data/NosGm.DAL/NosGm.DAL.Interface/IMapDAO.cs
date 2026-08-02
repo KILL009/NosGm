@@ -1,4 +1,4 @@
-﻿using NosGm.Data;
+using NosGm.Data;
 using System.Collections.Generic;
 
 namespace NosGm.DAL.Interface
@@ -12,6 +12,8 @@ namespace NosGm.DAL.Interface
         void Insert(List<MapDTO> maps);
 
         IEnumerable<MapDTO> LoadAll();
+
+        CacheStatisticsSnapshot GetCacheStatistics();
 
         MapDTO LoadById(short mapId);
 

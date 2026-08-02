@@ -52,8 +52,11 @@ namespace NosGm.DAL.DAO
                     context.SaveChanges();
                 }
 
-                _cache.Clear();
-                Volatile.Write(ref _isFullyLoaded, 0);
+                lock (_loadLock)
+                {
+                    Volatile.Write(ref _isFullyLoaded, 0);
+                    _cache.Clear();
+                }
             }
             catch (Exception e)
             {
@@ -73,7 +76,10 @@ namespace NosGm.DAL.DAO
                     context.SaveChanges();
                     if (ItemMapper.ToItemDTO(entity, item))
                     {
-                        _cache.Set(item.VNum, item);
+                        lock (_loadLock)
+                        {
+                            _cache.Set(item.VNum, item);
+                        }
                         return item;
                     }
 
@@ -120,6 +126,8 @@ namespace NosGm.DAL.DAO
             }
         }
 
+        public CacheStatisticsSnapshot GetCacheStatistics() => _cache.GetStatistics();
+
         public ItemDTO LoadById(short vNum)
         {
             try
@@ -134,7 +142,10 @@ namespace NosGm.DAL.DAO
                     var dto = new ItemDTO();
                     if (ItemMapper.ToItemDTO(context.Item.AsNoTracking().FirstOrDefault(i => i.VNum.Equals(vNum)), dto))
                     {
-                        _cache.Set(vNum, dto);
+                        lock (_loadLock)
+                        {
+                            _cache.Set(vNum, dto);
+                        }
                         return dto;
                     }
 

@@ -37,8 +37,11 @@ namespace NosGm.DAL.DAO
                     context.SaveChanges();
                 }
                 
-                _cache.Clear();
-                Volatile.Write(ref _isFullyLoaded, 0);
+                lock (_loadLock)
+                {
+                    Volatile.Write(ref _isFullyLoaded, 0);
+                    _cache.Clear();
+                }
             }
             catch (Exception e)
             {
@@ -60,7 +63,10 @@ namespace NosGm.DAL.DAO
                         context.SaveChanges();
                         if (MapMapper.ToMapDTO(entity, map))
                         {
-                            _cache.Set(map.MapId, map);
+                            lock (_loadLock)
+                            {
+                                _cache.Set(map.MapId, map);
+                            }
                             return map;
                         }
 
@@ -110,6 +116,8 @@ namespace NosGm.DAL.DAO
             }
         }
 
+        public CacheStatisticsSnapshot GetCacheStatistics() => _cache.GetStatistics();
+
         public MapDTO LoadById(short mapId)
         {
             try
@@ -124,7 +132,10 @@ namespace NosGm.DAL.DAO
                     var dto = new MapDTO();
                     if (MapMapper.ToMapDTO(context.Map.AsNoTracking().FirstOrDefault(c => c.MapId.Equals(mapId)), dto))
                     {
-                        _cache.Set(mapId, dto);
+                        lock (_loadLock)
+                        {
+                            _cache.Set(mapId, dto);
+                        }
                         return dto;
                     }
 
