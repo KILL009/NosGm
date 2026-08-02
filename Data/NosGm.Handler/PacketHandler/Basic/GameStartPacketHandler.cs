@@ -173,6 +173,17 @@ namespace NosGm.Handler.PacketHandler.Basic
                     }
                 }
 
+                #region Restore Login Health
+
+                // Current HP is persisted, but maximum HP is rebuilt from the active
+                // equipment, cellon options, titles and buffs. Refresh those derived
+                // values after entering the map and always begin the login at full HP.
+                Session.Character.GenerateEquipment();
+                Session.Character.Hp = (int)Session.Character.HPLoad();
+                Session.SendPacket(Session.Character.GenerateStat());
+
+                #endregion
+
 
 
                 Session.SendPacket(Session.Character.GenerateSki());
