@@ -1,6 +1,5 @@
 using NosGm.AI.Core;
 using NosGm.GameObject;
-
 using System.Linq;
 
 namespace NosGm.GameObject.AI.Conditions
@@ -10,19 +9,30 @@ namespace NosGm.GameObject.AI.Conditions
         public BehaviorStatus Tick(Blackboard blackboard)
         {
             var mate = blackboard.Get<Mate>("Self");
-            if (mate == null || mate.Owner == null) return BehaviorStatus.Failure;
-
-            // Check if owner is targeted by any monsters
-            var target = mate.Owner.BattleEntity.TargettedByMonstersList(false).FirstOrDefault();
-            
-            if (target != null && target.Hp > 0)
+            if (mate?.Owner?.BattleEntity == null || mate.BattleEntity == null || !mate.IsAlive)
             {
-                // Set pet's target to the monster attacking the owner
-                blackboard.Set("Target", target);
-                return BehaviorStatus.Success;
+                return BehaviorStatus.Failure;
             }
 
-            return BehaviorStatus.Failure;
+            // Include the owner's active mates. This allows one pet to react when the
+            // owner or another team mate is being attacked and keeps the behaviour
+            // compatible with the legacy Target property synchronized by mob AI.
+            var target = mate.Owner.BattleEntity
+                .TargettedByMonstersList(true)
+                .Where(monster => monster != null &&
+                                  monster.Hp > 0 &&
+                                  monster.MapInstance == mate.BattleEntity.MapInstance)
+                .OrderBy(monster => Map.GetDistance(mate.BattleEntity.GetPos(), monster.GetPos()))
+                .FirstOrDefault();
+
+            if (target == null)
+            {
+                blackboard.Remove("Target");
+                return BehaviorStatus.Failure;
+            }
+
+            blackboard.Set("Target", target);
+            return BehaviorStatus.Success;
         }
     }
 }
