@@ -4,7 +4,7 @@
   <PropertyGroup>
     <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
     <Platform Condition=" '$(Platform)' == '' ">x64</Platform>
-    <PlatformTarget>x64</PlatformTarget>
+    
     <ProjectGuid>{9DC21067-A102-419A-993C-4AA10C0B4708}</ProjectGuid>
     <OutputType>Exe</OutputType>
     <RootNamespace>NosGm.Parser</RootNamespace>
@@ -218,5 +218,6 @@
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>
+
 
 

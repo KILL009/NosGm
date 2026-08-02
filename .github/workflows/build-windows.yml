@@ -133,6 +133,7 @@ jobs:
             /v:minimal `
             /p:NosGmLegacyBuild=true `
             /p:Configuration="$env:CONFIGURATION" `
+            /p:Platform="$env:PLATFORM" `
             /bl:"$env:ARTIFACTS\build.binlog" `
             /fl `
             /flp:"logfile=$env:ARTIFACTS\build.log;verbosity=normal" 2>&1

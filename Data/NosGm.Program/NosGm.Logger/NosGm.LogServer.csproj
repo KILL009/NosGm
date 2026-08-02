@@ -4,7 +4,7 @@
   <PropertyGroup>
     <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
     <Platform Condition=" '$(Platform)' == '' ">x64</Platform>
-    <PlatformTarget>x64</PlatformTarget>
+    
     <ProjectGuid>{A09A8666-2598-4F86-8F5E-9A2708354F37}</ProjectGuid>
     <OutputType>Exe</OutputType>
     <RootNamespace>NosGm.LogServer</RootNamespace>
@@ -225,5 +225,6 @@
   </Target>
   <Import Project="..\..\..\packages\System.ValueTuple.4.6.2\build\net471\System.ValueTuple.targets" Condition="Exists('..\..\..\packages\System.ValueTuple.4.6.2\build\net471\System.ValueTuple.targets')" />
 </Project>
+
 
 

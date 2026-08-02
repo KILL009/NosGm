@@ -4,7 +4,7 @@
   <PropertyGroup>
     <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
     <Platform Condition=" '$(Platform)' == '' ">x64</Platform>
-    <PlatformTarget>x64</PlatformTarget>
+    
     <ProjectGuid>{EC300279-181E-4E6E-A94C-E8BAF0EAB2AD}</ProjectGuid>
     <OutputType>Exe</OutputType>
     <AppDesignerFolder>Properties</AppDesignerFolder>
@@ -282,5 +282,6 @@ copy /Y "$(ProjectDir)exception.wav" "$(TargetDir)exception.wav"</PostBuildEvent
 
   </PropertyGroup>
 </Project>
+
 
 

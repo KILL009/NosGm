@@ -3,7 +3,7 @@
   <PropertyGroup>
     <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
     <Platform Condition=" '$(Platform)' == '' ">x64</Platform>
-    <PlatformTarget>x64</PlatformTarget>
+    
     <ProjectGuid>{AB3A47F3-3B2A-484A-B768-7C6CF5C83386}</ProjectGuid>
     <OutputType>Exe</OutputType>
     <AssemblyName>NosGm.Login</AssemblyName>
@@ -253,5 +253,6 @@
 
   </PropertyGroup>
 </Project>
+
 
 
