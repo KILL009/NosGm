@@ -66,20 +66,30 @@ jobs:
           </Project>
           '@ | Set-Content -LiteralPath ./Directory.Build.props -Encoding utf8
 
-          $log4net = Get-ChildItem `
-            -LiteralPath "$env:USERPROFILE\.nuget\packages\log4net\3.3.2\lib" `
-            -Filter log4net.dll `
-            -File `
-            -Recurse | Select-Object -First 1
-          if ($null -eq $log4net) {
-            throw "Restored log4net 3.3.2 assembly was not found."
+          function Find-RestoredAssembly([string]$Package, [string]$FileName) {
+            $packageRoot = Join-Path "$env:USERPROFILE\.nuget\packages" $Package
+            $assembly = Get-ChildItem `
+              -LiteralPath $packageRoot `
+              -Filter $FileName `
+              -File `
+              -Recurse | Select-Object -First 1
+            if ($null -eq $assembly) {
+              throw "Restored assembly was not found: $Package/$FileName"
+            }
+            return [Security.SecurityElement]::Escape($assembly.FullName)
           }
-          $escapedPath = [Security.SecurityElement]::Escape($log4net.FullName)
+
+          $log4netPath = Find-RestoredAssembly "log4net" "log4net.dll"
+          $newtonsoftPath = Find-RestoredAssembly "newtonsoft.json" "Newtonsoft.Json.dll"
           @"
           <Project>
             <ItemGroup>
               <Reference Include="log4net">
-                <HintPath>$escapedPath</HintPath>
+                <HintPath>$log4netPath</HintPath>
+                <Private>true</Private>
+              </Reference>
+              <Reference Include="Newtonsoft.Json">
+                <HintPath>$newtonsoftPath</HintPath>
                 <Private>true</Private>
               </Reference>
             </ItemGroup>
