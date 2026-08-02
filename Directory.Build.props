@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project>
+  <!--
+    The server build evaluates the dual-target SDK projects as net481 by setting
+    NosGmLegacyBuild=true. Visual Studio and dotnet 10 evaluate the same projects
+    as net481;net10.0. Keep their NuGet assets in separate intermediate folders
+    so one restore mode cannot poison the other mode's project.assets.json.
+  -->
+  <PropertyGroup Condition="'$(NosGmLegacyBuild)' == 'true'">
+    <BaseIntermediateOutputPath>obj\legacy\</BaseIntermediateOutputPath>
+    <MSBuildProjectExtensionsPath>$(BaseIntermediateOutputPath)</MSBuildProjectExtensionsPath>
+  </PropertyGroup>
+</Project>
