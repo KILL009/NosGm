@@ -1,4 +1,4 @@
-﻿using NosGm.Domain;
+using NosGm.Domain;
 using System;
 
 namespace NosGm.Data
@@ -29,5 +29,7 @@ namespace NosGm.Data
         public byte TimeoutBuffChance { get; set; }
 
         #endregion
+
+        public CardDTO Clone() => (CardDTO)this.MemberwiseClone();
     }
 }

@@ -7,12 +7,15 @@ using NosGm.Mapper.Mappers;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
 
 namespace NosGm.DAL.DAO
 {
     public class ItemDAO : IItemDAO
     {
-        private static readonly ICacheService<short, ItemDTO> _cache = new NosGm.DAL.EF.Cache.MemoryCacheService<short, ItemDTO>();
+        private static readonly ICacheService<short, ItemDTO> _cache = new NosGm.DAL.EF.Cache.MemoryCacheService<short, ItemDTO>(dto => dto.Clone());
+        private static int _isFullyLoaded;
+        private static readonly object _loadLock = new object();
 
         #region Methods
 
@@ -48,6 +51,9 @@ namespace NosGm.DAL.DAO
 
                     context.SaveChanges();
                 }
+
+                _cache.Clear();
+                Volatile.Write(ref _isFullyLoaded, 0);
             }
             catch (Exception e)
             {
@@ -65,7 +71,11 @@ namespace NosGm.DAL.DAO
                     ItemMapper.ToItem(item, entity);
                     context.Item.Add(entity);
                     context.SaveChanges();
-                    if (ItemMapper.ToItemDTO(entity, item)) return item;
+                    if (ItemMapper.ToItemDTO(entity, item))
+                    {
+                        _cache.Set(item.VNum, item);
+                        return item;
+                    }
 
                     return null;
                 }
@@ -79,18 +89,34 @@ namespace NosGm.DAL.DAO
 
         public IEnumerable<ItemDTO> LoadAll()
         {
-            using (var context = DataAccessHelper.CreateContext())
+            if (Volatile.Read(ref _isFullyLoaded) == 1)
             {
-                var result = new List<ItemDTO>();
-                foreach (var item in context.Item.AsNoTracking())
+                return _cache.GetAll();
+            }
+
+            lock (_loadLock)
+            {
+                if (Volatile.Read(ref _isFullyLoaded) == 1)
                 {
-                    var dto = new ItemDTO();
-                    ItemMapper.ToItemDTO(item, dto);
-                    _cache.Set(dto.VNum, dto, TimeSpan.FromHours(24));
-                    result.Add(dto);
+                    return _cache.GetAll();
                 }
 
-                return result;
+                using (var context = DataAccessHelper.CreateContext())
+                {
+                    var result = new List<ItemDTO>();
+                    var cacheItems = new List<KeyValuePair<short, ItemDTO>>();
+                    foreach (var item in context.Item.AsNoTracking())
+                    {
+                        var dto = new ItemDTO();
+                        ItemMapper.ToItemDTO(item, dto);
+                        cacheItems.Add(new KeyValuePair<short, ItemDTO>(dto.VNum, dto));
+                        result.Add(dto);
+                    }
+
+                    _cache.ReplaceAll(cacheItems);
+                    Volatile.Write(ref _isFullyLoaded, 1);
+                    return result;
+                }
             }
         }
 
@@ -108,7 +134,7 @@ namespace NosGm.DAL.DAO
                     var dto = new ItemDTO();
                     if (ItemMapper.ToItemDTO(context.Item.AsNoTracking().FirstOrDefault(i => i.VNum.Equals(vNum)), dto))
                     {
-                        _cache.Set(vNum, dto, TimeSpan.FromHours(24));
+                        _cache.Set(vNum, dto);
                         return dto;
                     }
 

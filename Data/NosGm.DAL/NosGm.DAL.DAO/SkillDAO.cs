@@ -8,12 +8,15 @@ using NosGm.Mapper.Mappers;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
 
 namespace NosGm.DAL.DAO
 {
     public class SkillDAO : ISkillDAO
     {
-        private static readonly ICacheService<short, SkillDTO> _cache = new NosGm.DAL.EF.Cache.MemoryCacheService<short, SkillDTO>();
+        private static readonly ICacheService<short, SkillDTO> _cache = new NosGm.DAL.EF.Cache.MemoryCacheService<short, SkillDTO>(dto => dto.Clone());
+        private static int _isFullyLoaded;
+        private static readonly object _loadLock = new object();
 
         #region Methods
 
@@ -28,6 +31,9 @@ namespace NosGm.DAL.DAO
                     context.Configuration.AutoDetectChangesEnabled = true;
                     context.SaveChanges();
                 }
+
+                _cache.Clear();
+                Volatile.Write(ref _isFullyLoaded, 0);
             }
             catch (Exception e)
             {
@@ -45,7 +51,11 @@ namespace NosGm.DAL.DAO
                     SkillMapper.ToSkill(skill, entity);
                     context.Skill.Add(entity);
                     context.SaveChanges();
-                    if (SkillMapper.ToSkillDTO(entity, skill)) return skill;
+                    if (SkillMapper.ToSkillDTO(entity, skill))
+                    {
+                        _cache.Set(skill.SkillVNum, skill);
+                        return skill;
+                    }
 
                     return null;
                 }
@@ -69,10 +79,12 @@ namespace NosGm.DAL.DAO
                     if (entity == null)
                     {
                         skill = insert(skill, context);
+                        if (skill != null) _cache.Set(skill.SkillVNum, skill);
                         return SaveResult.Inserted;
                     }
 
                     skill = update(entity, skill, context);
+                    if (skill != null) _cache.Set(skill.SkillVNum, skill);
                     return SaveResult.Updated;
                 }
             }
@@ -87,18 +99,34 @@ namespace NosGm.DAL.DAO
 
         public IEnumerable<SkillDTO> LoadAll()
         {
-            using (var context = DataAccessHelper.CreateContext())
+            if (Volatile.Read(ref _isFullyLoaded) == 1)
             {
-                var result = new List<SkillDTO>();
-                foreach (var Skill in context.Skill.AsNoTracking())
+                return _cache.GetAll();
+            }
+
+            lock (_loadLock)
+            {
+                if (Volatile.Read(ref _isFullyLoaded) == 1)
                 {
-                    var dto = new SkillDTO();
-                    SkillMapper.ToSkillDTO(Skill, dto);
-                    _cache.Set(dto.SkillVNum, dto, TimeSpan.FromHours(24));
-                    result.Add(dto);
+                    return _cache.GetAll();
                 }
 
-                return result;
+                using (var context = DataAccessHelper.CreateContext())
+                {
+                    var result = new List<SkillDTO>();
+                    var cacheItems = new List<KeyValuePair<short, SkillDTO>>();
+                    foreach (var Skill in context.Skill.AsNoTracking())
+                    {
+                        var dto = new SkillDTO();
+                        SkillMapper.ToSkillDTO(Skill, dto);
+                        cacheItems.Add(new KeyValuePair<short, SkillDTO>(dto.SkillVNum, dto));
+                        result.Add(dto);
+                    }
+
+                    _cache.ReplaceAll(cacheItems);
+                    Volatile.Write(ref _isFullyLoaded, 1);
+                    return result;
+                }
             }
         }
 
@@ -116,7 +144,7 @@ namespace NosGm.DAL.DAO
                     var dto = new SkillDTO();
                     if (SkillMapper.ToSkillDTO(context.Skill.AsNoTracking().FirstOrDefault(s => s.SkillVNum.Equals(skillId)), dto))
                     {
-                        _cache.Set(skillId, dto, TimeSpan.FromHours(24));
+                        _cache.Set(skillId, dto);
                         return dto;
                     }
 

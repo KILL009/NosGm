@@ -13,6 +13,7 @@
     <FileAlignment>512</FileAlignment>
     <NuGetPackageImportStamp />
     <TargetFrameworkProfile />
+    <RestoreProjectStyle>PackageReference</RestoreProjectStyle>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
     <DebugSymbols>true</DebugSymbols>
@@ -179,9 +180,9 @@
     </None>
   </ItemGroup>
   <ItemGroup>
-    <Reference Include="log4net, Version=3.3.2.0, Culture=neutral, PublicKeyToken=669e0ddf0bb1aa2a, processorArchitecture=MSIL">
-      <HintPath>..\..\packages\log4net.3.3.2\lib\net462\log4net.dll</HintPath>
-    </Reference>
+    <PackageReference Include="log4net">
+      <Version>3.3.2</Version>
+    </PackageReference>
   </ItemGroup>
   <ItemGroup>
     <Content Include="favicon.ico" />

@@ -7,6 +7,7 @@
     <ProjectGuid>{691E0594-F6AA-4A25-9BB7-493D4F6CE059}</ProjectGuid>
     <LangVersion>latest</LangVersion>
     <Nullable>disable</Nullable>
+    <RuntimeIdentifiers>win</RuntimeIdentifiers>
   </PropertyGroup>
 
   <ItemGroup>

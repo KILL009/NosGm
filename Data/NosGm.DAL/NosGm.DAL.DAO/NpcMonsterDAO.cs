@@ -8,12 +8,15 @@ using NosGm.Mapper.Mappers;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
 
 namespace NosGm.DAL.DAO
 {
     public class NpcMonsterDAO : INpcMonsterDAO
     {
-        private static readonly ICacheService<short, NpcMonsterDTO> _cache = new NosGm.DAL.EF.Cache.MemoryCacheService<short, NpcMonsterDTO>();
+        private static readonly ICacheService<short, NpcMonsterDTO> _cache = new NosGm.DAL.EF.Cache.MemoryCacheService<short, NpcMonsterDTO>(dto => dto.Clone());
+        private static int _isFullyLoaded;
+        private static readonly object _loadLock = new object();
 
         #region Methods
 
@@ -51,6 +54,9 @@ namespace NosGm.DAL.DAO
                     context.Configuration.AutoDetectChangesEnabled = true;
                     context.SaveChanges();
                 }
+                
+                _cache.Clear();
+                Volatile.Write(ref _isFullyLoaded, 0);
             }
             catch (Exception e)
             {
@@ -68,7 +74,11 @@ namespace NosGm.DAL.DAO
                     NpcMonsterMapper.ToNpcMonster(npc, entity);
                     context.NpcMonster.Add(entity);
                     context.SaveChanges();
-                    if (NpcMonsterMapper.ToNpcMonsterDTO(entity, npc)) return npc;
+                    if (NpcMonsterMapper.ToNpcMonsterDTO(entity, npc))
+                    {
+                        _cache.Set(npc.NpcMonsterVNum, npc);
+                        return npc;
+                    }
 
                     return null;
                 }
@@ -92,10 +102,12 @@ namespace NosGm.DAL.DAO
                     if (entity == null)
                     {
                         npcMonster = insert(npcMonster, context);
+                        if (npcMonster != null) _cache.Set(npcMonster.NpcMonsterVNum, npcMonster);
                         return SaveResult.Inserted;
                     }
 
                     npcMonster = update(entity, npcMonster, context);
+                    if (npcMonster != null) _cache.Set(npcMonster.NpcMonsterVNum, npcMonster);
                     return SaveResult.Updated;
                 }
             }
@@ -110,18 +122,34 @@ namespace NosGm.DAL.DAO
 
         public IEnumerable<NpcMonsterDTO> LoadAll()
         {
-            using (var context = DataAccessHelper.CreateContext())
+            if (Volatile.Read(ref _isFullyLoaded) == 1)
             {
-                var result = new List<NpcMonsterDTO>();
-                foreach (var NpcMonster in context.NpcMonster.AsNoTracking())
+                return _cache.GetAll();
+            }
+
+            lock (_loadLock)
+            {
+                if (Volatile.Read(ref _isFullyLoaded) == 1)
                 {
-                    var dto = new NpcMonsterDTO();
-                    NpcMonsterMapper.ToNpcMonsterDTO(NpcMonster, dto);
-                    _cache.Set(dto.NpcMonsterVNum, dto, TimeSpan.FromHours(24));
-                    result.Add(dto);
+                    return _cache.GetAll();
                 }
 
-                return result;
+                using (var context = DataAccessHelper.CreateContext())
+                {
+                    var result = new List<NpcMonsterDTO>();
+                    var cacheItems = new List<KeyValuePair<short, NpcMonsterDTO>>();
+                    foreach (var NpcMonster in context.NpcMonster.AsNoTracking())
+                    {
+                        var dto = new NpcMonsterDTO();
+                        NpcMonsterMapper.ToNpcMonsterDTO(NpcMonster, dto);
+                        cacheItems.Add(new KeyValuePair<short, NpcMonsterDTO>(dto.NpcMonsterVNum, dto));
+                        result.Add(dto);
+                    }
+
+                    _cache.ReplaceAll(cacheItems);
+                    Volatile.Write(ref _isFullyLoaded, 1);
+                    return result;
+                }
             }
         }
 
@@ -140,7 +168,7 @@ namespace NosGm.DAL.DAO
                     if (NpcMonsterMapper.ToNpcMonsterDTO(
                         context.NpcMonster.AsNoTracking().FirstOrDefault(i => i.NpcMonsterVNum.Equals(npcMonsterVNum)), dto))
                     {
-                        _cache.Set(npcMonsterVNum, dto, TimeSpan.FromHours(24));
+                        _cache.Set(npcMonsterVNum, dto);
                         return dto;
                     }
 

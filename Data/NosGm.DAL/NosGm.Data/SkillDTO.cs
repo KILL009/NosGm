@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 
 namespace NosGm.Data
 {
@@ -68,5 +68,7 @@ namespace NosGm.Data
         public short UpgradeType { get; set; }
 
         #endregion
+
+        public SkillDTO Clone() => (SkillDTO)this.MemberwiseClone();
     }
 }

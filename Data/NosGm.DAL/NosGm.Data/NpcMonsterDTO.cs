@@ -1,4 +1,4 @@
-﻿using NosGm.Domain;
+using NosGm.Domain;
 using System;
 
 namespace NosGm.Data
@@ -105,5 +105,7 @@ namespace NosGm.Data
         public byte Tameable { get; set; }
 
         #endregion
+
+        public NpcMonsterDTO Clone() => (NpcMonsterDTO)this.MemberwiseClone();
     }
 }

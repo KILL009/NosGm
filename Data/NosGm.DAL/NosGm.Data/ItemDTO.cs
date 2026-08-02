@@ -1,4 +1,4 @@
-﻿using NosGm.Domain;
+using NosGm.Domain;
 using System;
 
 namespace NosGm.Data
@@ -159,5 +159,7 @@ namespace NosGm.Data
         public short TsMapId { get; set; }
 
         #endregion
+
+        public ItemDTO Clone() => (ItemDTO)this.MemberwiseClone();
     }
 }

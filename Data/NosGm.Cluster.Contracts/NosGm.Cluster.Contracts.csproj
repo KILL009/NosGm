@@ -6,6 +6,7 @@
     <RootNamespace>NosGm.Cluster.Contracts</RootNamespace>
     <LangVersion>latest</LangVersion>
     <Nullable>disable</Nullable>
+    <RuntimeIdentifiers>win</RuntimeIdentifiers>
   </PropertyGroup>
 
   <ItemGroup>

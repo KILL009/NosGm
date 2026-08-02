@@ -13,6 +13,11 @@ namespace NosGm.DAL.Interface
         public long RemovedItems { get; set; }
         public double HitRate { get; set; }
         public long EvictionRuns { get; set; }
+        public long BulkCacheHits { get; set; }
+        public long BulkCacheMisses { get; set; }
+        public long EntriesReturned { get; set; }
+        public long FullReloads { get; set; }
+        public long Invalidations { get; set; }
     }
 
     public interface ICacheService<TKey, TValue>
@@ -23,6 +28,7 @@ namespace NosGm.DAL.Interface
         bool TryGetValue(TKey key, out TValue value);
         void Remove(TKey key);
         void Clear();
+        void ReplaceAll(IEnumerable<KeyValuePair<TKey, TValue>> items);
         IEnumerable<TValue> GetAll();
         bool ContainsKey(TKey key);
 

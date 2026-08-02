@@ -7,12 +7,15 @@ using NosGm.Mapper.Mappers;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
 
 namespace NosGm.DAL.DAO
 {
     public class MapDAO : IMapDAO
     {
-        private static readonly ICacheService<short, MapDTO> _cache = new NosGm.DAL.EF.Cache.MemoryCacheService<short, MapDTO>();
+        private static readonly ICacheService<short, MapDTO> _cache = new NosGm.DAL.EF.Cache.MemoryCacheService<short, MapDTO>(dto => dto.Clone());
+        private static int _isFullyLoaded;
+        private static readonly object _loadLock = new object();
 
         #region Methods
 
@@ -33,6 +36,9 @@ namespace NosGm.DAL.DAO
                     context.Configuration.AutoDetectChangesEnabled = true;
                     context.SaveChanges();
                 }
+                
+                _cache.Clear();
+                Volatile.Write(ref _isFullyLoaded, 0);
             }
             catch (Exception e)
             {
@@ -52,7 +58,11 @@ namespace NosGm.DAL.DAO
                         MapMapper.ToMap(map, entity);
                         context.Map.Add(entity);
                         context.SaveChanges();
-                        if (MapMapper.ToMapDTO(entity, map)) return map;
+                        if (MapMapper.ToMapDTO(entity, map))
+                        {
+                            _cache.Set(map.MapId, map);
+                            return map;
+                        }
 
                         return null;
                     }
@@ -69,18 +79,34 @@ namespace NosGm.DAL.DAO
 
         public IEnumerable<MapDTO> LoadAll()
         {
-            using (var context = DataAccessHelper.CreateContext())
+            if (Volatile.Read(ref _isFullyLoaded) == 1)
             {
-                var result = new List<MapDTO>();
-                foreach (var Map in context.Map.AsNoTracking())
+                return _cache.GetAll();
+            }
+
+            lock (_loadLock)
+            {
+                if (Volatile.Read(ref _isFullyLoaded) == 1)
                 {
-                    var dto = new MapDTO();
-                    MapMapper.ToMapDTO(Map, dto);
-                    _cache.Set(dto.MapId, dto, TimeSpan.FromHours(24));
-                    result.Add(dto);
+                    return _cache.GetAll();
                 }
 
-                return result;
+                using (var context = DataAccessHelper.CreateContext())
+                {
+                    var result = new List<MapDTO>();
+                    var cacheItems = new List<KeyValuePair<short, MapDTO>>();
+                    foreach (var Map in context.Map.AsNoTracking())
+                    {
+                        var dto = new MapDTO();
+                        MapMapper.ToMapDTO(Map, dto);
+                        cacheItems.Add(new KeyValuePair<short, MapDTO>(dto.MapId, dto));
+                        result.Add(dto);
+                    }
+
+                    _cache.ReplaceAll(cacheItems);
+                    Volatile.Write(ref _isFullyLoaded, 1);
+                    return result;
+                }
             }
         }
 
@@ -98,7 +124,7 @@ namespace NosGm.DAL.DAO
                     var dto = new MapDTO();
                     if (MapMapper.ToMapDTO(context.Map.AsNoTracking().FirstOrDefault(c => c.MapId.Equals(mapId)), dto))
                     {
-                        _cache.Set(mapId, dto, TimeSpan.FromHours(24));
+                        _cache.Set(mapId, dto);
                         return dto;
                     }
 

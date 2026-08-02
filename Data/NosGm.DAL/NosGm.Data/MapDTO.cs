@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 
 namespace NosGm.Data
 {
@@ -22,5 +22,16 @@ namespace NosGm.Data
         public byte XpRate { get; set; }
 
         #endregion
+
+        public MapDTO Clone()
+        {
+            var clone = (MapDTO)this.MemberwiseClone();
+            if (this.Data != null)
+            {
+                clone.Data = new byte[this.Data.Length];
+                Array.Copy(this.Data, clone.Data, this.Data.Length);
+            }
+            return clone;
+        }
     }
 }
