@@ -1,0 +1,101 @@
+name: Pet combat contracts
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - .github/workflows/pet-combat-contracts.yml
+      - Data/NosGm.GameObject/AI/**
+      - Data/NosGm.GameObject/Character.cs
+      - Data/NosGm.GameObject/Mate.cs
+      - scripts/verify-pet-combat-contracts.ps1
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/pet-combat-contracts.yml
+      - Data/NosGm.GameObject/AI/**
+      - Data/NosGm.GameObject/Character.cs
+      - Data/NosGm.GameObject/Mate.cs
+      - scripts/verify-pet-combat-contracts.ps1
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: windows-2022
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Verify pet combat, tanking and experience contracts
+        shell: pwsh
+        run: ./scripts/verify-pet-combat-contracts.ps1
+
+  compile:
+    name: Compile pet AI project
+    runs-on: windows-2022
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install .NET 10 SDK
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Restore SDK projects
+        shell: pwsh
+        run: dotnet restore ./Data/NosGm.GameObject/NosGm.GameObject.csproj
+
+      - name: Restore legacy packages.config projects
+        shell: pwsh
+        run: nuget restore ./NosGm.sln -NonInteractive -Verbosity quiet
+
+      - name: Supply isolated build compatibility settings
+        shell: pwsh
+        run: |
+          @'
+          <Project>
+            <PropertyGroup Condition="'$(OutputPath)' == ''">
+              <BaseOutputPath>$(MSBuildThisFileDirectory)artifacts\pet-compile\</BaseOutputPath>
+              <OutputPath>$(BaseOutputPath)$(MSBuildProjectName)\$(Configuration)\</OutputPath>
+            </PropertyGroup>
+          </Project>
+          '@ | Set-Content -LiteralPath ./Directory.Build.props -Encoding utf8
+
+          function Find-RestoredAssembly([string]$Package, [string]$FileName) {
+            $packageRoot = Join-Path "$env:USERPROFILE\.nuget\packages" $Package
+            $assembly = Get-ChildItem `
+              -LiteralPath $packageRoot `
+              -Filter $FileName `
+              -File `
+              -Recurse | Select-Object -First 1
+            if ($null -eq $assembly) {
+              throw "Restored assembly was not found: $Package/$FileName"
+            }
+            return [Security.SecurityElement]::Escape($assembly.FullName)
+          }
+
+          $log4netPath = Find-RestoredAssembly "log4net" "log4net.dll"
+          $newtonsoftPath = Find-RestoredAssembly "newtonsoft.json" "Newtonsoft.Json.dll"
+          @"
+          <Project>
+            <ItemGroup>
+              <Reference Include="log4net">
+                <HintPath>$log4netPath</HintPath>
+                <Private>true</Private>
+              </Reference>
+              <Reference Include="Newtonsoft.Json">
+                <HintPath>$newtonsoftPath</HintPath>
+                <Private>true</Private>
+              </Reference>
+            </ItemGroup>
+          </Project>
+          "@ | Set-Content -LiteralPath ./Directory.Build.targets -Encoding utf8
+
+      - name: Build GameObject project
+        shell: pwsh
+        run: dotnet build ./Data/NosGm.GameObject/NosGm.GameObject.csproj --configuration Release --no-restore --property:Platform=AnyCPU

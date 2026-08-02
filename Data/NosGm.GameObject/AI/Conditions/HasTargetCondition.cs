@@ -9,15 +9,27 @@ namespace NosGm.GameObject.AI.Conditions
         public BehaviorStatus Tick(Blackboard blackboard)
         {
             var entity = blackboard.Get<MapMonster>("Self");
-            var target = entity?.Target ?? blackboard.Get<BattleEntity>("Target");
+            var target = blackboard.Get<BattleEntity>("Target");
 
-            if (target != null && target.Hp > 0)
+            if (target != null &&
+                target.Hp > 0 &&
+                (entity == null || target.MapInstance == entity.MapInstance))
             {
-                // Sync to blackboard so child nodes use the updated target
-                blackboard.Set("Target", target);
+                // Keep the legacy target property synchronized with the behavior-tree
+                // blackboard. Pet defence and older combat systems still read it.
+                if (entity != null)
+                {
+                    entity.Target = target;
+                }
+
                 return BehaviorStatus.Success;
             }
-            
+
+            if (entity != null)
+            {
+                entity.Target = null;
+            }
+
             blackboard.Remove("Target");
             if (entity != null) entity.Target = null;
             return BehaviorStatus.Failure;

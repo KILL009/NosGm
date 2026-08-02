@@ -26,6 +26,15 @@ namespace NosGm.Core
 
         private const int MaximumInitialCustomParameterBytes = 4096;
 
+        private static readonly HashSet<string> ModernFourArgumentWopenTypes =
+            new HashSet<string>(StringComparer.Ordinal)
+            {
+                "8",
+                "9",
+                "27",
+                "93"
+            };
+
         private CryptographyBase _encryptor;
         private object _session;
         private readonly object _initialCustomParameterSync = new object();
@@ -56,6 +65,7 @@ namespace NosGm.Core
         {
             if (!IsDisposing && packet != null && packet != "")
             {
+                packet = NormalizeOfficialPacketLayout(packet);
                 var rawMessage = new ScsRawDataMessage(_encryptor.Encrypt(packet));
                 SendMessage(rawMessage, priority);
             }
@@ -63,6 +73,7 @@ namespace NosGm.Core
 
         public async Task SendPacketAsync(string packet, byte priority = 10)
         {
+            packet = NormalizeOfficialPacketLayout(packet);
             ScsRawDataMessage rawDataMessage = new ScsRawDataMessage(_encryptor.Encrypt(packet));
             await SendMessageAsync(rawDataMessage, priority).ConfigureAwait(false);
         }
@@ -88,6 +99,44 @@ namespace NosGm.Core
         public void SetClientSession(object clientSession)
         {
             _session = clientSession;
+        }
+
+        /// <summary>
+        /// Normalizes the current official layout for the window packets observed in
+        /// the live client captures. Older handlers still emit two or three payload
+        /// values for these window types, while the current client emits four.
+        /// Unknown and payload-bearing window types are deliberately left untouched.
+        /// </summary>
+        private static string NormalizeOfficialPacketLayout(string packet)
+        {
+            if (string.IsNullOrWhiteSpace(packet) ||
+                !packet.StartsWith("wopen ", StringComparison.Ordinal))
+            {
+                return packet;
+            }
+
+            string[] fields = packet.Split(
+                new[] { ' ' },
+                StringSplitOptions.RemoveEmptyEntries);
+
+            if (fields.Length < 2 ||
+                fields.Length >= 5 ||
+                !ModernFourArgumentWopenTypes.Contains(fields[1]))
+            {
+                return packet;
+            }
+
+            switch (fields.Length)
+            {
+                case 2:
+                    return $"wopen {fields[1]} 0 0 0";
+                case 3:
+                    return $"wopen {fields[1]} {fields[2]} 0 0";
+                case 4:
+                    return $"wopen {fields[1]} {fields[2]} {fields[3]} 0";
+                default:
+                    return packet;
+            }
         }
 
         /// <summary>
