@@ -50,6 +50,18 @@ jobs:
         shell: pwsh
         run: dotnet restore ./Data/NosGm.GameObject/NosGm.GameObject.csproj
 
+      - name: Supply isolated fallback output paths
+        shell: pwsh
+        run: |
+          @'
+          <Project>
+            <PropertyGroup Condition="'$(OutputPath)' == ''">
+              <BaseOutputPath>$(MSBuildThisFileDirectory)artifacts\pet-compile\</BaseOutputPath>
+              <OutputPath>$(BaseOutputPath)$(MSBuildProjectName)\$(Configuration)\</OutputPath>
+            </PropertyGroup>
+          </Project>
+          '@ | Set-Content -LiteralPath ./Directory.Build.props -Encoding utf8
+
       - name: Build GameObject project
         shell: pwsh
         run: dotnet build ./Data/NosGm.GameObject/NosGm.GameObject.csproj --configuration Release --no-restore --property:Platform=AnyCPU
