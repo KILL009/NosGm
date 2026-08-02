@@ -1,4 +1,4 @@
-﻿using NosGm.Core;
+using NosGm.Core;
 using NosGm.DAL.EF;
 using NosGm.DAL.EF.Helpers;
 using NosGm.DAL.Interface;
@@ -13,6 +13,8 @@ namespace NosGm.DAL.DAO
 {
     public class NpcMonsterDAO : INpcMonsterDAO
     {
+        private static readonly ICacheService<short, NpcMonsterDTO> _cache = new NosGm.DAL.EF.Cache.MemoryCacheService<short, NpcMonsterDTO>();
+
         #region Methods
 
         public IEnumerable<NpcMonsterDTO> FindByName(string name)
@@ -111,10 +113,11 @@ namespace NosGm.DAL.DAO
             using (var context = DataAccessHelper.CreateContext())
             {
                 var result = new List<NpcMonsterDTO>();
-                foreach (var NpcMonster in context.NpcMonster)
+                foreach (var NpcMonster in context.NpcMonster.AsNoTracking())
                 {
                     var dto = new NpcMonsterDTO();
                     NpcMonsterMapper.ToNpcMonsterDTO(NpcMonster, dto);
+                    _cache.Set(dto.NpcMonsterVNum, dto, TimeSpan.FromHours(24));
                     result.Add(dto);
                 }
 
@@ -126,12 +129,20 @@ namespace NosGm.DAL.DAO
         {
             try
             {
+                if (_cache.TryGetValue(npcMonsterVNum, out var cachedDto))
+                {
+                    return cachedDto;
+                }
+
                 using (var context = DataAccessHelper.CreateContext())
                 {
                     var dto = new NpcMonsterDTO();
                     if (NpcMonsterMapper.ToNpcMonsterDTO(
-                        context.NpcMonster.FirstOrDefault(i => i.NpcMonsterVNum.Equals(npcMonsterVNum)), dto))
+                        context.NpcMonster.AsNoTracking().FirstOrDefault(i => i.NpcMonsterVNum.Equals(npcMonsterVNum)), dto))
+                    {
+                        _cache.Set(npcMonsterVNum, dto, TimeSpan.FromHours(24));
                         return dto;
+                    }
 
                     return null;
                 }

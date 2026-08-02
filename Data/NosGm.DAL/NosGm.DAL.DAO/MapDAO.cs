@@ -1,4 +1,4 @@
-﻿using NosGm.Core;
+using NosGm.Core;
 using NosGm.DAL.EF;
 using NosGm.DAL.EF.Helpers;
 using NosGm.DAL.Interface;
@@ -12,6 +12,8 @@ namespace NosGm.DAL.DAO
 {
     public class MapDAO : IMapDAO
     {
+        private static readonly ICacheService<short, MapDTO> _cache = new NosGm.DAL.EF.Cache.MemoryCacheService<short, MapDTO>();
+
         #region Methods
 
         public void Insert(List<MapDTO> maps)
@@ -70,10 +72,11 @@ namespace NosGm.DAL.DAO
             using (var context = DataAccessHelper.CreateContext())
             {
                 var result = new List<MapDTO>();
-                foreach (var Map in context.Map)
+                foreach (var Map in context.Map.AsNoTracking())
                 {
                     var dto = new MapDTO();
                     MapMapper.ToMapDTO(Map, dto);
+                    _cache.Set(dto.MapId, dto, TimeSpan.FromHours(24));
                     result.Add(dto);
                 }
 
@@ -85,10 +88,19 @@ namespace NosGm.DAL.DAO
         {
             try
             {
+                if (_cache.TryGetValue(mapId, out var cachedDto))
+                {
+                    return cachedDto;
+                }
+
                 using (var context = DataAccessHelper.CreateContext())
                 {
                     var dto = new MapDTO();
-                    if (MapMapper.ToMapDTO(context.Map.FirstOrDefault(c => c.MapId.Equals(mapId)), dto)) return dto;
+                    if (MapMapper.ToMapDTO(context.Map.AsNoTracking().FirstOrDefault(c => c.MapId.Equals(mapId)), dto))
+                    {
+                        _cache.Set(mapId, dto, TimeSpan.FromHours(24));
+                        return dto;
+                    }
 
                     return null;
                 }

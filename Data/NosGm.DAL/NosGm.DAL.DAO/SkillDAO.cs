@@ -1,4 +1,4 @@
-﻿using NosGm.Core;
+using NosGm.Core;
 using NosGm.DAL.EF;
 using NosGm.DAL.EF.Helpers;
 using NosGm.DAL.Interface;
@@ -13,6 +13,8 @@ namespace NosGm.DAL.DAO
 {
     public class SkillDAO : ISkillDAO
     {
+        private static readonly ICacheService<short, SkillDTO> _cache = new NosGm.DAL.EF.Cache.MemoryCacheService<short, SkillDTO>();
+
         #region Methods
 
         public void Insert(List<SkillDTO> skills)
@@ -88,10 +90,11 @@ namespace NosGm.DAL.DAO
             using (var context = DataAccessHelper.CreateContext())
             {
                 var result = new List<SkillDTO>();
-                foreach (var Skill in context.Skill)
+                foreach (var Skill in context.Skill.AsNoTracking())
                 {
                     var dto = new SkillDTO();
                     SkillMapper.ToSkillDTO(Skill, dto);
+                    _cache.Set(dto.SkillVNum, dto, TimeSpan.FromHours(24));
                     result.Add(dto);
                 }
 
@@ -103,11 +106,19 @@ namespace NosGm.DAL.DAO
         {
             try
             {
+                if (_cache.TryGetValue(skillId, out var cachedDto))
+                {
+                    return cachedDto;
+                }
+
                 using (var context = DataAccessHelper.CreateContext())
                 {
                     var dto = new SkillDTO();
-                    if (SkillMapper.ToSkillDTO(context.Skill.FirstOrDefault(s => s.SkillVNum.Equals(skillId)), dto))
+                    if (SkillMapper.ToSkillDTO(context.Skill.AsNoTracking().FirstOrDefault(s => s.SkillVNum.Equals(skillId)), dto))
+                    {
+                        _cache.Set(skillId, dto, TimeSpan.FromHours(24));
                         return dto;
+                    }
 
                     return null;
                 }

@@ -1,4 +1,4 @@
-﻿using NosGm.Core;
+using NosGm.Core;
 using NosGm.DAL.EF;
 using NosGm.DAL.EF.Helpers;
 using NosGm.DAL.Interface;
@@ -12,6 +12,8 @@ namespace NosGm.DAL.DAO
 {
     public class RecipeDAO : IRecipeDAO
     {
+        private static readonly ICacheService<short, RecipeDTO> _cache = new NosGm.DAL.EF.Cache.MemoryCacheService<short, RecipeDTO>();
+
         #region Methods
 
         public RecipeDTO Insert(RecipeDTO recipe)
@@ -41,10 +43,11 @@ namespace NosGm.DAL.DAO
             using (var context = DataAccessHelper.CreateContext())
             {
                 var result = new List<RecipeDTO>();
-                foreach (var Recipe in context.Recipe)
+                foreach (var Recipe in context.Recipe.AsNoTracking())
                 {
                     var dto = new RecipeDTO();
                     RecipeMapper.ToRecipeDTO(Recipe, dto);
+                    _cache.Set(dto.RecipeId, dto, TimeSpan.FromHours(24));
                     result.Add(dto);
                 }
 
@@ -56,11 +59,19 @@ namespace NosGm.DAL.DAO
         {
             try
             {
+                if (_cache.TryGetValue(recipeId, out var cachedDto))
+                {
+                    return cachedDto;
+                }
+
                 using (var context = DataAccessHelper.CreateContext())
                 {
                     var dto = new RecipeDTO();
-                    if (RecipeMapper.ToRecipeDTO(context.Recipe.SingleOrDefault(s => s.RecipeId.Equals(recipeId)), dto))
+                    if (RecipeMapper.ToRecipeDTO(context.Recipe.AsNoTracking().SingleOrDefault(s => s.RecipeId.Equals(recipeId)), dto))
+                    {
+                        _cache.Set(recipeId, dto, TimeSpan.FromHours(24));
                         return dto;
+                    }
 
                     return null;
                 }
