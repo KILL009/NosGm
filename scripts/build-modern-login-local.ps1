@@ -71,7 +71,9 @@ function Resolve-DotNet10 {
 function Resolve-Net9SdkImports {
     param([Parameter(Mandatory = $true)][string]$DotNetExecutable)
 
-    $matches = New-Object System.Collections.Generic.List[object]
+    # PowerShell variables are case-insensitive. Do not name this collection
+    # $matches because the -match operator writes to the automatic $Matches map.
+    $sdkCandidates = New-Object System.Collections.Generic.List[object]
     foreach ($sdkLine in (& $DotNetExecutable --list-sdks 2>$null)) {
         if ($sdkLine -notmatch '^(9\.0\.[0-9]+)\s+\[(.+)\]$') {
             continue
@@ -81,14 +83,14 @@ function Resolve-Net9SdkImports {
         $sdkBase = $Matches[2]
         $sdkPath = Join-Path (Join-Path $sdkBase $version.ToString()) "Sdks"
         if (Test-Path -LiteralPath (Join-Path $sdkPath "Microsoft.NET.Sdk\Sdk") -PathType Container) {
-            $matches.Add([pscustomobject]@{
+            $sdkCandidates.Add([pscustomobject]@{
                 Version = $version
                 Path = [System.IO.Path]::GetFullPath($sdkPath)
             })
         }
     }
 
-    $selected = $matches | Sort-Object Version -Descending | Select-Object -First 1
+    $selected = $sdkCandidates | Sort-Object Version -Descending | Select-Object -First 1
     if ($null -eq $selected) {
         throw ".NET 9 compatibility SDK was not found. Install it with: winget install --id Microsoft.DotNet.SDK.9 --exact --source winget"
     }
