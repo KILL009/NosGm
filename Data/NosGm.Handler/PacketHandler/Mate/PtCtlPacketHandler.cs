@@ -1,4 +1,4 @@
-﻿using NosGm.Packets.Packets.ClientPackets;
+using NosGm.Packets.Packets.ClientPackets;
 using NosGm.Core;
 using NosGm.Domain;
 using NosGm.GameObject;
@@ -36,39 +36,44 @@ namespace NosGm.Handler.PacketHandler.Mate
             }
 
             var packetsplit = ptCtlPacket.PacketEnd.Split(' ');
-            for (var i = 0; i < ptCtlPacket.Amount * 3; i += 3)
-                if (packetsplit.Length >= ptCtlPacket.Amount * 3 && int.TryParse(packetsplit[i], out var petId)
-                                                                 && short.TryParse(packetsplit[i + 1],
-                                                                     out var positionX)
-                                                                 && short.TryParse(packetsplit[i + 2],
-                                                                     out var positionY))
+
+            foreach (var mate in Session.Character.Mates)
+            {
+                if (mate == null || !mate.IsTeamMember || !mate.IsAlive) continue;
+
+                // Find the Mate's ID in the packet string
+                int idx = Array.IndexOf(packetsplit, mate.MateTransportId.ToString());
+                if (idx != -1 && idx + 2 < packetsplit.Length)
                 {
-                    var mate = Session.Character.Mates.Find(s => s.MateTransportId == petId);
-                    if (mate != null && mate.IsAlive &&
-                        !mate.HasBuff(BCardType.CardType.Move, (byte)AdditionalTypes.Move.MovementImpossible) &&
-                        mate.Owner.Session.HasCurrentMapInstance && !mate.Owner.IsChangingMapInstance
-                        && Session.CurrentMapInstance?.Map?.IsBlockedZone(positionX, positionY) == false)
+                    if (short.TryParse(packetsplit[idx + 1], out var positionX) && 
+                        short.TryParse(packetsplit[idx + 2], out var positionY))
                     {
-                        if (mate.Loyalty > 0)
+                        if (!mate.HasBuff(BCardType.CardType.Move, (byte)AdditionalTypes.Move.MovementImpossible) &&
+                            mate.Owner.Session.HasCurrentMapInstance && !mate.Owner.IsChangingMapInstance &&
+                            Session.CurrentMapInstance?.Map?.IsBlockedZone(positionX, positionY) == false)
                         {
-                            mate.PositionX = positionX;
-                            mate.PositionY = positionY;
-                            if (Session.Character.MapInstance.MapInstanceType == MapInstanceType.BaseMapInstance)
+                            if (mate.Loyalty > 0)
                             {
-                                mate.MapX = positionX;
-                                mate.MapY = positionY;
+                                mate.PositionX = positionX;
+                                mate.PositionY = positionY;
+                                if (Session.Character.MapInstance.MapInstanceType == MapInstanceType.BaseMapInstance)
+                                {
+                                    mate.MapX = positionX;
+                                    mate.MapY = positionY;
+                                }
+
+                                Session.CurrentMapInstance?.Broadcast(StaticPacketHelper.Move(UserType.Npc, mate.MateTransportId, positionX, positionY, mate.Monster.Speed));
+                                if (mate.LastMonsterAggro.AddSeconds(5) > DateTime.Now) mate.UpdateBushFire();
+
+                                Session.CurrentMapInstance?.OnMoveOnMapEvents?.ForEach(e => EventHelper.Instance.RunEvent(e));
+                                Session.CurrentMapInstance?.OnMoveOnMapEvents?.RemoveAll(s => s != null);
                             }
 
-                            Session.CurrentMapInstance?.Broadcast(StaticPacketHelper.Move(UserType.Npc, petId, positionX, positionY, mate.Monster.Speed));
-                            if (mate.LastMonsterAggro.AddSeconds(5) > DateTime.Now) mate.UpdateBushFire();
-
-                            Session.CurrentMapInstance?.OnMoveOnMapEvents?.ForEach(e => EventHelper.Instance.RunEvent(e));
-                            Session.CurrentMapInstance?.OnMoveOnMapEvents?.RemoveAll(s => s != null);
+                            Session.SendPacket(mate.GenerateCond());
                         }
-
-                        Session.SendPacket(mate.GenerateCond());
                     }
                 }
+            }
         }
 
         #endregion

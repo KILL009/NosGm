@@ -70,6 +70,12 @@ namespace NosGm.GameObject
                     PSkills.Add(new NpcMonsterSkill { SkillVNum = ski.SkillVNum, Rate = ski.Rate, LastSkillUse = DateTime.MinValue });
                 }
             }
+            if (Monster != null && Monster.BasicSkill != 0 && !PSkills.Any(s => s.SkillVNum == Monster.BasicSkill))
+            {
+                var basicNpcSkill = new NpcMonsterSkill { SkillVNum = Monster.BasicSkill, Rate = 0, LastSkillUse = DateTime.MinValue };
+                basicNpcSkill.SetSkill(BasicSkill);
+                PSkills.Add(basicNpcSkill);
+            }
             GenerateMateTransportId();
             IsAlive = true;
             BattleEntity = new BattleEntity(this);
@@ -112,6 +118,12 @@ namespace NosGm.GameObject
                 {
                     PSkills.Add(new NpcMonsterSkill { SkillVNum = ski.SkillVNum, Rate = ski.Rate, LastSkillUse = DateTime.MinValue });
                 }
+            }
+            if (npcMonster.BasicSkill != 0 && !PSkills.Any(s => s.SkillVNum == npcMonster.BasicSkill))
+            {
+                var basicNpcSkill = new NpcMonsterSkill { SkillVNum = npcMonster.BasicSkill, Rate = 0, LastSkillUse = DateTime.MinValue };
+                basicNpcSkill.SetSkill(BasicSkill);
+                PSkills.Add(basicNpcSkill);
             }
             GenerateMateTransportId();
             IsAlive = true;
@@ -352,7 +364,14 @@ namespace NosGm.GameObject
             {
                 if (IsAlive && IsTeamMember)
                 {
-                    AI?.Tick();
+                    try
+                    {
+                        AI?.Tick();
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.Error(ex, $"[MATE_AI_ERROR] Mate: {MateTransportId} NpcMonsterVNum: {NpcMonsterVNum}");
+                    }
                 }
             });
 
@@ -1081,14 +1100,14 @@ namespace NosGm.GameObject
                         $"{Level} " +
                         $"{Loyalty} " +
                         $"{Experience} " +
-                        "0 " +
                         $"{Attack} " +
+                        $"{Defence} " +
                         $"{DamageMinimum} " +
                         $"{DamageMaximum} " +
                         $"{Concentrate} " +
                         $"{Monster.CriticalChance} " +
                         $"{Monster.CriticalRate} " +
-                        $"{Defence} " +
+                        "0 " +
                         $"{MeleeDefense} " +
                         $"{MeleeDefenseDodge} " +
                         $"{RangeDefense} " +
@@ -1114,7 +1133,7 @@ namespace NosGm.GameObject
                         $"{Skill1} " +
                         $"{Skill2} " +
                         $"{CurrentEXP} " +
-                        $"{EXPNeeded} ";
+                        $"{(EXPNeeded == 0 ? 1 : EXPNeeded)} ";
             }
 
             return "";
@@ -1138,7 +1157,7 @@ namespace NosGm.GameObject
                 Experience += (int)(xp * (1 + (Owner.Buff.ContainsKey(122) ? 0.5 : 0)));
                 if (Experience >= XpLoad())
                 {
-                    if (Level + 1 < Owner.Level)
+                    if (Level < Owner.Level)
                     {
                         Experience = (long)(Experience - XpLoad());
                         Level++;
