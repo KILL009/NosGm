@@ -161,8 +161,8 @@ if ($bridgeCount -ne 8) {
     throw "Bridge inventory changed: expected 8 projects but found $bridgeCount."
 }
 
-if ($legacyOnlyCount -ne 22) {
-    throw "Legacy-only inventory changed: expected 22 .NET Framework 4.8.1 projects but found $legacyOnlyCount."
+if ($legacyOnlyCount -ne 21) {
+    throw "Legacy-only inventory changed: expected 21 .NET Framework 4.8.1 projects but found $legacyOnlyCount."
 }
 
 & (Join-Path $PSScriptRoot "verify-scs-transport-contracts.ps1")
