@@ -32,7 +32,17 @@ namespace TestCache
             var stats3 = cache.GetStatistics();
             Console.WriteLine(string.Format("\n[EXECUTION 3] After 2 In-Game Reads:\nStoredItems={0} Hits={1} Misses={2} Reloads={3}", stats3.StoredItems, stats3.CacheHits, stats3.CacheMisses, stats3.FullReloads));
             
-            Console.WriteLine("\n[PASS] CacheStats functionally validated! Hits increase and Reloads remain stable.");
+            if (stats2.StoredItems != 2 ||
+                stats2.FullReloads != 1 ||
+                stats3.CacheHits != 2 ||
+                stats3.CacheMisses != 0 ||
+                stats3.FullReloads != 1)
+            {
+                Console.Error.WriteLine("[FAIL] Unexpected cache statistics.");
+                Environment.Exit(1);
+            }
+
+            Console.WriteLine("\n[PASS] Cache service statistics validated.");
         }
     }
 }
