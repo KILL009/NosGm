@@ -3,10 +3,188 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              StartupUri="MainWindow.xaml">
     <Application.Resources>
-        <Style TargetType="Button">
-            <Setter Property="Padding" Value="16,9" />
+        <Color x:Key="BackgroundColor">#070B18</Color>
+        <Color x:Key="PanelColor">#CC11182B</Color>
+        <Color x:Key="PanelHoverColor">#E0182038</Color>
+        <Color x:Key="AccentColor">#A855F7</Color>
+        <Color x:Key="AccentBlueColor">#38BDF8</Color>
+        <Color x:Key="AccentPinkColor">#F472B6</Color>
+        <Color x:Key="TextPrimaryColor">#F8FAFC</Color>
+        <Color x:Key="TextSecondaryColor">#A8B4CC</Color>
+        <Color x:Key="SuccessColor">#3EE88F</Color>
+        <Color x:Key="WarningColor">#FFB84D</Color>
+        <Color x:Key="DangerColor">#FF5D7A</Color>
+
+        <SolidColorBrush x:Key="BackgroundBrush" Color="{StaticResource BackgroundColor}" />
+        <SolidColorBrush x:Key="PanelBrush" Color="{StaticResource PanelColor}" />
+        <SolidColorBrush x:Key="PanelHoverBrush" Color="{StaticResource PanelHoverColor}" />
+        <SolidColorBrush x:Key="AccentBrush" Color="{StaticResource AccentColor}" />
+        <SolidColorBrush x:Key="AccentBlueBrush" Color="{StaticResource AccentBlueColor}" />
+        <SolidColorBrush x:Key="AccentPinkBrush" Color="{StaticResource AccentPinkColor}" />
+        <SolidColorBrush x:Key="TextPrimaryBrush" Color="{StaticResource TextPrimaryColor}" />
+        <SolidColorBrush x:Key="TextSecondaryBrush" Color="{StaticResource TextSecondaryColor}" />
+        <SolidColorBrush x:Key="SuccessBrush" Color="{StaticResource SuccessColor}" />
+        <SolidColorBrush x:Key="WarningBrush" Color="{StaticResource WarningColor}" />
+        <SolidColorBrush x:Key="DangerBrush" Color="{StaticResource DangerColor}" />
+
+        <LinearGradientBrush x:Key="WindowBackgroundBrush" StartPoint="0,0" EndPoint="1,1">
+            <GradientStop Color="#080C1B" Offset="0" />
+            <GradientStop Color="#0D1026" Offset="0.45" />
+            <GradientStop Color="#120B28" Offset="1" />
+        </LinearGradientBrush>
+
+        <LinearGradientBrush x:Key="AccentGradientBrush" StartPoint="0,0" EndPoint="1,1">
+            <GradientStop Color="#29C7FF" Offset="0" />
+            <GradientStop Color="#7C5CFF" Offset="0.5" />
+            <GradientStop Color="#E14BFF" Offset="1" />
+        </LinearGradientBrush>
+
+        <LinearGradientBrush x:Key="PlayGradientBrush" StartPoint="0,0" EndPoint="1,0">
+            <GradientStop Color="#6D28D9" Offset="0" />
+            <GradientStop Color="#A855F7" Offset="0.48" />
+            <GradientStop Color="#DB3DFF" Offset="1" />
+        </LinearGradientBrush>
+
+        <Style TargetType="Window">
+            <Setter Property="FontFamily" Value="Segoe UI" />
+            <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}" />
+            <Setter Property="Background" Value="{StaticResource WindowBackgroundBrush}" />
+        </Style>
+
+        <Style x:Key="GlassCard" TargetType="Border">
+            <Setter Property="Background" Value="{StaticResource PanelBrush}" />
+            <Setter Property="BorderBrush" Value="#4438BDF8" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="14" />
+            <Setter Property="Padding" Value="18" />
+            <Setter Property="SnapsToDevicePixels" Value="True" />
+        </Style>
+
+        <Style x:Key="SectionTitle" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="#D8B4FE" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="TextOptions.TextFormattingMode" Value="Display" />
+        </Style>
+
+        <Style TargetType="TextBox">
+            <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}" />
+            <Setter Property="Background" Value="#A00A1020" />
+            <Setter Property="BorderBrush" Value="#555D6FA3" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Padding" Value="12,9" />
+            <Setter Property="CaretBrush" Value="White" />
+            <Setter Property="SelectionBrush" Value="{StaticResource AccentBrush}" />
+        </Style>
+
+        <Style TargetType="ComboBox">
+            <Setter Property="Foreground" Value="#101426" />
+            <Setter Property="Background" Value="#EDF2FF" />
+            <Setter Property="BorderBrush" Value="#665D6FA3" />
+            <Setter Property="Padding" Value="9,5" />
+        </Style>
+
+        <Style x:Key="NeonButton" TargetType="Button">
+            <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}" />
+            <Setter Property="Background" Value="#A01A2340" />
+            <Setter Property="BorderBrush" Value="#777C5CFF" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Padding" Value="16,10" />
             <Setter Property="Margin" Value="4" />
-            <Setter Property="MinWidth" Value="110" />
+            <Setter Property="MinWidth" Value="106" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Chrome"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="9"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Chrome" Property="Background" Value="#D02A2454" />
+                                <Setter TargetName="Chrome" Property="BorderBrush" Value="#CC38BDF8" />
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="Chrome" Property="Opacity" Value="0.78" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="Chrome" Property="Opacity" Value="0.38" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="IconButton" TargetType="Button" BasedOn="{StaticResource NeonButton}">
+            <Setter Property="MinWidth" Value="36" />
+            <Setter Property="Width" Value="36" />
+            <Setter Property="Height" Value="36" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="FontSize" Value="14" />
+        </Style>
+
+        <Style x:Key="PlayButtonStyle" TargetType="Button">
+            <Setter Property="Foreground" Value="White" />
+            <Setter Property="Background" Value="{StaticResource PlayGradientBrush}" />
+            <Setter Property="BorderBrush" Value="#E5C4B5FD" />
+            <Setter Property="BorderThickness" Value="2" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="FontSize" Value="29" />
+            <Setter Property="FontStyle" Value="Italic" />
+            <Setter Property="FontWeight" Value="Bold" />
+            <Setter Property="Padding" Value="40,18" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Grid>
+                            <Border x:Name="Glow"
+                                    Margin="-8"
+                                    Background="#332F1B69"
+                                    BorderBrush="#554F46E5"
+                                    BorderThickness="6"
+                                    CornerRadius="20" />
+                            <Border x:Name="Chrome"
+                                    Background="{TemplateBinding Background}"
+                                    BorderBrush="{TemplateBinding BorderBrush}"
+                                    BorderThickness="{TemplateBinding BorderThickness}"
+                                    CornerRadius="15"
+                                    Padding="{TemplateBinding Padding}">
+                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            </Border>
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Glow" Property="Background" Value="#665A21D6" />
+                                <Setter TargetName="Chrome" Property="BorderBrush" Value="White" />
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="Chrome" Property="Opacity" Value="0.78" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="Glow" Property="Opacity" Value="0.15" />
+                                <Setter TargetName="Chrome" Property="Opacity" Value="0.35" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style TargetType="ProgressBar">
+            <Setter Property="Height" Value="8" />
+            <Setter Property="Foreground" Value="{StaticResource AccentBrush}" />
+            <Setter Property="Background" Value="#334A5575" />
+            <Setter Property="BorderThickness" Value="0" />
+        </Style>
+
+        <Style TargetType="Slider">
+            <Setter Property="Foreground" Value="{StaticResource AccentBrush}" />
         </Style>
     </Application.Resources>
 </Application>

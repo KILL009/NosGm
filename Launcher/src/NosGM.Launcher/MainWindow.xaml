@@ -1,89 +1,322 @@
 <Window x:Class="NosGM.Launcher.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
         Title="NosGM Launcher"
-        Width="980"
-        Height="560"
-        MinWidth="880"
-        MinHeight="510"
-        WindowStartupLocation="CenterScreen">
-    <Grid Margin="28">
-        <Grid.RowDefinitions>
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="*" />
-            <RowDefinition Height="Auto" />
-        </Grid.RowDefinitions>
+        Width="1280"
+        Height="720"
+        MinWidth="1080"
+        MinHeight="650"
+        WindowStartupLocation="CenterScreen"
+        WindowStyle="None"
+        ResizeMode="CanResizeWithGrip"
+        Background="{StaticResource WindowBackgroundBrush}">
+    <shell:WindowChrome.WindowChrome>
+        <shell:WindowChrome CaptionHeight="42"
+                            CornerRadius="0"
+                            GlassFrameThickness="0"
+                            ResizeBorderThickness="8"
+                            UseAeroCaptionButtons="False" />
+    </shell:WindowChrome.WindowChrome>
 
-        <Grid Grid.Row="0">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*" />
-                <ColumnDefinition Width="Auto" />
-            </Grid.ColumnDefinitions>
-            <StackPanel>
-                <TextBlock FontSize="30" FontWeight="SemiBold" Text="NosGM Launcher" />
-                <TextBlock x:Name="SubtitleTextBlock"
-                           Margin="0,6,0,0"
-                           Foreground="DimGray"
-                           Text="Actualizaciones firmadas, recuperación transaccional y lanzamiento sin privilegios administrativos." />
-            </StackPanel>
-            <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Top">
-                <TextBlock x:Name="LanguageLabelTextBlock" Margin="0,7,8,0" Text="Idioma:" />
-                <ComboBox x:Name="LanguageComboBox"
-                          Width="130"
-                          DisplayMemberPath="DisplayName"
-                          SelectedValuePath="Code"
-                          SelectionChanged="Language_SelectionChanged" />
-            </StackPanel>
-        </Grid>
+    <Grid>
+        <Grid.Background>
+            <RadialGradientBrush Center="0.72,0.05" GradientOrigin="0.72,0.05" RadiusX="0.8" RadiusY="0.85">
+                <GradientStop Color="#442E1065" Offset="0" />
+                <GradientStop Color="#2213325C" Offset="0.36" />
+                <GradientStop Color="#00070B18" Offset="1" />
+            </RadialGradientBrush>
+        </Grid.Background>
 
-        <Border Grid.Row="1" Margin="0,24,0,18" Padding="16" BorderBrush="LightGray" BorderThickness="1" CornerRadius="6">
-            <Grid>
+        <Canvas IsHitTestVisible="False" Opacity="0.7">
+            <Ellipse Width="520" Height="520" Canvas.Left="760" Canvas.Top="-250" Fill="#202D7DFF" />
+            <Ellipse Width="360" Height="360" Canvas.Left="1040" Canvas.Top="160" Fill="#1829C7FF" />
+            <Polygon Points="650,210 800,95 930,190 1040,90 1210,250 1210,390 650,390"
+                     Fill="#1F3B1B72" />
+            <Polygon Points="730,230 870,130 950,210 1060,140 1210,275 1210,410 730,410"
+                     Fill="#25121C42" />
+            <Line X1="20" Y1="640" X2="1260" Y2="640" Stroke="#334F46E5" StrokeThickness="1" />
+        </Canvas>
+
+        <Grid Margin="22">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="42" />
+                <RowDefinition Height="112" />
+                <RowDefinition Height="*" />
+                <RowDefinition Height="74" />
+            </Grid.RowDefinitions>
+
+            <!-- Custom title bar -->
+            <Grid Grid.Row="0" Background="Transparent" MouseLeftButtonDown="TitleBar_MouseLeftButtonDown">
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
-                <TextBlock x:Name="InstallationLabelTextBlock" Grid.Column="0" VerticalAlignment="Center" FontWeight="SemiBold" Text="Instalación:" />
-                <TextBox x:Name="InstallRootTextBox" Grid.Column="1" Margin="12,0" IsReadOnly="True" />
-                <Button x:Name="BrowseFolderButton" Grid.Column="2" Margin="0,0,8,0" Click="BrowseFolder_Click" Content="Examinar" />
-                <Button x:Name="OpenFolderButton" Grid.Column="3" Click="OpenFolder_Click" Content="Abrir carpeta" />
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <Border Width="28" Height="28" CornerRadius="8" Background="{StaticResource AccentGradientBrush}">
+                        <TextBlock Text="N" HorizontalAlignment="Center" VerticalAlignment="Center" FontWeight="Black" FontSize="16" />
+                    </Border>
+                    <TextBlock Margin="10,0,0,0" VerticalAlignment="Center" FontWeight="SemiBold" Text="NosGM Launcher" />
+                    <Border Margin="10,0,0,0" Padding="8,3" CornerRadius="10" Background="#3329C7FF">
+                        <TextBlock Text="PREMIUM" Foreground="#7DD3FC" FontSize="9" FontWeight="Bold" />
+                    </Border>
+                </StackPanel>
+                <StackPanel Grid.Column="1" Margin="0,0,14,0" Orientation="Horizontal" VerticalAlignment="Center"
+                            shell:WindowChrome.IsHitTestVisibleInChrome="True">
+                    <TextBlock x:Name="LanguageLabelTextBlock" Margin="0,0,8,0" VerticalAlignment="Center" Foreground="{StaticResource TextSecondaryBrush}" Text="Idioma:" />
+                    <ComboBox x:Name="LanguageComboBox"
+                              Width="128"
+                              DisplayMemberPath="DisplayName"
+                              SelectedValuePath="Code"
+                              SelectionChanged="Language_SelectionChanged" />
+                </StackPanel>
+                <Button Grid.Column="2"
+                        Style="{StaticResource IconButton}"
+                        Content="—"
+                        Margin="2"
+                        Click="MinimizeWindow_Click"
+                        shell:WindowChrome.IsHitTestVisibleInChrome="True" />
+                <Button Grid.Column="3"
+                        Style="{StaticResource IconButton}"
+                        Content="✕"
+                        Margin="2"
+                        Click="CloseWindow_Click"
+                        shell:WindowChrome.IsHitTestVisibleInChrome="True" />
             </Grid>
-        </Border>
 
-        <StackPanel Grid.Row="2">
-            <TextBlock x:Name="StatusTextBlock"
-                       FontSize="18"
-                       FontWeight="SemiBold"
-                       Text="Inicializando..." />
-            <TextBlock x:Name="DetailTextBlock"
-                       Margin="0,8,0,14"
-                       TextWrapping="Wrap"
-                       Foreground="DimGray" />
-            <ProgressBar x:Name="UpdateProgressBar"
-                         Height="20"
-                         Minimum="0"
-                         Maximum="100"
-                         Value="0" />
-            <TextBlock x:Name="ProgressTextBlock"
-                       Margin="0,8,0,0"
-                       Foreground="DimGray"
-                       Text="0 %" />
+            <!-- Hero / install path -->
+            <Grid Grid.Row="1" Margin="4,10,4,10">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="400" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <StackPanel VerticalAlignment="Center">
+                    <TextBlock FontSize="34" FontStyle="Italic" FontWeight="Black">
+                        <Run Text="Nos" Foreground="White" />
+                        <Run Text="GM" Foreground="{StaticResource AccentBlueBrush}" />
+                        <Run Text=" Launcher" Foreground="#D8B4FE" />
+                    </TextBlock>
+                    <TextBlock x:Name="SubtitleTextBlock"
+                               Margin="2,4,0,0"
+                               Foreground="{StaticResource TextSecondaryBrush}"
+                               FontSize="13"
+                               Text="Compite. Conquista. Conviértete en leyenda." />
+                </StackPanel>
 
-            <Border Margin="0,24,0,0" Padding="14" Background="#FFF7E8" CornerRadius="5">
-                <TextBlock TextWrapping="Wrap">
-                    <Run x:Name="ChannelLabelRun" FontWeight="SemiBold" Text="Estado del canal: " />
-                    <Run x:Name="ChannelStatusRun" Text="sin configurar" />
-                </TextBlock>
-            </Border>
-        </StackPanel>
+                <Border Grid.Column="1" Style="{StaticResource GlassCard}" Padding="14">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+                        <TextBlock x:Name="InstallationLabelTextBlock" Style="{StaticResource SectionTitle}" Text="INSTALACIÓN" />
+                        <Grid Grid.Row="1" Margin="0,8,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBox x:Name="InstallRootTextBox" VerticalContentAlignment="Center" IsReadOnly="True" />
+                            <Button x:Name="BrowseFolderButton" Grid.Column="1" Style="{StaticResource NeonButton}" Margin="8,0,0,0" Click="BrowseFolder_Click" Content="Examinar" />
+                            <Button x:Name="OpenFolderButton" Grid.Column="2" Style="{StaticResource NeonButton}" Margin="8,0,0,0" Click="OpenFolder_Click" Content="Abrir carpeta" />
+                            <Button x:Name="ImportButton" Grid.Column="3" Style="{StaticResource NeonButton}" Margin="8,0,0,0" Click="Import_Click" Content="Importar" />
+                        </Grid>
+                    </Grid>
+                </Border>
+            </Grid>
 
-        <StackPanel Grid.Row="3" Margin="0,22,0,0" Orientation="Horizontal" HorizontalAlignment="Right">
-            <Button x:Name="ImportButton" Click="Import_Click" Content="Importar instalación" />
-            <Button x:Name="CheckButton" Click="Check_Click" Content="Comprobar" />
-            <Button x:Name="RepairButton" Click="Repair_Click" Content="Reparar" />
-            <Button x:Name="PlayButton" Click="Play_Click" Content="Jugar" IsDefault="True" />
-        </StackPanel>
+            <!-- Main dashboard -->
+            <Grid Grid.Row="2" Margin="4,0,4,10">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="1.05*" />
+                    <ColumnDefinition Width="1.18*" />
+                    <ColumnDefinition Width="1.05*" />
+                    <ColumnDefinition Width="1.2*" />
+                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="*" />
+                    <RowDefinition Height="138" />
+                </Grid.RowDefinitions>
+
+                <!-- Server status -->
+                <Border Grid.Column="0" Style="{StaticResource GlassCard}" Margin="0,0,10,10">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Style="{StaticResource SectionTitle}" Text="ESTADO DEL SERVIDOR" />
+                            <Button Grid.Column="1" Style="{StaticResource IconButton}" Width="28" Height="28" Margin="0" Content="↻" Click="RefreshServerStatus_Click" />
+                        </Grid>
+                        <StackPanel Grid.Row="1" Margin="0,15,0,0">
+                            <Grid Margin="0,7">
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="22"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                <Ellipse x:Name="MasterStatusDot" Width="9" Height="9" Fill="{StaticResource WarningBrush}" />
+                                <TextBlock Grid.Column="1" Text="Master" />
+                                <TextBlock x:Name="MasterStatusText" Grid.Column="2" Foreground="{StaticResource TextSecondaryBrush}" Text="Comprobando" />
+                            </Grid>
+                            <Grid Margin="0,7">
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="22"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                <Ellipse x:Name="WorldStatusDot" Width="9" Height="9" Fill="{StaticResource WarningBrush}" />
+                                <TextBlock Grid.Column="1" Text="World" />
+                                <TextBlock x:Name="WorldStatusText" Grid.Column="2" Foreground="{StaticResource TextSecondaryBrush}" Text="Comprobando" />
+                            </Grid>
+                            <Grid Margin="0,7">
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="22"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                <Ellipse x:Name="LoginStatusDot" Width="9" Height="9" Fill="{StaticResource WarningBrush}" />
+                                <TextBlock Grid.Column="1" Text="Login ES" />
+                                <TextBlock x:Name="LoginStatusText" Grid.Column="2" Foreground="{StaticResource TextSecondaryBrush}" Text="Comprobando" />
+                            </Grid>
+                        </StackPanel>
+                        <TextBlock Grid.Row="2" x:Name="ServerProbeTimeTextBlock" Foreground="#71809C" FontSize="10" Text="Actualizando..." />
+                    </Grid>
+                </Border>
+
+                <!-- News -->
+                <Border Grid.Column="1" Style="{StaticResource GlassCard}" Margin="0,0,10,10">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+                        <TextBlock Style="{StaticResource SectionTitle}" Text="EVENTOS Y NOTICIAS" />
+                        <StackPanel Grid.Row="1" Margin="0,13,0,0">
+                            <Grid Margin="0,5">
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="22"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                <TextBlock Text="✦" Foreground="{StaticResource AccentPinkBrush}" />
+                                <TextBlock Grid.Column="1" Text="Liga de Campeones NosGM" TextTrimming="CharacterEllipsis" />
+                                <TextBlock Grid.Column="2" Foreground="{StaticResource TextSecondaryBrush}" Text="NUEVO" FontSize="10" />
+                            </Grid>
+                            <Grid Margin="0,5">
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="22"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                <TextBlock Text="✦" Foreground="{StaticResource AccentBrush}" />
+                                <TextBlock Grid.Column="1" Text="Sistema de mascotas mejorado" TextTrimming="CharacterEllipsis" />
+                                <TextBlock Grid.Column="2" Foreground="{StaticResource TextSecondaryBrush}" Text="02/08" FontSize="10" />
+                            </Grid>
+                            <Grid Margin="0,5">
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="22"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                <TextBlock Text="✦" Foreground="{StaticResource AccentBlueBrush}" />
+                                <TextBlock Grid.Column="1" Text="Estabilización x64 completada" TextTrimming="CharacterEllipsis" />
+                                <TextBlock Grid.Column="2" Foreground="{StaticResource TextSecondaryBrush}" Text="01/08" FontSize="10" />
+                            </Grid>
+                        </StackPanel>
+                        <TextBlock Grid.Row="2" HorizontalAlignment="Right" Foreground="#C084FC" Text="Ver todas  ›" Cursor="Hand" MouseLeftButtonUp="OpenNews_Click" />
+                    </Grid>
+                </Border>
+
+                <!-- Music -->
+                <Border Grid.Column="2" Style="{StaticResource GlassCard}" Margin="0,0,10,10">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                        </Grid.RowDefinitions>
+                        <Grid>
+                            <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                            <TextBlock Style="{StaticResource SectionTitle}" Text="MÚSICA" />
+                            <Button Grid.Column="1" Style="{StaticResource IconButton}" Width="28" Height="28" Margin="0" Content="♫" ToolTip="Abrir carpeta de música" Click="OpenMusicFolder_Click" />
+                        </Grid>
+                        <TextBlock x:Name="MusicTrackTextBlock" Grid.Row="1" Margin="0,13,0,0" FontWeight="SemiBold" Text="Sin canciones" TextTrimming="CharacterEllipsis" />
+                        <TextBlock x:Name="MusicDetailTextBlock" Grid.Row="2" Margin="0,2,0,0" Foreground="{StaticResource TextSecondaryBrush}" FontSize="11" Text="Añade MP3, WAV o WMA" />
+                        <Grid Grid.Row="3" Margin="0,12,0,0">
+                            <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                            <TextBlock x:Name="MusicCurrentTimeTextBlock" Foreground="{StaticResource TextSecondaryBrush}" FontSize="10" Text="00:00" />
+                            <Slider x:Name="MusicProgressSlider" Grid.Column="1" Margin="9,0" Minimum="0" Maximum="1" Value="0" PreviewMouseUp="MusicProgressSlider_PreviewMouseUp" />
+                            <TextBlock x:Name="MusicDurationTextBlock" Grid.Column="2" Foreground="{StaticResource TextSecondaryBrush}" FontSize="10" Text="00:00" />
+                        </Grid>
+                        <Grid Grid.Row="4" Margin="0,12,0,0" VerticalAlignment="Bottom">
+                            <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                            <Button Grid.Column="1" Style="{StaticResource IconButton}" Content="◀" Click="PreviousTrack_Click" />
+                            <Button x:Name="MusicPlayPauseButton" Grid.Column="2" Style="{StaticResource IconButton}" Width="44" Height="44" Content="▶" Click="MusicPlayPause_Click" />
+                            <Button Grid.Column="3" Style="{StaticResource IconButton}" Content="▶|" Click="NextTrack_Click" />
+                        </Grid>
+                    </Grid>
+                </Border>
+
+                <!-- Play panel -->
+                <Border Grid.Column="3" Grid.RowSpan="2" Style="{StaticResource GlassCard}" Margin="0,0,0,0" Padding="18">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="*" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+                        <Grid HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,5,0,10">
+                            <Ellipse Width="190" Height="190" Fill="#191D4ED8" Stroke="#555B4BFF" StrokeThickness="2" />
+                            <Ellipse Width="140" Height="140" Fill="#221E1B4B" Stroke="#7756CCF2" StrokeThickness="1" />
+                            <TextBlock Text="✦" FontSize="86" Foreground="#E9D5FF" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            <TextBlock Text="NOSGM" Margin="0,128,0,0" FontWeight="Bold" Foreground="#7DD3FC" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Grid>
+                        <Button x:Name="PlayButton"
+                                Grid.Row="1"
+                                Style="{StaticResource PlayButtonStyle}"
+                                Margin="18,0"
+                                Click="Play_Click"
+                                Content="JUGAR"
+                                IsDefault="True" />
+                        <TextBlock Grid.Row="2" Margin="0,18,0,0" HorizontalAlignment="Center" Foreground="{StaticResource TextSecondaryBrush}" Text="Tu aventura comienza aquí" />
+                    </Grid>
+                </Border>
+
+                <!-- Operation status -->
+                <Border Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="3" Style="{StaticResource GlassCard}" Margin="0,0,10,0" Padding="16">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="1.25*" />
+                            <ColumnDefinition Width="1.1*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel VerticalAlignment="Center">
+                            <TextBlock x:Name="StatusTextBlock" FontSize="17" FontWeight="SemiBold" Text="Inicializando..." />
+                            <TextBlock x:Name="DetailTextBlock" Margin="0,6,0,0" Foreground="{StaticResource TextSecondaryBrush}" TextWrapping="Wrap" />
+                            <TextBlock Margin="0,5,0,0" Foreground="#71809C" FontSize="10" TextWrapping="Wrap">
+                                <Run x:Name="ChannelLabelRun" FontWeight="SemiBold" Text="Estado del canal: " />
+                                <Run x:Name="ChannelStatusRun" Text="sin configurar" />
+                            </TextBlock>
+                        </StackPanel>
+                        <StackPanel Grid.Column="1" Margin="22,0" VerticalAlignment="Center">
+                            <ProgressBar x:Name="UpdateProgressBar" Minimum="0" Maximum="100" Value="0" />
+                            <TextBlock x:Name="ProgressTextBlock" Margin="0,7,0,0" HorizontalAlignment="Right" Foreground="{StaticResource TextSecondaryBrush}" Text="0 %" />
+                        </StackPanel>
+                        <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                            <Button x:Name="CheckButton" Style="{StaticResource NeonButton}" Click="Check_Click" Content="Comprobar" />
+                            <Button x:Name="RepairButton" Style="{StaticResource NeonButton}" Click="Repair_Click" Content="Reparar" />
+                        </StackPanel>
+                    </Grid>
+                </Border>
+            </Grid>
+
+            <!-- Footer -->
+            <Grid Grid.Row="3" Margin="4,4,4,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <Button Style="{StaticResource NeonButton}" MinWidth="94" Content="◎ Sitio Web" Tag="https://github.com/KILL009/NosGm" Click="OpenExternalLink_Click" />
+                    <Button Style="{StaticResource NeonButton}" MinWidth="94" Content="◈ Discord" Tag="" Click="OpenExternalLink_Click" />
+                    <Button Style="{StaticResource NeonButton}" MinWidth="94" Content="▣ Foro" Tag="" Click="OpenExternalLink_Click" />
+                    <Button Style="{StaticResource NeonButton}" MinWidth="94" Content="? Soporte" Tag="https://github.com/KILL009/NosGm/issues" Click="OpenExternalLink_Click" />
+                </StackPanel>
+                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                    <TextBlock Margin="0,0,12,0" VerticalAlignment="Center" Foreground="{StaticResource TextSecondaryBrush}" Text="VOL" />
+                    <Slider x:Name="MusicVolumeSlider" Width="120" Minimum="0" Maximum="1" Value="0.45" ValueChanged="MusicVolumeSlider_ValueChanged" />
+                    <TextBlock Margin="18,0,0,0" VerticalAlignment="Center" Foreground="#71809C" Text="NosGM © 2026" />
+                </StackPanel>
+            </Grid>
+        </Grid>
     </Grid>
 </Window>
