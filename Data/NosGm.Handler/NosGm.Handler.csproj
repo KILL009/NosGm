@@ -53,14 +53,14 @@
     <LangVersion>latest</LangVersion>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Debug|x86'">
-    <PlatformTarget>x64</PlatformTarget>
+    <PlatformTarget>x86</PlatformTarget>
     <OutputPath>bin\x86\Debug\</OutputPath>
     <DefineConstants>TRACE;DEBUG</DefineConstants>
     <CodeAnalysisRuleSet>..\..\..\ProjectRuleset.ruleset</CodeAnalysisRuleSet>
     <LangVersion>latest</LangVersion>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Release|x86'">
-    <PlatformTarget>x64</PlatformTarget>
+    <PlatformTarget>x86</PlatformTarget>
     <OutputPath>bin\x86\Release\</OutputPath>
     <DefineConstants>TRACE</DefineConstants>
     <Optimize>true</Optimize>
@@ -203,6 +203,7 @@
     <Compile Include="PacketHandler\Command\GodModeHandler.cs" />
     <Compile Include="PacketHandler\Command\GogoHandler.cs" />
     <Compile Include="PacketHandler\Command\GoldDropRateHandler.cs" />
+    <Compile Include="PacketHandler\Command\CacheStatsHandler.cs" />
     <Compile Include="PacketHandler\Command\GoldHandler.cs" />
     <Compile Include="PacketHandler\Command\GoldRateHandler.cs" />
     <Compile Include="PacketHandler\Command\GuriHandler.cs" />

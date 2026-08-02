@@ -95,16 +95,11 @@ namespace NosGm.DAL.DAO
 
         public IEnumerable<ItemDTO> LoadAll()
         {
-            if (Volatile.Read(ref _isFullyLoaded) == 1)
-            {
-                return _cache.GetAll();
-            }
-
             lock (_loadLock)
             {
                 if (Volatile.Read(ref _isFullyLoaded) == 1)
                 {
-                    return _cache.GetAll();
+                    return _cache.GetAll().ToList();
                 }
 
                 using (var context = DataAccessHelper.CreateContext())
@@ -137,19 +132,24 @@ namespace NosGm.DAL.DAO
                     return cachedDto;
                 }
 
-                using (var context = DataAccessHelper.CreateContext())
+                lock (_loadLock)
                 {
-                    var dto = new ItemDTO();
-                    if (ItemMapper.ToItemDTO(context.Item.AsNoTracking().FirstOrDefault(i => i.VNum.Equals(vNum)), dto))
+                    if (_cache.TryGetValue(vNum, out cachedDto))
                     {
-                        lock (_loadLock)
-                        {
-                            _cache.Set(vNum, dto);
-                        }
-                        return dto;
+                        return cachedDto;
                     }
 
-                    return null;
+                    using (var context = DataAccessHelper.CreateContext())
+                    {
+                        var dto = new ItemDTO();
+                        if (ItemMapper.ToItemDTO(context.Item.AsNoTracking().FirstOrDefault(i => i.VNum.Equals(vNum)), dto))
+                        {
+                            _cache.Set(vNum, dto);
+                            return dto;
+                        }
+
+                        return null;
+                    }
                 }
             }
             catch (Exception e)

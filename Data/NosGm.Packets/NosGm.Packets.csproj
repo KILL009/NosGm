@@ -271,6 +271,7 @@
     <Compile Include="Packets\CommandPackets\HomePacket.cs" />
     <Compile Include="Packets\CommandPackets\InvisiblePacket.cs" />
     <Compile Include="Packets\CommandPackets\ItemRainPacket.cs" />
+    <Compile Include="Packets\CommandPackets\CacheStatsPacket.cs" />
     <Compile Include="Packets\CommandPackets\KickPacket.cs" />
     <Compile Include="Packets\CommandPackets\KickSessionPacket.cs" />
     <Compile Include="Packets\CommandPackets\KillPacket.cs" />

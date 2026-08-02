@@ -117,16 +117,11 @@ namespace NosGm.DAL.DAO
 
         public IEnumerable<SkillDTO> LoadAll()
         {
-            if (Volatile.Read(ref _isFullyLoaded) == 1)
-            {
-                return _cache.GetAll();
-            }
-
             lock (_loadLock)
             {
                 if (Volatile.Read(ref _isFullyLoaded) == 1)
                 {
-                    return _cache.GetAll();
+                    return _cache.GetAll().ToList();
                 }
 
                 using (var context = DataAccessHelper.CreateContext())
@@ -159,19 +154,24 @@ namespace NosGm.DAL.DAO
                     return cachedDto;
                 }
 
-                using (var context = DataAccessHelper.CreateContext())
+                lock (_loadLock)
                 {
-                    var dto = new SkillDTO();
-                    if (SkillMapper.ToSkillDTO(context.Skill.AsNoTracking().FirstOrDefault(s => s.SkillVNum.Equals(skillId)), dto))
+                    if (_cache.TryGetValue(skillId, out cachedDto))
                     {
-                        lock (_loadLock)
-                        {
-                            _cache.Set(skillId, dto);
-                        }
-                        return dto;
+                        return cachedDto;
                     }
 
-                    return null;
+                    using (var context = DataAccessHelper.CreateContext())
+                    {
+                        var dto = new SkillDTO();
+                        if (SkillMapper.ToSkillDTO(context.Skill.AsNoTracking().FirstOrDefault(s => s.SkillVNum.Equals(skillId)), dto))
+                        {
+                            _cache.Set(skillId, dto);
+                            return dto;
+                        }
+
+                        return null;
+                    }
                 }
             }
             catch (Exception e)

@@ -85,16 +85,11 @@ namespace NosGm.DAL.DAO
 
         public IEnumerable<MapDTO> LoadAll()
         {
-            if (Volatile.Read(ref _isFullyLoaded) == 1)
-            {
-                return _cache.GetAll();
-            }
-
             lock (_loadLock)
             {
                 if (Volatile.Read(ref _isFullyLoaded) == 1)
                 {
-                    return _cache.GetAll();
+                    return _cache.GetAll().ToList();
                 }
 
                 using (var context = DataAccessHelper.CreateContext())
@@ -127,19 +122,24 @@ namespace NosGm.DAL.DAO
                     return cachedDto;
                 }
 
-                using (var context = DataAccessHelper.CreateContext())
+                lock (_loadLock)
                 {
-                    var dto = new MapDTO();
-                    if (MapMapper.ToMapDTO(context.Map.AsNoTracking().FirstOrDefault(c => c.MapId.Equals(mapId)), dto))
+                    if (_cache.TryGetValue(mapId, out cachedDto))
                     {
-                        lock (_loadLock)
-                        {
-                            _cache.Set(mapId, dto);
-                        }
-                        return dto;
+                        return cachedDto;
                     }
 
-                    return null;
+                    using (var context = DataAccessHelper.CreateContext())
+                    {
+                        var dto = new MapDTO();
+                        if (MapMapper.ToMapDTO(context.Map.AsNoTracking().FirstOrDefault(c => c.MapId.Equals(mapId)), dto))
+                        {
+                            _cache.Set(mapId, dto);
+                            return dto;
+                        }
+
+                        return null;
+                    }
                 }
             }
             catch (Exception e)

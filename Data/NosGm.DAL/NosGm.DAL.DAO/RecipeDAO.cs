@@ -50,16 +50,11 @@ namespace NosGm.DAL.DAO
 
         public IEnumerable<RecipeDTO> LoadAll()
         {
-            if (Volatile.Read(ref _isFullyLoaded) == 1)
-            {
-                return _cache.GetAll();
-            }
-
             lock (_loadLock)
             {
                 if (Volatile.Read(ref _isFullyLoaded) == 1)
                 {
-                    return _cache.GetAll();
+                    return _cache.GetAll().ToList();
                 }
 
                 using (var context = DataAccessHelper.CreateContext())
@@ -92,19 +87,24 @@ namespace NosGm.DAL.DAO
                     return cachedDto;
                 }
 
-                using (var context = DataAccessHelper.CreateContext())
+                lock (_loadLock)
                 {
-                    var dto = new RecipeDTO();
-                    if (RecipeMapper.ToRecipeDTO(context.Recipe.AsNoTracking().SingleOrDefault(s => s.RecipeId.Equals(recipeId)), dto))
+                    if (_cache.TryGetValue(recipeId, out cachedDto))
                     {
-                        lock (_loadLock)
-                        {
-                            _cache.Set(recipeId, dto);
-                        }
-                        return dto;
+                        return cachedDto;
                     }
 
-                    return null;
+                    using (var context = DataAccessHelper.CreateContext())
+                    {
+                        var dto = new RecipeDTO();
+                        if (RecipeMapper.ToRecipeDTO(context.Recipe.AsNoTracking().SingleOrDefault(s => s.RecipeId.Equals(recipeId)), dto))
+                        {
+                            _cache.Set(recipeId, dto);
+                            return dto;
+                        }
+
+                        return null;
+                    }
                 }
             }
             catch (Exception e)
