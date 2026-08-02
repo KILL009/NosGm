@@ -1,4 +1,4 @@
-﻿using NosGm.Core;
+using NosGm.Core;
 using NosGm.DAL;
 using NosGm.Data;
 using NosGm.Domain;
@@ -477,7 +477,21 @@ namespace NosGm.Handler.Services
                     continue;
                 }
 
-                if (character == null || character.IsDisposed)
+                if (character == null || character.IsDisposed ||
+                    character.Inventory == null || !session.HasCurrentMapInstance ||
+                    !ReferenceEquals(session.Character, character))
+                {
+                    Interlocked.Increment(ref counters.SkippedSessions);
+                    continue;
+                }
+
+                // Character selection, map changes and disconnects can mutate the
+                // session after the snapshot above. Revalidate immediately before
+                // entering CharacterLife so it never runs against a detached character.
+                if (!session.IsConnected || session.IsDisposing ||
+                    !session.HasSelectedCharacter || !session.HasCurrentMapInstance ||
+                    character.IsDisposed || character.Inventory == null ||
+                    !ReferenceEquals(session.Character, character))
                 {
                     Interlocked.Increment(ref counters.SkippedSessions);
                     continue;
