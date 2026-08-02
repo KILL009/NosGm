@@ -62,7 +62,14 @@ namespace NosGm.GameObject
             Name = input.Name;
             NpcMonsterVNum = input.NpcMonsterVNum;
             Skin = input.Skin;
-            PSkills = new List<NpcMonsterSkill>();            
+            PSkills = new List<NpcMonsterSkill>();
+            if (Monster?.Skills != null)
+            {
+                foreach (var ski in Monster.Skills)
+                {
+                    PSkills.Add(new NpcMonsterSkill { SkillVNum = ski.SkillVNum, Rate = ski.Rate, Skill = ski.Skill, LastSkillUse = DateTime.MinValue });
+                }
+            }
             GenerateMateTransportId();
             IsAlive = true;
             BattleEntity = new BattleEntity(this);
@@ -99,6 +106,13 @@ namespace NosGm.GameObject
             CharacterId = owner.CharacterId;
             Owner = owner;
             PSkills = new List<NpcMonsterSkill>();
+            if (npcMonster.Skills != null)
+            {
+                foreach (var ski in npcMonster.Skills)
+                {
+                    PSkills.Add(new NpcMonsterSkill { SkillVNum = ski.SkillVNum, Rate = ski.Rate, Skill = ski.Skill, LastSkillUse = DateTime.MinValue });
+                }
+            }
             GenerateMateTransportId();
             IsAlive = true;
             BattleEntity = new BattleEntity(this);
