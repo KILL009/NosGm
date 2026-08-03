@@ -34,6 +34,8 @@ $hasTarget = Read-Source "Data/NosGm.GameObject/AI/Conditions/HasTargetCondition
 $findTarget = Read-Source "Data/NosGm.GameObject/AI/Actions/FindTargetNode.cs"
 $ownerTargeted = Read-Source "Data/NosGm.GameObject/AI/Conditions/OwnerIsTargetedCondition.cs"
 $mateAttack = Read-Source "Data/NosGm.GameObject/AI/Actions/MateAttackTargetNode.cs"
+$mateDiagnostics = Read-Source "Data/NosGm.GameObject/Helpers/MateCombatDiagnostics.cs"
+$packetHelper = Read-Source "Data/NosGm.GameObject/Helpers/StaticPacketHelper.cs"
 $suctl = Read-Source "Data/NosGm.Handler/PacketHandler/Mate/SuctlPacketHandler.cs"
 $upet = Read-Source "Data/NosGm.Handler/PacketHandler/Mate/UpetPacketHandler.cs"
 $mate = Read-Source "Data/NosGm.GameObject/Mate.cs"
@@ -58,8 +60,10 @@ Assert-Contains $mateAttack 'target.MapMonster.AddToAggroList(mate.BattleEntity)
     "Pet attacks generate threat for the pet"
 Assert-Contains $mateAttack 'target.MapMonster.Target = mate.BattleEntity' `
     "Attacked monsters can immediately switch onto the pet"
-Assert-Contains $mateAttack 'Source=AI Action=Basic' `
-    "Automatic pet basic attacks expose their execution source in debug logs"
+Assert-Contains $mateAttack 'MateCombatDiagnostics.BeginBasicAttack' `
+    "Automatic pet basic attacks are marked for client-safe packet encoding"
+Assert-Contains $mateAttack 'MateCombatDiagnostics.ObserveExperienceAfterAttack' `
+    "Automatic pet attacks expose post-kill experience state"
 Assert-NotContains $mateAttack 'SelectReadySpecialSkill' `
     "The behavior tree cannot schedule pet special skills"
 Assert-NotContains $mateAttack 'mate.PSkills' `
@@ -69,10 +73,29 @@ Assert-NotContains $mateAttack 'selectedSkill' `
 Assert-NotContains $mateAttack 'Skill.Cooldown' `
     "Special cooldowns cannot become behavior-tree action locks"
 
+Assert-Contains $mateDiagnostics 'Logger.Info(' `
+    "Pet diagnostics remain visible in Release logging"
+Assert-Contains $mateDiagnostics '[MATE_COMBAT]' `
+    "Basic pet attacks expose their execution source"
+Assert-Contains $mateDiagnostics '[MATE_XP]' `
+    "Pet experience changes expose before, after and required values"
+Assert-Contains $mateDiagnostics 'PendingBasicAttackPackets' `
+    "Only explicitly marked basic attacks are normalized"
+Assert-Contains $packetHelper 'MateCombatDiagnostics.TryConsumeBasicAttackPacket' `
+    "Pet basic packet normalization is connected to packet serialization"
+Assert-Contains $packetHelper 'skillEffect = skillVNum;' `
+    "The original pet basic skill becomes the client effect"
+Assert-Contains $packetHelper 'skillVNum = 0;' `
+    "Client-safe pet basics use packet skill zero"
+Assert-Contains $packetHelper 'attackAnimation = 11;' `
+    "Client-safe pet basics use the NPC attack animation"
+
 Assert-Contains $suctl 'attacker.TargetHit(target, null);' `
     "Client-driven suctl commands always use the dedicated basic attack path"
-Assert-Contains $suctl 'Source=SUCTL Action=Basic' `
-    "Client-driven pet basic attacks expose their execution source"
+Assert-Contains $suctl 'MateCombatDiagnostics.BeginBasicAttack' `
+    "Client-driven pet basics are marked and logged"
+Assert-Contains $suctl 'attacker.Monster.BasicRange <= 0' `
+    "Client-driven melee pet range matches automatic AI range"
 Assert-NotContains $suctl '1000 * s.Skill.Cooldown' `
     "Client-driven basic attacks are not filtered by a special skill cooldown"
 Assert-NotContains $suctl 's.Rate == 0' `
@@ -84,8 +107,12 @@ Assert-Contains $upet 'attacker.PSkills?' `
     "Special cooldown state comes from per-mate skill instances"
 Assert-Contains $upet 'mateSkill.LastSkillUse = DateTime.Now;' `
     "Successful manual pet skills update only their own cooldown timer"
-Assert-Contains $upet 'Source=UPET Action=Special' `
-    "Manual pet special skills expose their execution source"
+Assert-Contains $upet 'Logger.Info(' `
+    "Manual pet special diagnostics remain visible in Release logging"
+Assert-Contains $upet 'ApplyPositiveOwnerBuffs(attacker, skill);' `
+    "Pet support skills mirror positive effects to their owner"
+Assert-Contains $upet 'Result=AppliedToOwner' `
+    "Owner buff routing is observable during runtime tests"
 Assert-NotContains $upet 'attacker.Monster.Skills.FirstOrDefault' `
     "u_pet does not mutate a shared monster-template cooldown"
 Assert-NotContains $upet 'SkillVNum = 200' `
@@ -100,4 +127,4 @@ Assert-Contains $character 'Mates.Where(x => x.IsTeamMember && x.IsAlive)' `
 Assert-Contains $character 'mate.GenerateXp(xp);' `
     "Combat experience is forwarded to active mates"
 
-Write-Host "Pet combat authority, tanking, cooldown and experience contracts passed."
+Write-Host "Pet combat authority, animation, buffs, logging and experience contracts passed."
