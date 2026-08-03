@@ -19,8 +19,8 @@ namespace NosGm.GameObject.Plugin.Event
             catch (Exception exception)
             {
                 Logger.Error(
-                    exception,
-                    $"[EVENT_RUNTIME] Operation={operation} Result=Failed");
+                    $"[EVENT_RUNTIME] Operation={operation} Result=Failed",
+                    exception);
             }
         }
 
@@ -32,8 +32,8 @@ namespace NosGm.GameObject.Plugin.Event
         public static Action<Exception> ObserveFailure(string operation)
         {
             return exception => Logger.Error(
-                exception,
-                $"[EVENT_RUNTIME] Operation={operation} Result=ObservableFailed");
+                $"[EVENT_RUNTIME] Operation={operation} Result=ObservableFailed",
+                exception);
         }
     }
 }
