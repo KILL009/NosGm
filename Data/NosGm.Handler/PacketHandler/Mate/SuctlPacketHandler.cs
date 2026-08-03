@@ -84,6 +84,9 @@ namespace NosGm.Handler.PacketHandler.Mate
             // made every basic attack attempt reuse that skill; while it was cooling
             // down, Mate.TargetHit rejected the request and the pet appeared frozen.
             // A null skill deliberately selects Mate.TargetHit's basic-attack path.
+            Logger.Debug(
+                $"[MATE_COMBAT] Source=SUCTL Action=Basic Mate={attacker.MateTransportId} " +
+                $"TargetType={target.UserType} Target={target.MapEntityId}");
             attacker.TargetHit(target, null);
         }
 
