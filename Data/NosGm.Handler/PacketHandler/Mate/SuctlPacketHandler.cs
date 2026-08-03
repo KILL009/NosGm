@@ -8,6 +8,7 @@ using System;
 using System.Linq;
 using static NosGm.Domain.BCardType;
 using GameMate = NosGm.GameObject.Mate;
+using NosGm.Core;
 
 namespace NosGm.Handler.PacketHandler.Mate
 {
