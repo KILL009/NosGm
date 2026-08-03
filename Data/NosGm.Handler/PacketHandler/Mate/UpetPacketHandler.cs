@@ -117,12 +117,65 @@ namespace NosGm.Handler.PacketHandler.Mate
             });
             Session.SendPacketAfter("petsr 0", cooldownMilliseconds);
 
-            Logger.Debug(
+            Logger.Info(
                 $"[MATE_COMBAT] Source=UPET Action=Special Mate={attacker.MateTransportId} " +
-                $"Skill={mateSkill.SkillVNum} TargetType={battleEntityDefender.UserType} " +
-                $"Target={battleEntityDefender.MapEntityId}");
+                $"Npc={attacker.NpcMonsterVNum} Skill={mateSkill.SkillVNum} " +
+                $"TargetType={battleEntityDefender.UserType} Target={battleEntityDefender.MapEntityId} " +
+                $"SkillTargetType={skill.TargetType} HitType={skill.HitType} " +
+                $"Range={skill.Range} TargetRange={skill.TargetRange} " +
+                $"BCards={skill.BCards?.Count ?? 0}");
 
             MateExt.PetSkillTargetHit(attacker.BattleEntity, battleEntityDefender, skill);
+            ApplyPositiveOwnerBuffs(attacker, skill);
+        }
+
+        private void ApplyPositiveOwnerBuffs(GameMate attacker, Skill skill)
+        {
+            if (attacker?.BattleEntity == null ||
+                Session.Character?.BattleEntity == null ||
+                skill?.BCards == null)
+            {
+                return;
+            }
+
+            // Direct offensive pet skills keep their debuffs on enemies. Only
+            // support/self skill layouts may mirror positive effects to the owner.
+            bool isSupportLayout = skill.TargetType == 2 ||
+                                   skill.TargetType == 1 && skill.HitType != 1;
+            if (!isSupportLayout)
+            {
+                return;
+            }
+
+            foreach (BCard bcard in skill.BCards.Where(card =>
+                         card.Type == (byte)BCardType.CardType.Buff))
+            {
+                Buff buff = new Buff((short)bcard.SecondData, attacker.Level);
+                if (buff.Card == null ||
+                    buff.Card.BuffType != BuffType.Good &&
+                    buff.Card.BuffType != BuffType.Neutral)
+                {
+                    continue;
+                }
+
+                if (Session.Character.Buff.Any(existing =>
+                        existing.Card?.CardId == buff.Card.CardId))
+                {
+                    Logger.Info(
+                        $"[MATE_BUFF] Owner={Session.Character.CharacterId} " +
+                        $"Mate={attacker.MateTransportId} Skill={skill.SkillVNum} " +
+                        $"Card={buff.Card.CardId} Result=AlreadyActive");
+                    continue;
+                }
+
+                bcard.ApplyBCards(
+                    Session.Character.BattleEntity,
+                    attacker.BattleEntity);
+                Logger.Info(
+                    $"[MATE_BUFF] Owner={Session.Character.CharacterId} " +
+                    $"Mate={attacker.MateTransportId} Skill={skill.SkillVNum} " +
+                    $"Card={buff.Card.CardId} Result=AppliedToOwner");
+            }
         }
 
         private BattleEntity ResolveTarget(UpetPacket upetPacket)
