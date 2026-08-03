@@ -60,10 +60,11 @@ namespace NosGm.GameObject.Helpers
                                        short cooldown, short attackAnimation, short skillEffect, short x, short y, bool isAlive, int health,
                                        int damage, int hitmode, byte skillType)
         {
-            // The official client expects normal mate attacks to use the NPC basic
-            // layout: skill 0, animation 11 and the monster BasicSkill as effect.
-            // Sending BasicSkill as the packet skill made some mate models vanish
-            // for the duration of the attack animation.
+            // Normal pet attacks use the exact legacy-client layout that worked
+            // before the pathfinder/behavior-tree migration: skill 0, animation 11,
+            // the monster BasicSkill as effect, and zero coordinates. Keeping the
+            // mate's live MapX/MapY here makes some client models disappear during
+            // every basic attack animation.
             if (MateCombatDiagnostics.TryConsumeBasicAttackPacket(
                     type,
                     callerId,
@@ -74,6 +75,8 @@ namespace NosGm.GameObject.Helpers
                 skillEffect = skillVNum;
                 skillVNum = 0;
                 attackAnimation = 11;
+                x = 0;
+                y = 0;
             }
 
             return $"su {(byte)type} {callerId} {secondaryType} {targetId} {skillVNum} {cooldown} {attackAnimation} {skillEffect} {x} {y} {(isAlive ? 1 : 0)} {health} {damage} {hitmode} {skillType}";
