@@ -34,6 +34,7 @@ $hasTarget = Read-Source "Data/NosGm.GameObject/AI/Conditions/HasTargetCondition
 $findTarget = Read-Source "Data/NosGm.GameObject/AI/Actions/FindTargetNode.cs"
 $ownerTargeted = Read-Source "Data/NosGm.GameObject/AI/Conditions/OwnerIsTargetedCondition.cs"
 $mateAttack = Read-Source "Data/NosGm.GameObject/AI/Actions/MateAttackTargetNode.cs"
+$suctl = Read-Source "Data/NosGm.Handler/PacketHandler/Mate/SuctlPacketHandler.cs"
 $mate = Read-Source "Data/NosGm.GameObject/Mate.cs"
 $character = Read-Source "Data/NosGm.GameObject/Character.cs"
 
@@ -63,6 +64,14 @@ Assert-NotContains $mateAttack '_skill.Skill.Cooldown * 100' `
     "Special skill cooldown never becomes an AI action lock"
 Assert-NotContains $mateAttack 'mateSkills.FirstOrDefault(s => s != null)' `
     "Pet AI cannot fall back to a special skill that is still cooling down"
+Assert-Contains $suctl 'attacker.TargetHit(target, null);' `
+    "Client-driven suctl commands always use the dedicated basic attack path"
+Assert-NotContains $suctl '1000 * s.Skill.Cooldown' `
+    "Client-driven basic attacks are not filtered by a special skill cooldown"
+Assert-NotContains $suctl 's.Rate == 0' `
+    "A zero-rate manual pet skill cannot replace the normal attack"
+Assert-NotContains $suctl 'attacker.TargetHit(target.BattleEntity, skill);' `
+    "The client pet attack handler never forwards a selected special skill"
 Assert-Contains $mate 'if (!CanUseBasicSkill())' `
     "Mate.TargetHit keeps the dedicated basic attack cooldown check"
 Assert-Contains $mate 'LastBasicSkillUse = DateTime.Now;' `
@@ -72,4 +81,4 @@ Assert-Contains $character 'Mates.Where(x => x.IsTeamMember && x.IsAlive)' `
 Assert-Contains $character 'mate.GenerateXp(xp);' `
     "Combat experience is forwarded to active mates"
 
-Write-Host "Pet combat, tanking, basic attack recovery and experience contracts passed."
+Write-Host "Pet combat, tanking, client basic attacks and experience contracts passed."
