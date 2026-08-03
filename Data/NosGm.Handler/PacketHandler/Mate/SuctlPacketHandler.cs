@@ -8,6 +8,7 @@ using NosGm.GameObject.Helpers;
 using System;
 using System.Linq;
 using static NosGm.Domain.BCardType;
+using GameMate = NosGm.GameObject.Mate;
 
 namespace NosGm.Handler.PacketHandler.Mate
 {
@@ -56,7 +57,7 @@ namespace NosGm.Handler.PacketHandler.Mate
                 return;
             }
 
-            Mate attacker = Session.Character.Mates.Find(
+            GameMate attacker = Session.Character.Mates.Find(
                 mate => mate.MateTransportId == suctlPacket.MateTransportId);
             if (attacker?.BattleEntity == null ||
                 attacker.Hp <= 0 ||
