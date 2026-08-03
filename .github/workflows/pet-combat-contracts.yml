@@ -102,6 +102,10 @@ jobs:
         shell: pwsh
         run: dotnet build ./Data/NosGm.GameObject/NosGm.GameObject.csproj --configuration Release --no-restore --property:Platform=AnyCPU
 
-      - name: Build pet packet handlers
+      - name: Build Extension project without unrelated server graph
         shell: pwsh
-        run: dotnet build ./Data/NosGm.Handler/NosGm.Handler.csproj --configuration Release --no-restore --property:Platform=AnyCPU
+        run: dotnet build ./Data/NosGm.Extension/NosGm.Extension.csproj --configuration Release --no-restore --property:Platform=AnyCPU --property:BuildProjectReferences=false
+
+      - name: Build pet packet handlers without unrelated server graph
+        shell: pwsh
+        run: dotnet build ./Data/NosGm.Handler/NosGm.Handler.csproj --configuration Release --no-restore --property:Platform=AnyCPU --property:BuildProjectReferences=false
