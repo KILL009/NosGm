@@ -10,6 +10,7 @@ using System;
 using System.Linq;
 using System.Threading.Tasks;
 using System.Reactive.Linq;
+using GameMate = NosGm.GameObject.Mate;
 
 namespace NosGm.Handler.PacketHandler.Mate
 {
@@ -60,7 +61,7 @@ namespace NosGm.Handler.PacketHandler.Mate
 
             // u_pet identifies the exact pet that owns the skill. Selecting the
             // first active pet made cooldown state leak to a different companion.
-            Mate attacker = Session.Character.Mates.Find(mate =>
+            GameMate attacker = Session.Character.Mates.Find(mate =>
                 mate.MateTransportId == upetPacket.MateTransportId &&
                 mate.IsTeamMember &&
                 mate.IsAlive &&
