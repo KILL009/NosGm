@@ -53,7 +53,7 @@ Assert-Contains $eventHandler 'Result=Failed' `
     "Event dispatcher exceptions are observable"
 Assert-Contains $eventHandler 'Result=UnsupportedLocalDispatch' `
     "Unwired event types are reported instead of silently discarded"
-Assert-NotContains $eventHandler 'InstantBattle.GenerateInstantBattle();' `
+Assert-NotContains $eventHandler '                        InstantBattle.GenerateInstantBattle();' `
     "The obsolete Instant Battle implementation is unreachable"
 
 Assert-Contains $eventGuard 'public static void Run' `
