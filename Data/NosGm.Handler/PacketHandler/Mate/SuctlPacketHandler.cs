@@ -1,5 +1,4 @@
 using NosGm.Packets.Packets.ClientPackets;
-using NosGm.Core;
 using NosGm.Data;
 using NosGm.Domain;
 using NosGm.GameObject;
@@ -8,6 +7,7 @@ using NosGm.GameObject.Helpers;
 using System;
 using System.Linq;
 using static NosGm.Domain.BCardType;
+using GameMate = NosGm.GameObject.Mate;
 
 namespace NosGm.Handler.PacketHandler.Mate
 {
@@ -32,7 +32,7 @@ namespace NosGm.Handler.PacketHandler.Mate
 
         public void Attack(SuctlPacket suctlPacket)
         {
-            if (suctlPacket == null)
+            if (suctlPacket == null || Session.Character == null)
             {
                 return;
             }
@@ -56,9 +56,10 @@ namespace NosGm.Handler.PacketHandler.Mate
                 return;
             }
 
-            Mate attacker = Session.Character.Mates.Find(
+            GameMate attacker = Session.Character.Mates.Find(
                 mate => mate.MateTransportId == suctlPacket.MateTransportId);
             if (attacker?.BattleEntity == null ||
+                attacker.Monster == null ||
                 attacker.Hp <= 0 ||
                 attacker.HasBuff(
                     CardType.SpecialAttack,
@@ -68,7 +69,9 @@ namespace NosGm.Handler.PacketHandler.Mate
             }
 
             BattleEntity target = ResolveTarget(suctlPacket);
-            if (target == null)
+            if (target == null ||
+                target.Hp <= 0 ||
+                target.MapInstance != attacker.BattleEntity.MapInstance)
             {
                 return;
             }
@@ -79,12 +82,29 @@ namespace NosGm.Handler.PacketHandler.Mate
                 return;
             }
 
+            int allowedBasicRange = attacker.Monster.BasicRange <= 0
+                ? 1
+                : attacker.Monster.BasicRange + 1;
+            if (!attacker.CanUseBasicSkill() ||
+                attacker.BattleEntity.GetDistance(target) > allowedBasicRange)
+            {
+                return;
+            }
+
             // suctl is the normal pet attack command. Pet special skills are handled
             // separately by UpetPacketHandler. Passing a special NpcMonsterSkill here
             // made every basic attack attempt reuse that skill; while it was cooling
             // down, Mate.TargetHit rejected the request and the pet appeared frozen.
             // A null skill deliberately selects Mate.TargetHit's basic-attack path.
+            long experienceBefore = MateCombatDiagnostics.BeginBasicAttack(
+                attacker,
+                target,
+                "SUCTL");
             attacker.TargetHit(target, null);
+            MateCombatDiagnostics.ObserveExperienceAfterAttack(
+                attacker,
+                target,
+                experienceBefore);
         }
 
         private BattleEntity ResolveTarget(SuctlPacket suctlPacket)

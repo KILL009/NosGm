@@ -10,6 +10,7 @@ using System;
 using System.Linq;
 using System.Threading.Tasks;
 using System.Reactive.Linq;
+using GameMate = NosGm.GameObject.Mate;
 
 namespace NosGm.Handler.PacketHandler.Mate
 {
@@ -34,98 +35,171 @@ namespace NosGm.Handler.PacketHandler.Mate
 
         public async Task SpecialSkillAsync(UpetPacket upetPacket)
         {
-            if (upetPacket == null)
+            if (upetPacket == null || Session.Character == null)
             {
                 return;
             }
 
-            PenaltyLogDTO penalty = Session.Account.PenaltyLogs.OrderByDescending(s => s.DateEnd).FirstOrDefault();
+            PenaltyLogDTO penalty = Session.Account.PenaltyLogs
+                .OrderByDescending(s => s.DateEnd)
+                .FirstOrDefault();
             if (Session.Character.IsMuted() && penalty != null)
             {
-                if (Session.Character.Gender == GenderType.Female)
-                {
-                    Session.CurrentMapInstance?.Broadcast(Session.Character.GenerateSay(Language.Instance.GetMessageFromKey("MUTED_FEMALE"), 1));
-                    Session.SendPacket(Session.Character.GenerateSay(string.Format(Language.Instance.GetMessageFromKey("MUTE_TIME"), (penalty.DateEnd - DateTime.Now).ToString("hh\\:mm\\:ss")), 11));
-                }
-                else
-                {
-                    Session.CurrentMapInstance?.Broadcast(Session.Character.GenerateSay(Language.Instance.GetMessageFromKey("MUTED_MALE"), 1));
-                    Session.SendPacket(Session.Character.GenerateSay(string.Format(Language.Instance.GetMessageFromKey("MUTE_TIME"), (penalty.DateEnd - DateTime.Now).ToString("hh\\:mm\\:ss")), 11));
-                }
+                string messageKey = Session.Character.Gender == GenderType.Female
+                    ? "MUTED_FEMALE"
+                    : "MUTED_MALE";
 
+                Session.CurrentMapInstance?.Broadcast(
+                    Session.Character.GenerateSay(Language.Instance.GetMessageFromKey(messageKey), 1));
+                Session.SendPacket(Session.Character.GenerateSay(
+                    string.Format(
+                        Language.Instance.GetMessageFromKey("MUTE_TIME"),
+                        (penalty.DateEnd - DateTime.Now).ToString("hh\\:mm\\:ss")),
+                    11));
                 return;
             }
 
-            var attacker = Session.Character.Mates.Find(x => x.IsTeamMember && x.MateType == MateType.Pet);
-            if (attacker == null)
-            {
-                return;
-            }
+            // u_pet identifies the exact pet that owns the skill. Selecting the
+            // first active pet made cooldown state leak to a different companion.
+            GameMate attacker = Session.Character.Mates.Find(mate =>
+                mate.MateTransportId == upetPacket.MateTransportId &&
+                mate.IsTeamMember &&
+                mate.IsAlive &&
+                mate.MateType == MateType.Pet);
 
-            NpcMonsterSkill mateSkill = null;
-            if (attacker.Monster.Skills.Any())
-            {
-                mateSkill = attacker.Monster.Skills.FirstOrDefault(sk => MateHelper.Instance.PetSkills.Contains(sk.SkillVNum));
-            }
-
-            if (mateSkill == null)
-            {
-                mateSkill = new NpcMonsterSkill
-                {
-                    SkillVNum = 200
-                };
-            }
-
-            if (mateSkill.LastSkillUse.AddMilliseconds((mateSkill.Skill?.Cooldown * 100) ?? 500) > DateTime.Now || (mateSkill != null && Session.Character.npcMonstersSkillsInCd.Contains(mateSkill.SkillVNum)))
+            if (attacker?.BattleEntity == null ||
+                attacker.Monster == null ||
+                attacker.IsSitting)
             {
                 return;
             }
 
-            NpcMonsterSkill petskill = mateSkill;
+            // PSkills contains per-mate NpcMonsterSkill instances. Using the shared
+            // Monster.Skills collection made LastSkillUse global across pets that
+            // use the same monster template.
+            NpcMonsterSkill mateSkill = attacker.PSkills?
+                .FirstOrDefault(candidate =>
+                    candidate?.Skill != null &&
+                    MateHelper.Instance.PetSkills.Contains(candidate.SkillVNum));
 
-            if (attacker.IsSitting)
+            if (mateSkill?.Skill == null ||
+                !mateSkill.CanBeUsed() ||
+                Session.Character.npcMonstersSkillsInCd.Contains(mateSkill.SkillVNum))
             {
                 return;
             }
 
+            BattleEntity battleEntityDefender = ResolveTarget(upetPacket);
+            if (battleEntityDefender == null ||
+                battleEntityDefender.MapInstance != attacker.BattleEntity.MapInstance ||
+                battleEntityDefender.Hp <= 0)
+            {
+                return;
+            }
+
+            Skill skill = PartnerSkillHelper.ConvertToNormalPSkill(mateSkill);
+            if (skill == null)
+            {
+                return;
+            }
+
+            int cooldownMilliseconds = Math.Max(0, mateSkill.Skill.Cooldown * 100);
+            Character owner = Session.Character;
+
+            // PetSkillTargetHit currently owns damage/cast execution, while this
+            // handler owns the per-pet cooldown and the client cooldown indicator.
             mateSkill.LastSkillUse = DateTime.Now;
+            owner.npcMonstersSkillsInCd.Add(mateSkill.SkillVNum);
 
-            Skill skill = PartnerSkillHelper.ConvertToNormalPSkill(petskill);
+            Observable.Timer(TimeSpan.FromMilliseconds(cooldownMilliseconds)).Subscribe(_ =>
+            {
+                owner.npcMonstersSkillsInCd.Remove(mateSkill.SkillVNum);
+            });
+            Session.SendPacketAfter("petsr 0", cooldownMilliseconds);
 
-            BattleEntity battleEntityAttacker = attacker.BattleEntity;
-            BattleEntity battleEntityDefender = null;
+            Logger.Info(
+                $"[MATE_COMBAT] Source=UPET Action=Special Mate={attacker.MateTransportId} " +
+                $"Npc={attacker.NpcMonsterVNum} Skill={mateSkill.SkillVNum} " +
+                $"TargetType={battleEntityDefender.UserType} Target={battleEntityDefender.MapEntityId} " +
+                $"SkillTargetType={skill.TargetType} HitType={skill.HitType} " +
+                $"Range={skill.Range} TargetRange={skill.TargetRange} " +
+                $"BCards={skill.BCards?.Count ?? 0}");
 
-            Observable.Timer(TimeSpan.FromMilliseconds(mateSkill.Skill.Cooldown * 100)).Subscribe(x => Session.Character.npcMonstersSkillsInCd.Remove(mateSkill.SkillVNum));
-            Session.Character.npcMonstersSkillsInCd.Add(mateSkill.SkillVNum);
+            MateExt.PetSkillTargetHit(attacker.BattleEntity, battleEntityDefender, skill);
+            ApplyPositiveOwnerBuffs(attacker, skill);
+        }
 
+        private void ApplyPositiveOwnerBuffs(GameMate attacker, Skill skill)
+        {
+            if (attacker?.BattleEntity == null ||
+                Session.Character?.BattleEntity == null ||
+                skill?.BCards == null)
+            {
+                return;
+            }
+
+            // Direct offensive pet skills keep their debuffs on enemies. Only
+            // support/self skill layouts may mirror positive effects to the owner.
+            bool isSupportLayout = skill.TargetType == 2 ||
+                                   skill.TargetType == 1 && skill.HitType != 1;
+            if (!isSupportLayout)
+            {
+                return;
+            }
+
+            foreach (BCard bcard in skill.BCards.Where(card =>
+                         card.Type == (byte)BCardType.CardType.Buff))
+            {
+                Buff buff = new Buff((short)bcard.SecondData, attacker.Level);
+                if (buff.Card == null ||
+                    buff.Card.BuffType != BuffType.Good &&
+                    buff.Card.BuffType != BuffType.Neutral)
+                {
+                    continue;
+                }
+
+                if (Session.Character.Buff.Any(existing =>
+                        existing.Card?.CardId == buff.Card.CardId))
+                {
+                    Logger.Info(
+                        $"[MATE_BUFF] Owner={Session.Character.CharacterId} " +
+                        $"Mate={attacker.MateTransportId} Skill={skill.SkillVNum} " +
+                        $"Card={buff.Card.CardId} Result=AlreadyActive");
+                    continue;
+                }
+
+                bcard.ApplyBCards(
+                    Session.Character.BattleEntity,
+                    attacker.BattleEntity);
+                Logger.Info(
+                    $"[MATE_BUFF] Owner={Session.Character.CharacterId} " +
+                    $"Mate={attacker.MateTransportId} Skill={skill.SkillVNum} " +
+                    $"Card={buff.Card.CardId} Result=AppliedToOwner");
+            }
+        }
+
+        private BattleEntity ResolveTarget(UpetPacket upetPacket)
+        {
             switch (upetPacket.TargetType)
             {
                 case UserType.Player:
-                    {
-                        var target = Session.Character.MapInstance?.GetCharacterById(upetPacket.TargetId);
-                        battleEntityDefender = target?.BattleEntity;
-                        Session.SendPacketAfter("petsr 0", mateSkill.Skill.Cooldown * 100);
-                    }
-                    break;
+                    return Session.CurrentMapInstance?
+                        .GetCharacterById(upetPacket.TargetId)?
+                        .BattleEntity;
 
                 case UserType.Npc:
-                    {
-                        var target = Session.Character.MapInstance?.GetMate(upetPacket.TargetId);
-                        battleEntityDefender = target?.BattleEntity;
-                        Session.SendPacketAfter("petsr 0", mateSkill.Skill.Cooldown * 100);
-                    }
-                    break;
+                    return Session.CurrentMapInstance?
+                        .GetMate(upetPacket.TargetId)?
+                        .BattleEntity;
 
                 case UserType.Monster:
-                    {
-                        var target = Session.Character.MapInstance?.GetMonsterById(upetPacket.TargetId);
-                        battleEntityDefender = target?.BattleEntity;
-                        Session.SendPacketAfter("petsr 0", mateSkill.Skill.Cooldown * 100);
-                    }
-                    break;
-            }
+                    return Session.CurrentMapInstance?
+                        .GetMonsterById(upetPacket.TargetId)?
+                        .BattleEntity;
 
-            MateExt.PetSkillTargetHit(battleEntityAttacker, battleEntityDefender, skill);
+                default:
+                    return null;
+            }
         }
 
         #endregion
