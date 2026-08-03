@@ -1,4 +1,4 @@
-﻿using NosGm.Packets.Packets.ClientPackets;
+using NosGm.Packets.Packets.ClientPackets;
 using NosGm.Extension.Extension.Packet;
 using NosGm.Core;
 using NosGm.Data;
@@ -87,6 +87,8 @@ namespace NosGm.Handler.PacketHandler.Mate
             {
                 return;
             }
+
+            mateSkill.LastSkillUse = DateTime.Now;
 
             Skill skill = PartnerSkillHelper.ConvertToNormalPSkill(petskill);
 
