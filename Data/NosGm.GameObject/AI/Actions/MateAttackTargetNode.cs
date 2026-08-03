@@ -1,7 +1,7 @@
 using NosGm.AI.Core;
-using NosGm.Core;
 using NosGm.GameObject;
 using NosGm.GameObject.Battle;
+using NosGm.GameObject.Helpers;
 
 namespace NosGm.GameObject.AI.Actions
 {
@@ -49,13 +49,18 @@ namespace NosGm.GameObject.AI.Actions
                 target.MapMonster.Target = mate.BattleEntity;
             }
 
-            Logger.Debug(
-                $"[MATE_COMBAT] Source=AI Action=Basic Mate={mate.MateTransportId} " +
-                $"TargetType={target.UserType} Target={target.MapEntityId}");
+            long experienceBefore = MateCombatDiagnostics.BeginBasicAttack(
+                mate,
+                target,
+                "AI");
 
             // A null NpcMonsterSkill deliberately enters Mate.TargetHit's dedicated
             // LastBasicSkillUse path. No special-skill cooldown is consulted here.
             mate.TargetHit(target, null);
+            MateCombatDiagnostics.ObserveExperienceAfterAttack(
+                mate,
+                target,
+                experienceBefore);
             return BehaviorStatus.Success;
         }
     }
