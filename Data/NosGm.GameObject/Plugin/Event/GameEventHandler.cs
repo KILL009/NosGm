@@ -1,6 +1,6 @@
 using System;
 using System.Threading.Tasks;
-using Game.Configuration;
+using NosGm.Configuration;
 using NosGm.Core;
 using NosGm.Domain;
 using NosGm.GameObject.Event.ARENA;
@@ -13,6 +13,12 @@ namespace NosGm.GameObject.Plugin.Event
 {
     public static class GameEventHandler
     {
+        private const int MaximumRuntimeRate = 1000;
+        private const int DefaultXpRate = 5;
+        private const int DefaultHeroXpRate = 5;
+        private const int DefaultDropRate = 1;
+        private const int DefaultFairyXpRate = 10;
+
         private static readonly object EventStateSync = new object();
 
         public static void GenerateEvent(EventType type, int LvlBracket = -1, byte value = 0)
@@ -118,15 +124,21 @@ namespace NosGm.GameObject.Plugin.Event
                     ServerManager.Instance.RebootTask = new Task(ServerManager.Instance.AutoReboot);
                     ServerManager.Instance.RebootTask.Start();
                     break;
-                case EventType.GLACERNONRAID:
-                case EventType.METEORITEGAME:
-                case EventType.Act7Ship:
-                case EventType.CELESTIALSPIRE:
                 case EventType.DROPRATE:
                 case EventType.FAIRYRATE:
                 case EventType.HERORATE:
                 case EventType.XPRATE:
+                    ApplyRateEvent(type, ResolveRuntimeRate(levelBracket, value));
+                    CompleteEvent(type);
+                    break;
                 case EventType.RESETRATE:
+                    ResetRuntimeRates();
+                    CompleteEvent(type);
+                    break;
+                case EventType.GLACERNONRAID:
+                case EventType.METEORITEGAME:
+                case EventType.Act7Ship:
+                case EventType.CELESTIALSPIRE:
                 case EventType.BattleRoyal:
                 case EventType.DUELEVENT:
                 case EventType.DUELEVENTPRIVATE:
@@ -139,6 +151,56 @@ namespace NosGm.GameObject.Plugin.Event
                     CompleteEvent(type);
                     break;
             }
+        }
+
+        private static int ResolveRuntimeRate(int levelBracket, byte value)
+        {
+            int rate = value > 0 ? value : levelBracket;
+            if (rate <= 0 || rate > MaximumRuntimeRate)
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(levelBracket),
+                    rate,
+                    $"Runtime rates must be between 1 and {MaximumRuntimeRate}.");
+            }
+
+            return rate;
+        }
+
+        private static void ApplyRateEvent(EventType type, int rate)
+        {
+            switch (type)
+            {
+                case EventType.DROPRATE:
+                    GameConfiguration.DropRate = rate;
+                    break;
+                case EventType.FAIRYRATE:
+                    GameConfiguration.FairyXPRate = rate;
+                    break;
+                case EventType.HERORATE:
+                    GameConfiguration.HeroXPRate = rate;
+                    break;
+                case EventType.XPRATE:
+                    GameConfiguration.XPRate = rate;
+                    break;
+                default:
+                    throw new ArgumentOutOfRangeException(nameof(type), type, "Not a rate event.");
+            }
+
+            Logger.Info($"[EVENT_RUNTIME] Event={type} Result=RateApplied Rate={rate}");
+        }
+
+        private static void ResetRuntimeRates()
+        {
+            GameConfiguration.XPRate = DefaultXpRate;
+            GameConfiguration.HeroXPRate = DefaultHeroXpRate;
+            GameConfiguration.DropRate = DefaultDropRate;
+            GameConfiguration.FairyXPRate = DefaultFairyXpRate;
+
+            Logger.Info(
+                $"[EVENT_RUNTIME] Event={EventType.RESETRATE} Result=RatesReset " +
+                $"XP={DefaultXpRate} HeroXP={DefaultHeroXpRate} " +
+                $"Drop={DefaultDropRate} FairyXP={DefaultFairyXpRate}");
         }
     }
 }
