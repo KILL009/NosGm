@@ -126,24 +126,38 @@ namespace NosGm.Handler.PacketHandler.Mate
                 $"BCards={skill.BCards?.Count ?? 0}");
 
             MateExt.PetSkillTargetHit(attacker.BattleEntity, battleEntityDefender, skill);
-            ApplyPositiveOwnerBuffs(attacker, skill);
+            ApplyPositiveOwnerBuffs(attacker, battleEntityDefender, skill);
         }
 
-        private void ApplyPositiveOwnerBuffs(GameMate attacker, Skill skill)
+        private void ApplyPositiveOwnerBuffs(
+            GameMate attacker,
+            BattleEntity battleEntityDefender,
+            Skill skill)
         {
             if (attacker?.BattleEntity == null ||
+                battleEntityDefender == null ||
                 Session.Character?.BattleEntity == null ||
                 skill?.BCards == null)
             {
                 return;
             }
 
-            // Direct offensive pet skills keep their debuffs on enemies. Only
-            // support/self skill layouts may mirror positive effects to the owner.
+            bool targetsPetItself =
+                battleEntityDefender.MapEntityId == attacker.MateTransportId &&
+                battleEntityDefender.UserType == UserType.Npc;
+
+            // Fiesta de sushi and similar skills use TargetType=1/HitType=1 but
+            // target the pet itself. Their good/neutral BCards must also reach the
+            // owner. Enemy-directed offensive skills remain excluded.
             bool isSupportLayout = skill.TargetType == 2 ||
-                                   skill.TargetType == 1 && skill.HitType != 1;
+                                   skill.TargetType == 1 &&
+                                   (skill.HitType != 1 || targetsPetItself);
             if (!isSupportLayout)
             {
+                Logger.Info(
+                    $"[MATE_BUFF] Owner={Session.Character.CharacterId} " +
+                    $"Mate={attacker.MateTransportId} Skill={skill.SkillVNum} " +
+                    "Result=SkippedNonSupportLayout");
                 return;
             }
 

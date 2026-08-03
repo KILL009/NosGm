@@ -79,8 +79,21 @@ Assert-Contains $mateDiagnostics '[MATE_COMBAT]' `
     "Basic pet attacks expose their execution source"
 Assert-Contains $mateDiagnostics '[MATE_XP]' `
     "Pet experience changes expose before, after and required values"
+Assert-Contains $mateDiagnostics 'AwardedPetKills' `
+    "Concurrent attack probes cannot award the same kill repeatedly"
+Assert-Contains $mateDiagnostics 'CharacterHelper.ExperiencePenalty(mate.Level, monsterLevel)' `
+    "Fallback pet experience uses the pet level instead of the owner level"
+Assert-Contains $mateDiagnostics 'mate.GenerateXp(petXp);' `
+    "A confirmed pet kill can award independent pet experience"
+Assert-Contains $mateDiagnostics 'mate.Owner.Session.SendPacket(mate.GenerateScPacket());' `
+    "Pet experience immediately refreshes the client pet panel"
+Assert-Contains $mateDiagnostics '[MATE_XP_REWARD]' `
+    "Independent pet experience awards are visible in runtime logs"
 Assert-Contains $mateDiagnostics 'PendingBasicAttackPackets' `
     "Only explicitly marked basic attacks are normalized"
+Assert-NotContains $mateDiagnostics 'skillVNum <= 0' `
+    "Pets whose database BasicSkill is zero still receive safe packet normalization"
+
 Assert-Contains $packetHelper 'MateCombatDiagnostics.TryConsumeBasicAttackPacket' `
     "Pet basic packet normalization is connected to packet serialization"
 Assert-Contains $packetHelper 'skillEffect = skillVNum;' `
@@ -89,6 +102,10 @@ Assert-Contains $packetHelper 'skillVNum = 0;' `
     "Client-safe pet basics use packet skill zero"
 Assert-Contains $packetHelper 'attackAnimation = 11;' `
     "Client-safe pet basics use the NPC attack animation"
+Assert-Contains $packetHelper 'x = 0;' `
+    "Client-safe pet basics use the legacy zero X coordinate"
+Assert-Contains $packetHelper 'y = 0;' `
+    "Client-safe pet basics use the legacy zero Y coordinate"
 
 Assert-Contains $suctl 'attacker.TargetHit(target, null);' `
     "Client-driven suctl commands always use the dedicated basic attack path"
@@ -109,8 +126,10 @@ Assert-Contains $upet 'mateSkill.LastSkillUse = DateTime.Now;' `
     "Successful manual pet skills update only their own cooldown timer"
 Assert-Contains $upet 'Logger.Info(' `
     "Manual pet special diagnostics remain visible in Release logging"
-Assert-Contains $upet 'ApplyPositiveOwnerBuffs(attacker, skill);' `
-    "Pet support skills mirror positive effects to their owner"
+Assert-Contains $upet 'ApplyPositiveOwnerBuffs(attacker, battleEntityDefender, skill);' `
+    "Pet support skills evaluate the actual client-selected target"
+Assert-Contains $upet 'targetsPetItself' `
+    "Self-target pet support layouts are recognized"
 Assert-Contains $upet 'Result=AppliedToOwner' `
     "Owner buff routing is observable during runtime tests"
 Assert-NotContains $upet 'attacker.Monster.Skills.FirstOrDefault' `
@@ -123,8 +142,8 @@ Assert-Contains $mate 'if (!CanUseBasicSkill())' `
 Assert-Contains $mate 'LastBasicSkillUse = DateTime.Now;' `
     "Successful basic attacks update their own timer"
 Assert-Contains $character 'Mates.Where(x => x.IsTeamMember && x.IsAlive)' `
-    "Only active living mates receive combat experience"
+    "Only active living mates receive the normal character kill reward"
 Assert-Contains $character 'mate.GenerateXp(xp);' `
-    "Combat experience is forwarded to active mates"
+    "Normal character kill experience is still forwarded to active mates"
 
-Write-Host "Pet combat authority, animation, buffs, logging and experience contracts passed."
+Write-Host "Pet combat authority, model visibility, owner buffs and experience contracts passed."
