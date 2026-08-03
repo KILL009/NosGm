@@ -9,6 +9,7 @@ on:
       - Data/NosGm.GameObject/AI/**
       - Data/NosGm.GameObject/Character.cs
       - Data/NosGm.GameObject/Mate.cs
+      - Data/NosGm.Handler/PacketHandler/Mate/**
       - scripts/verify-pet-combat-contracts.ps1
   push:
     branches:
@@ -18,6 +19,7 @@ on:
       - Data/NosGm.GameObject/AI/**
       - Data/NosGm.GameObject/Character.cs
       - Data/NosGm.GameObject/Mate.cs
+      - Data/NosGm.Handler/PacketHandler/Mate/**
       - scripts/verify-pet-combat-contracts.ps1
 
 permissions:
@@ -30,7 +32,7 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
-      - name: Verify pet combat, tanking and experience contracts
+      - name: Verify pet combat authority, tanking and experience contracts
         shell: pwsh
         run: ./scripts/verify-pet-combat-contracts.ps1
 
