@@ -80,7 +80,7 @@ namespace NosGm.GameObject.Helpers
                 return;
             }
 
-            Observable.Timer(TimeSpan.FromMilliseconds(1500)).Subscribe(_ =>
+            Observable.Timer(TimeSpan.FromMilliseconds(1500)).Subscribe(tick =>
             {
                 try
                 {
@@ -142,9 +142,9 @@ namespace NosGm.GameObject.Helpers
                 return 0;
             }
 
-            Observable.Timer(KillDeduplicationLifetime).Subscribe(_ =>
+            Observable.Timer(KillDeduplicationLifetime).Subscribe(tick =>
             {
-                AwardedPetKills.TryRemove(killKey, out _);
+                AwardedPetKills.TryRemove(killKey, out byte ignored);
             });
 
             NpcMonster monster = target.MapMonster.Monster;
