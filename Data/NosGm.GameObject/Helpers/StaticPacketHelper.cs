@@ -58,7 +58,26 @@ namespace NosGm.GameObject.Helpers
 
         public static string SkillUsed(UserType type, long callerId, byte secondaryType, long targetId, short skillVNum,
                                        short cooldown, short attackAnimation, short skillEffect, short x, short y, bool isAlive, int health,
-                                       int damage, int hitmode, byte skillType) => $"su {(byte)type} {callerId} {secondaryType} {targetId} {skillVNum} {cooldown} {attackAnimation} {skillEffect} {x} {y} {(isAlive ? 1 : 0)} {health} {damage} {hitmode} {skillType}";
+                                       int damage, int hitmode, byte skillType)
+        {
+            // The official client expects normal mate attacks to use the NPC basic
+            // layout: skill 0, animation 11 and the monster BasicSkill as effect.
+            // Sending BasicSkill as the packet skill made some mate models vanish
+            // for the duration of the attack animation.
+            if (MateCombatDiagnostics.TryConsumeBasicAttackPacket(
+                    type,
+                    callerId,
+                    skillVNum,
+                    skillEffect,
+                    skillType))
+            {
+                skillEffect = skillVNum;
+                skillVNum = 0;
+                attackAnimation = 11;
+            }
+
+            return $"su {(byte)type} {callerId} {secondaryType} {targetId} {skillVNum} {cooldown} {attackAnimation} {skillEffect} {x} {y} {(isAlive ? 1 : 0)} {health} {damage} {hitmode} {skillType}";
+        }
 
         public static string SkillUsed(UserType attackerType, long attackerId, UserType defenderType, long defenderId,
                                        short skillVNum, short cooldown, short attackAnimation, short skillEffect, short x, short y, bool isAlive,
