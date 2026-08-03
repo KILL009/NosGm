@@ -62,8 +62,10 @@ Assert-Contains $mateAttack 'Source=AI Action=Basic' `
     "Automatic pet basic attacks expose their execution source in debug logs"
 Assert-NotContains $mateAttack 'SelectReadySpecialSkill' `
     "The behavior tree cannot schedule pet special skills"
-Assert-NotContains $mateAttack 'NpcMonsterSkill' `
-    "The behavior-tree attack node has no special-skill dependency"
+Assert-NotContains $mateAttack 'mate.PSkills' `
+    "The behavior-tree attack node cannot inspect the pet special-skill collection"
+Assert-NotContains $mateAttack 'selectedSkill' `
+    "The behavior-tree attack node cannot forward a selected special skill"
 Assert-NotContains $mateAttack 'Skill.Cooldown' `
     "Special cooldowns cannot become behavior-tree action locks"
 
