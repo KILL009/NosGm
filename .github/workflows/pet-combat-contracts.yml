@@ -95,6 +95,9 @@ jobs:
                 <Private>true</Private>
               </Reference>
             </ItemGroup>
+            <ItemGroup Condition="'`$(PetContractBuild)' == 'true' And '`$(MSBuildProjectName)' == 'NosGm.Extension'">
+              <ProjectReference Remove="..\NosGm.Program\NosGm.Master.Server\NosGm.Master.Server.csproj" />
+            </ItemGroup>
           </Project>
           "@ | Set-Content -LiteralPath ./Directory.Build.targets -Encoding utf8
 
@@ -104,8 +107,8 @@ jobs:
 
       - name: Build Extension project without unrelated server graph
         shell: pwsh
-        run: dotnet build ./Data/NosGm.Extension/NosGm.Extension.csproj --configuration Release --no-restore --property:Platform=AnyCPU --property:BuildProjectReferences=false
+        run: dotnet build ./Data/NosGm.Extension/NosGm.Extension.csproj --configuration Release --no-restore --property:Platform=AnyCPU --property:BuildProjectReferences=false --property:PetContractBuild=true
 
       - name: Build pet packet handlers without unrelated server graph
         shell: pwsh
-        run: dotnet build ./Data/NosGm.Handler/NosGm.Handler.csproj --configuration Release --no-restore --property:Platform=AnyCPU --property:BuildProjectReferences=false
+        run: dotnet build ./Data/NosGm.Handler/NosGm.Handler.csproj --configuration Release --no-restore --property:Platform=AnyCPU --property:BuildProjectReferences=false --property:PetContractBuild=true
