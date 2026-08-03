@@ -42,13 +42,13 @@ namespace NosGm.GameObject.AI.Actions
                 List<NpcMonsterSkill> possibleSkills = mateSkills
                     .Where(skill => skill?.Skill != null &&
                                     ((DateTime.Now - skill.LastSkillUse).TotalMilliseconds >=
-                                     1000 * skill.Skill.Cooldown || skill.Rate == 0))
+                                     100 * skill.Skill.Cooldown || skill.SkillVNum == mate.Monster.BasicSkill))
                     .ToList();
 
                 _skill = null;
                 foreach (NpcMonsterSkill skill in possibleSkills.OrderBy(_ => ServerManager.RandomNumber()))
                 {
-                    if (skill.Rate == 0)
+                    if (skill.SkillVNum == mate.Monster.BasicSkill)
                     {
                         _skill = skill;
                     }
@@ -81,9 +81,9 @@ namespace NosGm.GameObject.AI.Actions
 
                 mate.TargetHit(target, _skill);
 
-                _castTimeMs = _skill.Skill.CastTime > 0
-                    ? _skill.Skill.CastTime * 100
-                    : Math.Max(1000, _skill.Skill.Cooldown * 100);
+                _castTimeMs = _skill.SkillVNum == mate.Monster.BasicSkill
+                    ? Math.Max(1000, _skill.Skill.Cooldown * 100)
+                    : (_skill.Skill.CastTime > 0 ? _skill.Skill.CastTime * 100 : 1000);
                 _castStartTime = DateTime.Now;
                 return BehaviorStatus.Running;
             }
