@@ -94,7 +94,7 @@ namespace NosGm.GameObject.Plugin.Event
                 case EventType.INSTANTBATTLE:
                     if (ServerManager.Instance.ChannelId != 51)
                     {
-                        InstantBattle.GenerateInstantBattle();
+                        InstantBattleRuntime.GenerateInstantBattle();
                     }
                     else
                     {
