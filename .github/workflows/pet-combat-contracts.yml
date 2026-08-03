@@ -37,7 +37,7 @@ jobs:
         run: ./scripts/verify-pet-combat-contracts.ps1
 
   compile:
-    name: Compile pet AI project
+    name: Compile pet AI and packet handlers
     runs-on: windows-2022
     steps:
       - name: Check out repository
@@ -101,3 +101,7 @@ jobs:
       - name: Build GameObject project
         shell: pwsh
         run: dotnet build ./Data/NosGm.GameObject/NosGm.GameObject.csproj --configuration Release --no-restore --property:Platform=AnyCPU
+
+      - name: Build pet packet handlers
+        shell: pwsh
+        run: dotnet build ./Data/NosGm.Handler/NosGm.Handler.csproj --configuration Release --no-restore --property:Platform=AnyCPU
