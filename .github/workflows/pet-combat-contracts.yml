@@ -81,8 +81,28 @@ jobs:
             return [Security.SecurityElement]::Escape($assembly.FullName)
           }
 
+          function Find-FrameworkAssembly([string]$Package, [string]$FileName) {
+            $packageRoot = Join-Path "$env:USERPROFILE\.nuget\packages" $Package
+            $assemblies = @(Get-ChildItem `
+              -LiteralPath $packageRoot `
+              -Filter $FileName `
+              -File `
+              -Recurse)
+            $assembly = $assemblies |
+              Where-Object { $_.FullName -match '\\lib\\net4[0-9]+\\' } |
+              Select-Object -First 1
+            if ($null -eq $assembly) {
+              $assembly = $assemblies | Select-Object -First 1
+            }
+            if ($null -eq $assembly) {
+              throw "Restored framework assembly was not found: $Package/$FileName"
+            }
+            return [Security.SecurityElement]::Escape($assembly.FullName)
+          }
+
           $log4netPath = Find-RestoredAssembly "log4net" "log4net.dll"
           $newtonsoftPath = Find-RestoredAssembly "newtonsoft.json" "Newtonsoft.Json.dll"
+          $systemReactivePath = Find-FrameworkAssembly "system.reactive" "System.Reactive.dll"
           @"
           <Project>
             <ItemGroup>
@@ -97,6 +117,11 @@ jobs:
             </ItemGroup>
             <ItemGroup Condition="'`$(PetContractBuild)' == 'true' And '`$(MSBuildProjectName)' == 'NosGm.Extension'">
               <ProjectReference Remove="..\NosGm.Program\NosGm.Master.Server\NosGm.Master.Server.csproj" />
+              <Reference Include="System.Reactive">
+                <HintPath>$systemReactivePath</HintPath>
+                <Private>true</Private>
+              </Reference>
+              <Reference Include="System.Web" />
             </ItemGroup>
           </Project>
           "@ | Set-Content -LiteralPath ./Directory.Build.targets -Encoding utf8
