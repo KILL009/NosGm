@@ -1,14 +1,12 @@
 using NosGm.Packets.Packets.ClientPackets;
 using NosGm.Core;
+using NosGm.Data;
 using NosGm.Domain;
 using NosGm.GameObject;
 using NosGm.GameObject.Battle;
 using NosGm.GameObject.Helpers;
-using NosGm.GameObject.Networking;
 using System;
-using System.Collections.Generic;
 using System.Linq;
-using System.Threading.Tasks;
 using static NosGm.Domain.BCardType;
 
 namespace NosGm.Handler.PacketHandler.Mate
@@ -39,106 +37,79 @@ namespace NosGm.Handler.PacketHandler.Mate
                 return;
             }
 
-            var penalty = Session.Account.PenaltyLogs.OrderByDescending(s => s.DateEnd).FirstOrDefault();
+            PenaltyLogDTO penalty = Session.Account.PenaltyLogs
+                .OrderByDescending(s => s.DateEnd)
+                .FirstOrDefault();
             if (Session.Character.IsMuted() && penalty != null)
             {
-                if (Session.Character.Gender == GenderType.Female)
-                {
-                    Session.CurrentMapInstance?.Broadcast(Session.Character.GenerateSay(Language.Instance.GetMessageFromKey("MUTED_FEMALE"), 1));
-                    Session.SendPacket(Session.Character.GenerateSay(string.Format(Language.Instance.GetMessageFromKey("MUTE_TIME"), (penalty.DateEnd - DateTime.Now).ToString("hh\\:mm\\:ss")), 11));
-                }
-                else
-                {
-                    Session.CurrentMapInstance?.Broadcast(Session.Character.GenerateSay(Language.Instance.GetMessageFromKey("MUTED_MALE"), 1));
-                    Session.SendPacket(Session.Character.GenerateSay(string.Format(Language.Instance.GetMessageFromKey("MUTE_TIME"), (penalty.DateEnd - DateTime.Now).ToString("hh\\:mm\\:ss")), 11));
-                }
+                string messageKey = Session.Character.Gender == GenderType.Female
+                    ? "MUTED_FEMALE"
+                    : "MUTED_MALE";
 
+                Session.CurrentMapInstance?.Broadcast(
+                    Session.Character.GenerateSay(Language.Instance.GetMessageFromKey(messageKey), 1));
+                Session.SendPacket(Session.Character.GenerateSay(
+                    string.Format(
+                        Language.Instance.GetMessageFromKey("MUTE_TIME"),
+                        (penalty.DateEnd - DateTime.Now).ToString("hh\\:mm\\:ss")),
+                    11));
                 return;
             }
 
-            var attacker = Session.Character.Mates.Find(x => x.MateTransportId == suctlPacket.MateTransportId);
-
-            if (attacker != null && !attacker.HasBuff(CardType.SpecialAttack, (byte)AdditionalTypes.SpecialAttack.NoAttack))
+            Mate attacker = Session.Character.Mates.Find(
+                mate => mate.MateTransportId == suctlPacket.MateTransportId);
+            if (attacker?.BattleEntity == null ||
+                attacker.Hp <= 0 ||
+                attacker.HasBuff(
+                    CardType.SpecialAttack,
+                    (byte)AdditionalTypes.SpecialAttack.NoAttack))
             {
-                IEnumerable<NpcMonsterSkill> mateSkills = attacker.PSkills;
+                return;
+            }
 
-                if (mateSkills != null)
-                {
-                    NpcMonsterSkill skill = null;
+            BattleEntity target = ResolveTarget(suctlPacket);
+            if (target == null)
+            {
+                return;
+            }
 
-                    List<NpcMonsterSkill> PossibleSkills = mateSkills.Where(s => s.Skill != null && ((DateTime.Now - s.LastSkillUse).TotalMilliseconds >= 1000 * s.Skill.Cooldown || s.Rate == 0)).ToList();
+            if (!attacker.BattleEntity.CanAttackEntity(target))
+            {
+                Session.SendPacket(StaticPacketHelper.Cancel(2, target.MapEntityId));
+                return;
+            }
 
-                    foreach (NpcMonsterSkill ski in PossibleSkills.OrderBy(rnd => ServerManager.RandomNumber()))
-                    {
-                        if (ski.Rate == 0)
-                        {
-                            skill = ski;
-                        }
-                        else if (ServerManager.RandomNumber() < ski.Rate)
-                        {
-                            skill = ski;
-                            break;
-                        }
-                    }
+            // suctl is the normal pet attack command. Pet special skills are handled
+            // separately by UpetPacketHandler. Passing a special NpcMonsterSkill here
+            // made every basic attack attempt reuse that skill; while it was cooling
+            // down, Mate.TargetHit rejected the request and the pet appeared frozen.
+            // A null skill deliberately selects Mate.TargetHit's basic-attack path.
+            attacker.TargetHit(target, null);
+        }
 
-                    switch (suctlPacket.TargetType)
-                    {
-                        case UserType.Monster:
-                            if (attacker.Hp > 0)
-                            {
-                                var target = Session.CurrentMapInstance?.GetMonsterById(suctlPacket.TargetId);
-                                if (target != null)
-                                {
-                                    if (attacker.BattleEntity.CanAttackEntity(target.BattleEntity))
-                                    {
-                                        attacker.TargetHit(target.BattleEntity, skill);
-                                    }
-                                }
-                            }
+        private BattleEntity ResolveTarget(SuctlPacket suctlPacket)
+        {
+            switch (suctlPacket.TargetType)
+            {
+                case UserType.Monster:
+                    return Session.CurrentMapInstance?
+                        .GetMonsterById(suctlPacket.TargetId)?
+                        .BattleEntity;
 
-                            return;
+                case UserType.Npc:
+                    return Session.CurrentMapInstance?
+                        .GetMate(suctlPacket.TargetId)?
+                        .BattleEntity;
 
-                        case UserType.Npc:
-                            if (attacker.Hp > 0)
-                            {
-                                var target = Session.CurrentMapInstance?.GetMate(suctlPacket.TargetId);
-                                if (target != null)
-                                {
-                                    if (attacker.Owner.BattleEntity.CanAttackEntity(target.BattleEntity))
-                                    {
-                                        attacker.TargetHit(target.BattleEntity, skill);
-                                    }
-                                    else
-                                    {
-                                        Session.SendPacket(StaticPacketHelper.Cancel(2, target.CharacterId));
-                                    }
-                                }
-                            }
-                            return;
+                case UserType.Player:
+                    return Session.CurrentMapInstance?
+                        .GetSessionByCharacterId(suctlPacket.TargetId)?
+                        .Character?
+                        .BattleEntity;
 
-                        case UserType.Player:
-                            if (attacker.Hp > 0)
-                            {
-                                var target = Session.CurrentMapInstance?.GetSessionByCharacterId(suctlPacket.TargetId)?.Character;
-                                if (target != null)
-                                {
-                                    if (attacker.Owner.BattleEntity.CanAttackEntity(target.BattleEntity))
-                                    {
-                                        attacker.TargetHit(target.BattleEntity, skill);
-                                    }
-                                    else
-                                    {
-                                        Session.SendPacket(StaticPacketHelper.Cancel(2, target.CharacterId));
-                                    }
-                                }
-                            }
-
-                            return;
-
-                        case UserType.Object:
-                            return;
-                    }
-                }
+                case UserType.Object:
+                default:
+                    return null;
             }
         }
 
