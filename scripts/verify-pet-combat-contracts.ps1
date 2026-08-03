@@ -91,6 +91,8 @@ Assert-Contains $mateDiagnostics '[MATE_XP_REWARD]' `
     "Independent pet experience awards are visible in runtime logs"
 Assert-Contains $mateDiagnostics 'PendingBasicAttackPackets' `
     "Only explicitly marked basic attacks are normalized"
+Assert-NotContains $mateDiagnostics 'skillVNum <= 0' `
+    "Pets whose database BasicSkill is zero still receive safe packet normalization"
 
 Assert-Contains $packetHelper 'MateCombatDiagnostics.TryConsumeBasicAttackPacket' `
     "Pet basic packet normalization is connected to packet serialization"
