@@ -92,6 +92,11 @@ jobs:
               Where-Object { $_.FullName -match '\\lib\\net4[0-9]+\\' } |
               Select-Object -First 1
             if ($null -eq $assembly) {
+              $assembly = $assemblies |
+                Where-Object { $_.FullName -match '\\lib\\netstandard2\.0\\' } |
+                Select-Object -First 1
+            }
+            if ($null -eq $assembly) {
               $assembly = $assemblies | Select-Object -First 1
             }
             if ($null -eq $assembly) {
@@ -103,6 +108,9 @@ jobs:
           $log4netPath = Find-RestoredAssembly "log4net" "log4net.dll"
           $newtonsoftPath = Find-RestoredAssembly "newtonsoft.json" "Newtonsoft.Json.dll"
           $systemReactivePath = Find-FrameworkAssembly "system.reactive" "System.Reactive.dll"
+          $mongoBsonPath = Find-FrameworkAssembly "mongodb.bson" "MongoDB.Bson.dll"
+          $mongoDriverCorePath = Find-FrameworkAssembly "mongodb.driver.core" "MongoDB.Driver.Core.dll"
+          $mongoDriverPath = Find-FrameworkAssembly "mongodb.driver" "MongoDB.Driver.dll"
           @"
           <Project>
             <ItemGroup>
@@ -122,6 +130,24 @@ jobs:
                 <Private>true</Private>
               </Reference>
               <Reference Include="System.Web" />
+            </ItemGroup>
+            <ItemGroup Condition="'`$(PetContractBuild)' == 'true' And '`$(MSBuildProjectName)' == 'NosGm.Handler'">
+              <Reference Include="System.Reactive">
+                <HintPath>$systemReactivePath</HintPath>
+                <Private>true</Private>
+              </Reference>
+              <Reference Include="MongoDB.Bson">
+                <HintPath>$mongoBsonPath</HintPath>
+                <Private>true</Private>
+              </Reference>
+              <Reference Include="MongoDB.Driver.Core">
+                <HintPath>$mongoDriverCorePath</HintPath>
+                <Private>true</Private>
+              </Reference>
+              <Reference Include="MongoDB.Driver">
+                <HintPath>$mongoDriverPath</HintPath>
+                <Private>true</Private>
+              </Reference>
             </ItemGroup>
           </Project>
           "@ | Set-Content -LiteralPath ./Directory.Build.targets -Encoding utf8
