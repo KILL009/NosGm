@@ -49,7 +49,11 @@ namespace NosGm.GameObject.Helpers
             short skillEffect,
             byte skillType)
         {
-            if (attackerType != UserType.Npc || skillVNum <= 0 || skillEffect != 0 || skillType != 0)
+            // Some valid pets, including Npc 683 in the acceptance capture, have
+            // BasicSkill=0. The per-mate pending marker is the authority check; a
+            // positive SkillVNum must not be required or those pets bypass the
+            // client-safe packet normalization entirely.
+            if (attackerType != UserType.Npc || skillEffect != 0 || skillType != 0)
             {
                 return false;
             }
