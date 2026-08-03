@@ -1,4 +1,4 @@
-﻿using NosGm.Core;
+using NosGm.Core;
 using NosGm.Domain;
 using NosGm.GameObject.Extension;
 using NosGm.GameObject.Helpers;
@@ -6,8 +6,7 @@ using NosGm.GameObject.Networking;
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Reactive.Linq;
-using System.Threading;
+using System.Threading.Tasks;
 
 namespace NosGm.GameObject.Event
 {
@@ -15,102 +14,255 @@ namespace NosGm.GameObject.Event
     {
         private const short BossVnum = 994;
         private const short MapVnum = 2004;
-        private static readonly TimeSpan BossTime = new(0, 10, 0);
+        private static readonly TimeSpan BossTime = TimeSpan.FromMinutes(10);
 
         public static void GenerateWorldBoss()
         {
-            ServerManager.Instance.Broadcast("msg 0 The Worldboss Event will start in 5 Minutes");
-            ServerManager.Instance.Broadcast("msg 1 The Worldboss Event will start in 5 Minutes");
-            Thread.Sleep(4 * 60 * 1000);
-            ServerManager.Instance.Broadcast("msg 0 The Worldboss Event will start in 1 Minute");
-            ServerManager.Instance.Broadcast("msg 1 The Worldboss Event will start in 1 Minute");
-            Thread.Sleep(30 * 1000);
-            ServerManager.Instance.Broadcast("msg 0 The Worldboss Event will start in 30 Seconds");
-            ServerManager.Instance.Broadcast("msg 1 The Worldboss Event will start in 30 Seconds");
-            Thread.Sleep(20 * 1000);
-            ServerManager.Instance.Broadcast("msg 0 The Worldboss Event will start in 10 Seconds");
-            ServerManager.Instance.Broadcast("msg 1 The Worldboss Event will start in 10 Seconds");
-            Thread.Sleep(10 * 1000);
-            ServerManager.Instance.Broadcast("msg 0 The Worldboss Event started");
-            ServerManager.Instance.Sessions.Where(s => s.Character?.MapInstance.MapInstanceType == MapInstanceType.BaseMapInstance).ToList().ForEach(s => s.SendPacket($"qnaml 100 #guri^506 Do you want to join the fight?"));
-            ServerManager.Instance.EventInWaiting = true;
-            Thread.Sleep(30 * 1000);
-            ServerManager.Instance.Broadcast("msg 0 The Worldboss Event started");
-            ServerManager.Instance.Sessions.Where(s => s.Character?.IsWaitingForEvent == false).ToList().ForEach(s => s.SendPacket("esf"));
-            ServerManager.Instance.EventInWaiting = false;
-
-            var sessions = ServerManager.Instance.Sessions.Where(s => s.Character?.IsWaitingForEvent == true && s.Character.MapInstance.MapInstanceType == MapInstanceType.BaseMapInstance);
-            var map = ServerManager.GenerateMapInstance(MapVnum, MapInstanceType.NormalInstance, new InstanceBag());
-
-            foreach (var s in sessions)
-            {
-                ServerManager.Instance.TeleportOnRandomPlaceInMap(s, map.MapInstanceId);
-                s.Character.IsWaitingForEvent = false;
-            }
-            ServerManager.Instance.StartedEvents.Remove(EventType.WORLDBOSS);
-            WorldBossTask.Run(map);
+            Task.Run(RunEventAsync);
         }
 
-        public class WorldBossTask
+        private static async Task RunEventAsync()
         {
-            public static void Run(MapInstance mapinstance)
+            MapInstance eventMap = null;
+
+            try
             {
-                Thread.Sleep(10 * 1000); //10 Seconds Delay Cool
+                BroadcastCountdown("5 Minutes");
+                await Task.Delay(TimeSpan.FromMinutes(4)).ConfigureAwait(false);
+                BroadcastCountdown("1 Minute");
+                await Task.Delay(TimeSpan.FromSeconds(30)).ConfigureAwait(false);
+                BroadcastCountdown("30 Seconds");
+                await Task.Delay(TimeSpan.FromSeconds(20)).ConfigureAwait(false);
+                BroadcastCountdown("10 Seconds");
+                await Task.Delay(TimeSpan.FromSeconds(10)).ConfigureAwait(false);
 
-                #region Remove Invis
-                if (!mapinstance.Sessions.Skip(1 - 1).Any())
+                ServerManager.Instance.Broadcast("msg 0 The Worldboss Event started");
+                List<ClientSession> eligibleSessions = ServerManager.Instance.Sessions
+                    .Where(session =>
+                        session?.Character?.MapInstance != null &&
+                        session.Character.MapInstance.MapInstanceType == MapInstanceType.BaseMapInstance)
+                    .ToList();
+
+                foreach (ClientSession session in eligibleSessions)
                 {
-                    mapinstance.Sessions.Where(s => s.Character != null).ToList().ForEach(s =>
-                    {
-                        s.Character.RemoveBuffByBCardTypeSubType(new List<KeyValuePair<byte, byte>>()
-                        {
-                            new KeyValuePair<byte, byte>((byte)BCardType.CardType.SpecialActions, (byte)AdditionalTypes.SpecialActions.Hide),
-                            new KeyValuePair<byte, byte>((byte)BCardType.CardType.FalconSkill, (byte)AdditionalTypes.FalconSkill.Hide),
-                            new KeyValuePair<byte, byte>((byte)BCardType.CardType.FalconSkill, (byte)AdditionalTypes.FalconSkill.Ambush)
-                        });
-                        ServerManager.Instance.ChangeMap(s.Character.CharacterId, s.Character.MapId, s.Character.MapX, s.Character.MapY);
-                    });
+                    session.SendPacket("qnaml 100 #guri^506 Do you want to join the fight?");
                 }
-                #endregion
 
-                EventHelper.Instance.ScheduleEvent(TimeSpan.FromMinutes(BossTime.TotalMinutes), new EventContainer(mapinstance, EventActionType.DISPOSEMAP, null));
-                EventHelper.Instance.ScheduleEvent(TimeSpan.FromMinutes(BossTime.TotalMinutes - 10), new EventContainer(mapinstance, EventActionType.SENDPACKET, UserInterfaceHelper.GenerateMsg(string.Format(Language.Instance.GetMessageFromKey("WORLDBOSS_MINUTES_REMAINING"), 10), 0)));
-                EventHelper.Instance.ScheduleEvent(TimeSpan.FromMinutes(BossTime.TotalMinutes - 5), new EventContainer(mapinstance, EventActionType.SENDPACKET, UserInterfaceHelper.GenerateMsg(string.Format(Language.Instance.GetMessageFromKey("WORLDBOSS_MINUTES_REMAINING"), 5), 0)));
-                EventHelper.Instance.ScheduleEvent(TimeSpan.FromMinutes(BossTime.TotalMinutes - 3), new EventContainer(mapinstance, EventActionType.SENDPACKET, UserInterfaceHelper.GenerateMsg(string.Format(Language.Instance.GetMessageFromKey("WORLDBOSS_MINUTES_REMAINING"), 3), 0)));
-                EventHelper.Instance.ScheduleEvent(TimeSpan.FromMinutes(BossTime.TotalMinutes - 2), new EventContainer(mapinstance, EventActionType.SENDPACKET, UserInterfaceHelper.GenerateMsg(string.Format(Language.Instance.GetMessageFromKey("WORLDBOSS_MINUTES_REMAINING"), 2), 0)));
-                EventHelper.Instance.ScheduleEvent(TimeSpan.FromMinutes(BossTime.TotalMinutes - 1), new EventContainer(mapinstance, EventActionType.SENDPACKET, UserInterfaceHelper.GenerateMsg(string.Format(Language.Instance.GetMessageFromKey("WORLDBOSS_MINUTES_REMAINING"), 1), 0)));
-                EventHelper.Instance.ScheduleEvent(TimeSpan.FromMinutes(BossTime.TotalMinutes - 0.5), new EventContainer(mapinstance, EventActionType.SENDPACKET, UserInterfaceHelper.GenerateMsg(string.Format(Language.Instance.GetMessageFromKey("WORLDBOSS_SECONDS_REMAINING"), 30), 0)));
+                ServerManager.Instance.EventInWaiting = true;
+                await Task.Delay(TimeSpan.FromSeconds(30)).ConfigureAwait(false);
+                ServerManager.Instance.EventInWaiting = false;
 
-                var cancellationToken = new CancellationTokenSource();
-                EventHelper.Instance.RunEvent(new EventContainer(mapinstance, EventActionType.SPAWNMONSTERS, mapinstance.Map.GenerateMonsters(BossVnum, 1, true, new List<EventContainer>(), false, true, true)));
-
-                mapinstance.Sessions.Where(s => s.Character != null).ToList().ForEach(s =>
+                foreach (ClientSession session in ServerManager.Instance.Sessions
+                             .Where(current => current?.Character?.IsWaitingForEvent == false)
+                             .ToList())
                 {
-                    s.SendPacket("bsinfo 1 18 1200 10");
-                });
+                    session.SendPacket("esf");
+                }
 
-                Observable.Interval(TimeSpan.FromSeconds(1)).Timeout(BossTime).Subscribe(_ =>
+                List<ClientSession> participants = ServerManager.Instance.Sessions
+                    .Where(session =>
+                        session?.Character?.IsWaitingForEvent == true &&
+                        session.Character.MapInstance != null &&
+                        session.Character.MapInstance.MapInstanceType == MapInstanceType.BaseMapInstance)
+                    .ToList();
+
+                eventMap = ServerManager.GenerateMapInstance(
+                    MapVnum,
+                    MapInstanceType.NormalInstance,
+                    new InstanceBag());
+                if (eventMap == null)
                 {
-                    if (!mapinstance.Monsters.Any(s => s.CurrentHp > 0))
+                    throw new InvalidOperationException($"World Boss map {MapVnum} could not be created.");
+                }
+
+                foreach (ClientSession participant in participants)
+                {
+                    ServerManager.Instance.TeleportOnRandomPlaceInMap(
+                        participant,
+                        eventMap.MapInstanceId);
+                    participant.Character.IsWaitingForEvent = false;
+                }
+
+                Logger.Info(
+                    $"[WORLD_BOSS] Result=LobbyClosed Participants={participants.Count} " +
+                    $"MapInstance={eventMap.MapInstanceId}");
+                await WorldBossRuntime.RunAsync(eventMap).ConfigureAwait(false);
+            }
+            catch (Exception exception)
+            {
+                Logger.Error("[WORLD_BOSS] Result=Failed", exception);
+                if (eventMap != null)
+                {
+                    DisposeMap(eventMap);
+                }
+            }
+            finally
+            {
+                ServerManager.Instance.EventInWaiting = false;
+                foreach (ClientSession session in ServerManager.Instance.Sessions
+                             .Where(current => current?.Character != null)
+                             .ToList())
+                {
+                    session.Character.IsWaitingForEvent = false;
+                }
+
+                Plugin.Event.GameEventHandler.CompleteEvent(EventType.WORLDBOSS);
+            }
+        }
+
+        private static void BroadcastCountdown(string remaining)
+        {
+            ServerManager.Instance.Broadcast(
+                $"msg 0 The Worldboss Event will start in {remaining}");
+            ServerManager.Instance.Broadcast(
+                $"msg 1 The Worldboss Event will start in {remaining}");
+        }
+
+        private static void DisposeMap(MapInstance map)
+        {
+            EventHelper.Instance.RunEvent(
+                new EventContainer(map, EventActionType.DISPOSEMAP, null));
+        }
+
+        private static class WorldBossRuntime
+        {
+            public static async Task RunAsync(MapInstance mapInstance)
+            {
+                await Task.Delay(TimeSpan.FromSeconds(10)).ConfigureAwait(false);
+                RemoveInvisibility(mapInstance);
+                ScheduleWarnings(mapInstance);
+
+                EventHelper.Instance.RunEvent(
+                    new EventContainer(
+                        mapInstance,
+                        EventActionType.SPAWNMONSTERS,
+                        mapInstance.Map.GenerateMonsters(
+                            BossVnum,
+                            1,
+                            true,
+                            new List<EventContainer>(),
+                            false,
+                            true,
+                            true)));
+
+                foreach (ClientSession session in mapInstance.Sessions
+                             .Where(current => current?.Character != null)
+                             .ToList())
+                {
+                    session.SendPacket("bsinfo 1 18 1200 10");
+                }
+
+                DateTime deadline = DateTime.UtcNow.Add(BossTime);
+                while (DateTime.UtcNow < deadline)
+                {
+                    if (!mapInstance.Monsters.Any(monster => monster?.CurrentHp > 0))
                     {
-                        EventHelper.Instance.RunEvent(new EventContainer(mapinstance, EventActionType.SPAWNPORTAL, new Portal { SourceX = 39, SourceY = 12, DestinationMapId = 1 }));
-                        mapinstance.Broadcast("msg 3 The Worldboss has been defeated!");
-                        foreach (var cli in mapinstance.Sessions.Where(s => s.Character != null).ToList())
-                        {
-                            cli.Character.GiftAdd(2172, 1);
-                            cli.Character.GiftAdd(9287, 5);
-                            cli.Character.GiftAdd(2333, 10);
-                            cli.Character.GiftAdd(1363, 5);
-                            cli.Character.GiftAdd(1364, 5);
-                            cli.Character.GiftAdd(5369, 5);
-                            cli.Character.GiftAdd(5815, 5);
-                            cli.Character.GiftAdd(9574, 5);
-                            InstanceExtension.AddBattlePassPoint(cli);
-                            cli.SendPacket("bsinfo 2");
-                            cancellationToken.Cancel();
-                        }
+                        await CompleteVictoryAsync(mapInstance).ConfigureAwait(false);
+                        return;
                     }
-                }, () => { EventHelper.Instance.ScheduleEvent(TimeSpan.FromSeconds(30), new EventContainer(mapinstance, EventActionType.DISPOSEMAP, null)); }, cancellationToken.Token);
+
+                    await Task.Delay(TimeSpan.FromSeconds(1)).ConfigureAwait(false);
+                }
+
+                mapInstance.Broadcast("msg 3 The Worldboss escaped because time ran out.");
+                foreach (ClientSession session in mapInstance.Sessions
+                             .Where(current => current?.Character != null)
+                             .ToList())
+                {
+                    session.SendPacket("bsinfo 2");
+                }
+
+                Logger.Warn(
+                    $"[WORLD_BOSS] Result=TimedOut MapInstance={mapInstance.MapInstanceId}");
+                DisposeMap(mapInstance);
+            }
+
+            private static async Task CompleteVictoryAsync(MapInstance mapInstance)
+            {
+                EventHelper.Instance.RunEvent(
+                    new EventContainer(
+                        mapInstance,
+                        EventActionType.SPAWNPORTAL,
+                        new Portal
+                        {
+                            SourceX = 39,
+                            SourceY = 12,
+                            DestinationMapId = 1
+                        }));
+                mapInstance.Broadcast("msg 3 The Worldboss has been defeated!");
+
+                List<ClientSession> winners = mapInstance.Sessions
+                    .Where(session => session?.Character != null)
+                    .ToList();
+                foreach (ClientSession winner in winners)
+                {
+                    winner.Character.GiftAdd(2172, 1);
+                    winner.Character.GiftAdd(9287, 5);
+                    winner.Character.GiftAdd(2333, 10);
+                    winner.Character.GiftAdd(1363, 5);
+                    winner.Character.GiftAdd(1364, 5);
+                    winner.Character.GiftAdd(5369, 5);
+                    winner.Character.GiftAdd(5815, 5);
+                    winner.Character.GiftAdd(9574, 5);
+                    InstanceExtension.AddBattlePassPoint(winner);
+                    winner.SendPacket("bsinfo 2");
+                }
+
+                Logger.Info(
+                    $"[WORLD_BOSS] Result=Defeated MapInstance={mapInstance.MapInstanceId} " +
+                    $"Rewarded={winners.Count}");
+                await Task.Delay(TimeSpan.FromSeconds(30)).ConfigureAwait(false);
+                DisposeMap(mapInstance);
+            }
+
+            private static void RemoveInvisibility(MapInstance mapInstance)
+            {
+                foreach (ClientSession session in mapInstance.Sessions
+                             .Where(current => current?.Character != null)
+                             .ToList())
+                {
+                    session.Character.RemoveBuffByBCardTypeSubType(
+                        new List<KeyValuePair<byte, byte>>
+                        {
+                            new KeyValuePair<byte, byte>(
+                                (byte)BCardType.CardType.SpecialActions,
+                                (byte)AdditionalTypes.SpecialActions.Hide),
+                            new KeyValuePair<byte, byte>(
+                                (byte)BCardType.CardType.FalconSkill,
+                                (byte)AdditionalTypes.FalconSkill.Hide),
+                            new KeyValuePair<byte, byte>(
+                                (byte)BCardType.CardType.FalconSkill,
+                                (byte)AdditionalTypes.FalconSkill.Ambush)
+                        });
+                }
+            }
+
+            private static void ScheduleWarnings(MapInstance mapInstance)
+            {
+                ScheduleWarning(mapInstance, TimeSpan.Zero, "WORLDBOSS_MINUTES_REMAINING", 10);
+                ScheduleWarning(mapInstance, TimeSpan.FromMinutes(5), "WORLDBOSS_MINUTES_REMAINING", 5);
+                ScheduleWarning(mapInstance, TimeSpan.FromMinutes(7), "WORLDBOSS_MINUTES_REMAINING", 3);
+                ScheduleWarning(mapInstance, TimeSpan.FromMinutes(8), "WORLDBOSS_MINUTES_REMAINING", 2);
+                ScheduleWarning(mapInstance, TimeSpan.FromMinutes(9), "WORLDBOSS_MINUTES_REMAINING", 1);
+                ScheduleWarning(mapInstance, TimeSpan.FromMinutes(9.5), "WORLDBOSS_SECONDS_REMAINING", 30);
+            }
+
+            private static void ScheduleWarning(
+                MapInstance mapInstance,
+                TimeSpan delay,
+                string messageKey,
+                int value)
+            {
+                EventHelper.Instance.ScheduleEvent(
+                    delay,
+                    new EventContainer(
+                        mapInstance,
+                        EventActionType.SENDPACKET,
+                        UserInterfaceHelper.GenerateMsg(
+                            string.Format(
+                                Language.Instance.GetMessageFromKey(messageKey),
+                                value),
+                            0)));
             }
         }
     }
