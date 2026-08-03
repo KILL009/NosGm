@@ -22,10 +22,19 @@ function Assert-Contains([string]$source, [string]$expected, [string]$name) {
     Write-Host "[PASS] $name"
 }
 
+function Assert-NotContains([string]$source, [string]$unexpected, [string]$name) {
+    if ($source.Contains($unexpected)) {
+        throw "$name failed. Forbidden source contract remains: $unexpected"
+    }
+
+    Write-Host "[PASS] $name"
+}
+
 $hasTarget = Read-Source "Data/NosGm.GameObject/AI/Conditions/HasTargetCondition.cs"
 $findTarget = Read-Source "Data/NosGm.GameObject/AI/Actions/FindTargetNode.cs"
 $ownerTargeted = Read-Source "Data/NosGm.GameObject/AI/Conditions/OwnerIsTargetedCondition.cs"
 $mateAttack = Read-Source "Data/NosGm.GameObject/AI/Actions/MateAttackTargetNode.cs"
+$mate = Read-Source "Data/NosGm.GameObject/Mate.cs"
 $character = Read-Source "Data/NosGm.GameObject/Character.cs"
 
 Assert-Contains $hasTarget 'target.Hp > 0' `
@@ -42,9 +51,25 @@ Assert-Contains $mateAttack 'target.MapMonster.AddToAggroList(mate.BattleEntity)
     "Pet attacks generate threat for the pet"
 Assert-Contains $mateAttack 'target.MapMonster.Target = mate.BattleEntity' `
     "Attacked monsters can immediately switch onto the pet"
+Assert-Contains $mateAttack 'private const int BasicAttackRecoveryMilliseconds = 1500;' `
+    "Pet basic attacks use a short independent recovery"
+Assert-Contains $mateAttack 'mate.TargetHit(target, selectedSkill);' `
+    "Pet AI routes a null selected skill into the dedicated basic attack path"
+Assert-Contains $mateAttack '.Where(skill => skill.SkillVNum != mate.Monster.BasicSkill)' `
+    "The basic attack is excluded from the special skill scheduler"
+Assert-Contains $mateAttack '.Where(skill => skill.CanBeUsed())' `
+    "Only ready special skills may be selected"
+Assert-NotContains $mateAttack '_skill.Skill.Cooldown * 100' `
+    "Special skill cooldown never becomes an AI action lock"
+Assert-NotContains $mateAttack 'mateSkills.FirstOrDefault(s => s != null)' `
+    "Pet AI cannot fall back to a special skill that is still cooling down"
+Assert-Contains $mate 'if (!CanUseBasicSkill())' `
+    "Mate.TargetHit keeps the dedicated basic attack cooldown check"
+Assert-Contains $mate 'LastBasicSkillUse = DateTime.Now;' `
+    "Successful basic attacks update their own timer"
 Assert-Contains $character 'Mates.Where(x => x.IsTeamMember && x.IsAlive)' `
     "Only active living mates receive combat experience"
 Assert-Contains $character 'mate.GenerateXp(xp);' `
     "Combat experience is forwarded to active mates"
 
-Write-Host "Pet combat, tanking and experience contracts passed."
+Write-Host "Pet combat, tanking, basic attack recovery and experience contracts passed."
