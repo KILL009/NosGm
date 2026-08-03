@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project>
+  <!--
+    The legacy server restore evaluates dual-target SDK projects as net481 by
+    setting NosGmLegacyBuild=true. Visual Studio and dotnet 10 evaluate those
+    projects as net481;net10.0.
+
+    Only the NuGet/MSBuild extensions path needs isolation because
+    project.assets.json is written there. Keep BaseIntermediateOutputPath at
+    its SDK default (obj\) so the SDK continues excluding the whole obj tree
+    from implicit Compile globs. Moving BaseIntermediateOutputPath to
+    obj\legacy\ would make the old obj\Debug and obj\Release generated .cs
+    files look like normal source files, producing duplicate assembly and gRPC
+    declarations.
+  -->
+  <PropertyGroup Condition="'$(NosGmLegacyBuild)' == 'true'">
+    <MSBuildProjectExtensionsPath>obj\legacy\</MSBuildProjectExtensionsPath>
+  </PropertyGroup>
+</Project>
