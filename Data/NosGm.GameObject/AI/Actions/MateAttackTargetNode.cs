@@ -1,19 +1,22 @@
 using NosGm.AI.Core;
 using NosGm.GameObject;
-using NosGm.GameObject.Networking;
 using NosGm.GameObject.Battle;
-using System.Linq;
+using NosGm.GameObject.Networking;
 using System;
-using NosGm.Core;
 using System.Collections.Generic;
+using System.Linq;
 
 namespace NosGm.GameObject.AI.Actions
 {
     public class MateAttackTargetNode : IBehaviorNode
     {
-        private DateTime? _castStartTime;
-        private int _castTimeMs;
-        private NpcMonsterSkill _skill;
+        // Keep the pet responsive after either a normal hit or a special skill.
+        // Skill cooldown controls when that special may be selected again; it must
+        // never block the pet's independent basic-attack loop.
+        private const int BasicAttackRecoveryMilliseconds = 1500;
+
+        private DateTime? _actionStartTime;
+        private int _actionDurationMilliseconds;
 
         public BehaviorStatus Tick(Blackboard blackboard)
         {
@@ -21,85 +24,104 @@ namespace NosGm.GameObject.AI.Actions
             var target = blackboard.Get<BattleEntity>("Target");
 
             if (mate?.BattleEntity == null ||
+                mate.Monster == null ||
                 target == null ||
                 target.Hp <= 0 ||
                 mate.BattleEntity.Hp <= 0 ||
                 target.MapInstance != mate.BattleEntity.MapInstance)
             {
-                _castStartTime = null;
+                ResetAction();
                 blackboard.Remove("Target");
                 return BehaviorStatus.Failure;
             }
 
-            if (_castStartTime == null)
+            if (_actionStartTime.HasValue)
             {
-                IEnumerable<NpcMonsterSkill> mateSkills = mate.PSkills;
-                if (mateSkills == null || !mateSkills.Any())
+                if ((DateTime.Now - _actionStartTime.Value).TotalMilliseconds <
+                    _actionDurationMilliseconds)
                 {
-                    return BehaviorStatus.Failure;
+                    return BehaviorStatus.Running;
                 }
 
-                List<NpcMonsterSkill> possibleSkills = mateSkills
-                    .Where(skill => skill?.Skill != null &&
-                                    ((DateTime.Now - skill.LastSkillUse).TotalMilliseconds >=
-                                     100 * skill.Skill.Cooldown || skill.SkillVNum == mate.Monster.BasicSkill))
-                    .ToList();
-
-                _skill = null;
-                foreach (NpcMonsterSkill skill in possibleSkills.OrderBy(_ => ServerManager.RandomNumber()))
-                {
-                    if (skill.SkillVNum == mate.Monster.BasicSkill)
-                    {
-                        _skill = skill;
-                    }
-                    else if (ServerManager.RandomNumber() < skill.Rate)
-                    {
-                        _skill = skill;
-                        break;
-                    }
-                }
-
-                if (_skill == null)
-                {
-                    // Fallback to the basic skill (easiest way is to pick the first one with rate 0, or just the first skill)
-                    _skill = mateSkills.FirstOrDefault(s => s != null && s.Rate == 0) ?? mateSkills.FirstOrDefault(s => s != null);
-                    if (_skill == null)
-                    {
-                        return BehaviorStatus.Running;
-                    }
-                }
-
-                if (!mate.BattleEntity.CanAttackEntity(target))
-                {
-                    blackboard.Remove("Target");
-                    return BehaviorStatus.Failure;
-                }
-
-                // A mate attack must create threat for the mate itself. Previously all
-                // pet damage was effectively associated with the owner, so monsters
-                // ignored the pet and it could never tank.
-                if (target.MapMonster != null)
-                {
-                    target.MapMonster.AddToAggroList(mate.BattleEntity);
-                    target.MapMonster.Target = mate.BattleEntity;
-                }
-
-                mate.TargetHit(target, _skill);
-
-                _castTimeMs = _skill.SkillVNum == mate.Monster.BasicSkill
-                    ? Math.Max(1000, _skill.Skill.Cooldown * 100)
-                    : (_skill.Skill.CastTime > 0 ? _skill.Skill.CastTime * 100 : 1000);
-                _castStartTime = DateTime.Now;
-                return BehaviorStatus.Running;
+                ResetAction();
+                return BehaviorStatus.Success;
             }
 
-            if ((DateTime.Now - _castStartTime.Value).TotalMilliseconds < _castTimeMs)
+            if (!mate.BattleEntity.CanAttackEntity(target))
             {
-                return BehaviorStatus.Running;
+                blackboard.Remove("Target");
+                return BehaviorStatus.Failure;
             }
 
-            _castStartTime = null;
-            return BehaviorStatus.Success;
+            var selectedSkill = SelectReadySpecialSkill(mate, target);
+            var isBasicAttack = selectedSkill == null;
+
+            if (isBasicAttack)
+            {
+                // A basic attack is represented by a null NpcMonsterSkill in
+                // Mate.TargetHit. This enters the dedicated LastBasicSkillUse path
+                // instead of inheriting a special skill's 30+ second cooldown.
+                if (!mate.CanUseBasicSkill() ||
+                    mate.BattleEntity.GetDistance(target) > mate.Monster.BasicRange + 1)
+                {
+                    return BehaviorStatus.Success;
+                }
+            }
+
+            // Do not start an action lock until every validation has passed. Failed
+            // MP, range or cooldown checks must not freeze the behavior tree.
+            if (target.MapMonster != null)
+            {
+                target.MapMonster.AddToAggroList(mate.BattleEntity);
+                target.MapMonster.Target = mate.BattleEntity;
+            }
+
+            mate.TargetHit(target, selectedSkill);
+
+            var castTimeMilliseconds = selectedSkill?.Skill != null &&
+                                       selectedSkill.Skill.CastEffect != 0
+                ? Math.Max(0, selectedSkill.Skill.CastTime * 100)
+                : 0;
+
+            _actionDurationMilliseconds = Math.Max(
+                BasicAttackRecoveryMilliseconds,
+                castTimeMilliseconds);
+            _actionStartTime = DateTime.Now;
+            return BehaviorStatus.Running;
+        }
+
+        private static NpcMonsterSkill SelectReadySpecialSkill(Mate mate, BattleEntity target)
+        {
+            IEnumerable<NpcMonsterSkill> mateSkills = mate.PSkills ??
+                                                      Enumerable.Empty<NpcMonsterSkill>();
+
+            var readySkills = mateSkills
+                .Where(skill => skill?.Skill != null)
+                // The normal attack is handled by Mate.TargetHit(target, null).
+                .Where(skill => skill.SkillVNum != mate.Monster.BasicSkill)
+                .Where(skill => skill.Rate > 0)
+                .Where(skill => skill.CanBeUsed())
+                .Where(skill => mate.BattleEntity.Mp >= skill.Skill.MpCost)
+                .Where(skill => skill.Skill.TargetType != 0 ||
+                                mate.BattleEntity.GetDistance(target) <= skill.Skill.Range)
+                .OrderBy(_ => ServerManager.RandomNumber())
+                .ToList();
+
+            foreach (var skill in readySkills)
+            {
+                if (ServerManager.RandomNumber() < skill.Rate)
+                {
+                    return skill;
+                }
+            }
+
+            return null;
+        }
+
+        private void ResetAction()
+        {
+            _actionStartTime = null;
+            _actionDurationMilliseconds = 0;
         }
     }
 }
