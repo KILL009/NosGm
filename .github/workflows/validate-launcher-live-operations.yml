@@ -10,6 +10,7 @@ on:
       - "Web/src/NosGM.Web/Pages/Api/V1/Public/**"
       - "Web/config/public-events.example.json"
       - "Tests/NosGM.LiveOperationsPublisher.CompileCheck/**"
+      - "scripts/set-local-launcher-operations-test.ps1"
       - "scripts/verify-launcher-live-operations.ps1"
       - "docs/launcher-live-operations.md"
       - ".github/workflows/validate-launcher-live-operations.yml"
