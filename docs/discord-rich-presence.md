@@ -12,6 +12,18 @@ Discord Rich Presence
 
 The game client is not injected, inspected or modified for this feature.
 
+## Official Discord application
+
+NosGM uses this public Discord Application ID:
+
+```text
+1534034979363754014
+```
+
+It is now the launcher's built-in default. Players do not need to edit an environment variable or `settings.json` for the official application. `NOSGM_DISCORD_APPLICATION_ID` remains available only as a development/test override.
+
+Never distribute a Discord client secret, bot token or OAuth secret with the launcher. None is required by this Rich Presence integration.
+
 ## Privacy boundary
 
 World sends only a bounded state snapshot containing:
@@ -39,17 +51,9 @@ It never sends:
 
 The authenticated account name is used only to derive a fixed-length SHA-256 local pipe route. The raw value is not included in the pipe name or payload. The launcher pipe uses `CurrentUserOnly`, so another Windows user cannot publish activity into the session.
 
-## Create the Discord application
+## Discord Developer Portal setup
 
-An operator must create one Discord developer application for NosGM before Rich Presence can appear under the NosGM name.
-
-1. Open the Discord Developer Portal.
-2. Create an application named `NosGM`.
-3. Copy its numeric Application ID.
-4. Under Rich Presence assets, upload the NosGM-owned images listed below.
-5. Do not create or place a bot token, client secret or OAuth secret in the launcher.
-
-The Application ID is public metadata. A Discord client secret is not required and must never be distributed.
+The application must be named `NosGM` and contain the assets below under Rich Presence assets.
 
 ### Initial assets
 
@@ -69,18 +73,22 @@ If a class key is not uploaded, the main NosGM image and all text continue worki
 
 ## Configure the local launcher
 
-The recommended test uses a process-only environment value:
+No extra Discord configuration is required for the official application. Start the local stack normally:
 
 ```powershell
-$env:NOSGM_DISCORD_APPLICATION_ID = "YOUR_NUMERIC_APPLICATION_ID"
-
 .\scripts\start-modern-login-local.ps1 `
     -SkipBuild `
     -AuthenticationTransport GRPC `
     -AuthenticationGrpcWireMode GRPCWEB
 ```
 
-The value is inherited by the launcher and is not a credential. It can instead be stored as `DiscordApplicationId` in:
+For isolated development against another Discord application, override the built-in ID for only the current PowerShell process:
+
+```powershell
+$env:NOSGM_DISCORD_APPLICATION_ID = "ANOTHER_NUMERIC_APPLICATION_ID"
+```
+
+The value can also be stored as `DiscordApplicationId` in:
 
 ```text
 %LOCALAPPDATA%\NosGM\Launcher\settings.json
@@ -91,7 +99,7 @@ Example preference fields:
 ```json
 {
   "DiscordRichPresenceEnabled": true,
-  "DiscordApplicationId": "123456789012345678",
+  "DiscordApplicationId": "1534034979363754014",
   "DiscordShowCharacterName": true,
   "DiscordShowMap": true,
   "DiscordShowChannel": true,
@@ -153,7 +161,7 @@ Because the launcher owns Rich Presence, `CloseAfterLaunch` is disabled in memor
 ## Acceptance test
 
 1. Start Discord Desktop before the launcher.
-2. Start the local stack with a valid NosGM Application ID.
+2. Start the local stack normally.
 3. Confirm Discord shows **NosGM**, not the generic **NosTale** detection.
 4. Confirm `Launcher listo` appears.
 5. Press **Jugar** and observe preparation/authentication stages.
