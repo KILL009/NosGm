@@ -40,6 +40,7 @@ $suctl = Read-Source "Data/NosGm.Handler/PacketHandler/Mate/SuctlPacketHandler.c
 $upet = Read-Source "Data/NosGm.Handler/PacketHandler/Mate/UpetPacketHandler.cs"
 $mate = Read-Source "Data/NosGm.GameObject/Mate.cs"
 $character = Read-Source "Data/NosGm.GameObject/Character.cs"
+$healingBurning = Read-Source "Data/NosGm.GameObject/Plugin/BCard/Handler/HealingBurningAndCastingHandler.cs"
 
 Assert-Contains $hasTarget 'target.Hp > 0' `
     "Mob targets are validated by life state instead of requiring a player character"
@@ -76,7 +77,7 @@ Assert-NotContains $mateAttack 'Skill.Cooldown' `
 Assert-Contains $mateDiagnostics 'Logger.Info(' `
     "Pet diagnostics remain visible in Release logging"
 Assert-Contains $mateDiagnostics '[MATE_COMBAT]' `
-    "Basic pet attacks expose their execution source"
+    "Pet basic attacks expose their execution source"
 Assert-Contains $mateDiagnostics '[MATE_XP]' `
     "Pet experience changes expose before, after and required values"
 Assert-Contains $mateDiagnostics 'AwardedPetKills' `
@@ -132,10 +133,25 @@ Assert-Contains $upet 'targetsPetItself' `
     "Self-target pet support layouts are recognized"
 Assert-Contains $upet 'Result=AppliedToOwner' `
     "Owner buff routing is observable during runtime tests"
+Assert-Contains $upet 'ScheduleAttractionRelease(' `
+    "Sushi Party attraction has a bounded release lifecycle"
+Assert-Contains $upet 'monster.RemoveFromAggroList(pet);' `
+    "Expired artificial pet aggro is removed"
+Assert-Contains $upet 'Result=Released' `
+    "Sushi Party attraction release is observable"
 Assert-NotContains $upet 'attacker.Monster.Skills.FirstOrDefault' `
     "u_pet does not mutate a shared monster-template cooldown"
 Assert-NotContains $upet 'SkillVNum = 200' `
     "Missing pet skills fail closed instead of fabricating a fallback skill"
+
+Assert-Contains $healingBurning 'int disposableKey = bCardId > 0 ? bCardId : cardId.Value;' `
+    "Periodic poison and burning effects use the same BCard key as buff removal"
+Assert-Contains $healingBurning 'if (!target.HasBuff(cardId.Value))' `
+    "Orphan periodic effects stop when their visible owning buff is gone"
+Assert-Contains $healingBurning 'target.Mate.Owner.Session.SendPackets(target.Mate.Owner.GeneratePst());' `
+    "Mate HP and effect state refresh after every periodic tick or removal"
+Assert-NotContains $healingBurning 'int disposableKey = cardId.Value;' `
+    "Periodic effects cannot survive under a mismatched CardId key"
 
 Assert-Contains $mate 'if (!CanUseBasicSkill())' `
     "Mate.TargetHit keeps the dedicated basic attack cooldown check"
@@ -146,4 +162,4 @@ Assert-Contains $character 'Mates.Where(x => x.IsTeamMember && x.IsAlive)' `
 Assert-Contains $character 'mate.GenerateXp(xp);' `
     "Normal character kill experience is still forwarded to active mates"
 
-Write-Host "Pet combat authority, model visibility, owner buffs and experience contracts passed."
+Write-Host "Pet combat, taunt release, mate debuff lifecycle, model visibility, owner buffs and experience contracts passed."

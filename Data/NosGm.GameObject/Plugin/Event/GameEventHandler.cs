@@ -3,6 +3,7 @@ using System.Threading.Tasks;
 using NosGm.Configuration;
 using NosGm.Core;
 using NosGm.Domain;
+using NosGm.GameObject.Event;
 using NosGm.GameObject.Event.ARENA;
 using NosGm.GameObject.Networking;
 using NosGm.GameObject.Plugin.Event.Handler;
