@@ -1,0 +1,55 @@
+name: Validate modern Login live portal
+
+on:
+  pull_request:
+    paths:
+      - "scripts/start-modern-login-local.ps1"
+      - "scripts/start-modern-login-core-local.ps1"
+      - "scripts/stop-modern-login-local.ps1"
+      - "scripts/verify-modern-login-live-stack.ps1"
+      - "docs/modern-login-live-portal.md"
+      - "Data/NosGm.GameObject/Plugin/Event/Handler/Handler/RankingEvent.cs"
+      - "Launcher/src/NosGM.Launcher/LauncherSettings.cs"
+      - "Web/**"
+      - ".github/workflows/validate-modern-login-live-stack.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  contracts-and-portal-build:
+    runs-on: windows-2022
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Install stable .NET 10 SDK
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Verify integrated live-stack contracts
+        shell: powershell
+        run: ./scripts/verify-modern-login-live-stack.ps1
+
+      - name: Restore public portal
+        run: dotnet restore Web/NosGM.Web.sln
+
+      - name: Build public portal Release
+        run: dotnet build Web/NosGM.Web.sln --configuration Release --no-restore
+
+      - name: Publish public portal
+        run: dotnet publish Web/src/NosGM.Web/NosGM.Web.csproj --configuration Release --no-build --output artifacts/portal-validation
+
+      - name: Reject private material in portal publish
+        shell: powershell
+        run: |
+          $forbidden = Get-ChildItem artifacts/portal-validation -Recurse -File | Where-Object {
+              $_.Extension -in '.pfx', '.p12', '.pem', '.key', '.nos', '.pak'
+          }
+          if ($forbidden) {
+              throw "Forbidden portal publish files: $($forbidden.FullName -join ', ')"
+          }
