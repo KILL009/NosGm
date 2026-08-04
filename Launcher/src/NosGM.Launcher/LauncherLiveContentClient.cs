@@ -58,6 +58,8 @@ internal sealed class LauncherLiveContentClient : IDisposable
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
         MaxDepth = 16,
+        PropertyNameCaseInsensitive = false,
+        UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow,
         Converters = { new JsonStringEnumConverter() }
     };
 
@@ -180,6 +182,8 @@ internal static class LauncherLiveContentCache
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
         MaxDepth = 16,
+        PropertyNameCaseInsensitive = false,
+        UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow,
         WriteIndented = false,
         Converters = { new JsonStringEnumConverter() }
     };
@@ -277,26 +281,32 @@ internal static class LauncherLiveContentValidator
             string.IsNullOrWhiteSpace(snapshot.Metadata.ClientVersion) ||
             snapshot.Metadata.ClientVersion.Length > 32 ||
             !string.Equals(snapshot.Metadata.ApiVersion, "v1", StringComparison.OrdinalIgnoreCase) ||
+            string.IsNullOrWhiteSpace(snapshot.Metadata.DataSource) ||
+            snapshot.Metadata.DataSource.Length > 64 ||
             snapshot.Metadata.SupportedLanguages is null ||
-            snapshot.Metadata.SupportedLanguages.Count is < 1 or > 20)
+            snapshot.Metadata.SupportedLanguages.Count is < 1 or > 20 ||
+            snapshot.Metadata.SupportedLanguages.Any(language =>
+                !IsSafeLanguage(language)))
         {
             throw new InvalidDataException("Live portal metadata is invalid.");
         }
 
-        if (snapshot.News is null || snapshot.News.Count > 3)
+        if (snapshot.News is null ||
+            snapshot.News.Count > MaximumDisplayedNewsItems ||
+            snapshot.News.Any(item => item is null))
         {
             throw new InvalidDataException("Live news collection is invalid.");
         }
 
         foreach (var item in snapshot.News)
         {
-            if (item is null ||
-                !IsSafeToken(item.Id, 80) ||
+            if (!IsSafeToken(item.Id, 80) ||
                 !IsSafeToken(item.Slug, 100) ||
                 string.IsNullOrWhiteSpace(item.Title) ||
                 item.Title.Length > 160 ||
                 string.IsNullOrWhiteSpace(item.Summary) ||
                 item.Summary.Length > 600 ||
+                !IsSafeLanguage(item.Language) ||
                 item.PublishedAt <= DateTimeOffset.UnixEpoch ||
                 item.PublishedAt > DateTimeOffset.UtcNow.AddMinutes(5))
             {
@@ -311,6 +321,7 @@ internal static class LauncherLiveContentValidator
             status.OnlinePlayers < 0 ||
             status.Services is null ||
             status.Services.Count is < 1 or > 64 ||
+            status.Services.Any(service => service is null) ||
             status.ObservedAt > DateTimeOffset.UtcNow.AddMinutes(5))
         {
             throw new InvalidDataException("Live server status is invalid.");
@@ -324,8 +335,7 @@ internal static class LauncherLiveContentValidator
 
         foreach (var service in status.Services)
         {
-            if (service is null ||
-                !IsSafeToken(service.Id, 64) ||
+            if (!IsSafeToken(service.Id, 64) ||
                 string.IsNullOrWhiteSpace(service.Name) ||
                 service.Name.Length > 80 ||
                 service.OnlinePlayers < 0)
@@ -334,6 +344,13 @@ internal static class LauncherLiveContentValidator
             }
         }
     }
+
+    private const int MaximumDisplayedNewsItems = 3;
+
+    private static bool IsSafeLanguage(string value)
+        => !string.IsNullOrWhiteSpace(value) &&
+           value.Length <= 10 &&
+           value.All(character => char.IsLetter(character) || character == '-');
 
     private static bool IsSafeToken(string value, int maximumLength)
         => !string.IsNullOrWhiteSpace(value) &&
