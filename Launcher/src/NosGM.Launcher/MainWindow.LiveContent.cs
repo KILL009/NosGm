@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.Net.Http;
+using System.Text.Json;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -41,6 +42,19 @@ public partial class MainWindow
         }
 
         _liveContentInitialized = true;
+
+        // MainWindow_Loaded reads settings and performs transactional recovery.
+        // Wait for that initialization instead of racing it with the live client.
+        for (var attempt = 0; attempt < 100 && !_languageSelectionReady && IsLoaded; attempt++)
+        {
+            await Task.Delay(TimeSpan.FromMilliseconds(50));
+        }
+
+        if (!IsLoaded || !_languageSelectionReady || _liveContentClosed)
+        {
+            return;
+        }
+
         ResolveLiveDashboardControls();
         _liveContentClient = new LauncherLiveContentClient(_settings.PortalBaseUri);
         _liveContentTimer.Tick += LiveContentTimer_Tick;
@@ -66,7 +80,7 @@ public partial class MainWindow
         LanguageComboBox.SelectionChanged += LiveLanguage_SelectionChanged;
 
         var cached = await LauncherLiveContentCache.LoadAsync(CancellationToken.None);
-        if (cached is not null)
+        if (cached is not null && !_liveContentClosed)
         {
             ApplyLiveContent(cached, fromCache: true);
         }
@@ -75,19 +89,13 @@ public partial class MainWindow
     }
 
     private async void DashboardStatusTimer_Tick(object? sender, EventArgs e)
-    {
-        await RefreshDashboardAsync();
-    }
+        => await RefreshDashboardAsync();
 
     private async void LiveContentTimer_Tick(object? sender, EventArgs e)
-    {
-        await RefreshLiveContentAsync();
-    }
+        => await RefreshLiveContentAsync();
 
     private async void RefreshDashboard_Click(object sender, RoutedEventArgs e)
-    {
-        await RefreshDashboardAsync();
-    }
+        => await RefreshDashboardAsync();
 
     private async Task RefreshDashboardAsync()
     {
@@ -97,7 +105,7 @@ public partial class MainWindow
 
     private async void LiveLanguage_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        if (_liveContentInitialized)
+        if (_liveContentInitialized && _languageSelectionReady)
         {
             await RefreshLiveContentAsync();
         }
@@ -123,6 +131,11 @@ public partial class MainWindow
             var snapshot = await _liveContentClient.GetSnapshotAsync(
                 _settings.Language,
                 _liveContentCancellation.Token);
+            if (_liveContentClosed)
+            {
+                return;
+            }
+
             ApplyLiveContent(snapshot, fromCache: false);
 
             try
@@ -135,11 +148,12 @@ public partial class MainWindow
                 // A cache failure never hides valid live data from the player.
             }
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException) when (!_liveContentClosed)
         {
             MarkLiveContentUnavailable("Portal sin respuesta");
         }
         catch (Exception exception) when (
+            !_liveContentClosed &&
             exception is HttpRequestException or IOException or InvalidDataException or JsonException)
         {
             MarkLiveContentUnavailable("Portal no disponible");
@@ -240,6 +254,11 @@ public partial class MainWindow
 
     private void MarkLiveContentUnavailable(string message)
     {
+        if (ServerProbeTimeTextBlock.Text.Contains(message, StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
         if (ServerProbeTimeTextBlock.Text.Contains("jugadores", StringComparison.OrdinalIgnoreCase))
         {
             ServerProbeTimeTextBlock.Text += $" • {message}";
@@ -295,13 +314,20 @@ public partial class MainWindow
 
     private void OpenLiveNews_Click(object sender, MouseButtonEventArgs e)
     {
+        var portalLanguage = _settings.Language switch
+        {
+            "cz" => "cs",
+            "jp" => "ja",
+            "cn" => "zh-CN",
+            _ => _settings.Language
+        };
         var newsUri = new Uri(
             new Uri(_settings.PortalBaseUri, UriKind.Absolute),
-            $"news?lang={Uri.EscapeDataString(_settings.Language)}");
+            $"news?lang={Uri.EscapeDataString(portalLanguage)}");
         OpenUrl(newsUri.AbsoluteUri);
     }
 
-    private async void MainWindow_LiveContentClosed(object? sender, EventArgs e)
+    private void MainWindow_LiveContentClosed(object? sender, EventArgs e)
     {
         if (_liveContentClosed)
         {
@@ -320,9 +346,5 @@ public partial class MainWindow
         _liveContentCancellation = null;
         _liveContentClient?.Dispose();
         _liveContentClient = null;
-
-        await _liveContentGate.WaitAsync();
-        _liveContentGate.Release();
-        _liveContentGate.Dispose();
     }
 }
