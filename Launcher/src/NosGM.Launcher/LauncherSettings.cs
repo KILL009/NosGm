@@ -196,7 +196,7 @@ internal static class LauncherSettingsStore
             !string.IsNullOrEmpty(uri.UserInfo) ||
             !string.IsNullOrEmpty(uri.Query) ||
             !string.IsNullOrEmpty(uri.Fragment) ||
-            !uri.AbsolutePath.EndsWith('/', StringComparison.Ordinal))
+            !uri.AbsolutePath.EndsWith("/", StringComparison.Ordinal))
         {
             return false;
         }
