@@ -9,6 +9,8 @@ namespace NosGM.Launcher;
 
 internal sealed record LauncherSettings
 {
+    public const string OfficialDiscordApplicationId = "1534034979363754014";
+
     public int SchemaVersion { get; init; } = 1;
     public string InstallRoot { get; init; } = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
@@ -22,7 +24,7 @@ internal sealed record LauncherSettings
     public string AccountName { get; init; } = string.Empty;
     public bool CloseAfterLaunch { get; init; }
     public bool DiscordRichPresenceEnabled { get; init; } = true;
-    public string DiscordApplicationId { get; init; } = string.Empty;
+    public string DiscordApplicationId { get; init; } = OfficialDiscordApplicationId;
     public bool DiscordShowCharacterName { get; init; } = true;
     public bool DiscordShowMap { get; init; } = true;
     public bool DiscordShowChannel { get; init; } = true;
@@ -39,7 +41,7 @@ internal static class LauncherSettingsStore
     private static string _persistedAuthenticationEndpoint = string.Empty;
     private static string _persistedAuthenticationTransport = "auto";
     private static string _persistedLoginServerAddress = "127.0.0.1";
-    private static string _persistedDiscordApplicationId = string.Empty;
+    private static string _persistedDiscordApplicationId = LauncherSettings.OfficialDiscordApplicationId;
 
     private static string SettingsPath => Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
@@ -60,6 +62,17 @@ internal static class LauncherSettingsStore
         {
             persistedSettings = await JsonSupport.ReadAsync<LauncherSettings>(SettingsPath);
             Validate(persistedSettings);
+
+            // Migrate launchers that saved the pre-Rich-Presence empty value.
+            // The Application ID is public application metadata, not a secret.
+            if (string.IsNullOrWhiteSpace(persistedSettings.DiscordApplicationId))
+            {
+                persistedSettings = persistedSettings with
+                {
+                    DiscordApplicationId = LauncherSettings.OfficialDiscordApplicationId
+                };
+                await JsonSupport.WriteAtomicAsync(SettingsPath, persistedSettings);
+            }
         }
 
         _persistedAuthenticationEndpoint = persistedSettings.AuthenticationEndpoint;
