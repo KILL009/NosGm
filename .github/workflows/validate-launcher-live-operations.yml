@@ -9,6 +9,7 @@ on:
       - "Web/src/NosGM.Web.Contracts/PublicOperationsModels.cs"
       - "Web/src/NosGM.Web/Pages/Api/V1/Public/**"
       - "Web/config/public-events.example.json"
+      - "Tests/NosGM.LiveOperationsPublisher.CompileCheck/**"
       - "scripts/verify-launcher-live-operations.ps1"
       - "docs/launcher-live-operations.md"
       - ".github/workflows/validate-launcher-live-operations.yml"
@@ -34,6 +35,12 @@ jobs:
       - name: Verify live operations contracts
         shell: powershell
         run: ./scripts/verify-launcher-live-operations.ps1
+
+      - name: Restore legacy publisher compile check
+        run: dotnet restore Tests/NosGM.LiveOperationsPublisher.CompileCheck/NosGM.LiveOperationsPublisher.CompileCheck.csproj
+
+      - name: Compile legacy publisher in isolation
+        run: dotnet build Tests/NosGM.LiveOperationsPublisher.CompileCheck/NosGM.LiveOperationsPublisher.CompileCheck.csproj --configuration Release --no-restore
 
       - name: Restore launcher
         run: dotnet restore Launcher/NosGM.Launcher.sln
