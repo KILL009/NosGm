@@ -120,9 +120,10 @@ namespace Game.Configuration
                         return;
                     }
 
-                    // Also stop defensively when the visible owning buff is gone.
-                    // This prevents an orphan timer from continuing to damage a mate.
-                    if (!target.HasBuff(cardId.Value))
+                    // Mate status must be represented by an active card. Stop a
+                    // leaked interval when the client-visible owning buff is gone.
+                    // Other entity types retain their legacy direct-card behavior.
+                    if (target.Mate != null && !target.HasBuff(cardId.Value))
                     {
                         bcardDisposable.Dispose();
                         if (target.BCardDisposables[disposableKey] == bcardDisposable)
@@ -132,7 +133,7 @@ namespace Game.Configuration
 
                         Logger.Info(
                             $"[MATE_DEBUFF] Result=StoppedOrphan Card={cardId.Value} " +
-                            $"BCard={bCardId} TargetType={target.EntityType} Target={target.MapEntityId}");
+                            $"BCard={bCardId} Target={target.MapEntityId}");
                         RefreshTargetStatus();
                         return;
                     }
