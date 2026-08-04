@@ -21,6 +21,12 @@ internal sealed record LauncherSettings
     public string LoginServerAddress { get; init; } = "127.0.0.1";
     public string AccountName { get; init; } = string.Empty;
     public bool CloseAfterLaunch { get; init; }
+    public bool DiscordRichPresenceEnabled { get; init; } = true;
+    public string DiscordApplicationId { get; init; } = string.Empty;
+    public bool DiscordShowCharacterName { get; init; } = true;
+    public bool DiscordShowMap { get; init; } = true;
+    public bool DiscordShowChannel { get; init; } = true;
+    public bool DiscordShowParty { get; init; } = true;
 }
 
 internal static class LauncherSettingsStore
@@ -28,10 +34,12 @@ internal static class LauncherSettingsStore
     private const string AuthenticationEndpointEnvironmentVariable = "NOSGM_AUTH_ENDPOINT";
     private const string AuthenticationTransportEnvironmentVariable = "NOSGM_LOGIN_TRANSPORT";
     private const string LoginServerAddressEnvironmentVariable = "NOSGM_LOGIN_ADDRESS";
+    private const string DiscordApplicationIdEnvironmentVariable = "NOSGM_DISCORD_APPLICATION_ID";
 
     private static string _persistedAuthenticationEndpoint = string.Empty;
     private static string _persistedAuthenticationTransport = "auto";
     private static string _persistedLoginServerAddress = "127.0.0.1";
+    private static string _persistedDiscordApplicationId = string.Empty;
 
     private static string SettingsPath => Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
@@ -57,6 +65,7 @@ internal static class LauncherSettingsStore
         _persistedAuthenticationEndpoint = persistedSettings.AuthenticationEndpoint;
         _persistedAuthenticationTransport = persistedSettings.AuthenticationTransport;
         _persistedLoginServerAddress = persistedSettings.LoginServerAddress;
+        _persistedDiscordApplicationId = persistedSettings.DiscordApplicationId;
 
         var effectiveSettings = persistedSettings with
         {
@@ -65,7 +74,9 @@ internal static class LauncherSettingsStore
             AuthenticationTransport = GetRuntimeValue(AuthenticationTransportEnvironmentVariable) ??
                                       persistedSettings.AuthenticationTransport,
             LoginServerAddress = GetRuntimeValue(LoginServerAddressEnvironmentVariable) ??
-                                 persistedSettings.LoginServerAddress
+                                 persistedSettings.LoginServerAddress,
+            DiscordApplicationId = GetRuntimeValue(DiscordApplicationIdEnvironmentVariable) ??
+                                   persistedSettings.DiscordApplicationId
         };
         Validate(effectiveSettings);
         return effectiveSettings;
@@ -83,12 +94,16 @@ internal static class LauncherSettingsStore
                 : _persistedAuthenticationTransport,
             LoginServerAddress = GetRuntimeValue(LoginServerAddressEnvironmentVariable) is null
                 ? settings.LoginServerAddress
-                : _persistedLoginServerAddress
+                : _persistedLoginServerAddress,
+            DiscordApplicationId = GetRuntimeValue(DiscordApplicationIdEnvironmentVariable) is null
+                ? settings.DiscordApplicationId
+                : _persistedDiscordApplicationId
         };
         Validate(persistedSettings);
         _persistedAuthenticationEndpoint = persistedSettings.AuthenticationEndpoint;
         _persistedAuthenticationTransport = persistedSettings.AuthenticationTransport;
         _persistedLoginServerAddress = persistedSettings.LoginServerAddress;
+        _persistedDiscordApplicationId = persistedSettings.DiscordApplicationId;
         return JsonSupport.WriteAtomicAsync(SettingsPath, persistedSettings);
     }
 
@@ -110,7 +125,8 @@ internal static class LauncherSettingsStore
             settings.AccountName.IndexOfAny(['\t', '\r', '\n', '\v', '\0']) >= 0 ||
             !IsSafeAuthenticationEndpoint(settings.AuthenticationEndpoint) ||
             !IsSupportedTransport(settings.AuthenticationTransport) ||
-            !IsIpv4Address(settings.LoginServerAddress))
+            !IsIpv4Address(settings.LoginServerAddress) ||
+            !IsDiscordApplicationId(settings.DiscordApplicationId))
         {
             throw new InvalidDataException("Launcher settings are invalid.");
         }
@@ -136,6 +152,18 @@ internal static class LauncherSettingsStore
     {
         return IPAddress.TryParse(value?.Trim(), out var address) &&
                address.AddressFamily == AddressFamily.InterNetwork;
+    }
+
+    private static bool IsDiscordApplicationId(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return true;
+        }
+
+        var normalized = value.Trim();
+        return normalized.Length is >= 15 and <= 22 &&
+               normalized.All(char.IsDigit);
     }
 
     private static bool IsSafeAuthenticationEndpoint(string endpoint)
