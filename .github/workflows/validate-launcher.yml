@@ -7,9 +7,12 @@ on:
       - "Data/NosGm.Configuration/ServerConfiguration.cs"
       - "Data/NosGm.Program/NosGm.Master.Server/**"
       - "Data/NosGm.Program/NosGm.World/Properties/AssemblyInfo.cs"
+      - "Web/src/NosGM.Web/Program.cs"
+      - "Web/src/NosGM.Web.Contracts/PublicModels.cs"
       - "scripts/verify-launcher.ps1"
       - "scripts/verify-launcher-auth-bridge.ps1"
       - "scripts/verify-discord-rich-presence.ps1"
+      - "scripts/verify-launcher-live-content.ps1"
       - ".github/workflows/validate-launcher.yml"
       - "AUTHORS.md"
       - "NOTICE.md"
@@ -19,6 +22,7 @@ on:
       - "docs/LICENSING.md"
       - "docs/launcher-authentication.md"
       - "docs/discord-rich-presence.md"
+      - "docs/launcher-live-content.md"
   workflow_dispatch:
 
 permissions:
@@ -114,3 +118,7 @@ jobs:
       - name: Verify Discord Rich Presence contracts
         shell: pwsh
         run: ./scripts/verify-discord-rich-presence.ps1
+
+      - name: Verify launcher live content contracts
+        shell: pwsh
+        run: ./scripts/verify-launcher-live-content.ps1
