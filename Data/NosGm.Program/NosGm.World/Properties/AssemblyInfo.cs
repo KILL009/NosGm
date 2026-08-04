@@ -17,39 +17,21 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Web.Script.Serialization;
 
-// General Information about an assembly is controlled through the following set of attributes.
-// Change these attribute values to modify the information associated with an assembly.
 [assembly: AssemblyDescription("")]
 [assembly: AssemblyCompany("")]
 [assembly: AssemblyCopyright("")]
 [assembly: AssemblyProduct("")]
-
-// Version information for an assembly consists of the following four values:
-//
-// Major Version Minor Version Build Number Revision
-//
-// You can specify all the values or you can default the Build and Revision Numbers by using the '*'
-// as shown below: [assembly: AssemblyVersion("1.0.*")]
 [assembly: AssemblyVersion("1.1.*")]
 [assembly: AssemblyTitle("")]
 [assembly: AssemblyConfiguration("")]
 [assembly: AssemblyTrademark("")]
 [assembly: AssemblyCulture("")]
-
-// Setting ComVisible to false makes the types in this assembly not visible to COM components. If you
-// need to access a type in this assembly from COM, set the ComVisible attribute to true on that type.
 [assembly: ComVisible(false)]
-
-// The following GUID is for the ID of the typelib if this project is exposed to COM
 [assembly: Guid("b0720365-a61c-407e-854f-2a93526a39fb")]
 [assembly: XmlConfigurator(Watch = true)]
 
 namespace System.Runtime.CompilerServices
 {
-    /// <summary>
-    /// Compatibility definition used by the C# compiler when targeting .NET
-    /// Framework 4.8.1, whose reference assemblies predate module initializers.
-    /// </summary>
     [AttributeUsage(AttributeTargets.Method, Inherited = false)]
     internal sealed class ModuleInitializerAttribute : Attribute
     {
@@ -58,11 +40,6 @@ namespace System.Runtime.CompilerServices
 
 namespace NosGm.World
 {
-    /// <summary>
-    /// Starts the optional local presence publisher without coupling gameplay or
-    /// login code to Discord. The publisher is activated only for the local World
-    /// identity used by the NosGM development launcher or through an explicit flag.
-    /// </summary>
     internal static class LauncherPresenceModule
     {
         [ModuleInitializer]
@@ -119,10 +96,15 @@ namespace NosGm.World
                 return;
             }
 
-            Interlocked.CompareExchange(
+            var candidate = new LauncherPresencePublisher();
+            LauncherPresencePublisher existing = Interlocked.CompareExchange(
                 ref _instance,
-                new LauncherPresencePublisher(),
-                null)?.Dispose();
+                candidate,
+                null);
+            if (existing != null)
+            {
+                candidate.Dispose();
+            }
         }
 
         private async Task RunAsync(CancellationToken cancellationToken)
@@ -135,7 +117,7 @@ namespace NosGm.World
                 }
                 catch
                 {
-                    // Presence is observational. It must never affect World life.
+                    // Presence is observational and must never affect World life.
                 }
 
                 try
@@ -219,7 +201,9 @@ namespace NosGm.World
             string mapName = mapInstance.Map?.Name;
             if (string.IsNullOrWhiteSpace(mapName))
             {
-                int mapId = mapInstance.Map?.MapId ?? mapInstance.MapId;
+                int mapId = mapInstance.Map != null
+                    ? mapInstance.Map.MapId
+                    : mapInstance.MapId;
                 mapName = "Mapa " + mapId;
             }
 
