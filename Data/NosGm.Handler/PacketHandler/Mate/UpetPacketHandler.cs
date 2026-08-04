@@ -16,6 +16,8 @@ namespace NosGm.Handler.PacketHandler.Mate
 {
     public class UpetPacketHandler : IPacketHandler
     {
+        private const int DefaultSushiPartyTauntDurationMilliseconds = 10000;
+
         #region Instantiation
 
         public UpetPacketHandler(ClientSession session)
@@ -165,16 +167,125 @@ namespace NosGm.Handler.PacketHandler.Mate
                 return;
             }
 
+            int durationMilliseconds = ResolveAttractionDurationMilliseconds(skill, attacker.Level);
             foreach (MapMonster monster in monsters)
             {
+                BattleEntity previousTarget = monster.Target;
+                bool petWasAlreadyAggroed = monster.AggroList?.Any(candidate =>
+                    IsSameEntity(candidate, attacker.BattleEntity)) == true;
+
                 monster.AddToAggroList(attacker.BattleEntity);
                 monster.Target = attacker.BattleEntity;
                 monster.LastMonsterAggro = DateTime.Now;
+
+                ScheduleAttractionRelease(
+                    monster,
+                    attacker.BattleEntity,
+                    previousTarget,
+                    petWasAlreadyAggroed,
+                    durationMilliseconds);
             }
 
             Logger.Info(
                 $"[MATE_TAUNT] Mate={attacker.MateTransportId} Skill={skill.SkillVNum} " +
-                $"Range={skill.TargetRange} Attracted={monsters.Count}");
+                $"Range={skill.TargetRange} DurationMs={durationMilliseconds} " +
+                $"Attracted={monsters.Count}");
+        }
+
+        private static int ResolveAttractionDurationMilliseconds(Skill skill, int petLevel)
+        {
+            int durationDeciseconds = skill.BCards?
+                .Where(card => card.Type == (byte)BCardType.CardType.Buff)
+                .Select(card => new Buff((short)card.SecondData, petLevel).Card?.Duration ?? 0)
+                .Where(duration => duration > 0)
+                .DefaultIfEmpty(DefaultSushiPartyTauntDurationMilliseconds / 100)
+                .Max() ?? DefaultSushiPartyTauntDurationMilliseconds / 100;
+
+            return Math.Max(1000, durationDeciseconds * 100);
+        }
+
+        private static void ScheduleAttractionRelease(
+            MapMonster monster,
+            BattleEntity pet,
+            BattleEntity previousTarget,
+            bool petWasAlreadyAggroed,
+            int durationMilliseconds)
+        {
+            _ = Task.Run(async () =>
+            {
+                await Task.Delay(durationMilliseconds).ConfigureAwait(false);
+
+                try
+                {
+                    if (monster?.BattleEntity == null ||
+                        monster.MapInstance == null ||
+                        !monster.IsAlive ||
+                        pet == null)
+                    {
+                        return;
+                    }
+
+                    bool petIsStillValid = pet.Hp > 0 && pet.MapInstance == monster.MapInstance;
+                    bool petHasDamageAggro = monster.DamageList?.Keys.Any(candidate =>
+                        IsSameEntity(candidate, pet)) == true;
+                    bool keepNaturalAggro = petIsStillValid &&
+                                            (petWasAlreadyAggroed || petHasDamageAggro);
+
+                    if (!keepNaturalAggro)
+                    {
+                        monster.RemoveFromAggroList(pet);
+                    }
+
+                    if (!IsSameEntity(monster.Target, pet))
+                    {
+                        return;
+                    }
+
+                    BattleEntity restoredTarget = IsValidMonsterTarget(monster, previousTarget)
+                        ? previousTarget
+                        : monster.AggroList?.FirstOrDefault(candidate =>
+                            !IsSameEntity(candidate, pet) &&
+                            IsValidMonsterTarget(monster, candidate));
+
+                    if (restoredTarget != null)
+                    {
+                        monster.Target = restoredTarget;
+                    }
+                    else if (!keepNaturalAggro)
+                    {
+                        monster.Target = null;
+                    }
+
+                    Logger.Info(
+                        $"[MATE_TAUNT] Mate={pet.MapEntityId} Monster={monster.MapMonsterId} " +
+                        $"Result=Released RestoredTarget={monster.Target?.MapEntityId ?? 0} " +
+                        $"NaturalAggro={keepNaturalAggro}");
+                }
+                catch (Exception exception)
+                {
+                    Logger.Error(
+                        exception,
+                        $"[MATE_TAUNT] Mate={pet?.MapEntityId ?? 0} " +
+                        $"Monster={monster?.MapMonsterId ?? 0} Result=ReleaseFailed");
+                }
+            });
+        }
+
+        private static bool IsValidMonsterTarget(MapMonster monster, BattleEntity target)
+        {
+            return monster?.BattleEntity != null &&
+                   target != null &&
+                   target.Hp > 0 &&
+                   target.MapInstance == monster.MapInstance &&
+                   monster.BattleEntity.CanAttackEntity(target);
+        }
+
+        private static bool IsSameEntity(BattleEntity left, BattleEntity right)
+        {
+            return left != null &&
+                   right != null &&
+                   left.MapEntityId == right.MapEntityId &&
+                   left.EntityType == right.EntityType;
         }
 
         private void ApplyPositiveOwnerBuffs(

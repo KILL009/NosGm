@@ -1,8 +1,8 @@
 using Game.Configuration.BCards;
+using NosGm.Core;
 using NosGm.Domain;
 using System;
 using System.Reactive.Linq;
-using System.Threading.Tasks;
 
 namespace Game.Configuration
 {
@@ -14,25 +14,26 @@ namespace Game.Configuration
         {
             var caster = evnt.Caster;
             var target = evnt.Target;
-            var secondData = evnt.BCard.SecondData;
             var firstData = evnt.FirstData;
-            var x = evnt.X;
-            var y = evnt.Y;
-            var skill = evnt.Skill;
             var thirdData = evnt.BCard.ThirdData;
             var cardId = evnt.BCard.CardId;
-            var skillVNum = evnt.BCard.SkillVNum;
             var bCardId = evnt.BCard.BCardId;
             var subType = evnt.BCard.SubType;
             var casterLevel = evnt.CasterLevel;
-            var delayTime = evnt.DelayTime;
-            var duration = evnt.Duration;
-
             var castType = evnt.BCard.CastType;
             var isLevelScaled = evnt.BCard.IsLevelScaled;
             var isLevelDivided = evnt.BCard.IsLevelDivided;
 
             var amount = 0;
+
+            void RefreshTargetStatus()
+            {
+                target.Character?.Session?.SendPacket(target.Character.GenerateStat());
+                if (target.Mate?.Owner?.Session != null)
+                {
+                    target.Mate.Owner.Session.SendPackets(target.Mate.Owner.GeneratePst());
+                }
+            }
 
             void HealingBurningAndCastingAction()
             {
@@ -86,7 +87,7 @@ namespace Game.Configuration
 
                     case (byte)AdditionalTypes.HealingBurningAndCasting.DecreaseHP:
                         target.Hp = target.Hp - amount <= 0 ? 1 : target.Hp - amount;
-                        target.MapInstance?.Broadcast(target.GenerateDm(amount));
+                        target.MapInstance.Broadcast(target.GenerateDm(amount));
                         break;
 
                     case (byte)AdditionalTypes.HealingBurningAndCasting.DecreaseMP:
@@ -94,33 +95,55 @@ namespace Game.Configuration
                         break;
                 }
 
-                target?.Character?.Session?.SendPacket(target.Character?.GenerateStat());
+                RefreshTargetStatus();
             }
 
             HealingBurningAndCastingAction();
 
             var interval = thirdData > 0 ? thirdData * 2 : castType * 2;
-
-            if (cardId.HasValue && interval > 0)
+            if (!cardId.HasValue || interval <= 0)
             {
-                int disposableKey = cardId.Value;
-                IDisposable bcardDisposable = null;
-                bcardDisposable = Observable.Interval(TimeSpan.FromSeconds(interval))
-                    .Subscribe(s =>
+                return;
+            }
+
+            // BattleEntity.RemoveBuff disposes every periodic BCard by BCardId.
+            // The old implementation stored this interval under CardId instead,
+            // so poison/burning ticks could survive after the owning buff expired.
+            int disposableKey = bCardId > 0 ? bCardId : cardId.Value;
+            IDisposable bcardDisposable = null;
+            bcardDisposable = Observable.Interval(TimeSpan.FromSeconds(interval))
+                .Subscribe(_ =>
+                {
+                    if (target.BCardDisposables[disposableKey] != bcardDisposable)
                     {
-                        if (target.BCardDisposables[disposableKey] != bcardDisposable)
+                        bcardDisposable.Dispose();
+                        return;
+                    }
+
+                    // Mate status must be represented by an active card. Stop a
+                    // leaked interval when the client-visible owning buff is gone.
+                    // Other entity types retain their legacy direct-card behavior.
+                    if (target.Mate != null)
+                    {
+                        if (!target.HasBuff(cardId.Value))
                         {
                             bcardDisposable.Dispose();
+                            if (target.BCardDisposables[disposableKey] == bcardDisposable)
+                            {
+                                target.BCardDisposables.Remove(disposableKey);
+                            }
+
+                            Logger.Info(
+                                $"[MATE_DEBUFF] Result=StoppedOrphan Card={cardId.Value} " +
+                                $"BCard={bCardId} Target={target.MapEntityId}");
+                            RefreshTargetStatus();
                             return;
                         }
+                    }
 
-                        if (target != null)
-                        {
-                            HealingBurningAndCastingAction();
-                        }
-                    });
-                target.BCardDisposables[disposableKey] = bcardDisposable;
-            }
+                    HealingBurningAndCastingAction();
+                });
+            target.BCardDisposables[disposableKey] = bcardDisposable;
         }
     }
 }
