@@ -113,6 +113,7 @@ jobs:
             /nr:false `
             /v:minimal `
             /p:NosGmLegacyBuild=true `
+            /p:BuildProjectReferences=false `
             /p:Configuration="$env:CONFIGURATION" `
             /p:Platform="$env:PLATFORM" `
             /bl:"$env:ARTIFACTS\resx.binlog" `

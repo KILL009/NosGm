@@ -127,6 +127,54 @@ namespace NosGm.Handler.PacketHandler.Mate
 
             MateExt.PetSkillTargetHit(attacker.BattleEntity, battleEntityDefender, skill);
             ApplyPositiveOwnerBuffs(attacker, battleEntityDefender, skill);
+            ApplyAreaAttraction(attacker, skill);
+        }
+
+        private void ApplyAreaAttraction(GameMate attacker, Skill skill)
+        {
+            // Fiesta de sushi (663) is a self-centred support/taunt skill. The
+            // packet/BCard path applies its buffs, but it never transferred monster
+            // aggro to the pet. That left the visible "attract nearby enemies"
+            // description without a server-side effect.
+            if (skill?.SkillVNum != 663 ||
+                skill.TargetRange <= 0 ||
+                attacker?.BattleEntity == null ||
+                Session.CurrentMapInstance == null)
+            {
+                return;
+            }
+
+            var monsters = Session.CurrentMapInstance
+                .GetMonsterInRangeList(
+                    attacker.PositionX,
+                    attacker.PositionY,
+                    skill.TargetRange)?
+                .Where(monster =>
+                    monster?.BattleEntity != null &&
+                    monster.IsAlive &&
+                    monster.CurrentHp > 0 &&
+                    monster.MapInstance == attacker.BattleEntity.MapInstance &&
+                    attacker.BattleEntity.CanAttackEntity(monster.BattleEntity))
+                .ToList();
+
+            if (monsters == null || monsters.Count == 0)
+            {
+                Logger.Info(
+                    $"[MATE_TAUNT] Mate={attacker.MateTransportId} Skill={skill.SkillVNum} " +
+                    $"Range={skill.TargetRange} Attracted=0");
+                return;
+            }
+
+            foreach (MapMonster monster in monsters)
+            {
+                monster.AddToAggroList(attacker.BattleEntity);
+                monster.Target = attacker.BattleEntity;
+                monster.LastMonsterAggro = DateTime.Now;
+            }
+
+            Logger.Info(
+                $"[MATE_TAUNT] Mate={attacker.MateTransportId} Skill={skill.SkillVNum} " +
+                $"Range={skill.TargetRange} Attracted={monsters.Count}");
         }
 
         private void ApplyPositiveOwnerBuffs(

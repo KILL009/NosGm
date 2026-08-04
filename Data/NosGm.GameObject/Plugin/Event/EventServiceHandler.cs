@@ -28,39 +28,56 @@ public static class EventServiceHandler
 
         ServerManager.Instance.ThreadSafeGroupList = new ThreadSafeSortedList<long, Group>();
 
-        Observable.Interval(TimeSpan.FromMinutes(2)).Subscribe(x => SaveEvent.Save());
+        Observable.Interval(TimeSpan.FromMinutes(2)).Subscribe(
+            EventRuntimeGuard.Protect<long>("SaveEvent", _ => SaveEvent.Save()),
+            EventRuntimeGuard.ObserveFailure("SaveEvent"));
 
         if (ServerManager.Instance.IsAct4Online())
         {
-            //Make sure to only load Glacernon if it's even online. 
-            Observable.Interval(TimeSpan.FromMinutes(1)).Subscribe(x => IceFlowerEvent.Load());
-            Observable.Interval(TimeSpan.FromSeconds(2)).Subscribe(x => GlacernonEvent.Load());
+            // Make sure to only load Glacernon if it is online.
+            Observable.Interval(TimeSpan.FromMinutes(1)).Subscribe(
+                EventRuntimeGuard.Protect<long>("IceFlowerEvent", _ => IceFlowerEvent.Load()),
+                EventRuntimeGuard.ObserveFailure("IceFlowerEvent"));
+            Observable.Interval(TimeSpan.FromSeconds(2)).Subscribe(
+                EventRuntimeGuard.Protect<long>("GlacernonEvent", _ => GlacernonEvent.Load()),
+                EventRuntimeGuard.ObserveFailure("GlacernonEvent"));
         }
 
-        Observable.Interval(TimeSpan.FromSeconds(2)).Subscribe(x => GroupEvent.Load());
+        Observable.Interval(TimeSpan.FromSeconds(2)).Subscribe(
+            EventRuntimeGuard.Protect<long>("GroupEvent", _ => GroupEvent.Load()),
+            EventRuntimeGuard.ObserveFailure("GroupEvent"));
 
-        Parallel.ForEach(ServerManager.Instance.Schedules, schedule => Observable
-            .Timer(TimeSpan.FromSeconds(EventHelper.GetMilisecondsBeforeTime(schedule.Time).TotalSeconds),
-                TimeSpan.FromDays(1)).Subscribe(e =>
+        Parallel.ForEach(ServerManager.Instance.Schedules, schedule =>
+        {
+            TimeSpan dueTime = EventHelper.GetMilisecondsBeforeTime(schedule.Time);
+            string operation = $"Schedule:{schedule.Event}:{schedule.Time}";
+            Observable.Timer(dueTime, TimeSpan.FromDays(1)).Subscribe(
+                EventRuntimeGuard.Protect<long>(operation, _ =>
                 {
-                    if (schedule.DayOfWeek == "" || schedule.DayOfWeek == DateTime.Now.DayOfWeek.ToString())
+                    if (string.IsNullOrEmpty(schedule.DayOfWeek) ||
+                        schedule.DayOfWeek == DateTime.Now.DayOfWeek.ToString())
+                    {
                         GameEventHandler.GenerateEvent(schedule.Event, schedule.LvlBracket);
-                }));
+                    }
+                }),
+                EventRuntimeGuard.ObserveFailure(operation));
+        });
 
         if (ServerManager.Instance.IsAct4Online())
         {
             GameEventHandler.GenerateEvent(EventType.GLACERNONSHIP);
         }
 
-        Observable.Interval(TimeSpan.FromSeconds(1)).Subscribe(x => RemoveItemEvent.Remove());
+        Observable.Interval(TimeSpan.FromSeconds(1)).Subscribe(
+            EventRuntimeGuard.Protect<long>("RemoveItemEvent", _ => RemoveItemEvent.Remove()),
+            EventRuntimeGuard.ObserveFailure("RemoveItemEvent"));
 
-        Observable.Interval(TimeSpan.FromMilliseconds(400)).Subscribe(x =>
-        {
-            ServerManager.StartMonster();
-        });
+        Observable.Interval(TimeSpan.FromMilliseconds(400)).Subscribe(
+            EventRuntimeGuard.Protect<long>("StartMonster", _ => ServerManager.StartMonster()),
+            EventRuntimeGuard.ObserveFailure("StartMonster"));
 
-        //Let the Character load it by wish, other than that, load when logging in
-        //Observable.Interval(TimeSpan.FromSeconds(10)).Subscribe(x => LoadMail.LoadMailAsync());
+        // Let the Character load mail by request; otherwise load it when logging in.
+        // Observable.Interval(TimeSpan.FromSeconds(10)).Subscribe(x => LoadMail.LoadMailAsync());
 
         CommunicationServiceClient.Instance.SessionKickedEvent += ServerManager.Instance.OnSessionKicked;
         CommunicationServiceClient.Instance.MessageSentToCharacter += ServerManager.Instance.OnMessageSentToCharacter;
