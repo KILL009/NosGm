@@ -10,6 +10,9 @@ internal static class ModernGameLauncher
 {
     private const string ClientApplicationId = "d3b2a0c1-f0d0-4888-ae0b-1c5e1febdafb";
 
+    internal static event Action<string, string>? PresenceStageChanged;
+    internal static event Action<Process, string>? GameLaunched;
+
     private static readonly IReadOnlyDictionary<string, byte> RegionByLanguage =
         new Dictionary<string, byte>(StringComparer.OrdinalIgnoreCase)
         {
@@ -46,6 +49,8 @@ internal static class ModernGameLauncher
         string password,
         CancellationToken cancellationToken)
     {
+        ReportPresence("Preparando NosGM", "Validando la instalación");
+
         if (!RegionByLanguage.TryGetValue(settings.Language, out var countryId))
         {
             throw new InvalidDataException(
@@ -65,6 +70,7 @@ internal static class ModernGameLauncher
 
         if (transport == ModernAuthenticationTransport.SteamStub)
         {
+            ReportPresence("Preparando NosGM", "Preparando el cliente de Steam");
             GameforgeInstallationId.EnsureSteamClientIdentity(installationId);
             var preparation = SteamClientPatcher.Prepare(
                 installRoot,
@@ -73,6 +79,7 @@ internal static class ModernGameLauncher
             gamePath = preparation.ExecutablePath;
         }
 
+        ReportPresence("Iniciando sesión", "Autenticando la cuenta");
         var authenticationClient = new LauncherAuthenticationClient();
         var ticket = await authenticationClient.RequestTicketAsync(
             settings,
@@ -82,7 +89,8 @@ internal static class ModernGameLauncher
             installationId,
             cancellationToken);
 
-        return transport == ModernAuthenticationTransport.SteamStub
+        ReportPresence("Entrando al mundo", "Iniciando el cliente");
+        var process = transport == ModernAuthenticationTransport.SteamStub
             ? await LaunchWithSteamStubAsync(
                 gamePath,
                 installRoot,
@@ -97,6 +105,34 @@ internal static class ModernGameLauncher
                 countryId,
                 ticket,
                 cancellationToken);
+
+        ReportPresence("Entrando al mundo", "Seleccionando personaje");
+        NotifyGameLaunched(process, ticket.AccountName);
+        return process;
+    }
+
+    private static void ReportPresence(string details, string state)
+    {
+        try
+        {
+            PresenceStageChanged?.Invoke(details, state);
+        }
+        catch
+        {
+            // Presence observers cannot interrupt login or client startup.
+        }
+    }
+
+    private static void NotifyGameLaunched(Process process, string accountName)
+    {
+        try
+        {
+            GameLaunched?.Invoke(process, accountName);
+        }
+        catch
+        {
+            // Presence observers cannot interrupt a successful client launch.
+        }
     }
 
     private static ModernAuthenticationTransport ResolveTransport(
