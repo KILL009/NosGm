@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.Diagnostics;
+using System.Windows;
 
 namespace NosGM.Launcher;
 
@@ -11,6 +12,96 @@ public partial class MainWindow
     private LauncherPresencePipeServer? _launcherPresencePipeServer;
     private Process? _presenceGameProcess;
     private long _presenceStartedAtUnixSeconds;
+    private bool _presenceBootstrapStarted;
+    private bool _presenceShutdownStarted;
+
+    static MainWindow()
+    {
+        EventManager.RegisterClassHandler(
+            typeof(MainWindow),
+            LoadedEvent,
+            new RoutedEventHandler(MainWindow_PresenceLoaded));
+    }
+
+    private static void MainWindow_PresenceLoaded(object sender, RoutedEventArgs e)
+    {
+        if (sender is MainWindow window)
+        {
+            window.StartPresenceBootstrap();
+        }
+    }
+
+    private async void StartPresenceBootstrap()
+    {
+        if (_presenceBootstrapStarted)
+        {
+            return;
+        }
+
+        _presenceBootstrapStarted = true;
+        ModernGameLauncher.PresenceStageChanged += ModernGameLauncher_PresenceStageChanged;
+        ModernGameLauncher.GameLaunched += ModernGameLauncher_GameLaunched;
+        Closed += MainWindow_PresenceClosed;
+
+        // The WPF class handler runs before MainWindow_Loaded. Wait until the
+        // normal settings load has completed instead of reading default values.
+        for (var attempt = 0; attempt < 100 && !_languageSelectionReady && IsLoaded; attempt++)
+        {
+            await Task.Delay(TimeSpan.FromMilliseconds(50)).ConfigureAwait(true);
+        }
+
+        if (!IsLoaded || !_languageSelectionReady)
+        {
+            return;
+        }
+
+        await InitializeDiscordPresenceAsync().ConfigureAwait(true);
+    }
+
+    private void ModernGameLauncher_PresenceStageChanged(string details, string state)
+    {
+        if (!Dispatcher.CheckAccess())
+        {
+            Dispatcher.Invoke(() => ModernGameLauncher_PresenceStageChanged(details, state));
+            return;
+        }
+
+        _ = PublishLauncherPresenceStageAsync(details, state);
+    }
+
+    private void ModernGameLauncher_GameLaunched(Process process, string accountName)
+    {
+        if (!Dispatcher.CheckAccess())
+        {
+            Dispatcher.Invoke(() => ModernGameLauncher_GameLaunched(process, accountName));
+            return;
+        }
+
+        if (!_settings.DiscordRichPresenceEnabled ||
+            string.IsNullOrWhiteSpace(_settings.DiscordApplicationId))
+        {
+            return;
+        }
+
+        // Dynamic presence is owned by the launcher. Keep it alive while the game
+        // is running even when the previous preference requested close-on-launch.
+        _settings = _settings with { CloseAfterLaunch = false };
+        _ = AttachGamePresenceAsync(process, accountName);
+    }
+
+    private async void MainWindow_PresenceClosed(object? sender, EventArgs e)
+    {
+        if (_presenceShutdownStarted)
+        {
+            return;
+        }
+
+        _presenceShutdownStarted = true;
+        ModernGameLauncher.PresenceStageChanged -= ModernGameLauncher_PresenceStageChanged;
+        ModernGameLauncher.GameLaunched -= ModernGameLauncher_GameLaunched;
+        Closed -= MainWindow_PresenceClosed;
+        await ShutdownDiscordPresenceAsync().ConfigureAwait(true);
+    }
 
     private async Task InitializeDiscordPresenceAsync()
     {
@@ -143,10 +234,7 @@ public partial class MainWindow
 
     private void PresenceGameProcess_Exited(object? sender, EventArgs e)
     {
-        _ = Dispatcher.InvokeAsync(async () =>
-        {
-            await StopGamePresenceAsync().ConfigureAwait(true);
-        });
+        _ = Dispatcher.InvokeAsync(StopGamePresenceAsync).Task.Unwrap();
     }
 
     private async Task StopGamePresenceAsync()
