@@ -1,0 +1,48 @@
+name: Validate launcher live operations
+
+on:
+  pull_request:
+    paths:
+      - "Data/NosGm.GameObject/Plugin/Event/PublicOperationsPublisher.cs"
+      - "Launcher/src/NosGM.Launcher/LauncherLiveOperationsClient.cs"
+      - "Launcher/src/NosGM.Launcher/MainWindow.LiveOperations.cs"
+      - "Web/src/NosGM.Web.Contracts/PublicOperationsModels.cs"
+      - "Web/src/NosGM.Web/Pages/Api/V1/Public/**"
+      - "Web/config/public-events.example.json"
+      - "scripts/verify-launcher-live-operations.ps1"
+      - "docs/launcher-live-operations.md"
+      - ".github/workflows/validate-launcher-live-operations.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  contracts-and-modern-builds:
+    runs-on: windows-2022
+    timeout-minutes: 25
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up .NET 10
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Verify live operations contracts
+        shell: powershell
+        run: ./scripts/verify-launcher-live-operations.ps1
+
+      - name: Restore launcher
+        run: dotnet restore Launcher/NosGM.Launcher.sln
+
+      - name: Build launcher Release
+        run: dotnet build Launcher/NosGM.Launcher.sln --configuration Release --no-restore
+
+      - name: Restore portal
+        run: dotnet restore Web/NosGM.Web.sln
+
+      - name: Build portal Release
+        run: dotnet build Web/NosGM.Web.sln --configuration Release --no-restore
