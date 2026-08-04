@@ -88,6 +88,32 @@ Start from `Web/config/public-events.example.json`. A populated example is:
 
 Use real server times. The publisher deliberately ignores malformed entries, expired entries and events more than 30 days in the future.
 
+## Quick local acceptance test
+
+With the local stack running, create a countdown that starts in two minutes:
+
+```powershell
+./scripts/set-local-launcher-operations-test.ps1
+```
+
+World reads the file on its next publication cycle. Allow about 15 seconds for `Próximo: Instant Battle de prueba` to appear in the launcher.
+
+Test maintenance priority immediately:
+
+```powershell
+./scripts/set-local-launcher-operations-test.ps1 `
+    -Maintenance `
+    -StartsInMinutes 0
+```
+
+Clear all temporary test data:
+
+```powershell
+./scripts/set-local-launcher-operations-test.ps1 -Clear
+```
+
+The helper writes only to the ignored local artifacts directory. It does not read environment variables, signing keys, accounts or server credentials.
+
 ## Launcher presentation
 
 The operation card gains three compact lines:
