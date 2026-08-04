@@ -60,9 +60,17 @@ public sealed class OperationsModel : PageModel
                 exception,
                 "NosGM public operations could not be loaded from {OperationsPath}.",
                 _operationsPath);
-            return Problem(
-                statusCode: StatusCodes.Status503ServiceUnavailable,
-                title: "Launcher operations are temporarily unavailable.");
+            var problem = new ProblemDetails
+            {
+                Status = StatusCodes.Status503ServiceUnavailable,
+                Title = "Launcher operations are temporarily unavailable."
+            };
+            var result = new ObjectResult(problem)
+            {
+                StatusCode = StatusCodes.Status503ServiceUnavailable
+            };
+            result.ContentTypes.Add("application/problem+json");
+            return result;
         }
     }
 
@@ -82,7 +90,7 @@ public sealed class OperationsModel : PageModel
                 throw new InvalidDataException("Public operations file size is invalid.");
             }
 
-            var json = await File.ReadAllTextAsync(
+            var json = await System.IO.File.ReadAllTextAsync(
                     _operationsPath,
                     Encoding.UTF8,
                     cancellationToken)
