@@ -123,19 +123,22 @@ namespace Game.Configuration
                     // Mate status must be represented by an active card. Stop a
                     // leaked interval when the client-visible owning buff is gone.
                     // Other entity types retain their legacy direct-card behavior.
-                    if (target.Mate != null && !target.HasBuff(cardId.Value))
+                    if (target.Mate != null)
                     {
-                        bcardDisposable.Dispose();
-                        if (target.BCardDisposables[disposableKey] == bcardDisposable)
+                        if (!target.HasBuff(cardId.Value))
                         {
-                            target.BCardDisposables.Remove(disposableKey);
-                        }
+                            bcardDisposable.Dispose();
+                            if (target.BCardDisposables[disposableKey] == bcardDisposable)
+                            {
+                                target.BCardDisposables.Remove(disposableKey);
+                            }
 
-                        Logger.Info(
-                            $"[MATE_DEBUFF] Result=StoppedOrphan Card={cardId.Value} " +
-                            $"BCard={bCardId} Target={target.MapEntityId}");
-                        RefreshTargetStatus();
-                        return;
+                            Logger.Info(
+                                $"[MATE_DEBUFF] Result=StoppedOrphan Card={cardId.Value} " +
+                                $"BCard={bCardId} Target={target.MapEntityId}");
+                            RefreshTargetStatus();
+                            return;
+                        }
                     }
 
                     HealingBurningAndCastingAction();
