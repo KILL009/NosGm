@@ -30,11 +30,28 @@ function Forbid([string]$source, [string]$needle, [string]$description) {
     Write-Host "[PASS] $description"
 }
 
+function Assert-PowerShellParses([string]$relativePath) {
+    $path = Join-Path $root $relativePath
+    $tokens = $null
+    $errors = $null
+    [void][Management.Automation.Language.Parser]::ParseFile(
+        $path,
+        [ref]$tokens,
+        [ref]$errors)
+    if (@($errors).Count -gt 0) {
+        throw "PowerShell parse errors in ${relativePath}: $(@($errors).Message -join '; ')"
+    }
+
+    Write-Host "[PASS] $relativePath parses on Windows PowerShell"
+}
+
 $publisher = Read-Source "Data/NosGm.GameObject/Plugin/Event/PublicOperationsPublisher.cs"
 $contracts = Read-Source "Web/src/NosGM.Web.Contracts/PublicOperationsModels.cs"
 $page = Read-Source "Web/src/NosGM.Web/Pages/Api/V1/Public/Operations.cshtml.cs"
 $client = Read-Source "Launcher/src/NosGM.Launcher/LauncherLiveOperationsClient.cs"
 $window = Read-Source "Launcher/src/NosGM.Launcher/MainWindow.LiveOperations.cs"
+$helperPath = "scripts/set-local-launcher-operations-test.ps1"
+$helper = Read-Source $helperPath
 $documentation = Read-Source "docs/launcher-live-operations.md"
 $examplePath = Join-Path $root "Web/config/public-events.example.json"
 
@@ -134,6 +151,22 @@ Require $window 'maintenance.IsActive' `
     "Maintenance warnings override event countdowns"
 Require $window 'MainWindow_OperationsClosed' `
     "Operations timers and clients are cleaned on close"
+
+Assert-PowerShellParses $helperPath
+Require $helper 'artifacts\modern-login-local\public-data' `
+    "Local test helper writes only inside ignored runtime artifacts"
+Require $helper 'Write-AtomicJson' `
+    "Local test helper replaces calendar data atomically"
+Require $helper '[DateTimeOffset]::Now' `
+    "Local test helper produces timezone-aware relative dates"
+Require $helper '[switch]$Maintenance' `
+    "Local test helper can exercise maintenance priority"
+Require $helper '[switch]$Clear' `
+    "Local test helper can clear temporary operations data"
+Forbid $helper 'NOSGM_PUBLIC_SNAPSHOT_KEY_BASE64' `
+    "Local test helper never reads the snapshot signing key"
+Forbid $helper 'GetEnvironmentVariables' `
+    "Local test helper never enumerates process secrets"
 
 $example = Get-Content -LiteralPath $examplePath -Raw | ConvertFrom-Json
 if ($null -eq $example.events -or @($example.events).Count -ne 0) {
