@@ -8,6 +8,7 @@ using NosGm.Core;
 using NosGm.Core.Extensions;
 using NosGm.Domain;
 using NosGm.GameObject.Extension.Message;
+using NosGm.GameObject.Helpers;
 using NosGm.GameObject.Networking;
 
 namespace NosGm.GameObject.Plugin.Event

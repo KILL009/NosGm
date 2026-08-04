@@ -463,7 +463,7 @@ namespace NosGm.GameObject.Plugin.Event
             destination.AddRange(
                 map.GenerateMonsters(
                     monsterVNum,
-                    count,
+                    (short)count,
                     moving,
                     new List<EventContainer>()));
         }
