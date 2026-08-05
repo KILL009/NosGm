@@ -5,6 +5,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using Microsoft.Win32;
+using NosGM.Updater.Core;
 
 namespace NosGM.Launcher;
 
@@ -12,11 +13,14 @@ internal sealed class LauncherDiagnosticsWindow : Window
 {
     private readonly LauncherSettings _settings;
     private readonly LauncherDiagnosticsService _service = new();
+    private readonly LauncherSmartRepairService _repairService = new();
     private readonly CancellationTokenSource _lifetime = new();
     private readonly TextBlock _summaryText = new();
     private readonly TextBlock _detailText = new();
+    private readonly TextBlock _historyText = new();
     private readonly ProgressBar _progress = new();
     private readonly StackPanel _checksPanel = new();
+    private readonly Button _repairButton;
     private readonly Button _runButton;
     private readonly Button _exportButton;
 
@@ -27,15 +31,18 @@ internal sealed class LauncherDiagnosticsWindow : Window
     {
         _settings = settings;
         Title = "Centro de diagnóstico de NosGM";
-        Width = 900;
-        Height = 680;
-        MinWidth = 720;
-        MinHeight = 520;
+        Width = 940;
+        Height = 700;
+        MinWidth = 760;
+        MinHeight = 540;
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
         ResizeMode = ResizeMode.CanResize;
         Background = FindBrush("WindowBackgroundBrush", Color.FromRgb(7, 11, 24));
         Foreground = FindBrush("TextPrimaryBrush", Colors.White);
 
+        _repairButton = CreateButton("🛠 Verificar y reparar", RepairButton_Click);
+        _repairButton.MinWidth = 160;
+        _repairButton.IsEnabled = false;
         _runButton = CreateButton("Ejecutar diagnóstico", RunButton_Click);
         _exportButton = CreateButton("Exportar ZIP para soporte", ExportButton_Click);
         _exportButton.IsEnabled = false;
@@ -47,10 +54,7 @@ internal sealed class LauncherDiagnosticsWindow : Window
 
     private UIElement BuildLayout()
     {
-        var root = new Grid
-        {
-            Margin = new Thickness(22)
-        };
+        var root = new Grid { Margin = new Thickness(22) };
         root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
@@ -63,21 +67,21 @@ internal sealed class LauncherDiagnosticsWindow : Window
         var titlePanel = new StackPanel();
         titlePanel.Children.Add(new TextBlock
         {
-            Text = "DIAGNÓSTICO DEL LAUNCHER",
+            Text = "DIAGNÓSTICO Y REPARACIÓN",
             FontSize = 12,
             FontWeight = FontWeights.SemiBold,
             Foreground = FindBrush("AccentBlueBrush", Color.FromRgb(56, 189, 248))
         });
         titlePanel.Children.Add(new TextBlock
         {
-            Text = "Detecta fallos antes de entrar al juego",
+            Text = "Detecta el fallo y repara solo lo necesario",
             FontSize = 27,
             FontWeight = FontWeights.Bold,
             Margin = new Thickness(0, 5, 0, 0)
         });
         titlePanel.Children.Add(new TextBlock
         {
-            Text = "Revisa el cliente, permisos, disco, portal, autenticación y servicios de NosGM sin leer contraseñas ni tickets.",
+            Text = "La reparación usa el manifiesto firmado de NosGM, reemplazo transaccional y rollback automático.",
             FontSize = 12,
             Foreground = FindBrush("TextSecondaryBrush", Color.FromRgb(168, 180, 204)),
             TextWrapping = TextWrapping.Wrap,
@@ -96,7 +100,7 @@ internal sealed class LauncherDiagnosticsWindow : Window
         summaryCard.Margin = new Thickness(0, 18, 0, 14);
         var summaryGrid = new Grid();
         summaryGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        summaryGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(220) });
+        summaryGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(240) });
 
         var summaryPanel = new StackPanel();
         _summaryText.Text = "Preparando diagnóstico...";
@@ -109,6 +113,12 @@ internal sealed class LauncherDiagnosticsWindow : Window
         _detailText.Foreground = FindBrush("TextSecondaryBrush", Color.FromRgb(168, 180, 204));
         _detailText.TextWrapping = TextWrapping.Wrap;
         summaryPanel.Children.Add(_detailText);
+        _historyText.Text = "Sin reparaciones registradas en este equipo.";
+        _historyText.Margin = new Thickness(0, 6, 0, 0);
+        _historyText.FontSize = 10;
+        _historyText.Foreground = FindBrush("TextSecondaryBrush", Color.FromRgb(113, 128, 156));
+        _historyText.TextWrapping = TextWrapping.Wrap;
+        summaryPanel.Children.Add(_historyText);
         summaryGrid.Children.Add(summaryPanel);
 
         var progressPanel = new StackPanel
@@ -121,15 +131,15 @@ internal sealed class LauncherDiagnosticsWindow : Window
         _progress.Height = 8;
         _progress.Value = 0;
         progressPanel.Children.Add(_progress);
-        var privacyText = new TextBlock
+        progressPanel.Children.Add(new TextBlock
         {
-            Text = "Privacidad: datos sensibles excluidos",
+            Text = "Privacidad: cuenta, contraseña y tickets excluidos",
             HorizontalAlignment = HorizontalAlignment.Right,
             FontSize = 10,
             Foreground = FindBrush("TextSecondaryBrush", Color.FromRgb(168, 180, 204)),
-            Margin = new Thickness(0, 7, 0, 0)
-        };
-        progressPanel.Children.Add(privacyText);
+            Margin = new Thickness(0, 7, 0, 0),
+            TextWrapping = TextWrapping.Wrap
+        });
         Grid.SetColumn(progressPanel, 1);
         summaryGrid.Children.Add(progressPanel);
         summaryCard.Child = summaryGrid;
@@ -146,26 +156,26 @@ internal sealed class LauncherDiagnosticsWindow : Window
         Grid.SetRow(scroll, 2);
         root.Children.Add(scroll);
 
-        var footer = new Grid
-        {
-            Margin = new Thickness(0, 16, 0, 0)
-        };
+        var footer = new Grid { Margin = new Thickness(0, 16, 0, 0) };
         footer.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        footer.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         footer.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         footer.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
 
         footer.Children.Add(new TextBlock
         {
-            Text = "El ZIP contiene un informe, un resumen seguro y la huella SHA-256 del cliente. No contiene la cuenta.",
+            Text = "Reparar verifica hashes y descarga únicamente archivos administrados que falten o no coincidan.",
             FontSize = 10,
             Foreground = FindBrush("TextSecondaryBrush", Color.FromRgb(168, 180, 204)),
             TextWrapping = TextWrapping.Wrap,
             VerticalAlignment = VerticalAlignment.Center,
             Margin = new Thickness(0, 0, 18, 0)
         });
-        Grid.SetColumn(_runButton, 1);
+        Grid.SetColumn(_repairButton, 1);
+        footer.Children.Add(_repairButton);
+        Grid.SetColumn(_runButton, 2);
         footer.Children.Add(_runButton);
-        Grid.SetColumn(_exportButton, 2);
+        Grid.SetColumn(_exportButton, 3);
         footer.Children.Add(_exportButton);
         Grid.SetRow(footer, 3);
         root.Children.Add(footer);
@@ -187,8 +197,7 @@ internal sealed class LauncherDiagnosticsWindow : Window
         }
 
         _running = true;
-        _runButton.IsEnabled = false;
-        _exportButton.IsEnabled = false;
+        SetActionButtons(false);
         _checksPanel.Children.Clear();
         _summaryText.Text = "Comprobando NosGM...";
         _summaryText.Foreground = Foreground;
@@ -199,7 +208,7 @@ internal sealed class LauncherDiagnosticsWindow : Window
         {
             _report = await _service.RunAsync(_settings, _lifetime.Token);
             RenderReport(_report);
-            _exportButton.IsEnabled = true;
+            await RefreshHistoryAsync();
         }
         catch (OperationCanceledException) when (_lifetime.IsCancellationRequested)
         {
@@ -215,8 +224,8 @@ internal sealed class LauncherDiagnosticsWindow : Window
         {
             _progress.IsIndeterminate = false;
             _progress.Value = _report is null ? 0 : 100;
-            _runButton.IsEnabled = !_lifetime.IsCancellationRequested;
             _running = false;
+            SetActionButtons(!_lifetime.IsCancellationRequested);
         }
     }
 
@@ -251,7 +260,7 @@ internal sealed class LauncherDiagnosticsWindow : Window
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(32) });
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
 
-        var icon = new TextBlock
+        grid.Children.Add(new TextBlock
         {
             Text = StatusIcon(check.Status),
             FontSize = 17,
@@ -259,8 +268,7 @@ internal sealed class LauncherDiagnosticsWindow : Window
             Foreground = StatusBrush(check.Status),
             VerticalAlignment = VerticalAlignment.Top,
             HorizontalAlignment = HorizontalAlignment.Center
-        };
-        grid.Children.Add(icon);
+        });
 
         var content = new StackPanel();
         content.Children.Add(new TextBlock
@@ -306,6 +314,121 @@ internal sealed class LauncherDiagnosticsWindow : Window
         return card;
     }
 
+    private async void RepairButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (_running || !_repairService.IsAvailable)
+        {
+            return;
+        }
+
+        var answer = MessageBox.Show(
+            this,
+            "NosGM verificará el manifiesto firmado y reemplazará únicamente los archivos administrados que falten o tengan un hash diferente. Los cambios se aplicarán con rollback automático. ¿Continuar?",
+            "Verificar y reparar NosGM",
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Question);
+        if (answer != MessageBoxResult.Yes)
+        {
+            return;
+        }
+
+        _running = true;
+        SetActionButtons(false);
+        _progress.IsIndeterminate = false;
+        _progress.Value = 0;
+        _summaryText.Text = "Verificando archivos administrados...";
+        _summaryText.Foreground = Foreground;
+        _detailText.Text = "Descargando únicamente lo que no coincida con el canal firmado.";
+
+        var progress = new Progress<UpdateProgress>(UpdateRepairProgress);
+        LauncherRepairOutcome? outcome = null;
+        try
+        {
+            outcome = await _repairService.RepairAsync(
+                _settings,
+                progress,
+                _lifetime.Token);
+            _progress.Value = 100;
+            _summaryText.Foreground = FindBrush("SuccessBrush", Color.FromRgb(62, 232, 143));
+            _summaryText.Text = outcome.Status == LauncherRepairStatus.UpToDate
+                ? "Todos los archivos ya estaban correctos"
+                : "Reparación completada correctamente";
+            _detailText.Text = outcome.Status == LauncherRepairStatus.UpToDate
+                ? $"Versión {outcome.ReleaseId}. No fue necesario reemplazar archivos."
+                : $"Versión {outcome.ReleaseId}: {outcome.DownloadedFiles} archivos descargados y {outcome.DeletedFiles} retirados.";
+            await RefreshHistoryAsync();
+        }
+        catch (OperationCanceledException) when (_lifetime.IsCancellationRequested)
+        {
+            return;
+        }
+        catch (OperationCanceledException)
+        {
+            _summaryText.Text = "Reparación cancelada";
+            _summaryText.Foreground = FindBrush("WarningBrush", Color.FromRgb(255, 184, 77));
+            _detailText.Text = "No se aplicaron cambios incompletos.";
+        }
+        catch (Exception exception)
+        {
+            _summaryText.Text = "La reparación no pudo completarse";
+            _summaryText.Foreground = FindBrush("DangerBrush", Color.FromRgb(255, 93, 122));
+            _detailText.Text = exception.Message;
+            MessageBox.Show(
+                this,
+                exception.Message,
+                "NosGM Smart Repair",
+                MessageBoxButton.OK,
+                MessageBoxImage.Error);
+        }
+        finally
+        {
+            _running = false;
+            SetActionButtons(!_lifetime.IsCancellationRequested);
+        }
+
+        if (outcome is not null && !_lifetime.IsCancellationRequested)
+        {
+            await RunDiagnosticsAsync();
+        }
+    }
+
+    private void UpdateRepairProgress(UpdateProgress update)
+    {
+        var percent = update.TotalBytes > 0
+            ? Math.Clamp(update.CompletedBytes * 100d / update.TotalBytes, 0d, 100d)
+            : update.TotalFiles > 0
+                ? Math.Clamp(update.CompletedFiles * 100d / update.TotalFiles, 0d, 100d)
+                : 0d;
+        _progress.Value = percent;
+        _summaryText.Text = update.Phase switch
+        {
+            "scan" => "Comprobando hashes...",
+            "download" => "Descargando archivos verificados...",
+            "commit" => "Aplicando reparación transaccional...",
+            "complete" => "Finalizando reparación...",
+            _ => "Verificando y reparando..."
+        };
+        _detailText.Text = string.IsNullOrWhiteSpace(update.Path)
+            ? $"{percent:0.0}% • {update.CompletedFiles}/{update.TotalFiles} archivos"
+            : $"{percent:0.0}% • {update.Path}";
+    }
+
+    private async Task RefreshHistoryAsync()
+    {
+        var history = await LauncherSmartRepairService.ReadHistoryAsync(_lifetime.Token);
+        var latest = history.Entries.FirstOrDefault();
+        _historyText.Text = latest is null
+            ? "Sin reparaciones registradas en este equipo."
+            : latest.Status switch
+            {
+                LauncherRepairStatus.Repaired =>
+                    $"Última reparación: {latest.OccurredAtUtc.ToLocalTime():g} • {latest.DownloadedFiles} archivos • {latest.ReleaseId}",
+                LauncherRepairStatus.UpToDate =>
+                    $"Última verificación: {latest.OccurredAtUtc.ToLocalTime():g} • archivos correctos • {latest.ReleaseId}",
+                _ => $"Último intento: {latest.OccurredAtUtc.ToLocalTime():g} • no completado ({latest.FailureType})"
+            };
+    }
+
     private async void ExportButton_Click(object sender, RoutedEventArgs e)
     {
         if (_report is null || _running)
@@ -326,8 +449,8 @@ internal sealed class LauncherDiagnosticsWindow : Window
             return;
         }
 
-        _exportButton.IsEnabled = false;
-        _runButton.IsEnabled = false;
+        _running = true;
+        SetActionButtons(false);
         _summaryText.Text = "Creando paquete para soporte...";
         _progress.IsIndeterminate = true;
         try
@@ -377,9 +500,19 @@ internal sealed class LauncherDiagnosticsWindow : Window
         {
             _progress.IsIndeterminate = false;
             _progress.Value = 100;
-            _exportButton.IsEnabled = _report is not null && !_lifetime.IsCancellationRequested;
-            _runButton.IsEnabled = !_lifetime.IsCancellationRequested;
+            _running = false;
+            SetActionButtons(!_lifetime.IsCancellationRequested);
         }
+    }
+
+    private void SetActionButtons(bool enabled)
+    {
+        _runButton.IsEnabled = enabled;
+        _exportButton.IsEnabled = enabled && _report is not null;
+        _repairButton.IsEnabled = enabled && _repairService.IsAvailable;
+        _repairButton.ToolTip = _repairService.IsAvailable
+            ? "Verifica el manifiesto firmado y repara únicamente archivos administrados."
+            : "Este build no tiene configurado un canal de actualizaciones firmado.";
     }
 
     private Button CreateButton(string text, RoutedEventHandler handler)
