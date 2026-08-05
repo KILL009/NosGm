@@ -56,8 +56,25 @@ public partial class MainWindow
             "Comprueba instalación, red, servicios y crea un ZIP sanitizado para soporte.";
     }
 
-    private void OpenDiagnosticsCenter_Click(object sender, RoutedEventArgs e)
+    private async void OpenDiagnosticsCenter_Click(object sender, RoutedEventArgs e)
     {
+        try
+        {
+            _ = await LocalDevelopmentRepairChannel.EnsureAsync(
+                    _settings,
+                    _lifetime.Token)
+                .ConfigureAwait(true);
+        }
+        catch (OperationCanceledException) when (_lifetime.IsCancellationRequested)
+        {
+            return;
+        }
+        catch
+        {
+            // Diagnostics remains useful even when the optional source-build
+            // repair channel cannot be prepared.
+        }
+
         var window = new LauncherDiagnosticsWindow(_settings)
         {
             Owner = this
