@@ -50,8 +50,8 @@ internal static class LocalUpdateEndpoints
         {
             if (!IsLoopbackRequest(context) ||
                 string.IsNullOrWhiteSpace(relativePath) ||
-                relativePath.Contains('\\', StringComparison.Ordinal) ||
-                relativePath.Contains(':', StringComparison.Ordinal) ||
+                relativePath.Contains('\\') ||
+                relativePath.Contains(':') ||
                 Path.IsPathRooted(relativePath))
             {
                 return Results.NotFound();
@@ -144,8 +144,8 @@ internal static class LocalUpdateEndpoints
 
     private static void SetPrivateNoStoreHeaders(HttpContext context)
     {
-        context.Response.Headers.CacheControl = "no-store,private";
-        context.Response.Headers.Pragma = "no-cache";
+        context.Response.Headers["Cache-Control"] = "no-store,private";
+        context.Response.Headers["Pragma"] = "no-cache";
         context.Response.Headers["X-Content-Type-Options"] = "nosniff";
     }
 }
