@@ -62,6 +62,8 @@ internal static class TrustedChannel
             return compiled;
         }
 
+        // The local configuration reader performs the same URI validation with
+        // allowLoopbackHttp: true, but only after this exact placeholder gate.
         if (!UsesPlaceholderConfiguration ||
             !LocalDevelopmentRepairChannel.TryReadConfiguration(out var local))
         {
