@@ -62,10 +62,11 @@ public partial class MainWindow
         {
             _ = await LocalDevelopmentRepairChannel.EnsureAsync(
                     _settings,
-                    _lifetime.Token)
+                    _localRepairChannelLifetime.Token)
                 .ConfigureAwait(true);
         }
-        catch (OperationCanceledException) when (_lifetime.IsCancellationRequested)
+        catch (OperationCanceledException) when (
+            _localRepairChannelLifetime.IsCancellationRequested)
         {
             return;
         }
