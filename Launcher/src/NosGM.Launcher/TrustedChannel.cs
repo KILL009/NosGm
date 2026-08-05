@@ -116,11 +116,16 @@ internal static class TrustedChannel
     {
         manifestUri = null!;
         contentUri = null!;
-        if (!Uri.TryCreate(manifestUriText, UriKind.Absolute, out manifestUri) ||
-            !Uri.TryCreate(contentBaseUriText, UriKind.Absolute, out contentUri))
+        if (!Uri.TryCreate(manifestUriText, UriKind.Absolute, out var parsedManifestUri) ||
+            parsedManifestUri is null ||
+            !Uri.TryCreate(contentBaseUriText, UriKind.Absolute, out var parsedContentUri) ||
+            parsedContentUri is null)
         {
             return false;
         }
+
+        manifestUri = parsedManifestUri;
+        contentUri = parsedContentUri;
 
         var manifestTransportAllowed =
             string.Equals(
