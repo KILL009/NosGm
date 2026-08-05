@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - "Launcher/src/NosGM.Launcher/LocalDevelopmentRepairChannel.cs"
+      - "Launcher/src/NosGM.Launcher/MainWindow.Diagnostics.cs"
       - "Launcher/src/NosGM.Launcher/MainWindow.LocalRepairChannel.cs"
       - "Launcher/src/NosGM.Launcher/TrustedChannel.cs"
       - "Launcher/src/NosGM.Updater.Core/ContentSources.cs"
@@ -12,7 +13,6 @@ on:
       - "scripts/verify-launcher-smart-repair.ps1"
       - "docs/launcher-smart-repair.md"
       - "docs/local-smart-repair-fix.md"
-      - ".github/workflows/validate-launcher-smart-repair.yml"
       - ".github/workflows/validate-local-smart-repair-channel.yml"
   workflow_dispatch:
 
