@@ -27,6 +27,7 @@ internal static class LocalRepairChannelModule
 
 public partial class MainWindow
 {
+    private readonly CancellationTokenSource _localRepairChannelLifetime = new();
     private bool _localRepairChannelBootstrapStarted;
 
     internal async void StartLocalRepairChannelBootstrap()
@@ -37,15 +38,20 @@ public partial class MainWindow
         }
 
         _localRepairChannelBootstrapStarted = true;
+        Closed += MainWindow_LocalRepairChannelClosed;
         for (var attempt = 0;
              attempt < 100 && !_languageSelectionReady && IsLoaded;
              attempt++)
         {
-            await Task.Delay(TimeSpan.FromMilliseconds(50), _lifetime.Token)
+            await Task.Delay(
+                    TimeSpan.FromMilliseconds(50),
+                    _localRepairChannelLifetime.Token)
                 .ConfigureAwait(true);
         }
 
-        if (!IsLoaded || !_languageSelectionReady || _lifetime.IsCancellationRequested)
+        if (!IsLoaded ||
+            !_languageSelectionReady ||
+            _localRepairChannelLifetime.IsCancellationRequested)
         {
             return;
         }
@@ -54,10 +60,11 @@ public partial class MainWindow
         {
             _ = await LocalDevelopmentRepairChannel.EnsureAsync(
                     _settings,
-                    _lifetime.Token)
+                    _localRepairChannelLifetime.Token)
                 .ConfigureAwait(true);
         }
-        catch (OperationCanceledException) when (_lifetime.IsCancellationRequested)
+        catch (OperationCanceledException) when (
+            _localRepairChannelLifetime.IsCancellationRequested)
         {
             // Normal launcher shutdown while the local channel is being prepared.
         }
@@ -65,5 +72,11 @@ public partial class MainWindow
         {
             // The local development channel is optional. Diagnostics and play stay available.
         }
+    }
+
+    private void MainWindow_LocalRepairChannelClosed(object? sender, EventArgs e)
+    {
+        Closed -= MainWindow_LocalRepairChannelClosed;
+        _localRepairChannelLifetime.Cancel();
     }
 }
