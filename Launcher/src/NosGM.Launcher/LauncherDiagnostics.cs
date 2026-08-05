@@ -67,13 +67,12 @@ internal sealed class LauncherDiagnosticsService : IDisposable
 
     public LauncherDiagnosticsService()
     {
-        var handler = new SocketsHttpHandler
+        var handler = new HttpClientHandler
         {
             AllowAutoRedirect = false,
             UseCookies = false,
             AutomaticDecompression = DecompressionMethods.All,
-            CheckCertificateRevocationList = true,
-            ConnectTimeout = TimeSpan.FromSeconds(3)
+            CheckCertificateRevocationList = true
         };
         _httpClient = new HttpClient(handler, disposeHandler: true)
         {
@@ -96,28 +95,15 @@ internal sealed class LauncherDiagnosticsService : IDisposable
             await CheckWriteAccessAsync(settings, cancellationToken).ConfigureAwait(false),
             CheckDiskSpace(settings),
             CheckAuthentication(settings),
-            CheckDiscord(settings)
+            CheckDiscord(settings),
+            await CheckPortalAsync(settings, cancellationToken).ConfigureAwait(false),
+            await CheckTcpServiceAsync("master", "Master Server", settings.LoginServerAddress, 4545, cancellationToken)
+                .ConfigureAwait(false),
+            await CheckTcpServiceAsync("world", "World Server", settings.LoginServerAddress, 1337, cancellationToken)
+                .ConfigureAwait(false),
+            await CheckTcpServiceAsync("login", "Login ES", settings.LoginServerAddress, 4005, cancellationToken)
+                .ConfigureAwait(false)
         };
-
-        checks.Add(await CheckPortalAsync(settings, cancellationToken).ConfigureAwait(false));
-        checks.Add(await CheckTcpServiceAsync(
-            "master",
-            "Master Server",
-            settings.LoginServerAddress,
-            4545,
-            cancellationToken).ConfigureAwait(false));
-        checks.Add(await CheckTcpServiceAsync(
-            "world",
-            "World Server",
-            settings.LoginServerAddress,
-            1337,
-            cancellationToken).ConfigureAwait(false));
-        checks.Add(await CheckTcpServiceAsync(
-            "login",
-            "Login ES",
-            settings.LoginServerAddress,
-            4005,
-            cancellationToken).ConfigureAwait(false));
 
         var overall = checks.Any(check => check.Status == LauncherDiagnosticStatus.Failed)
             ? LauncherDiagnosticStatus.Failed
@@ -168,45 +154,30 @@ internal sealed class LauncherDiagnosticsService : IDisposable
 
         try
         {
-            cancellationToken.ThrowIfCancellationRequested();
+            await WriteJsonAsync(
+                Path.Combine(stagingRoot, "launcher-diagnostics.json"),
+                report,
+                cancellationToken).ConfigureAwait(false);
             await File.WriteAllTextAsync(
-                    Path.Combine(stagingRoot, "launcher-diagnostics.json"),
-                    JsonSerializer.Serialize(report, JsonOptions),
-                    new UTF8Encoding(false),
-                    cancellationToken)
-                .ConfigureAwait(false);
-
+                Path.Combine(stagingRoot, "launcher-diagnostics.txt"),
+                BuildTextReport(report),
+                new UTF8Encoding(false),
+                cancellationToken).ConfigureAwait(false);
+            await WriteJsonAsync(
+                Path.Combine(stagingRoot, "settings-summary.json"),
+                BuildSafeSettingsSummary(settings),
+                cancellationToken).ConfigureAwait(false);
             await File.WriteAllTextAsync(
-                    Path.Combine(stagingRoot, "launcher-diagnostics.txt"),
-                    BuildTextReport(report),
-                    new UTF8Encoding(false),
-                    cancellationToken)
-                .ConfigureAwait(false);
-
-            await File.WriteAllTextAsync(
-                    Path.Combine(stagingRoot, "settings-summary.json"),
-                    JsonSerializer.Serialize(BuildSafeSettingsSummary(settings), JsonOptions),
-                    new UTF8Encoding(false),
-                    cancellationToken)
-                .ConfigureAwait(false);
-
-            await File.WriteAllTextAsync(
-                    Path.Combine(stagingRoot, "privacy.txt"),
-                    "This bundle intentionally excludes account names, passwords, authorization codes, " +
-                    "tickets, Discord secrets, process environment variables, chat messages, exact game " +
-                    "coordinates and complete launcher settings." + Environment.NewLine,
-                    new UTF8Encoding(false),
-                    cancellationToken)
-                .ConfigureAwait(false);
-
-            var fingerprint = await BuildClientFingerprintAsync(settings, cancellationToken)
-                .ConfigureAwait(false);
-            await File.WriteAllTextAsync(
-                    Path.Combine(stagingRoot, "client-fingerprint.json"),
-                    JsonSerializer.Serialize(fingerprint, JsonOptions),
-                    new UTF8Encoding(false),
-                    cancellationToken)
-                .ConfigureAwait(false);
+                Path.Combine(stagingRoot, "privacy.txt"),
+                "This bundle intentionally excludes account names, passwords, authorization codes, " +
+                "tickets, Discord secrets, process environment variables, chat messages, exact game " +
+                "coordinates and complete launcher settings." + Environment.NewLine,
+                new UTF8Encoding(false),
+                cancellationToken).ConfigureAwait(false);
+            await WriteJsonAsync(
+                Path.Combine(stagingRoot, "client-fingerprint.json"),
+                await BuildClientFingerprintAsync(settings, cancellationToken).ConfigureAwait(false),
+                cancellationToken).ConfigureAwait(false);
 
             cancellationToken.ThrowIfCancellationRequested();
             if (File.Exists(outputPath))
@@ -231,10 +202,20 @@ internal sealed class LauncherDiagnosticsService : IDisposable
             }
             catch
             {
-                // A diagnostic export must not fail only because temporary cleanup was delayed.
+                // Temporary cleanup may be delayed by an antivirus scanner.
             }
         }
     }
+
+    private static Task WriteJsonAsync(
+        string path,
+        object value,
+        CancellationToken cancellationToken)
+        => File.WriteAllTextAsync(
+            path,
+            JsonSerializer.Serialize(value, JsonOptions),
+            new UTF8Encoding(false),
+            cancellationToken);
 
     private static LauncherDiagnosticCheck CheckInstallationRoot(LauncherSettings settings)
     {
@@ -250,8 +231,7 @@ internal sealed class LauncherDiagnosticsService : IDisposable
                     "Selecciona la carpeta correcta o usa Reparar para crear una instalación administrada.");
             }
 
-            var attributes = File.GetAttributes(fullPath);
-            if ((attributes & FileAttributes.ReparsePoint) != 0)
+            if ((File.GetAttributes(fullPath) & FileAttributes.ReparsePoint) != 0)
             {
                 return Failed(
                     "install-root",
@@ -282,9 +262,7 @@ internal sealed class LauncherDiagnosticsService : IDisposable
     {
         try
         {
-            var gamePath = SafePaths.ResolveManagedPath(
-                settings.InstallRoot,
-                settings.GameExecutable);
+            var gamePath = SafePaths.ResolveManagedPath(settings.InstallRoot, settings.GameExecutable);
             if (!File.Exists(gamePath))
             {
                 return Failed(
@@ -348,7 +326,8 @@ internal sealed class LauncherDiagnosticsService : IDisposable
                 FileShare.None,
                 4096,
                 FileOptions.Asynchronous | FileOptions.DeleteOnClose);
-            await stream.WriteAsync([0x4E, 0x47, 0x4D], cancellationToken).ConfigureAwait(false);
+            var marker = new byte[] { 0x4E, 0x47, 0x4D };
+            await stream.WriteAsync(marker.AsMemory(), cancellationToken).ConfigureAwait(false);
             await stream.FlushAsync(cancellationToken).ConfigureAwait(false);
             return Passed(
                 "write-access",
@@ -396,8 +375,7 @@ internal sealed class LauncherDiagnosticsService : IDisposable
                     "Comprueba manualmente que la unidad tenga espacio suficiente.");
             }
 
-            var drive = new DriveInfo(root);
-            var free = drive.AvailableFreeSpace;
+            var free = new DriveInfo(root).AvailableFreeSpace;
             if (free < CriticalDiskBytes)
             {
                 return Failed(
@@ -407,19 +385,16 @@ internal sealed class LauncherDiagnosticsService : IDisposable
                     "Libera al menos 2 GB antes de actualizar o reparar.");
             }
 
-            if (free < LowDiskWarningBytes)
-            {
-                return Warning(
+            return free < LowDiskWarningBytes
+                ? Warning(
                     "disk-space",
                     "Espacio disponible",
                     $"Quedan {FormatBytes(free)} libres.",
-                    "Conviene liberar al menos 2 GB para futuras actualizaciones.");
-            }
-
-            return Passed(
-                "disk-space",
-                "Espacio disponible",
-                $"Hay {FormatBytes(free)} libres en la unidad del cliente.");
+                    "Conviene liberar al menos 2 GB para futuras actualizaciones.")
+                : Passed(
+                    "disk-space",
+                    "Espacio disponible",
+                    $"Hay {FormatBytes(free)} libres en la unidad del cliente.");
         }
         catch (Exception exception) when (
             exception is IOException or UnauthorizedAccessException or ArgumentException)
@@ -453,9 +428,8 @@ internal sealed class LauncherDiagnosticsService : IDisposable
                 "Corrige la configuración del launcher.");
         }
 
-        var protectedTransport = string.Equals(endpoint.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase)
-                                 || endpoint.IsLoopback;
-        return protectedTransport
+        return string.Equals(endpoint.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase)
+               || endpoint.IsLoopback
             ? Passed(
                 "authentication",
                 "Autenticación moderna",
@@ -513,11 +487,9 @@ internal sealed class LauncherDiagnosticsService : IDisposable
         {
             using var request = new HttpRequestMessage(HttpMethod.Get, statusUri);
             using var response = await _httpClient.SendAsync(
-                    request,
-                    HttpCompletionOption.ResponseHeadersRead,
-                    timeout.Token)
-                .ConfigureAwait(false);
-
+                request,
+                HttpCompletionOption.ResponseHeadersRead,
+                timeout.Token).ConfigureAwait(false);
             if (!response.IsSuccessStatusCode)
             {
                 return Warning(
@@ -528,10 +500,9 @@ internal sealed class LauncherDiagnosticsService : IDisposable
             }
 
             var body = await ReadBoundedAsync(
-                    response.Content,
-                    MaximumPortalResponseBytes,
-                    timeout.Token)
-                .ConfigureAwait(false);
+                response.Content,
+                MaximumPortalResponseBytes,
+                timeout.Token).ConfigureAwait(false);
             using var document = JsonDocument.Parse(body);
             if (document.RootElement.ValueKind != JsonValueKind.Object)
             {
@@ -632,11 +603,7 @@ internal sealed class LauncherDiagnosticsService : IDisposable
             var path = SafePaths.ResolveManagedPath(settings.InstallRoot, settings.GameExecutable);
             if (!File.Exists(path))
             {
-                return new
-                {
-                    file = settings.GameExecutable,
-                    status = "missing"
-                };
+                return new { file = settings.GameExecutable, status = "missing" };
             }
 
             var info = new FileInfo(path);
@@ -671,8 +638,7 @@ internal sealed class LauncherDiagnosticsService : IDisposable
     }
 
     private static object BuildSafeSettingsSummary(LauncherSettings settings)
-    {
-        return new
+        => new
         {
             schemaVersion = 1,
             language = settings.Language,
@@ -691,7 +657,6 @@ internal sealed class LauncherDiagnosticsService : IDisposable
                 StringComparison.Ordinal),
             closeAfterLaunch = settings.CloseAfterLaunch
         };
-    }
 
     private static string BuildTextReport(LauncherDiagnosticReport report)
     {
@@ -705,7 +670,6 @@ internal sealed class LauncherDiagnosticsService : IDisposable
         builder.AppendLine($"Language: {report.Environment.Language}");
         builder.AppendLine($"Install root: {report.Environment.InstallationRoot}");
         builder.AppendLine();
-
         foreach (var check in report.Checks)
         {
             builder.AppendLine($"[{check.Status}] {check.Title}: {check.Summary}");
@@ -742,7 +706,6 @@ internal sealed class LauncherDiagnosticsService : IDisposable
             {
                 break;
             }
-
             if (destination.Length + read > maximumBytes)
             {
                 throw new InvalidDataException("Portal response exceeds the diagnostic limit.");
