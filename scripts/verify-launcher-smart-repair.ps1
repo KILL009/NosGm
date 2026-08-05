@@ -32,6 +32,7 @@ function Forbid([string]$source, [string]$needle, [string]$description) {
 
 $service = Read-Source "Launcher/src/NosGM.Launcher/LauncherSmartRepair.cs"
 $window = Read-Source "Launcher/src/NosGM.Launcher/LauncherDiagnosticsWindow.cs"
+$diagnosticsIntegration = Read-Source "Launcher/src/NosGM.Launcher/MainWindow.Diagnostics.cs"
 $controller = Read-Source "Launcher/src/NosGM.Launcher/LauncherController.cs"
 $trustedChannel = Read-Source "Launcher/src/NosGM.Launcher/TrustedChannel.cs"
 $localChannel = Read-Source "Launcher/src/NosGM.Launcher/LocalDevelopmentRepairChannel.cs"
@@ -87,6 +88,11 @@ Require $window '_lifetime.Token' `
     "Closing diagnostics cancels repair work"
 Require $window 'Verificar y reparar' `
     "The repair action is clearly named"
+
+Require $diagnosticsIntegration 'LocalDevelopmentRepairChannel.EnsureAsync' `
+    "Opening diagnostics waits for source-build channel preparation"
+Require $diagnosticsIntegration '_localRepairChannelLifetime.Token' `
+    "Diagnostics opening shares the dedicated channel lifetime"
 
 Require $controller 'ManifestSecurity.Verify' `
     "The delegated updater verifies signed manifests"
@@ -145,7 +151,9 @@ Require $bootstrap 'LocalDevelopmentRepairChannel.EnsureAsync' `
     "Launcher prepares the source-build channel before diagnostics"
 Require $bootstrap '_languageSelectionReady' `
     "Local bootstrap waits for validated launcher settings"
-Require $bootstrap '_lifetime.Token' `
+Require $bootstrap '_localRepairChannelLifetime.Token' `
+    "Launcher channel work uses its dedicated cancellation token"
+Require $bootstrap '_localRepairChannelLifetime.Cancel()' `
     "Launcher shutdown cancels local channel preparation"
 
 Require $contentSource 'baseUri.IsLoopback' `
