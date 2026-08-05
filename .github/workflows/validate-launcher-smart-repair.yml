@@ -5,6 +5,12 @@ on:
     paths:
       - "Launcher/src/NosGM.Launcher/LauncherSmartRepair.cs"
       - "Launcher/src/NosGM.Launcher/LauncherDiagnosticsWindow.cs"
+      - "Launcher/src/NosGM.Launcher/LocalDevelopmentRepairChannel.cs"
+      - "Launcher/src/NosGM.Launcher/MainWindow.LocalRepairChannel.cs"
+      - "Launcher/src/NosGM.Launcher/TrustedChannel.cs"
+      - "Launcher/src/NosGM.Updater.Core/ContentSources.cs"
+      - "Web/src/NosGM.Web/LocalUpdateEndpoints.cs"
+      - "Web/src/NosGM.Web/Program.cs"
       - "scripts/verify-launcher-smart-repair.ps1"
       - "docs/launcher-smart-repair.md"
       - ".github/workflows/validate-launcher-smart-repair.yml"
@@ -16,7 +22,7 @@ permissions:
 jobs:
   build-and-contracts:
     runs-on: windows-2022
-    timeout-minutes: 25
+    timeout-minutes: 30
 
     steps:
       - name: Check out repository
@@ -36,6 +42,9 @@ jobs:
 
       - name: Build launcher Release
         run: dotnet build Launcher/NosGM.Launcher.sln --configuration Release --no-restore
+
+      - name: Build public portal Release
+        run: dotnet build Web/src/NosGM.Web/NosGM.Web.csproj --configuration Release
 
       - name: Run updater regression suite
         run: dotnet run --project Launcher/tests/NosGM.Updater.SelfTest/NosGM.Updater.SelfTest.csproj --configuration Release --no-build
