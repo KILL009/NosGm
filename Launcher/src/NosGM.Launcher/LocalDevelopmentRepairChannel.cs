@@ -32,6 +32,7 @@ internal static class LocalDevelopmentRepairChannel
     private static readonly JsonSerializerOptions StrictJsonOptions = new()
     {
         PropertyNameCaseInsensitive = false,
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
         UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow
     };
 
