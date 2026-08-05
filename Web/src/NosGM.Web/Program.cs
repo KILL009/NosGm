@@ -107,6 +107,7 @@ var legacyPublicApi = app.MapGroup("/api/public")
     });
 MapPublicApi(legacyPublicApi);
 
+app.MapLocalUpdateEndpoints();
 app.Run();
 
 static void MapPublicApi(RouteGroupBuilder publicApi)

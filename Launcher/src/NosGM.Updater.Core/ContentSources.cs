@@ -13,13 +13,25 @@ public sealed class HttpContentSource : IContentSource
     public HttpContentSource(Uri baseUri, TimeSpan? timeout = null)
     {
         ArgumentNullException.ThrowIfNull(baseUri);
+        var transportAllowed =
+            string.Equals(
+                baseUri.Scheme,
+                Uri.UriSchemeHttps,
+                StringComparison.OrdinalIgnoreCase) ||
+            baseUri.IsLoopback &&
+            string.Equals(
+                baseUri.Scheme,
+                Uri.UriSchemeHttp,
+                StringComparison.OrdinalIgnoreCase);
         if (!baseUri.IsAbsoluteUri ||
-            !string.Equals(baseUri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase) ||
+            !transportAllowed ||
             !string.IsNullOrEmpty(baseUri.UserInfo) ||
             !string.IsNullOrEmpty(baseUri.Query) ||
             !string.IsNullOrEmpty(baseUri.Fragment))
         {
-            throw new ArgumentException("Content base URI must be an absolute clean HTTPS URI.", nameof(baseUri));
+            throw new ArgumentException(
+                "Content base URI must be clean HTTPS or loopback HTTP.",
+                nameof(baseUri));
         }
 
         var normalized = baseUri.AbsoluteUri.EndsWith("/", StringComparison.Ordinal)
@@ -31,7 +43,8 @@ public sealed class HttpContentSource : IContentSource
         {
             AllowAutoRedirect = false,
             AutomaticDecompression = DecompressionMethods.None,
-            CheckCertificateRevocationList = true
+            CheckCertificateRevocationList = true,
+            UseCookies = false
         };
 
         _client = new HttpClient(handler, disposeHandler: true)
