@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MIT
 
+using System.Text.Json;
 using NosGM.Updater.Core;
 
 namespace NosGM.Launcher;
@@ -132,7 +133,9 @@ internal sealed class LauncherSmartRepairService
                     HistoryPath,
                     cancellationToken)
                 .ConfigureAwait(false);
-            if (history.SchemaVersion != 1 || history.Entries.Count > MaximumHistoryEntries)
+            if (history.SchemaVersion != 1 ||
+                history.Entries is null ||
+                history.Entries.Count > MaximumHistoryEntries)
             {
                 throw new InvalidDataException("Launcher repair history is invalid.");
             }
@@ -144,8 +147,15 @@ internal sealed class LauncherSmartRepairService
                     .ToArray()
             };
         }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
         catch (Exception exception) when (
-            exception is IOException or UnauthorizedAccessException or InvalidDataException)
+            exception is IOException or
+            UnauthorizedAccessException or
+            InvalidDataException or
+            JsonException)
         {
             return new LauncherRepairHistory();
         }
@@ -178,7 +188,10 @@ internal sealed class LauncherSmartRepairService
                 .ConfigureAwait(false);
         }
         catch (Exception exception) when (
-            exception is IOException or UnauthorizedAccessException or InvalidDataException)
+            exception is IOException or
+            UnauthorizedAccessException or
+            InvalidDataException or
+            JsonException)
         {
             // Repair must not fail only because optional local history could not be written.
         }
