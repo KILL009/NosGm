@@ -80,10 +80,10 @@ Forbid $state 'AuthorizationCode' `
 Forbid $state 'CharacterName' `
     "Alert state never persists character names"
 
-Require $window 'Password' `
+Require $window 'contraseñas' `
     "Privacy text explicitly states that passwords are excluded"
-Require $window 'LauncherSettingsStore' `
-    "Companion preferences remain part of validated launcher settings"
+Require $window 'Result = _settings with' `
+    "Companion window returns only validated launcher preferences"
 Forbid $window 'PasswordBox' `
     "Companion settings cannot collect passwords"
 Forbid $window 'LauncherAuthenticationClient' `
@@ -103,7 +103,7 @@ Require $integration '_companionExitRequested = true' `
     "Explicit tray exit bypasses hide-on-close"
 Require $integration 'LauncherCompanionAlertStateStore.WasDelivered' `
     "Duplicate public alerts are suppressed"
-Require $integration 'Maximum' `
+Require $integration 'Math.Max(1' `
     "Event countdown text is bounded away from negative values"
 Require $integration '_companionLifetime.Cancel()' `
     "Launcher shutdown cancels companion work"
