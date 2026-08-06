@@ -207,9 +207,17 @@ namespace NosGm.World
                 mapName = "Mapa " + mapId;
             }
 
-            PresenceClassification classification = Classify(
+            PresenceClassification mapClassification = Classify(
                 mapInstance.MapInstanceType,
                 mapName);
+            LauncherPresenceAction classification =
+                LauncherPresenceActionClassifier.Resolve(
+                    character,
+                    mapName,
+                    mapClassification.Activity,
+                    mapClassification.Details,
+                    session.RegisterTime,
+                    DateTime.Now);
             Group group = character.Group;
             int partyCurrent = group?.SessionCount ?? 0;
             int partyMaximum = ResolvePartyMaximum(group);
@@ -450,6 +458,157 @@ namespace NosGm.World
             public string LargeImageText { get; set; }
             public string SmallImageKey { get; set; }
             public string SmallImageText { get; set; }
+        }
+    }
+
+    internal sealed class LauncherPresenceAction
+    {
+        public LauncherPresenceAction(string activity, string details)
+        {
+            Activity = activity;
+            Details = details;
+        }
+
+        public string Activity { get; }
+        public string Details { get; }
+    }
+
+    internal static class LauncherPresenceActionClassifier
+    {
+        private static readonly TimeSpan CombatActivityWindow =
+            TimeSpan.FromSeconds(15);
+        private static readonly TimeSpan AfkThreshold =
+            TimeSpan.FromMinutes(5);
+        private static readonly TimeSpan MaximumClockSkew =
+            TimeSpan.FromMinutes(1);
+
+        public static LauncherPresenceAction Resolve(
+            Character character,
+            string mapName,
+            string fallbackActivity,
+            string fallbackDetails,
+            DateTime registeredAt,
+            DateTime now)
+        {
+            if (character == null)
+            {
+                return new LauncherPresenceAction(
+                    fallbackActivity,
+                    fallbackDetails);
+            }
+
+            string safeMapName = string.IsNullOrWhiteSpace(mapName)
+                ? "Sumeria"
+                : mapName.Trim();
+
+            if (character.IsFishing)
+            {
+                return new LauncherPresenceAction(
+                    "fishing",
+                    "Pescando en " + safeMapName);
+            }
+
+            if (character.CurrentMinigame > 0)
+            {
+                return new LauncherPresenceAction(
+                    "minigame",
+                    "Participando en un minijuego");
+            }
+
+            if (character.ExchangeInfo != null)
+            {
+                return new LauncherPresenceAction(
+                    "trading",
+                    "Intercambiando objetos");
+            }
+
+            if (character.IsShopping)
+            {
+                return new LauncherPresenceAction(
+                    "shopping",
+                    "Revisando una tienda");
+            }
+
+            DateTime lastCombat = MostRecentValid(
+                now,
+                character.LastSkillUse,
+                character.LastDefence);
+            if (IsRecent(lastCombat, now, CombatActivityWindow))
+            {
+                return new LauncherPresenceAction(
+                    "combat",
+                    "Combatiendo en " + safeMapName);
+            }
+
+            DateTime lastActivity = MostRecentValid(
+                now,
+                registeredAt,
+                character.LastMove,
+                character.LastSkillUse,
+                character.LastDefence,
+                character.LastMessage,
+                character.LastCommand,
+                character.LastFishBite,
+                character.LastFishCycle);
+            if (IsInactive(lastActivity, now, AfkThreshold))
+            {
+                return new LauncherPresenceAction(
+                    "afk",
+                    "Ausente en " + safeMapName);
+            }
+
+            return new LauncherPresenceAction(
+                fallbackActivity,
+                fallbackDetails);
+        }
+
+        private static DateTime MostRecentValid(
+            DateTime now,
+            params DateTime[] values)
+        {
+            DateTime latest = DateTime.MinValue;
+            DateTime latestAllowed = now.Add(MaximumClockSkew);
+            foreach (DateTime value in values)
+            {
+                if (value <= DateTime.MinValue.AddDays(1) ||
+                    value > latestAllowed ||
+                    value <= latest)
+                {
+                    continue;
+                }
+
+                latest = value;
+            }
+
+            return latest;
+        }
+
+        private static bool IsRecent(
+            DateTime value,
+            DateTime now,
+            TimeSpan window)
+        {
+            if (value <= DateTime.MinValue.AddDays(1))
+            {
+                return false;
+            }
+
+            TimeSpan elapsed = now - value;
+            return elapsed >= TimeSpan.Zero && elapsed <= window;
+        }
+
+        private static bool IsInactive(
+            DateTime value,
+            DateTime now,
+            TimeSpan threshold)
+        {
+            if (value <= DateTime.MinValue.AddDays(1))
+            {
+                return false;
+            }
+
+            TimeSpan elapsed = now - value;
+            return elapsed >= threshold && elapsed < TimeSpan.FromDays(1);
         }
     }
 }
