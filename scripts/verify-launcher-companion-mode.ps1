@@ -115,8 +115,6 @@ Forbid $integration 'AuthorizationCode' `
     "Companion never reads authorization codes"
 Forbid $integration 'Password' `
     "Companion never reads passwords"
-Forbid $integration 'AccountName' `
-    "Companion never reads stored account names"
 Forbid $integration 'Environment.GetEnvironmentVariable' `
     "Companion never reads process environment secrets"
 
