@@ -75,7 +75,7 @@ Require $window 'LauncherAccountHistory.Forget' `
     "The account window can forget a selected account"
 Require $window 'LauncherAccountHistory.UseAnotherAccount' `
     "The account window can clear the prepared account"
-Require $window 'never stores passwords or tickets' `
+Require $window 'Passwords and access tickets are never saved.' `
     "The account window presents its privacy boundary"
 Forbid $window 'LauncherAuthenticationClient' `
     "The account window cannot authenticate by itself"
