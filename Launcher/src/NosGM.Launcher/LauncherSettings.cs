@@ -58,14 +58,17 @@ internal static class LauncherSettingsStore
         LauncherSettings persistedSettings;
         if (!File.Exists(SettingsPath))
         {
-            persistedSettings = new LauncherSettings();
+            persistedSettings = LauncherAccountHistory.Normalize(new LauncherSettings());
             Validate(persistedSettings);
             await JsonSupport.WriteAtomicAsync(SettingsPath, persistedSettings);
         }
         else
         {
-            persistedSettings = await JsonSupport.ReadAsync<LauncherSettings>(SettingsPath);
-            Validate(persistedSettings);
+            var loadedSettings = await JsonSupport.ReadAsync<LauncherSettings>(SettingsPath);
+            persistedSettings = LauncherAccountHistory.Normalize(loadedSettings);
+            var settingsChanged = !LauncherAccountHistory.StoredAccountsEqual(
+                loadedSettings,
+                persistedSettings);
 
             // Migrate launchers that saved the pre-Rich-Presence empty value.
             // The Application ID is public application metadata, not a secret.
@@ -75,6 +78,12 @@ internal static class LauncherSettingsStore
                 {
                     DiscordApplicationId = LauncherSettings.OfficialDiscordApplicationId
                 };
+                settingsChanged = true;
+            }
+
+            Validate(persistedSettings);
+            if (settingsChanged)
+            {
                 await JsonSupport.WriteAtomicAsync(SettingsPath, persistedSettings);
             }
         }
@@ -104,22 +113,23 @@ internal static class LauncherSettingsStore
 
     public static Task SaveAsync(LauncherSettings settings)
     {
-        var persistedSettings = settings with
+        var normalizedSettings = LauncherAccountHistory.Normalize(settings);
+        var persistedSettings = normalizedSettings with
         {
             AuthenticationEndpoint = GetRuntimeValue(AuthenticationEndpointEnvironmentVariable) is null
-                ? settings.AuthenticationEndpoint
+                ? normalizedSettings.AuthenticationEndpoint
                 : _persistedAuthenticationEndpoint,
             AuthenticationTransport = GetRuntimeValue(AuthenticationTransportEnvironmentVariable) is null
-                ? settings.AuthenticationTransport
+                ? normalizedSettings.AuthenticationTransport
                 : _persistedAuthenticationTransport,
             LoginServerAddress = GetRuntimeValue(LoginServerAddressEnvironmentVariable) is null
-                ? settings.LoginServerAddress
+                ? normalizedSettings.LoginServerAddress
                 : _persistedLoginServerAddress,
             PortalBaseUri = GetRuntimeValue(PortalBaseUriEnvironmentVariable) is null
-                ? settings.PortalBaseUri
+                ? normalizedSettings.PortalBaseUri
                 : _persistedPortalBaseUri,
             DiscordApplicationId = GetRuntimeValue(DiscordApplicationIdEnvironmentVariable) is null
-                ? settings.DiscordApplicationId
+                ? normalizedSettings.DiscordApplicationId
                 : _persistedDiscordApplicationId
         };
         Validate(persistedSettings);
