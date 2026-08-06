@@ -3,6 +3,7 @@
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
+using System.Text.Json;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
@@ -52,13 +53,16 @@ public partial class MainWindow
     private LauncherTrayIcon? _companionTrayIcon;
     private Button? _companionButton;
     private Process? _companionGameProcess;
+    private Task? _companionInitializationTask;
     private string? _companionPortalBaseUri;
     private bool _companionInitialized;
     private bool _companionHidden;
     private bool _companionExitRequested;
+    private bool _companionCloseDrainStarted;
+    private bool _companionShutdownDrained;
     private bool _companionClosed;
 
-    internal async void InitializeCompanionMode()
+    internal void InitializeCompanionMode()
     {
         if (_companionInitialized)
         {
@@ -71,7 +75,12 @@ public partial class MainWindow
         ModernGameLauncher.GameLaunched += CompanionGameLaunched;
         LanguageComboBox.SelectionChanged += CompanionLanguage_SelectionChanged;
         _companionPollTimer.Tick += CompanionPollTimer_Tick;
+        _companionInitializationTask = InitializeCompanionModeAsync();
+        _ = ObserveCompanionInitializationAsync(_companionInitializationTask);
+    }
 
+    private async Task InitializeCompanionModeAsync()
+    {
         for (var attempt = 0;
              attempt < 100 && (!_languageSelectionReady || !IsLoaded);
              attempt++)
@@ -89,17 +98,38 @@ public partial class MainWindow
             return;
         }
 
-        await AttachCompanionButtonAsync();
+        await AttachCompanionButtonAsync().ConfigureAwait(true);
         _companionAlertState = await LauncherCompanionAlertStateStore.LoadAsync(
                 _companionLifetime.Token)
             .ConfigureAwait(true);
-        ApplyCompanionSettings();
+        if (!_companionLifetime.IsCancellationRequested && !_companionClosed)
+        {
+            ApplyCompanionSettings();
+        }
+    }
+
+    private async Task ObserveCompanionInitializationAsync(Task initialization)
+    {
+        try
+        {
+            await initialization.ConfigureAwait(true);
+        }
+        catch (OperationCanceledException) when (_companionLifetime.IsCancellationRequested)
+        {
+            // Normal shutdown while the companion is attaching to the launcher.
+        }
+        catch (Exception exception) when (
+            exception is IOException or UnauthorizedAccessException or InvalidDataException or JsonException)
+        {
+            // Companion is optional and cannot prevent the launcher from opening.
+        }
     }
 
     private async Task AttachCompanionButtonAsync()
     {
         for (var attempt = 0; attempt < 60 && IsLoaded; attempt++)
         {
+            _companionLifetime.Token.ThrowIfCancellationRequested();
             var communityButton = FindVisualChildren<Button>(this)
                 .FirstOrDefault(button =>
                     button.Content is string content &&
@@ -121,7 +151,9 @@ public partial class MainWindow
                 };
                 _companionButton.Click += OpenCompanionSettings_Click;
                 var index = parent.Children.IndexOf(communityButton);
-                parent.Children.Insert(Math.Min(index + 1, parent.Children.Count), _companionButton);
+                parent.Children.Insert(
+                    Math.Min(index + 1, parent.Children.Count),
+                    _companionButton);
                 RefreshCompanionButtonText();
                 return;
             }
@@ -153,9 +185,6 @@ public partial class MainWindow
         }
 
         _companionPollTimer.Stop();
-        _companionOperationsClient?.Dispose();
-        _companionOperationsClient = null;
-        _companionPortalBaseUri = null;
         if (_companionHidden)
         {
             RestoreFromCompanionTray();
@@ -188,6 +217,12 @@ public partial class MainWindow
             return;
         }
 
+        if (_companionPollGate.CurrentCount == 0)
+        {
+            throw new InvalidOperationException(
+                "Companion operations cannot change while a public request is active.");
+        }
+
         _companionOperationsClient?.Dispose();
         _companionOperationsClient = new LauncherLiveOperationsClient(
             _settings.PortalBaseUri);
@@ -197,6 +232,11 @@ public partial class MainWindow
     private void CompanionGameLaunched(Process process, string accountName)
     {
         _ = accountName;
+        if (Dispatcher.HasShutdownStarted || Dispatcher.HasShutdownFinished)
+        {
+            return;
+        }
+
         Dispatcher.BeginInvoke(() => TrackCompanionGameProcess(process));
     }
 
@@ -213,6 +253,11 @@ public partial class MainWindow
         {
             process.EnableRaisingEvents = true;
             process.Exited += CompanionGameProcess_Exited;
+            if (process.HasExited)
+            {
+                CompanionGameProcess_Exited(process, EventArgs.Empty);
+                return;
+            }
         }
         catch (InvalidOperationException)
         {
@@ -235,6 +280,11 @@ public partial class MainWindow
 
     private void CompanionGameProcess_Exited(object? sender, EventArgs e)
     {
+        if (Dispatcher.HasShutdownStarted || Dispatcher.HasShutdownFinished)
+        {
+            return;
+        }
+
         Dispatcher.BeginInvoke(() =>
         {
             if (_companionClosed)
@@ -294,15 +344,82 @@ public partial class MainWindow
 
     private void MainWindow_CompanionClosing(object? sender, CancelEventArgs e)
     {
-        if (_companionExitRequested ||
-            !_settings.CompanionModeEnabled ||
-            !IsCompanionGameRunning())
+        if (_companionShutdownDrained)
+        {
+            return;
+        }
+
+        if (!_companionExitRequested &&
+            _settings.CompanionModeEnabled &&
+            IsCompanionGameRunning())
+        {
+            e.Cancel = true;
+            HideToCompanionTray();
+            return;
+        }
+
+        var initializationActive =
+            _companionInitializationTask is { IsCompleted: false };
+        var pollActive = _companionPollGate.CurrentCount == 0;
+        if (_companionCloseDrainStarted ||
+            (!initializationActive && !pollActive))
         {
             return;
         }
 
         e.Cancel = true;
-        HideToCompanionTray();
+        _companionCloseDrainStarted = true;
+        _companionExitRequested = true;
+        _companionPollTimer.Stop();
+        _companionLifetime.Cancel();
+        _ = DrainCompanionAndCloseAsync();
+    }
+
+    private async Task DrainCompanionAndCloseAsync()
+    {
+        try
+        {
+            if (_companionInitializationTask is { } initialization)
+            {
+                try
+                {
+                    await initialization.ConfigureAwait(true);
+                }
+                catch (OperationCanceledException)
+                {
+                    // The initialization observer already treats shutdown as normal.
+                }
+            }
+
+            var entered = false;
+            try
+            {
+                entered = await _companionPollGate.WaitAsync(
+                        TimeSpan.FromSeconds(4))
+                    .ConfigureAwait(true);
+            }
+            catch (ObjectDisposedException)
+            {
+                return;
+            }
+            finally
+            {
+                if (entered)
+                {
+                    _companionPollGate.Release();
+                }
+            }
+        }
+        finally
+        {
+            if (!_companionClosed &&
+                !Dispatcher.HasShutdownStarted &&
+                !Dispatcher.HasShutdownFinished)
+            {
+                _companionShutdownDrained = true;
+                Close();
+            }
+        }
     }
 
     private void HideToCompanionTray()
@@ -359,7 +476,7 @@ public partial class MainWindow
 
         try
         {
-            await LauncherSettingsStore.SaveAsync(updated);
+            await LauncherSettingsStore.SaveAsync(updated).ConfigureAwait(true);
             _settings = updated;
             ApplyCompanionSettings();
         }
@@ -408,9 +525,10 @@ public partial class MainWindow
     private async Task RefreshCompanionAlertsAsync()
     {
         if (_companionClosed ||
+            _companionLifetime.IsCancellationRequested ||
             !_settings.CompanionModeEnabled ||
             (!_settings.EventAlertsEnabled && !_settings.MaintenanceAlertsEnabled) ||
-            !await _companionPollGate.WaitAsync(0))
+            !await _companionPollGate.WaitAsync(0).ConfigureAwait(true))
         {
             return;
         }
@@ -430,6 +548,11 @@ public partial class MainWindow
             var dashboard = await _companionOperationsClient!.GetDashboardAsync(
                     timeout.Token)
                 .ConfigureAwait(true);
+            if (_companionClosed || _companionLifetime.IsCancellationRequested)
+            {
+                return;
+            }
+
             var candidate = SelectCompanionAlert(dashboard.Operations);
             if (candidate is null ||
                 LauncherCompanionAlertStateStore.WasDelivered(
@@ -461,12 +584,14 @@ public partial class MainWindow
                 // Notification delivery does not depend on optional local history.
             }
         }
-        catch (OperationCanceledException) when (!_companionClosed)
+        catch (OperationCanceledException) when (
+            _companionLifetime.IsCancellationRequested || !_companionClosed)
         {
-            // The next timer cycle will retry public operations.
+            // Shutdown or the next timer cycle will resolve the operation.
         }
         catch (Exception exception) when (
-            exception is IOException or HttpRequestException or InvalidDataException)
+            exception is IOException or HttpRequestException or InvalidDataException or
+                JsonException or ObjectDisposedException or InvalidOperationException)
         {
             // Public event alerts fail closed and never interrupt game launch.
         }
@@ -491,7 +616,9 @@ public partial class MainWindow
                 var key = $"maintenance:active:{maintenance.StartsAt?.UtcDateTime.Ticks ?? 0}";
                 candidates.Add(new CompanionAlertCandidate(
                     key,
-                    IsCompanionSpanish() ? "Mantenimiento en curso" : "Maintenance in progress",
+                    IsCompanionSpanish()
+                        ? "Mantenimiento en curso"
+                        : "Maintenance in progress",
                     BuildCompanionMaintenanceMessage(maintenance, active: true),
                     Warning: true,
                     Priority: 100,
@@ -504,7 +631,9 @@ public partial class MainWindow
                 var key = $"maintenance:reminder:{maintenanceStart.UtcDateTime.Ticks}";
                 candidates.Add(new CompanionAlertCandidate(
                     key,
-                    IsCompanionSpanish() ? "Mantenimiento próximo" : "Upcoming maintenance",
+                    IsCompanionSpanish()
+                        ? "Mantenimiento próximo"
+                        : "Upcoming maintenance",
                     BuildCompanionMaintenanceMessage(maintenance, active: false),
                     Warning: true,
                     Priority: 90,
@@ -516,7 +645,8 @@ public partial class MainWindow
         {
             foreach (var item in operations.Events)
             {
-                if (item.StartsAt <= now && item.EndsAt > now &&
+                if (item.StartsAt <= now &&
+                    item.EndsAt > now &&
                     now - item.StartsAt <= TimeSpan.FromMinutes(2))
                 {
                     candidates.Add(new CompanionAlertCandidate(
@@ -527,7 +657,8 @@ public partial class MainWindow
                         Priority: 80,
                         item.StartsAt));
                 }
-                else if (item.StartsAt > now && item.StartsAt - now <= reminder)
+                else if (item.StartsAt > now &&
+                         item.StartsAt - now <= reminder)
                 {
                     candidates.Add(new CompanionAlertCandidate(
                         $"event:{item.Id}:{item.StartsAt.UtcDateTime.Ticks}:reminder",
@@ -554,7 +685,9 @@ public partial class MainWindow
         bool active)
     {
         var title = string.IsNullOrWhiteSpace(maintenance.Title)
-            ? (IsCompanionSpanish() ? "Mantenimiento del servidor" : "Server maintenance")
+            ? IsCompanionSpanish()
+                ? "Mantenimiento del servidor"
+                : "Server maintenance"
             : maintenance.Title;
         if (active)
         {
@@ -574,15 +707,21 @@ public partial class MainWindow
         DateTimeOffset now)
     {
         var timing = active
-            ? (IsCompanionSpanish() ? "Ya está en curso" : "Now in progress")
+            ? IsCompanionSpanish()
+                ? "Ya está en curso"
+                : "Now in progress"
             : IsCompanionSpanish()
                 ? $"Comienza en {Math.Max(1, (int)Math.Ceiling((item.StartsAt - now).TotalMinutes))} min"
                 : $"Starts in {Math.Max(1, (int)Math.Ceiling((item.StartsAt - now).TotalMinutes))} min";
         var channel = item.Channel == 0
-            ? (IsCompanionSpanish() ? "Todos los canales" : "All channels")
+            ? IsCompanionSpanish()
+                ? "Todos los canales"
+                : "All channels"
             : $"{(IsCompanionSpanish() ? "Canal" : "Channel")} {item.Channel}";
         var levels = item.MinimumLevel == 0 && item.MaximumLevel == 0
-            ? (IsCompanionSpanish() ? "Todos los niveles" : "All levels")
+            ? IsCompanionSpanish()
+                ? "Todos los niveles"
+                : "All levels"
             : $"{(IsCompanionSpanish() ? "Niveles" : "Levels")} {item.MinimumLevel}-{item.MaximumLevel}";
         return $"{timing} • {channel} • {levels}";
     }
@@ -623,7 +762,10 @@ public partial class MainWindow
     }
 
     private bool IsCompanionSpanish()
-        => string.Equals(_settings.Language, "es", StringComparison.OrdinalIgnoreCase);
+        => string.Equals(
+            _settings.Language,
+            "es",
+            StringComparison.OrdinalIgnoreCase);
 
     private void MainWindow_CompanionClosed(object? sender, EventArgs e)
     {
