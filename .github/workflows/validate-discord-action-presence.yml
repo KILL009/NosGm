@@ -1,0 +1,37 @@
+name: Validate Discord action presence
+
+on:
+  pull_request:
+    paths:
+      - "Data/NosGm.Program/NosGm.World/Properties/AssemblyInfo.cs"
+      - "Launcher/src/NosGM.Launcher/LauncherPresenceState.cs"
+      - "scripts/verify-discord-rich-presence.ps1"
+      - "scripts/test-discord-action-presence.ps1"
+      - "docs/discord-rich-presence.md"
+      - ".github/workflows/validate-discord-action-presence.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  contracts-and-runtime-rules:
+    runs-on: windows-2022
+    timeout-minutes: 15
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up .NET 10
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Verify Discord presence contracts
+        shell: pwsh
+        run: ./scripts/verify-discord-rich-presence.ps1
+
+      - name: Compile and exercise action rules
+        shell: pwsh
+        run: ./scripts/test-discord-action-presence.ps1
