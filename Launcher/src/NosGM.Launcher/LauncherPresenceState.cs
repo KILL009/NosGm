@@ -101,6 +101,12 @@ internal sealed record LauncherPresenceState
     {
         return activity?.Trim().ToLowerInvariant() switch
         {
+            "combat" => "Combatiendo",
+            "fishing" => "Pescando",
+            "minigame" => "Participando en un minijuego",
+            "trading" => "Intercambiando objetos",
+            "shopping" => "Revisando una tienda",
+            "afk" => "Ausente por un momento",
             "raid" => "Participando en una raid",
             "timespace" => "Explorando una Piedra del Tiempo",
             "instant_battle" => "Participando en Instant Battle",
