@@ -50,7 +50,7 @@ internal sealed class LauncherTrayIcon : IDisposable
         _source = HwndSource.FromHwnd(_windowHandle)
                   ?? throw new InvalidOperationException("The launcher message source is unavailable.");
         _source.AddHook(WindowMessageHook);
-        _iconHandle = LoadIconW(IntPtr.Zero, new IntPtr(ApplicationIconId));
+        _iconHandle = LoadIconNative(IntPtr.Zero, new IntPtr(ApplicationIconId));
         if (_iconHandle == IntPtr.Zero)
         {
             _source.RemoveHook(WindowMessageHook);
@@ -70,7 +70,7 @@ internal sealed class LauncherTrayIcon : IDisposable
         _spanish = spanish;
         if (_visible)
         {
-            _ = ShellNotifyIconW(NotifyModify, CreateData(FlagMessage | FlagIcon | FlagTip));
+            _ = ShellNotifyIcon(NotifyModify, CreateData(FlagMessage | FlagIcon | FlagTip));
         }
     }
 
@@ -84,7 +84,7 @@ internal sealed class LauncherTrayIcon : IDisposable
 
         if (visible)
         {
-            if (!ShellNotifyIconW(NotifyAdd, CreateData(FlagMessage | FlagIcon | FlagTip)))
+            if (!ShellNotifyIcon(NotifyAdd, CreateData(FlagMessage | FlagIcon | FlagTip)))
             {
                 throw new InvalidOperationException("Windows could not create the NosGM companion icon.");
             }
@@ -93,7 +93,7 @@ internal sealed class LauncherTrayIcon : IDisposable
         }
         else
         {
-            _ = ShellNotifyIconW(NotifyDelete, CreateData(0));
+            _ = ShellNotifyIcon(NotifyDelete, CreateData(0));
             _visible = false;
         }
     }
@@ -110,7 +110,7 @@ internal sealed class LauncherTrayIcon : IDisposable
         data.InfoTitle = Limit(title, 63);
         data.Info = Limit(message, 255);
         data.InfoFlags = warning ? InfoWarning : InfoInfo;
-        _ = ShellNotifyIconW(NotifyModify, data);
+        _ = ShellNotifyIcon(NotifyModify, data);
     }
 
     private IntPtr WindowMessageHook(
@@ -219,14 +219,14 @@ internal sealed class LauncherTrayIcon : IDisposable
             return;
         }
 
-        _disposed = true;
         if (_visible)
         {
-            _ = ShellNotifyIconW(NotifyDelete, CreateData(0));
+            _ = ShellNotifyIcon(NotifyDelete, CreateData(0));
             _visible = false;
         }
 
         _source.RemoveHook(WindowMessageHook);
+        _disposed = true;
     }
 
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
@@ -258,13 +258,27 @@ internal sealed class LauncherTrayIcon : IDisposable
         public IntPtr BalloonIconHandle;
     }
 
-    [DllImport("shell32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    [DllImport(
+        "shell32.dll",
+        EntryPoint = "Shell_NotifyIconW",
+        CharSet = CharSet.Unicode,
+        ExactSpelling = true,
+        SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool ShellNotifyIconW(uint message, ref NotifyIconData data);
+    private static extern bool ShellNotifyIconNative(
+        uint message,
+        ref NotifyIconData data);
 
-    private static bool ShellNotifyIconW(uint message, NotifyIconData data)
-        => ShellNotifyIconW(message, ref data);
+    private static bool ShellNotifyIcon(uint message, NotifyIconData data)
+        => ShellNotifyIconNative(message, ref data);
 
-    [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
-    private static extern IntPtr LoadIconW(IntPtr instance, IntPtr iconName);
+    [DllImport(
+        "user32.dll",
+        EntryPoint = "LoadIconW",
+        CharSet = CharSet.Unicode,
+        ExactSpelling = true,
+        SetLastError = true)]
+    private static extern IntPtr LoadIconNative(
+        IntPtr instance,
+        IntPtr iconName);
 }
