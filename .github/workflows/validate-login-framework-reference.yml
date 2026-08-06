@@ -1,0 +1,136 @@
+name: Validate classic executable framework alignment
+
+on:
+  pull_request:
+    paths:
+      - "Data/NosGm.Program/NosGm.Login/NosGm.Login.csproj"
+      - "Data/NosGm.Program/NosGm.Parser/NosGm.Parser.csproj"
+      - "Data/NosGm.Program/NosGm.World/NosGm.World.csproj"
+      - "scripts/verify-login-framework-reference.ps1"
+      - ".github/workflows/validate-login-framework-reference.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: classic-executable-frameworks-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    runs-on: windows-2022
+    timeout-minutes: 25
+
+    env:
+      ARTIFACTS: artifacts\classic-executable-frameworks
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Install .NET 9 compatibility SDK
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 9.0.x
+
+      - name: Select compatible SDK imports for legacy MSBuild
+        shell: pwsh
+        run: |
+          $sdkLine = dotnet --list-sdks |
+            Where-Object { $_ -match '^9\.0\.' } |
+            Select-Object -Last 1
+          if ([string]::IsNullOrWhiteSpace($sdkLine) -or
+              $sdkLine -notmatch '^([^\s]+)\s+\[(.+)\]$') {
+            throw "Unable to locate the .NET 9 compatibility SDK."
+          }
+
+          $sdkVersion = $Matches[1]
+          $sdkBase = $Matches[2]
+          $sdkPath = Join-Path (Join-Path $sdkBase $sdkVersion) "Sdks"
+          "MSBuildSDKsPath=$sdkPath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "MSBuildEnableWorkloadResolver=false" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          Write-Host "Legacy MSBuild SDK imports: $sdkVersion"
+
+      - name: Set up Visual Studio MSBuild
+        uses: microsoft/setup-msbuild@v3
+        with:
+          vs-version: '[17.0,18.0)'
+          msbuild-architecture: x64
+
+      - name: Verify classic executable framework contracts
+        shell: powershell
+        run: ./scripts/verify-login-framework-reference.ps1
+
+      - name: Restore executable PackageReference dependencies
+        shell: pwsh
+        run: |
+          $projects = @(
+            "Data\NosGm.Program\NosGm.Login\NosGm.Login.csproj",
+            "Data\NosGm.Program\NosGm.Parser\NosGm.Parser.csproj",
+            "Data\NosGm.Program\NosGm.World\NosGm.World.csproj"
+          )
+
+          foreach ($project in $projects) {
+            Write-Host "Restoring $project without traversing project references..."
+            & msbuild $project `
+              /t:Restore `
+              /m `
+              /nologo `
+              /nr:false `
+              /v:minimal `
+              /p:RestoreRecursive=false `
+              /p:RestorePackagesConfig=true `
+              /p:NosGmLegacyBuild=true `
+              /p:Configuration=Release `
+              /p:Platform=x64
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
+
+      - name: Resolve framework assemblies from the 4.8.1 targeting pack
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path "$env:ARTIFACTS" | Out-Null
+          $projects = @(
+            "Data\NosGm.Program\NosGm.Login\NosGm.Login.csproj",
+            "Data\NosGm.Program\NosGm.Parser\NosGm.Parser.csproj",
+            "Data\NosGm.Program\NosGm.World\NosGm.World.csproj"
+          )
+
+          foreach ($project in $projects) {
+            $name = [IO.Path]::GetFileNameWithoutExtension($project)
+            $logPath = Join-Path $env:ARTIFACTS "$name-resolve-assemblies.log"
+            $output = & msbuild $project `
+              /t:ResolveAssemblyReferences `
+              /m `
+              /nologo `
+              /nr:false `
+              /v:minimal `
+              /p:BuildProjectReferences=false `
+              /p:NosGmLegacyBuild=true `
+              /p:Configuration=Release `
+              /p:Platform=x64 `
+              /fl `
+              /flp:"logfile=$logPath;verbosity=diagnostic" 2>&1
+            $exitCode = $LASTEXITCODE
+            $output | ForEach-Object { Write-Host $_ }
+            if ($exitCode -ne 0) { exit $exitCode }
+
+            $log = Get-Content -LiteralPath $logPath -Raw
+            if ($log -match '(?i)\\v4\.(5\.2|8)\\System\.dll') {
+              throw "$name resolved System.dll from an obsolete targeting pack."
+            }
+            if ($log -notmatch '(?i)\\v4\.8\.1\\System\.dll') {
+              throw "$name diagnostics did not confirm System.dll from .NET Framework 4.8.1."
+            }
+            Write-Host "[PASS] $name resolved System.dll from .NET Framework 4.8.1."
+          }
+
+      - name: Upload framework resolution diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: classic-executable-framework-diagnostics
+          path: artifacts/classic-executable-frameworks/
+          if-no-files-found: warn
+          retention-days: 14
