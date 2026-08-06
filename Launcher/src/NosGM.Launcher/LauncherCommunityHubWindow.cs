@@ -156,6 +156,7 @@ internal sealed class LauncherCommunityHubWindow : Window
     private readonly ListView _rankingList;
 
     private LauncherCommunitySnapshot? _snapshot;
+    private bool _closed;
 
     private LauncherCommunityHubWindow(LauncherSettings settings)
     {
@@ -384,13 +385,25 @@ internal sealed class LauncherCommunityHubWindow : Window
 
     private async void Window_Loaded(object sender, RoutedEventArgs e)
     {
-        var cached = await LauncherCommunityCache.LoadAsync(_lifetime.Token);
-        if (cached is not null && !_lifetime.IsCancellationRequested)
+        try
         {
-            ApplySnapshot(cached, fromCache: true);
-        }
+            var cached = await LauncherCommunityCache.LoadAsync(_lifetime.Token);
+            if (_closed || _lifetime.IsCancellationRequested)
+            {
+                return;
+            }
 
-        await RefreshAsync();
+            if (cached is not null)
+            {
+                ApplySnapshot(cached, fromCache: true);
+            }
+
+            await RefreshAsync();
+        }
+        catch (OperationCanceledException) when (_closed || _lifetime.IsCancellationRequested)
+        {
+            // Normal close while cached public data is being read.
+        }
     }
 
     private async void RefreshButton_Click(object sender, RoutedEventArgs e)
@@ -398,19 +411,40 @@ internal sealed class LauncherCommunityHubWindow : Window
 
     private async Task RefreshAsync()
     {
-        if (_lifetime.IsCancellationRequested || !await _refreshGate.WaitAsync(0))
+        if (_closed || _lifetime.IsCancellationRequested)
         {
             return;
         }
 
-        _refreshButton.IsEnabled = false;
-        _messageText.Text = _text.Loading;
-        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token);
-        timeout.CancelAfter(TimeSpan.FromSeconds(10));
+        bool entered;
         try
         {
+            entered = await _refreshGate.WaitAsync(0, _lifetime.Token);
+        }
+        catch (OperationCanceledException) when (_closed || _lifetime.IsCancellationRequested)
+        {
+            return;
+        }
+
+        if (!entered)
+        {
+            return;
+        }
+
+        try
+        {
+            if (_closed)
+            {
+                return;
+            }
+
+            _refreshButton.IsEnabled = false;
+            _messageText.Text = _text.Loading;
+            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token);
+            timeout.CancelAfter(TimeSpan.FromSeconds(10));
+
             var snapshot = await _client.GetSnapshotAsync(_settings.Language, timeout.Token);
-            if (_lifetime.IsCancellationRequested)
+            if (_closed || _lifetime.IsCancellationRequested)
             {
                 return;
             }
@@ -426,9 +460,17 @@ internal sealed class LauncherCommunityHubWindow : Window
                 // Valid public data remains visible even when optional cache persistence fails.
             }
         }
-        catch (OperationCanceledException) when (!_lifetime.IsCancellationRequested)
+        catch (OperationCanceledException) when (_closed || _lifetime.IsCancellationRequested)
+        {
+            // Normal close while a portal request is active.
+        }
+        catch (OperationCanceledException)
         {
             MarkUnavailable();
+        }
+        catch (Exception) when (_closed || _lifetime.IsCancellationRequested)
+        {
+            // Disposing the HTTP client during close is an expected lifecycle event.
         }
         catch (Exception exception) when (
             exception is HttpRequestException or IOException or JsonException or InvalidDataException)
@@ -437,7 +479,11 @@ internal sealed class LauncherCommunityHubWindow : Window
         }
         finally
         {
-            _refreshButton.IsEnabled = true;
+            if (!_closed)
+            {
+                _refreshButton.IsEnabled = true;
+            }
+
             _refreshGate.Release();
         }
     }
@@ -526,8 +572,9 @@ internal sealed class LauncherCommunityHubWindow : Window
     {
         _eventsPanel.Children.Clear();
         var now = DateTimeOffset.UtcNow;
+        var maintenanceUpcoming = maintenance.StartsAt is { } startsAt && startsAt > now;
 
-        if (maintenance.IsActive || maintenance.StartsAt > now)
+        if (maintenance.IsActive || maintenanceUpcoming)
         {
             var maintenanceContent = new StackPanel();
             maintenanceContent.Children.Add(new TextBlock
@@ -686,6 +733,11 @@ internal sealed class LauncherCommunityHubWindow : Window
 
     private void MarkUnavailable()
     {
+        if (_closed)
+        {
+            return;
+        }
+
         _messageText.Text = _snapshot is null
             ? _text.PortalUnavailable
             : _text.PortalUnavailable + " • " + _text.Cached;
@@ -730,7 +782,8 @@ internal sealed class LauncherCommunityHubWindow : Window
             });
         }
         catch (Exception exception) when (
-            exception is InvalidOperationException or InvalidDataException or System.ComponentModel.Win32Exception)
+            exception is InvalidOperationException or InvalidDataException or UriFormatException
+                or System.ComponentModel.Win32Exception)
         {
             MessageBox.Show(
                 this,
@@ -783,14 +836,44 @@ internal sealed class LauncherCommunityHubWindow : Window
 
     private void Window_Closed(object? sender, EventArgs e)
     {
+        if (_closed)
+        {
+            return;
+        }
+
+        _closed = true;
         Loaded -= Window_Loaded;
         Closed -= Window_Closed;
         _refreshButton.Click -= RefreshButton_Click;
         _rankingSelector.SelectionChanged -= RankingSelector_SelectionChanged;
         _lifetime.Cancel();
-        _client.Dispose();
-        _refreshGate.Dispose();
-        _lifetime.Dispose();
+        _ = DisposeResourcesAfterRefreshAsync();
+    }
+
+    private async Task DisposeResourcesAfterRefreshAsync()
+    {
+        try
+        {
+            await _refreshGate.WaitAsync().ConfigureAwait(false);
+            _client.Dispose();
+            _lifetime.Dispose();
+        }
+        catch (ObjectDisposedException)
+        {
+            // Defensive only; cleanup is intentionally idempotent.
+        }
+        finally
+        {
+            try
+            {
+                _refreshGate.Release();
+                _refreshGate.Dispose();
+            }
+            catch (ObjectDisposedException)
+            {
+                // Another defensive cleanup path already completed.
+            }
+        }
     }
 
     private static SolidColorBrush Brush(string color)
