@@ -92,6 +92,18 @@ Require $window 'LauncherCommunityValidator.Validate' `
     "Community data is validated before display"
 Require $window 'CreateLinkedTokenSource(_lifetime.Token)' `
     "Window closure cancels public requests"
+Require $window '_closed = true' `
+    "Window closure is recorded before asynchronous cleanup"
+Require $window '_lifetime.Cancel()' `
+    "Window closure cancels cache and portal work"
+Require $window 'DisposeResourcesAfterRefreshAsync' `
+    "HTTP and synchronization resources wait for active refresh work"
+Require $window 'await _refreshGate.WaitAsync().ConfigureAwait(false)' `
+    "Cleanup waits for the active refresh to release its lease"
+Require $window 'catch (OperationCanceledException) when (_closed || _lifetime.IsCancellationRequested)' `
+    "Normal close cancellation is handled without an unobserved exception"
+Require $window 'if (!_closed)' `
+    "Completed requests do not update controls after close"
 Require $window 'target.Port != baseUri.Port' `
     "Community links cannot escape the configured portal origin"
 Require $window 'UseShellExecute = true' `
