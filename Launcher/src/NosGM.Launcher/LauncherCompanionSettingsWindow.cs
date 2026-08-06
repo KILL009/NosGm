@@ -71,7 +71,10 @@ internal sealed class LauncherCompanionSettingsWindow : Window
     {
         _settings = settings;
         _testNotification = testNotification;
-        _text = string.Equals(settings.Language, "es", StringComparison.OrdinalIgnoreCase)
+        _text = string.Equals(
+            settings.Language,
+            "es",
+            StringComparison.OrdinalIgnoreCase)
             ? Spanish
             : English;
 
@@ -88,7 +91,10 @@ internal sealed class LauncherCompanionSettingsWindow : Window
 
         var root = new Grid { Margin = new Thickness(26) };
         root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-        root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+        root.RowDefinitions.Add(new RowDefinition
+        {
+            Height = new GridLength(1, GridUnitType.Star)
+        });
         root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
 
         var header = new StackPanel { Margin = new Thickness(0, 0, 0, 18) };
@@ -125,6 +131,8 @@ internal sealed class LauncherCompanionSettingsWindow : Window
         _eventsCheckBox = CreateCheckBox(
             _text.Events,
             settings.EventAlertsEnabled);
+        _eventsCheckBox.Checked += AlertSelectionChanged;
+        _eventsCheckBox.Unchecked += AlertSelectionChanged;
         content.Children.Add(CreateSettingCard(
             _eventsCheckBox,
             _text.EventsDetail));
@@ -132,12 +140,23 @@ internal sealed class LauncherCompanionSettingsWindow : Window
         _maintenanceCheckBox = CreateCheckBox(
             _text.Maintenance,
             settings.MaintenanceAlertsEnabled);
+        _maintenanceCheckBox.Checked += AlertSelectionChanged;
+        _maintenanceCheckBox.Unchecked += AlertSelectionChanged;
         content.Children.Add(CreateSettingCard(_maintenanceCheckBox, null));
 
         var reminderGrid = new Grid();
-        reminderGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        reminderGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        reminderGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        reminderGrid.ColumnDefinitions.Add(new ColumnDefinition
+        {
+            Width = new GridLength(1, GridUnitType.Star)
+        });
+        reminderGrid.ColumnDefinitions.Add(new ColumnDefinition
+        {
+            Width = GridLength.Auto
+        });
+        reminderGrid.ColumnDefinitions.Add(new ColumnDefinition
+        {
+            Width = GridLength.Auto
+        });
         reminderGrid.Children.Add(new TextBlock
         {
             Text = _text.Reminder,
@@ -189,8 +208,14 @@ internal sealed class LauncherCompanionSettingsWindow : Window
         root.Children.Add(scroll);
 
         var footer = new Grid { Margin = new Thickness(0, 18, 0, 0) };
-        footer.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        footer.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        footer.ColumnDefinitions.Add(new ColumnDefinition
+        {
+            Width = new GridLength(1, GridUnitType.Star)
+        });
+        footer.ColumnDefinitions.Add(new ColumnDefinition
+        {
+            Width = GridLength.Auto
+        });
         var testButton = CreateButton(_text.Test, 116);
         testButton.Click += (_, _) => _testNotification();
         footer.Children.Add(testButton);
@@ -209,6 +234,7 @@ internal sealed class LauncherCompanionSettingsWindow : Window
         root.Children.Add(footer);
 
         Content = root;
+        Closed += CompanionSettingsWindow_Closed;
         UpdateEnabledState();
     }
 
@@ -227,6 +253,9 @@ internal sealed class LauncherCompanionSettingsWindow : Window
     }
 
     private void CompanionSelectionChanged(object sender, RoutedEventArgs e)
+        => UpdateEnabledState();
+
+    private void AlertSelectionChanged(object sender, RoutedEventArgs e)
         => UpdateEnabledState();
 
     private void UpdateEnabledState()
@@ -253,6 +282,17 @@ internal sealed class LauncherCompanionSettingsWindow : Window
         };
         DialogResult = true;
         Close();
+    }
+
+    private void CompanionSettingsWindow_Closed(object? sender, EventArgs e)
+    {
+        Closed -= CompanionSettingsWindow_Closed;
+        _companionCheckBox.Checked -= CompanionSelectionChanged;
+        _companionCheckBox.Unchecked -= CompanionSelectionChanged;
+        _eventsCheckBox.Checked -= AlertSelectionChanged;
+        _eventsCheckBox.Unchecked -= AlertSelectionChanged;
+        _maintenanceCheckBox.Checked -= AlertSelectionChanged;
+        _maintenanceCheckBox.Unchecked -= AlertSelectionChanged;
     }
 
     private static CheckBox CreateCheckBox(string text, bool isChecked)
