@@ -23,6 +23,7 @@ internal sealed record LauncherSettings
     public string LoginServerAddress { get; init; } = "127.0.0.1";
     public string PortalBaseUri { get; init; } = "http://localhost:5080/";
     public string AccountName { get; init; } = string.Empty;
+    public string[] RecentAccountNames { get; init; } = Array.Empty<string>();
     public bool CloseAfterLaunch { get; init; }
     public bool DiscordRichPresenceEnabled { get; init; } = true;
     public string DiscordApplicationId { get; init; } = OfficialDiscordApplicationId;
@@ -144,8 +145,8 @@ internal static class LauncherSettingsStore
             string.IsNullOrWhiteSpace(settings.GameExecutable) ||
             Path.GetFileName(settings.GameExecutable) != settings.GameExecutable ||
             settings.GameExecutable.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0 ||
-            settings.AccountName.Length > 255 ||
-            settings.AccountName.IndexOfAny(['\t', '\r', '\n', '\v', '\0']) >= 0 ||
+            !IsStoredAccountName(settings.AccountName, allowEmpty: true) ||
+            !AreRecentAccountsValid(settings.RecentAccountNames) ||
             !IsSafeAuthenticationEndpoint(settings.AuthenticationEndpoint) ||
             !IsSupportedTransport(settings.AuthenticationTransport) ||
             !IsIpv4Address(settings.LoginServerAddress) ||
@@ -163,6 +164,43 @@ internal static class LauncherSettingsStore
         {
             throw new InvalidDataException($"Unsupported launcher language '{settings.Language}'.");
         }
+    }
+
+    private static bool AreRecentAccountsValid(string[]? values)
+    {
+        if (values is null || values.Length > LauncherAccountHistory.MaximumRecentAccounts)
+        {
+            return false;
+        }
+
+        var distinct = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var value in values)
+        {
+            if (!IsStoredAccountName(value, allowEmpty: false) || !distinct.Add(value))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static bool IsStoredAccountName(string? value, bool allowEmpty)
+    {
+        if (value is null)
+        {
+            return false;
+        }
+
+        if (value.Length == 0)
+        {
+            return allowEmpty;
+        }
+
+        return value.Length <= 255 &&
+               string.Equals(value, value.Trim(), StringComparison.Ordinal) &&
+               value.IndexOfAny(['\t', '\r', '\n', '\v', '\0']) < 0 &&
+               !value.Any(char.IsControl);
     }
 
     private static bool IsSupportedTransport(string value)
