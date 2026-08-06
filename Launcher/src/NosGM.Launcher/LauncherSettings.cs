@@ -31,6 +31,11 @@ internal sealed record LauncherSettings
     public bool DiscordShowMap { get; init; } = true;
     public bool DiscordShowChannel { get; init; } = true;
     public bool DiscordShowParty { get; init; } = true;
+    public bool CompanionModeEnabled { get; init; }
+    public bool CompanionRestoreAfterGame { get; init; } = true;
+    public bool EventAlertsEnabled { get; init; } = true;
+    public bool MaintenanceAlertsEnabled { get; init; } = true;
+    public int EventReminderMinutes { get; init; } = 10;
 }
 
 internal static class LauncherSettingsStore
@@ -161,7 +166,8 @@ internal static class LauncherSettingsStore
             !IsSupportedTransport(settings.AuthenticationTransport) ||
             !IsIpv4Address(settings.LoginServerAddress) ||
             !IsSafePortalBaseUri(settings.PortalBaseUri) ||
-            !IsDiscordApplicationId(settings.DiscordApplicationId))
+            !IsDiscordApplicationId(settings.DiscordApplicationId) ||
+            !IsSupportedReminder(settings.EventReminderMinutes))
         {
             throw new InvalidDataException("Launcher settings are invalid.");
         }
@@ -219,6 +225,9 @@ internal static class LauncherSettingsStore
                string.Equals(value, "gameforge-pipe", StringComparison.OrdinalIgnoreCase) ||
                string.Equals(value, "steam-stub", StringComparison.OrdinalIgnoreCase);
     }
+
+    private static bool IsSupportedReminder(int minutes)
+        => minutes is 5 or 10 or 15 or 30 or 60;
 
     private static bool IsIpv4Address(string value)
     {

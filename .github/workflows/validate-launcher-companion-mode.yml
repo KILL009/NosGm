@@ -1,0 +1,50 @@
+name: Validate launcher companion mode
+
+on:
+  pull_request:
+    paths:
+      - "Launcher/src/NosGM.Launcher/LauncherSettings.cs"
+      - "Launcher/src/NosGM.Launcher/LauncherTrayIcon.cs"
+      - "Launcher/src/NosGM.Launcher/LauncherCompanionSettingsWindow.cs"
+      - "Launcher/src/NosGM.Launcher/LauncherCompanionAlertState.cs"
+      - "Launcher/src/NosGM.Launcher/MainWindow.Companion.cs"
+      - "Launcher/src/NosGM.Launcher/LauncherController.cs"
+      - "scripts/verify-launcher.ps1"
+      - "scripts/verify-launcher-companion-mode.ps1"
+      - "docs/launcher-companion-mode.md"
+      - ".github/workflows/validate-launcher-companion-mode.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-contracts:
+    runs-on: windows-2022
+    timeout-minutes: 25
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up .NET 10
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Verify companion contracts
+        shell: powershell
+        run: ./scripts/verify-launcher-companion-mode.ps1
+
+      - name: Verify global launcher safety guard
+        shell: pwsh
+        run: ./scripts/verify-launcher.ps1
+
+      - name: Restore launcher
+        run: dotnet restore Launcher/NosGM.Launcher.sln
+
+      - name: Build launcher Release
+        run: dotnet build Launcher/NosGM.Launcher.sln --configuration Release --no-restore
+
+      - name: Run updater regression suite
+        run: dotnet run --project Launcher/tests/NosGM.Updater.SelfTest/NosGM.Updater.SelfTest.csproj --configuration Release --no-build
