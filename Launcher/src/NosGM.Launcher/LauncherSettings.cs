@@ -23,6 +23,7 @@ internal sealed record LauncherSettings
     public string LoginServerAddress { get; init; } = "127.0.0.1";
     public string PortalBaseUri { get; init; } = "http://localhost:5080/";
     public string AccountName { get; init; } = string.Empty;
+    public string[] RecentAccountNames { get; init; } = Array.Empty<string>();
     public bool CloseAfterLaunch { get; init; }
     public bool DiscordRichPresenceEnabled { get; init; } = true;
     public string DiscordApplicationId { get; init; } = OfficialDiscordApplicationId;
@@ -57,14 +58,17 @@ internal static class LauncherSettingsStore
         LauncherSettings persistedSettings;
         if (!File.Exists(SettingsPath))
         {
-            persistedSettings = new LauncherSettings();
+            persistedSettings = LauncherAccountHistory.Normalize(new LauncherSettings());
             Validate(persistedSettings);
             await JsonSupport.WriteAtomicAsync(SettingsPath, persistedSettings);
         }
         else
         {
-            persistedSettings = await JsonSupport.ReadAsync<LauncherSettings>(SettingsPath);
-            Validate(persistedSettings);
+            var loadedSettings = await JsonSupport.ReadAsync<LauncherSettings>(SettingsPath);
+            persistedSettings = LauncherAccountHistory.Normalize(loadedSettings);
+            var settingsChanged = !LauncherAccountHistory.StoredAccountsEqual(
+                loadedSettings,
+                persistedSettings);
 
             // Migrate launchers that saved the pre-Rich-Presence empty value.
             // The Application ID is public application metadata, not a secret.
@@ -74,6 +78,12 @@ internal static class LauncherSettingsStore
                 {
                     DiscordApplicationId = LauncherSettings.OfficialDiscordApplicationId
                 };
+                settingsChanged = true;
+            }
+
+            Validate(persistedSettings);
+            if (settingsChanged)
+            {
                 await JsonSupport.WriteAtomicAsync(SettingsPath, persistedSettings);
             }
         }
@@ -103,22 +113,23 @@ internal static class LauncherSettingsStore
 
     public static Task SaveAsync(LauncherSettings settings)
     {
-        var persistedSettings = settings with
+        var normalizedSettings = LauncherAccountHistory.Normalize(settings);
+        var persistedSettings = normalizedSettings with
         {
             AuthenticationEndpoint = GetRuntimeValue(AuthenticationEndpointEnvironmentVariable) is null
-                ? settings.AuthenticationEndpoint
+                ? normalizedSettings.AuthenticationEndpoint
                 : _persistedAuthenticationEndpoint,
             AuthenticationTransport = GetRuntimeValue(AuthenticationTransportEnvironmentVariable) is null
-                ? settings.AuthenticationTransport
+                ? normalizedSettings.AuthenticationTransport
                 : _persistedAuthenticationTransport,
             LoginServerAddress = GetRuntimeValue(LoginServerAddressEnvironmentVariable) is null
-                ? settings.LoginServerAddress
+                ? normalizedSettings.LoginServerAddress
                 : _persistedLoginServerAddress,
             PortalBaseUri = GetRuntimeValue(PortalBaseUriEnvironmentVariable) is null
-                ? settings.PortalBaseUri
+                ? normalizedSettings.PortalBaseUri
                 : _persistedPortalBaseUri,
             DiscordApplicationId = GetRuntimeValue(DiscordApplicationIdEnvironmentVariable) is null
-                ? settings.DiscordApplicationId
+                ? normalizedSettings.DiscordApplicationId
                 : _persistedDiscordApplicationId
         };
         Validate(persistedSettings);
@@ -144,8 +155,8 @@ internal static class LauncherSettingsStore
             string.IsNullOrWhiteSpace(settings.GameExecutable) ||
             Path.GetFileName(settings.GameExecutable) != settings.GameExecutable ||
             settings.GameExecutable.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0 ||
-            settings.AccountName.Length > 255 ||
-            settings.AccountName.IndexOfAny(['\t', '\r', '\n', '\v', '\0']) >= 0 ||
+            !IsStoredAccountName(settings.AccountName, allowEmpty: true) ||
+            !AreRecentAccountsValid(settings.RecentAccountNames) ||
             !IsSafeAuthenticationEndpoint(settings.AuthenticationEndpoint) ||
             !IsSupportedTransport(settings.AuthenticationTransport) ||
             !IsIpv4Address(settings.LoginServerAddress) ||
@@ -163,6 +174,43 @@ internal static class LauncherSettingsStore
         {
             throw new InvalidDataException($"Unsupported launcher language '{settings.Language}'.");
         }
+    }
+
+    private static bool AreRecentAccountsValid(string[]? values)
+    {
+        if (values is null || values.Length > LauncherAccountHistory.MaximumRecentAccounts)
+        {
+            return false;
+        }
+
+        var distinct = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var value in values)
+        {
+            if (!IsStoredAccountName(value, allowEmpty: false) || !distinct.Add(value))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static bool IsStoredAccountName(string? value, bool allowEmpty)
+    {
+        if (value is null)
+        {
+            return false;
+        }
+
+        if (value.Length == 0)
+        {
+            return allowEmpty;
+        }
+
+        return value.Length <= 255 &&
+               string.Equals(value, value.Trim(), StringComparison.Ordinal) &&
+               value.IndexOfAny(['\t', '\r', '\n', '\v', '\0']) < 0 &&
+               !value.Any(char.IsControl);
     }
 
     private static bool IsSupportedTransport(string value)

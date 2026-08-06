@@ -1,0 +1,44 @@
+name: Validate launcher account hub
+
+on:
+  pull_request:
+    paths:
+      - "Launcher/src/NosGM.Launcher/LauncherAccountHistory.cs"
+      - "Launcher/src/NosGM.Launcher/LauncherAccountHubWindow.cs"
+      - "Launcher/src/NosGM.Launcher/MainWindow.AccountHub.cs"
+      - "Launcher/src/NosGM.Launcher/LauncherSettings.cs"
+      - "Launcher/src/NosGM.Launcher/LauncherLoginDialog.cs"
+      - "scripts/verify-launcher-account-hub.ps1"
+      - "docs/launcher-account-hub.md"
+      - ".github/workflows/validate-launcher-account-hub.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-contracts:
+    runs-on: windows-2022
+    timeout-minutes: 25
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up .NET 10
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Verify account hub contracts
+        shell: powershell
+        run: ./scripts/verify-launcher-account-hub.ps1
+
+      - name: Restore launcher
+        run: dotnet restore Launcher/NosGM.Launcher.sln
+
+      - name: Build launcher Release
+        run: dotnet build Launcher/NosGM.Launcher.sln --configuration Release --no-restore
+
+      - name: Run updater regression suite
+        run: dotnet run --project Launcher/tests/NosGM.Updater.SelfTest/NosGM.Updater.SelfTest.csproj --configuration Release --no-build
