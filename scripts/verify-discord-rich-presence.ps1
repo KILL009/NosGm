@@ -151,9 +151,10 @@ Assert-Contains $world 'character.LastMove' `
     "Movement contributes to AFK expiry"
 Assert-Contains $world 'character.LastMessage' `
     "Player communication contributes to AFK expiry"
-Assert-Contains $world 'return new LauncherPresenceAction(`
-                fallbackActivity,' `
-    "Expired actions return to the authoritative map or event state"
+Assert-Contains $world 'fallbackActivity,' `
+    "Expired actions retain the authoritative fallback activity"
+Assert-Contains $world 'fallbackDetails);' `
+    "Expired actions retain the authoritative fallback details"
 
 Assert-NotContains $world 'character.LastSkillUseNew' `
     "Action presence avoids login-time combat false positives"
