@@ -70,6 +70,18 @@ Assert-Contains $state 'DiscordShowChannel' `
     "Channel sharing is controlled by privacy settings"
 Assert-Contains $state 'DiscordShowParty' `
     "Party sharing is controlled by privacy settings"
+Assert-Contains $state '"combat" => "Combatiendo"' `
+    "Combat has a map-free privacy fallback"
+Assert-Contains $state '"fishing" => "Pescando"' `
+    "Fishing has a map-free privacy fallback"
+Assert-Contains $state '"minigame" => "Participando en un minijuego"' `
+    "Minigames have a map-free privacy fallback"
+Assert-Contains $state '"trading" => "Intercambiando objetos"' `
+    "Trading has a map-free privacy fallback"
+Assert-Contains $state '"shopping" => "Revisando una tienda"' `
+    "Shopping has a map-free privacy fallback"
+Assert-Contains $state '"afk" => "Ausente por un momento"' `
+    "AFK has a map-free privacy fallback"
 
 Assert-Contains $presenceWindow 'CloseAfterLaunch = false' `
     "Launcher remains alive while it owns dynamic Rich Presence"
@@ -116,14 +128,70 @@ Assert-Contains $world 'MapInstanceType.RainbowBattleInstance' `
     "Rainbow Battle activity is classified"
 Assert-Contains $world 'MapInstanceType.CelestialSpire' `
     "Celestial Spire activity is classified"
+
+Assert-Contains $world 'LauncherPresenceActionClassifier.Resolve' `
+    "World resolves action-level presence after map classification"
+Assert-Contains $world 'TimeSpan.FromSeconds(15)' `
+    "Combat action presence expires after a short bounded window"
+Assert-Contains $world 'TimeSpan.FromMinutes(5)' `
+    "AFK requires a bounded inactivity threshold"
+Assert-Contains $world 'if (character.IsFishing)' `
+    "Fishing is driven by the authoritative character state"
+Assert-Contains $world 'if (character.CurrentMinigame > 0)' `
+    "Minigames are driven by the authoritative character state"
+Assert-Contains $world 'if (character.ExchangeInfo != null)' `
+    "Trading is driven by the authoritative exchange state"
+Assert-Contains $world 'if (character.IsShopping)' `
+    "Shopping is driven by the authoritative shop state"
+Assert-Contains $world 'character.LastSkillUse' `
+    "Recent skill use contributes to combat presence"
+Assert-Contains $world 'character.LastDefence' `
+    "Recent defence contributes to combat presence"
+Assert-Contains $world 'character.LastMove' `
+    "Movement contributes to AFK expiry"
+Assert-Contains $world 'character.LastMessage' `
+    "Player communication contributes to AFK expiry"
+Assert-Contains $world 'return new LauncherPresenceAction(`
+                fallbackActivity,' `
+    "Expired actions return to the authoritative map or event state"
+
+Assert-NotContains $world 'character.LastSkillUseNew' `
+    "Action presence avoids login-time combat false positives"
+Assert-NotContains $world 'character.LastMonsterAggro' `
+    "Action presence avoids constructor-time aggro false positives"
 Assert-NotContains $world 'public string AccountName' `
     "World snapshots do not expose account names"
 Assert-NotContains $world 'public string Password' `
     "World snapshots do not expose passwords"
+Assert-NotContains $world 'public string TargetName' `
+    "World snapshots do not expose combat target names"
+Assert-NotContains $world 'public long TargetId' `
+    "World snapshots do not expose combat target identifiers"
+Assert-NotContains $world 'public long MonsterId' `
+    "World snapshots do not expose monster identifiers"
 Assert-NotContains $world 'MapX' `
     "World snapshots do not expose precise X coordinates"
 Assert-NotContains $world 'MapY' `
     "World snapshots do not expose precise Y coordinates"
+
+$priorityMarkers = @(
+    'if (character.IsFishing)',
+    'if (character.CurrentMinigame > 0)',
+    'if (character.ExchangeInfo != null)',
+    'if (character.IsShopping)',
+    'if (IsRecent(lastCombat, now, CombatActivityWindow))',
+    'if (IsInactive(lastActivity, now, AfkThreshold))'
+)
+$previousIndex = -1
+foreach ($marker in $priorityMarkers) {
+    $index = $world.IndexOf($marker, [StringComparison]::Ordinal)
+    if ($index -le $previousIndex) {
+        throw "Action presence priority is invalid near: $marker"
+    }
+
+    $previousIndex = $index
+}
+Write-Host "[PASS] Action presence priority is deterministic"
 
 $sample = "ES_EDGARDO1"
 $sha = [Security.Cryptography.SHA256]::Create()
@@ -139,4 +207,4 @@ finally {
 }
 Write-Host "[PASS] Presence account routes are fixed-length SHA-256 derivations"
 
-Write-Host "NosGM Discord Rich Presence security, privacy and lifecycle contracts passed."
+Write-Host "NosGM Discord Rich Presence security, privacy, action expiry and lifecycle contracts passed."
