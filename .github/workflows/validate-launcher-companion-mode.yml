@@ -8,6 +8,8 @@ on:
       - "Launcher/src/NosGM.Launcher/LauncherCompanionSettingsWindow.cs"
       - "Launcher/src/NosGM.Launcher/LauncherCompanionAlertState.cs"
       - "Launcher/src/NosGM.Launcher/MainWindow.Companion.cs"
+      - "Launcher/src/NosGM.Launcher/LauncherController.cs"
+      - "scripts/verify-launcher.ps1"
       - "scripts/verify-launcher-companion-mode.ps1"
       - "docs/launcher-companion-mode.md"
       - ".github/workflows/validate-launcher-companion-mode.yml"
@@ -33,6 +35,10 @@ jobs:
       - name: Verify companion contracts
         shell: powershell
         run: ./scripts/verify-launcher-companion-mode.ps1
+
+      - name: Verify global launcher safety guard
+        shell: powershell
+        run: ./scripts/verify-launcher.ps1
 
       - name: Restore launcher
         run: dotnet restore Launcher/NosGM.Launcher.sln
