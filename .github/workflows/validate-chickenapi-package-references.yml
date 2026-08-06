@@ -1,0 +1,165 @@
+name: Validate legacy package references
+
+on:
+  pull_request:
+    paths:
+      - "NosGm.sln"
+      - "Data/NosGm.ChickenAPI/ChickenAPI.Events/ChickenAPI.Events.csproj"
+      - "Data/NosGm.ChickenAPI/ChickenAPI.Plugins/ChickenAPI.Plugins.csproj"
+      - "Data/NosGm.DAL/NosGm.DAL.DAO/NosGm.DAL.DAO.csproj"
+      - "Data/NosGm.DAL/NosGm.DAL.DAO/packages.config"
+      - "Data/NosGm.DAL/NosGm.DAL.EF/NosGm.DAL.EF.csproj"
+      - "Data/NosGm.DAL/NosGm.DAL.EF/packages.config"
+      - "Data/NosGm.DAL/NosGm.DAL.EF/Properties/SlowCheetah/SlowCheetah.Transforms.targets"
+      - "Data/NosGm.Program/NosGm.Logger/NosGm.LogServer.csproj"
+      - "Data/NosGm.Program/NosGm.Logger/packages.config"
+      - "scripts/verify-chickenapi-package-references.ps1"
+      - ".github/workflows/validate-chickenapi-package-references.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: legacy-package-references-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  restore-and-build:
+    runs-on: windows-2022
+    timeout-minutes: 30
+
+    env:
+      CONFIGURATION: Release
+      PLATFORM: AnyCPU
+      ARTIFACTS: artifacts/legacy-package-references
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Install .NET 9 compatibility SDK
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 9.0.x
+
+      - name: Select compatible SDK imports for legacy MSBuild
+        shell: pwsh
+        run: |
+          $sdkLine = dotnet --list-sdks |
+            Where-Object { $_ -match '^9\.0\.' } |
+            Select-Object -Last 1
+          if ([string]::IsNullOrWhiteSpace($sdkLine) -or
+              $sdkLine -notmatch '^([^\s]+)\s+\[(.+)\]$') {
+            throw "Unable to locate the .NET 9 compatibility SDK."
+          }
+
+          $sdkVersion = $Matches[1]
+          $sdkBase = $Matches[2]
+          $sdkPath = Join-Path (Join-Path $sdkBase $sdkVersion) "Sdks"
+          "MSBuildSDKsPath=$sdkPath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "MSBuildEnableWorkloadResolver=false" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          Write-Host "Legacy MSBuild SDK imports: $sdkVersion"
+
+      - name: Set up Visual Studio MSBuild
+        uses: microsoft/setup-msbuild@v3
+        with:
+          vs-version: '[17.0,18.0)'
+          msbuild-architecture: x64
+
+      - name: Verify package declarations
+        shell: powershell
+        run: ./scripts/verify-chickenapi-package-references.ps1
+
+      - name: Restore classic packages.config projects
+        shell: pwsh
+        run: |
+          $packageConfigs = @(
+            "Data\NosGm.DAL\NosGm.DAL.DAO\packages.config",
+            "Data\NosGm.DAL\NosGm.DAL.EF\packages.config",
+            "Data\NosGm.Program\NosGm.Logger\packages.config"
+          )
+          foreach ($packageConfig in $packageConfigs) {
+            nuget restore $packageConfig `
+              -PackagesDirectory "packages" `
+              -NonInteractive `
+              -Verbosity normal
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
+
+      - name: Verify restored classic package files
+        shell: powershell
+        run: ./scripts/verify-chickenapi-package-references.ps1 -VerifyRestoredFiles
+
+      - name: Load DAL.EF SlowCheetah build tools
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path "$env:ARTIFACTS" | Out-Null
+          & msbuild "Data\NosGm.DAL\NosGm.DAL.EF\NosGm.DAL.EF.csproj" `
+            /t:CopyAssembliesToLocalPath `
+            /m `
+            /nologo `
+            /nr:false `
+            /v:minimal `
+            /p:NosGmLegacyBuild=true `
+            /p:Configuration="$env:CONFIGURATION" `
+            /p:Platform="$env:PLATFORM" `
+            /bl:"$env:ARTIFACTS\NosGm.DAL.EF-SlowCheetah.binlog" `
+            /fl `
+            /flp:"logfile=$env:ARTIFACTS\NosGm.DAL.EF-SlowCheetah.log;verbosity=normal"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Restore ChickenAPI PackageReference projects
+        shell: pwsh
+        run: |
+          $projects = @(
+            "Data\NosGm.ChickenAPI\ChickenAPI.Events\ChickenAPI.Events.csproj",
+            "Data\NosGm.ChickenAPI\ChickenAPI.Plugins\ChickenAPI.Plugins.csproj"
+          )
+          foreach ($project in $projects) {
+            & msbuild $project `
+              /t:Restore `
+              /m `
+              /nologo `
+              /nr:false `
+              /v:minimal `
+              /p:RestorePackagesConfig=true `
+              /p:NosGmLegacyBuild=true `
+              /p:Configuration="$env:CONFIGURATION" `
+              /p:Platform="$env:PLATFORM"
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
+
+      - name: Build ChickenAPI PackageReference projects
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path "$env:ARTIFACTS" | Out-Null
+          $projects = @(
+            "Data\NosGm.ChickenAPI\ChickenAPI.Events\ChickenAPI.Events.csproj",
+            "Data\NosGm.ChickenAPI\ChickenAPI.Plugins\ChickenAPI.Plugins.csproj"
+          )
+          foreach ($project in $projects) {
+            $name = [IO.Path]::GetFileNameWithoutExtension($project)
+            & msbuild $project `
+              /t:Build `
+              /m `
+              /nologo `
+              /nr:false `
+              /v:minimal `
+              /p:NosGmLegacyBuild=true `
+              /p:Configuration="$env:CONFIGURATION" `
+              /p:Platform="$env:PLATFORM" `
+              /bl:"$env:ARTIFACTS\$name.binlog" `
+              /fl `
+              /flp:"logfile=$env:ARTIFACTS\$name.log;verbosity=normal"
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
+
+      - name: Upload focused build diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: legacy-package-reference-diagnostics
+          path: artifacts/legacy-package-references/
+          if-no-files-found: warn
+          retention-days: 14
