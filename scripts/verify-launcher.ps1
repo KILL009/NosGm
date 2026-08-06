@@ -21,6 +21,7 @@ $required = @(
     "src/NosGM.Launcher/SteamClientPatcher.cs",
     "src/NosGM.Launcher/ModernGameLauncher.cs",
     "src/NosGM.Launcher/LauncherLoginDialog.cs",
+    "src/NosGM.Launcher/LauncherTrayIcon.cs",
     "src/NosGM.SteamAuthStub/NosGM.SteamAuthStub.csproj",
     "src/NosGM.SteamAuthStub/SteamAuthStub.cs",
     "tests/NosGM.Updater.SelfTest/NosGM.Updater.SelfTest.csproj",
@@ -60,8 +61,11 @@ foreach ($needle in @(
     }
 }
 
+$traySourcePath = Join-Path $launcher "src/NosGM.Launcher/LauncherTrayIcon.cs"
 $sourceFiles = @($trackedFiles | Where-Object {
-    $_.Extension -eq ".cs" -and $_.FullName -notlike "*NosGM.SteamAuthStub*"
+    $_.Extension -eq ".cs" -and
+    $_.FullName -notlike "*NosGM.SteamAuthStub*" -and
+    $_.FullName -ne $traySourcePath
 })
 $source = ($sourceFiles | ForEach-Object { Get-Content $_.FullName -Raw }) -join "`n"
 
@@ -78,6 +82,46 @@ foreach ($forbidden in @(
 )) {
     if ($source.Contains($forbidden, [System.StringComparison]::OrdinalIgnoreCase)) {
         throw "Forbidden launcher primitive or upstream endpoint found: $forbidden"
+    }
+}
+
+$traySource = Get-Content $traySourcePath -Raw
+$trayDllImportCount = [regex]::Matches(
+    $traySource,
+    '\[DllImport\(',
+    [System.Text.RegularExpressions.RegexOptions]::CultureInvariant).Count
+if ($trayDllImportCount -ne 2) {
+    throw "Companion tray must contain exactly two audited DllImport declarations. Found: $trayDllImportCount"
+}
+foreach ($requiredTrayCode in @(
+    '"shell32.dll"',
+    'EntryPoint = "Shell_NotifyIconW"',
+    '"user32.dll"',
+    'EntryPoint = "LoadIconW"',
+    'ExactSpelling = true',
+    'SetLastError = true',
+    'NotifyDelete',
+    'Info = Limit(message, 255)'
+)) {
+    if (-not $traySource.Contains($requiredTrayCode, [System.StringComparison]::Ordinal)) {
+        throw "Companion tray native boundary missing: $requiredTrayCode"
+    }
+}
+foreach ($forbiddenTrayCode in @(
+    'LoadLibrary',
+    'GetProcAddress',
+    'CreateRemoteThread',
+    'OpenProcess',
+    'VirtualAlloc',
+    'WriteProcessMemory',
+    'VirtualProtect',
+    'Process.Start',
+    'HttpClient',
+    'WebClient',
+    'Environment.GetEnvironmentVariable'
+)) {
+    if ($traySource.Contains($forbiddenTrayCode, [System.StringComparison]::OrdinalIgnoreCase)) {
+        throw "Companion tray contains a forbidden native, process, network, or secret primitive: $forbiddenTrayCode"
     }
 }
 
@@ -228,4 +272,4 @@ if ($serverSolution.Contains("NosGM.Launcher", [System.StringComparison]::Ordina
     throw "Launcher projects must remain outside the NosGM server solution."
 }
 
-Write-Host "NosGM Launcher attribution, updater, Gameforge pipe, PATH-safe NativeAOT publish and Steam stub safety checks passed."
+Write-Host "NosGM Launcher attribution, updater, audited tray boundary, Gameforge pipe, PATH-safe NativeAOT publish and Steam stub safety checks passed."
