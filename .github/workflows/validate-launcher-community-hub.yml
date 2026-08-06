@@ -1,0 +1,42 @@
+name: Validate launcher community hub
+
+on:
+  pull_request:
+    paths:
+      - "Launcher/src/NosGM.Launcher/LauncherCommunityClient.cs"
+      - "Launcher/src/NosGM.Launcher/LauncherCommunityHubWindow.cs"
+      - "Launcher/src/NosGM.Launcher/MainWindow.CommunityHub.cs"
+      - "scripts/verify-launcher-community-hub.ps1"
+      - "docs/launcher-community-hub.md"
+      - ".github/workflows/validate-launcher-community-hub.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-contracts:
+    runs-on: windows-2022
+    timeout-minutes: 25
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up .NET 10
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Verify community hub contracts
+        shell: powershell
+        run: ./scripts/verify-launcher-community-hub.ps1
+
+      - name: Restore launcher
+        run: dotnet restore Launcher/NosGM.Launcher.sln
+
+      - name: Build launcher Release
+        run: dotnet build Launcher/NosGM.Launcher.sln --configuration Release --no-restore
+
+      - name: Run updater regression suite
+        run: dotnet run --project Launcher/tests/NosGM.Updater.SelfTest/NosGM.Updater.SelfTest.csproj --configuration Release --no-build
