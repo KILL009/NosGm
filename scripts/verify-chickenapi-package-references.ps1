@@ -174,7 +174,7 @@ foreach ($relativeProjectPath in $solutionProjects) {
             }
         }
 
-        Write-Host "[PASS] $relativeProjectPath: packages.config backs $packageFolder"
+        Write-Host "[PASS] ${relativeProjectPath}: packages.config backs $packageFolder"
     }
 
     if ($hasActiveSlowCheetah) {
@@ -232,7 +232,7 @@ foreach ($relativeProjectPath in $solutionProjects) {
             }
         }
 
-        Write-Host "[PASS] $relativeProjectPath: packages.config backs active $packageFolder build tools"
+        Write-Host "[PASS] ${relativeProjectPath}: packages.config backs active $packageFolder build tools"
     }
 }
 
