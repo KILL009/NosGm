@@ -140,21 +140,11 @@ public partial class MainWindow
             return;
         }
 
+        // ModernGameLauncher raises this event synchronously before Play_Click
+        // persists the successful account. Updating _settings here makes the
+        // existing single settings write include the bounded history too.
         _settings = LauncherAccountHistory.Remember(_settings, accountName);
         RefreshAccountHubButton();
-        _ = SaveAuthenticatedAccountAsync(_settings);
-    }
-
-    private static async Task SaveAuthenticatedAccountAsync(LauncherSettings settings)
-    {
-        try
-        {
-            await LauncherSettingsStore.SaveAsync(settings).ConfigureAwait(false);
-        }
-        catch
-        {
-            // A successful game launch must not be reversed by optional history persistence.
-        }
     }
 
     private void RefreshAccountHubButton()
