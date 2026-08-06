@@ -23,7 +23,8 @@ jobs:
     timeout-minutes: 45
 
     env:
-      SOLUTION: NosGm.sln
+      SOURCE_SOLUTION: NosGm.sln
+      SOLUTION: artifacts\NosGm.Legacy.generated.sln
       CONFIGURATION: Release
       PLATFORM: x64
       ARTIFACTS: artifacts
@@ -31,6 +32,13 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v6
+
+      - name: Prepare compatible legacy solution graph
+        shell: powershell
+        run: |
+          ./scripts/prepare-legacy-solution.ps1 `
+            -Source "$env:SOURCE_SOLUTION" `
+            -Destination "$env:SOLUTION"
 
       # The legacy .NET Framework solution is built by Visual Studio 2022
       # MSBuild 17.14, which cannot load the repository-wide .NET 10 SDK.
@@ -123,7 +131,7 @@ jobs:
           $output | ForEach-Object { Write-Host $_ }
           if ($exitCode -ne 0) { exit $exitCode }
 
-      - name: Build complete solution
+      - name: Build compatible legacy solution
         shell: pwsh
         run: |
           $output = & msbuild "$env:SOLUTION" `
