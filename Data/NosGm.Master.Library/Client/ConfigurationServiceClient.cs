@@ -34,6 +34,26 @@ namespace NosGm.Master.Library.Client
                         memberName: nameof(CommunicationServiceClient));
                     Thread.Sleep(1000);
                 }
+
+            string shadowDiagnostic;
+            ConfigurationGrpcShadowMirror shadowMirror;
+            if (ConfigurationGrpcShadowMirror.TryCreateFromEnvironment(
+                    out shadowMirror,
+                    out shadowDiagnostic))
+            {
+                _grpcShadowMirror = shadowMirror;
+                Logger.Info(
+                    "[CONFIG_GRPC_SHADOW] Configuration shadow mirror enabled; SCS remains authoritative.");
+            }
+            else if (!string.Equals(
+                         shadowDiagnostic,
+                         "disabled",
+                         StringComparison.Ordinal))
+            {
+                Logger.Warn(
+                    "[CONFIG_GRPC_SHADOW] Shadow mirror unavailable; continuing with SCS authority. Reason=" +
+                    (shadowDiagnostic ?? "unknown"));
+            }
         }
 
         #endregion
@@ -51,6 +71,8 @@ namespace NosGm.Master.Library.Client
         private readonly IScsServiceClient<IConfigurationService> _client;
 
         private readonly ConfigurationClient _confClient;
+
+        private readonly ConfigurationGrpcShadowMirror _grpcShadowMirror;
 
         #endregion
 
@@ -72,17 +94,53 @@ namespace NosGm.Master.Library.Client
 
         public ConfigurationObject GetConfigurationObject()
         {
-            return _client.ServiceProxy.GetConfigurationObject();
+            ConfigurationObject authoritative =
+                _client.ServiceProxy.GetConfigurationObject();
+            ObserveAuthoritativeConfiguration(authoritative, "Get");
+            return authoritative;
         }
 
         public void UpdateConfigurationObject(ConfigurationObject configurationObject)
         {
             _client.ServiceProxy.UpdateConfigurationObject(configurationObject);
+            ObserveAuthoritativeConfiguration(configurationObject, "Update");
         }
 
         internal void OnConfigurationUpdated(ConfigurationObject configurationObject)
         {
             ConfigurationUpdate?.Invoke(configurationObject, null);
+        }
+
+        private void ObserveAuthoritativeConfiguration(
+            ConfigurationObject authoritative,
+            string source)
+        {
+            if (_grpcShadowMirror == null)
+            {
+                return;
+            }
+
+            ConfigurationGrpcShadowResult result =
+                _grpcShadowMirror.Synchronize(authoritative);
+            switch (result.Status)
+            {
+                case ConfigurationGrpcShadowStatus.Matched:
+                    return;
+                case ConfigurationGrpcShadowStatus.Seeded:
+                case ConfigurationGrpcShadowStatus.Resynchronized:
+                    Logger.Info(
+                        "[CONFIG_GRPC_SHADOW] " + source +
+                        " synchronized shadow generation " +
+                        result.Generation + ". SCS remains authoritative.");
+                    return;
+                default:
+                    Logger.Warn(
+                        "[CONFIG_GRPC_SHADOW] " + source +
+                        " shadow observation failed with " +
+                        result.Status + "/" + result.TransportResult +
+                        "; SCS result remains authoritative.");
+                    return;
+            }
         }
 
         #endregion
