@@ -31,6 +31,13 @@ public sealed class ClusterConfigurationState
 
         lock (_sync)
         {
+            if (_snapshot != null && AreEqual(_snapshot, snapshot))
+            {
+                return new SnapshotState(
+                    Clone(_snapshot),
+                    _generation);
+            }
+
             _snapshot = Clone(snapshot);
             checked
             {
@@ -41,6 +48,15 @@ public sealed class ClusterConfigurationState
                 Clone(_snapshot),
                 _generation);
         }
+    }
+
+    private static bool AreEqual(
+        WireV1.ConfigurationSnapshot left,
+        WireV1.ConfigurationSnapshot right)
+    {
+        return left.MaxGold == right.MaxGold &&
+               left.TimeExpBuffUnixTimeMs == right.TimeExpBuffUnixTimeMs &&
+               left.TimeGoldBuffUnixTimeMs == right.TimeGoldBuffUnixTimeMs;
     }
 
     private static WireV1.ConfigurationSnapshot Clone(
