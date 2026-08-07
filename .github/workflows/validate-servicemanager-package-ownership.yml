@@ -1,0 +1,128 @@
+name: Validate ServiceManager package ownership
+
+on:
+  pull_request:
+    paths:
+      - "Data/NosGm.ServiceManager/NosGm.ServiceManager.csproj"
+      - "Data/NosGm.ServiceManager/packages.config"
+      - "Data/NosGm.ServiceManager/LogService/MongoDB/Lib/packages.config"
+      - "Data/NosGm.Configuration/NosGm.Configuration.csproj"
+      - "scripts/verify-servicemanager-package-ownership.ps1"
+      - ".github/workflows/validate-servicemanager-package-ownership.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: servicemanager-package-ownership-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  restore-and-build:
+    runs-on: windows-2022
+    timeout-minutes: 30
+
+    env:
+      PROJECT: Data\NosGm.ServiceManager\NosGm.ServiceManager.csproj
+      MANIFEST: Data\NosGm.ServiceManager\packages.config
+      ARTIFACTS: artifacts\servicemanager-package-ownership
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Install .NET 9 compatibility SDK
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 9.0.x
+
+      - name: Select compatible SDK imports for legacy MSBuild
+        shell: pwsh
+        run: |
+          $sdkLine = dotnet --list-sdks |
+            Where-Object { $_ -match '^9\.0\.' } |
+            Select-Object -Last 1
+          if ([string]::IsNullOrWhiteSpace($sdkLine) -or
+              $sdkLine -notmatch '^([^\s]+)\s+\[(.+)\]$') {
+            throw "Unable to locate the .NET 9 compatibility SDK."
+          }
+
+          $sdkVersion = $Matches[1]
+          $sdkBase = $Matches[2]
+          $sdkPath = Join-Path (Join-Path $sdkBase $sdkVersion) "Sdks"
+          "MSBuildSDKsPath=$sdkPath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "MSBuildEnableWorkloadResolver=false" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          Write-Host "Legacy MSBuild SDK imports: $sdkVersion"
+
+      - name: Set up Visual Studio MSBuild
+        uses: microsoft/setup-msbuild@v3
+        with:
+          vs-version: '[17.0,18.0)'
+          msbuild-architecture: x64
+
+      - name: Verify package ownership contracts
+        shell: pwsh
+        run: ./scripts/verify-servicemanager-package-ownership.ps1
+
+      - name: Restore ServiceManager packages.config
+        shell: pwsh
+        run: |
+          nuget restore "$env:MANIFEST" `
+            -PackagesDirectory "packages" `
+            -NonInteractive `
+            -Verbosity normal
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Verify restored package files
+        shell: pwsh
+        run: ./scripts/verify-servicemanager-package-ownership.ps1 -VerifyRestoredFiles
+
+      - name: Restore ServiceManager project
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path "$env:ARTIFACTS" | Out-Null
+          $solutionDir = (Resolve-Path ".").Path + [IO.Path]::DirectorySeparatorChar
+          & msbuild "$env:PROJECT" `
+            /t:Restore `
+            /m `
+            /nologo `
+            /nr:false `
+            /v:minimal `
+            /p:RestorePackagesConfig=true `
+            /p:SolutionDir="$solutionDir" `
+            /p:NosGmLegacyBuild=true `
+            /p:Configuration=Release `
+            /p:Platform=AnyCPU `
+            /bl:"$env:ARTIFACTS\servicemanager-restore.binlog" `
+            /fl `
+            /flp:"logfile=$env:ARTIFACTS\servicemanager-restore.log;verbosity=normal"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Build ServiceManager Release
+        shell: pwsh
+        run: |
+          $solutionDir = (Resolve-Path ".").Path + [IO.Path]::DirectorySeparatorChar
+          & msbuild "$env:PROJECT" `
+            /t:Build `
+            /m `
+            /nologo `
+            /nr:false `
+            /v:minimal `
+            /p:SolutionDir="$solutionDir" `
+            /p:NosGmLegacyBuild=true `
+            /p:Configuration=Release `
+            /p:Platform=AnyCPU `
+            /bl:"$env:ARTIFACTS\servicemanager.binlog" `
+            /fl `
+            /flp:"logfile=$env:ARTIFACTS\servicemanager.log;verbosity=normal"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Upload ServiceManager diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: servicemanager-package-ownership-diagnostics
+          path: artifacts/servicemanager-package-ownership/
+          if-no-files-found: warn
+          retention-days: 14
