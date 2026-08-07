@@ -52,6 +52,23 @@ if (-not (Test-Path -LiteralPath $configurationPath -PathType Leaf)) {
     throw "Resolved configuration project does not exist: $configurationPath"
 }
 
+$obsoleteConfigurationSources = New-Object System.Collections.Generic.List[string]
+$compileItems = $project.SelectNodes("//msb:Compile/@Include", $namespace)
+foreach ($compileItem in $compileItems) {
+    $sourcePath = Join-Path (Split-Path -Parent $projectPath) $compileItem.Value
+    if (-not (Test-Path -LiteralPath $sourcePath -PathType Leaf)) {
+        throw "Compiled ServiceManager source is missing: $($compileItem.Value)"
+    }
+
+    $source = Get-Content -LiteralPath $sourcePath -Raw
+    if ($source -match '(?m)^\s*using\s+NosTale\.Configuration\s*;') {
+        $obsoleteConfigurationSources.Add($compileItem.Value)
+    }
+}
+if ($obsoleteConfigurationSources.Count -gt 0) {
+    throw "Compiled ServiceManager sources still import obsolete NosTale.Configuration: $(($obsoleteConfigurationSources -join ', '))"
+}
+
 $packages = @($manifest.packages.package)
 if ($packages.Count -eq 0) {
     throw "ServiceManager packages.config is empty."
@@ -138,6 +155,7 @@ Write-Host "[PASS] ServiceManager package paths remain inside the repository."
 Write-Host "[PASS] Every package-backed path has an exact packages.config owner."
 Write-Host "[PASS] Package declarations are unique and target .NET Framework 4.8.1."
 Write-Host "[PASS] The configuration project reference resolves to NosGm.Configuration."
+Write-Host "[PASS] Compiled ServiceManager sources use the NosGm.Configuration namespace."
 if ($VerifyRestoredFiles) {
     Write-Host "[PASS] Every package-backed file exists after restore."
 }
