@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 1,
+  "legacyInterface": "IConfigurationService",
+  "legacyTransport": "SCS request/reply",
+  "targetService": "ClusterConfiguration",
+  "methods": [
+    {
+      "legacyMethod": "Authenticate",
+      "disposition": "transport_identity",
+      "target": null,
+      "callerRoles": ["World"],
+      "reason": "The replacement transport authenticates the World process with mTLS identity and must never send MasterAuthKey as an application payload."
+    },
+    {
+      "legacyMethod": "GetConfigurationObject",
+      "disposition": "typed_rpc",
+      "target": "GetConfiguration",
+      "callerRoles": ["World"]
+    },
+    {
+      "legacyMethod": "UpdateConfigurationObject",
+      "disposition": "typed_rpc",
+      "target": "UpdateConfiguration",
+      "callerRoles": ["World"]
+    }
+  ],
+  "callbackBoundary": {
+    "legacyInterface": "IConfigurationClient",
+    "legacyMethod": "ConfigurationUpdated",
+    "disposition": "deferred",
+    "reason": "The push update requires a typed subscriber with replay/cutover evidence before SCS callback delivery can be removed."
+  }
+}
