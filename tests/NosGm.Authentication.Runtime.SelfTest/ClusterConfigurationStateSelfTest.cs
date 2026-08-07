@@ -40,6 +40,17 @@ internal static class ClusterConfigurationStateSelfTest
         AssertEqual(1UL, reread.Generation,
             "Read does not advance Configuration generation");
 
+        var duplicate = new WireV1.ConfigurationSnapshot
+        {
+            MaxGold = 2_000_000_000L,
+            TimeExpBuffUnixTimeMs = 1_700_000_000_000L,
+            TimeGoldBuffUnixTimeMs = 1_700_000_010_000L
+        };
+        ClusterConfigurationState.SnapshotState duplicateState =
+            state.Update(duplicate);
+        AssertEqual(1UL, duplicateState.Generation,
+            "Equivalent Configuration update preserves generation");
+
         var second = new WireV1.ConfigurationSnapshot
         {
             MaxGold = 3_000_000_000L,
@@ -49,7 +60,7 @@ internal static class ClusterConfigurationStateSelfTest
         ClusterConfigurationState.SnapshotState secondState =
             state.Update(second);
         AssertEqual(2UL, secondState.Generation,
-            "Second Configuration update advances generation");
+            "Changed Configuration update advances generation");
         AssertEqual(second.MaxGold, secondState.Configuration.MaxGold,
             "Latest Configuration update wins");
 

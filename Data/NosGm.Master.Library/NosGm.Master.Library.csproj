@@ -80,6 +80,8 @@
     <Compile Include="Client\CommunicationClient.cs" />
     <Compile Include="Client\CommunicationServiceClient.cs" />
     <Compile Include="Client\ScsClusterCommunicationTransport.cs" />
+    <Compile Include="Client\ConfigurationGrpcShadowMirror.cs" />
+    <Compile Include="Client\ConfigurationGrpcShadowOptions.cs" />
     <Compile Include="Client\ConfigurationServiceClient.cs" />
     <Compile Include="Client\MailClient.cs" />
     <Compile Include="Client\ConfigurationClient.cs" />
@@ -162,4 +164,3 @@
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>
-

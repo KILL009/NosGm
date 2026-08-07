@@ -55,6 +55,7 @@ foreach ($required in @(
     "private ulong _generation;",
     "private WireV1.ConfigurationSnapshot _snapshot;",
     "if (_snapshot == null)",
+    "AreEqual(_snapshot, snapshot)",
     "_generation++;",
     "Clone(_snapshot)"
 )) {
@@ -95,7 +96,8 @@ foreach ($required in @(
     "starts unavailable",
     "Input mutation cannot alter stored Configuration state",
     "Returned snapshot mutation cannot alter stored Configuration state",
-    "Second Configuration update advances generation",
+    "Equivalent Configuration update preserves generation",
+    "Changed Configuration update advances generation",
     "Latest Configuration update wins"
 )) {
     Require-Text $selfTest $required "Configuration state self-test"
@@ -103,5 +105,6 @@ foreach ($required in @(
 
 Write-Host "[PASS] Configuration gRPC host starts unavailable and owns no legacy default." -ForegroundColor Green
 Write-Host "[PASS] Configuration snapshots are isolated and generation-backed." -ForegroundColor Green
+Write-Host "[PASS] Equivalent multi-World shadow writes preserve the current generation." -ForegroundColor Green
 Write-Host "[PASS] Configuration gRPC service reuses mTLS, deadline, replay and dispatch guards." -ForegroundColor Green
 Write-Host "[PASS] Configuration shadow host has no SCS callback, shared-secret or GameConfiguration dependency." -ForegroundColor Green
