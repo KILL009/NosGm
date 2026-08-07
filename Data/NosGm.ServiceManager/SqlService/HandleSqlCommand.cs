@@ -1,5 +1,5 @@
 ﻿using MongoDB.Driver.Core.Configuration;
-using NosTale.Configuration;
+using NosGm.Configuration;
 using System;
 using System.Collections.Generic;
 using System.Data.SqlClient;
