@@ -73,11 +73,13 @@ It:
 - uses `ClusterService.Configuration` in every `RequestContext`;
 - preserves the existing loopback HTTPS, mTLS and bounded-deadline model;
 - supports native HTTP/2 and the Windows 10 gRPC-Web compatibility path;
-- supports the isolated trusted-root pinning used by live acceptance;
+- supports the isolated trusted-root pinning model already used by the cluster runtime;
 - maps typed result codes, snapshots and `generation` without referencing SCS or legacy Configuration interfaces;
 - fails closed if the server claims `Success` without returning a snapshot.
 
-The live acceptance self-test connects with the real World certificate, observes the initial state when appropriate, updates a shadow snapshot, verifies exactly one generation advance, then reads the same snapshot back. A Login-role transport is rejected before any network dispatch.
+The transport is compiled and statically guarded in both bridge targets. Its construction self-test stays deliberately non-blocking and verifies that missing options and non-World roles fail before certificate loading.
+
+A first attempt to piggyback Configuration network I/O into the Authentication runtime's module-initializer acceptance was intentionally removed after it could keep that unrelated acceptance process alive far beyond its normal duration. End-to-end Configuration network traffic will instead be exercised from the explicit World shadow-adapter stage, where startup, cancellation and ownership are part of the test surface rather than hidden module initialization.
 
 This transport is infrastructure only. Nothing in `NosGm.Master.Library.Client.ConfigurationServiceClient` constructs it yet, so no gameplay or startup behavior is switched by its presence.
 
@@ -99,15 +101,16 @@ Completed foundations:
 
 1. typed Configuration request/reply contract and legacy migration map;
 2. shadow .NET 10 Configuration state host with monotonic generation and runtime guards;
-3. isolated World-only gRPC client transport with live mTLS acceptance.
+3. isolated World-only gRPC client transport compiled for net481/net10 with non-blocking construction guards.
 
 The safe continuation is:
 
 1. add a World shadow adapter around `ConfigurationServiceClient` that keeps SCS authoritative while seeding and comparing the typed host;
-2. add a typed `ConfigurationUpdated` subscriber with replay/recovery semantics;
-3. mirror legacy callback delivery without applying a second gameplay effect;
-4. compare legacy and typed snapshots/delivery across restart and reconnect windows;
-5. switch Get/Update and callback authority together behind one explicit Configuration selector;
-6. remove `IConfigurationService`, `IConfigurationClient` and their SCS registration only after acceptance passes.
+2. run explicit end-to-end Configuration transport acceptance through that adapter with bounded startup/cancellation;
+3. add a typed `ConfigurationUpdated` subscriber with replay/recovery semantics;
+4. mirror legacy callback delivery without applying a second gameplay effect;
+5. compare legacy and typed snapshots/delivery across restart and reconnect windows;
+6. switch Get/Update and callback authority together behind one explicit Configuration selector;
+7. remove `IConfigurationService`, `IConfigurationClient` and their SCS registration only after acceptance passes.
 
 Until the joint authority switch, `NOSGM_COMMUNICATION_TRANSPORT` and the existing Communication callback cutover are unrelated to this service and must not act as implicit Configuration selectors.
