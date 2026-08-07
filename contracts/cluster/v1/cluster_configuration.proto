@@ -8,7 +8,7 @@ import "cluster_control.proto";
 
 // Typed replacement foundation for the legacy IConfigurationService request/
 // response surface. Authentication is transport identity (mTLS), not an RPC
-// carrying the legacy MasterAuthKey.
+// carrying the legacy shared secret.
 service ClusterConfiguration {
   rpc GetConfiguration(GetConfigurationRequest)
       returns (GetConfigurationResponse);
