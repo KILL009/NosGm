@@ -29,14 +29,17 @@ on:
       - "docs/dotnet10-migration.md"
       - "docs/scs-transport-migration.md"
       - "docs/modern-login-local-runbook.md"
+      - "docs/configuration-grpc-slice.md"
       - "scripts/new-local-authentication-certificates.ps1"
       - "scripts/start-modern-login-local.ps1"
       - "scripts/test-authentication-grpc-local.ps1"
+      - "scripts/test-configuration-grpc-shadow-local.ps1"
       - "scripts/test-modern-login-readiness.ps1"
       - "scripts/verify-dotnet10-foundation.ps1"
       - "scripts/verify-scs-transport-contracts.ps1"
       - "scripts/verify-authentication-grpc-runtime.ps1"
       - "scripts/verify-authentication-grpc-local-acceptance.ps1"
+      - "scripts/verify-configuration-grpc-shadow-acceptance.ps1"
   pull_request:
     branches:
       - main
@@ -65,14 +68,17 @@ on:
       - "docs/dotnet10-migration.md"
       - "docs/scs-transport-migration.md"
       - "docs/modern-login-local-runbook.md"
+      - "docs/configuration-grpc-slice.md"
       - "scripts/new-local-authentication-certificates.ps1"
       - "scripts/start-modern-login-local.ps1"
       - "scripts/test-authentication-grpc-local.ps1"
+      - "scripts/test-configuration-grpc-shadow-local.ps1"
       - "scripts/test-modern-login-readiness.ps1"
       - "scripts/verify-dotnet10-foundation.ps1"
       - "scripts/verify-scs-transport-contracts.ps1"
       - "scripts/verify-authentication-grpc-runtime.ps1"
       - "scripts/verify-authentication-grpc-local-acceptance.ps1"
+      - "scripts/verify-configuration-grpc-shadow-acceptance.ps1"
   workflow_dispatch:
 
 permissions:
@@ -119,6 +125,10 @@ jobs:
         shell: powershell
         run: ./scripts/verify-dotnet10-foundation.ps1
 
+      - name: Verify Configuration shadow acceptance harness
+        shell: powershell
+        run: ./scripts/verify-configuration-grpc-shadow-acceptance.ps1
+
       - name: Create isolated authentication acceptance certificates
         shell: powershell
         run: ./scripts/new-local-authentication-certificates.ps1 -ManagedCertificateGenerator -KeyLength 2048
@@ -126,3 +136,7 @@ jobs:
       - name: Verify live HTTP2 and gRPC-Web mTLS authentication
         shell: powershell
         run: ./scripts/test-authentication-grpc-local.ps1 -UseFileScopedRootTrust
+
+      - name: Verify live net481 Configuration shadow transport
+        shell: powershell
+        run: ./scripts/test-configuration-grpc-shadow-local.ps1 -TrustRootForCurrentUser
