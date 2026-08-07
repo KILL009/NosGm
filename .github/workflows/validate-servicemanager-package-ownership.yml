@@ -81,6 +81,8 @@ jobs:
       - name: Restore ServiceManager project
         shell: pwsh
         run: |
+          New-Item -ItemType Directory -Force -Path "$env:ARTIFACTS" | Out-Null
+          $solutionDir = (Resolve-Path ".").Path + [IO.Path]::DirectorySeparatorChar
           & msbuild "$env:PROJECT" `
             /t:Restore `
             /m `
@@ -88,21 +90,26 @@ jobs:
             /nr:false `
             /v:minimal `
             /p:RestorePackagesConfig=true `
+            /p:SolutionDir="$solutionDir" `
             /p:NosGmLegacyBuild=true `
             /p:Configuration=Release `
-            /p:Platform=AnyCPU
+            /p:Platform=AnyCPU `
+            /bl:"$env:ARTIFACTS\servicemanager-restore.binlog" `
+            /fl `
+            /flp:"logfile=$env:ARTIFACTS\servicemanager-restore.log;verbosity=normal"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Build ServiceManager Release
         shell: pwsh
         run: |
-          New-Item -ItemType Directory -Force -Path "$env:ARTIFACTS" | Out-Null
+          $solutionDir = (Resolve-Path ".").Path + [IO.Path]::DirectorySeparatorChar
           & msbuild "$env:PROJECT" `
             /t:Build `
             /m `
             /nologo `
             /nr:false `
             /v:minimal `
+            /p:SolutionDir="$solutionDir" `
             /p:NosGmLegacyBuild=true `
             /p:Configuration=Release `
             /p:Platform=AnyCPU `
