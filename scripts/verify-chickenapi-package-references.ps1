@@ -27,7 +27,7 @@ $modernProjects = @(
 function New-MsBuildNamespaceManager([xml]$xml) {
     $namespace = New-Object System.Xml.XmlNamespaceManager($xml.NameTable)
     $namespace.AddNamespace("msb", "http://schemas.microsoft.com/developer/msbuild/2003")
-    return $namespace
+    Write-Output -NoEnumerate $namespace
 }
 
 foreach ($project in $modernProjects) {
