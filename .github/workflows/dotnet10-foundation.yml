@@ -34,6 +34,7 @@ on:
       - "scripts/start-modern-login-local.ps1"
       - "scripts/test-authentication-grpc-local.ps1"
       - "scripts/test-configuration-grpc-shadow-local.ps1"
+      - "scripts/invoke-configuration-grpc-shadow-acceptance-bounded.ps1"
       - "scripts/test-modern-login-readiness.ps1"
       - "scripts/verify-dotnet10-foundation.ps1"
       - "scripts/verify-scs-transport-contracts.ps1"
@@ -73,6 +74,7 @@ on:
       - "scripts/start-modern-login-local.ps1"
       - "scripts/test-authentication-grpc-local.ps1"
       - "scripts/test-configuration-grpc-shadow-local.ps1"
+      - "scripts/invoke-configuration-grpc-shadow-acceptance-bounded.ps1"
       - "scripts/test-modern-login-readiness.ps1"
       - "scripts/verify-dotnet10-foundation.ps1"
       - "scripts/verify-scs-transport-contracts.ps1"
@@ -158,7 +160,7 @@ jobs:
             } else {
               Write-Host "[TRUST] NosGM development root is already trusted for CurrentUser"
             }
-            ./scripts/test-configuration-grpc-shadow-local.ps1
+            ./scripts/invoke-configuration-grpc-shadow-acceptance-bounded.ps1 -TotalTimeoutSeconds 420
           }
           finally {
             if ($installedByStep) {
