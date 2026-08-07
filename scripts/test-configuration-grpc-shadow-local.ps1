@@ -6,7 +6,9 @@ param(
     [ValidateRange(1024, 65535)]
     [int]$Port = 7443,
     [ValidateRange(10, 120)]
-    [int]$StartupTimeoutSeconds = 45
+    [int]$StartupTimeoutSeconds = 45,
+    [ValidateRange(15, 180)]
+    [int]$ClientTimeoutSeconds = 60
 )
 
 $ErrorActionPreference = "Stop"
@@ -20,6 +22,7 @@ $root = Split-Path -Parent $PSScriptRoot
 $acceptanceRoot = Join-Path $root "artifacts\configuration-grpc-shadow-acceptance"
 $runtimeOutput = Join-Path $acceptanceRoot "runtime"
 $clientRoot = Join-Path $acceptanceRoot "client"
+$clientLogRoot = Join-Path $acceptanceRoot "client-logs"
 $clientProject = Join-Path $clientRoot "NosGm.Configuration.Grpc.Acceptance.csproj"
 $clientSource = Join-Path $clientRoot "Program.cs"
 $clientExecutable = Join-Path $clientRoot "bin\Release\net481\NosGm.Configuration.Grpc.Acceptance.exe"
@@ -191,6 +194,81 @@ function Restore-ProcessEnvironment {
     }
 }
 
+function Read-AcceptanceProcessLog {
+    param([Parameter(Mandatory = $true)][string]$Path)
+
+    if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
+        return "<no output>"
+    }
+    $content = Get-Content -LiteralPath $Path -Raw -ErrorAction SilentlyContinue
+    if ([string]::IsNullOrWhiteSpace($content)) {
+        return "<no output>"
+    }
+    return $content.Trim()
+}
+
+function Invoke-AcceptanceClient {
+    param([Parameter(Mandatory = $true)][string]$Mode)
+
+    New-Item -ItemType Directory -Force -Path $clientLogRoot | Out-Null
+    $modeName = $Mode.ToLowerInvariant()
+    $stdoutPath = Join-Path $clientLogRoot "$modeName.stdout.log"
+    $stderrPath = Join-Path $clientLogRoot "$modeName.stderr.log"
+    Remove-Item -LiteralPath $stdoutPath, $stderrPath -Force -ErrorAction SilentlyContinue
+
+    $process = $null
+    try {
+        $process = Start-Process `
+            -FilePath $clientExecutable `
+            -WorkingDirectory (Split-Path -Parent $clientExecutable) `
+            -NoNewWindow `
+            -PassThru `
+            -RedirectStandardOutput $stdoutPath `
+            -RedirectStandardError $stderrPath
+    }
+    finally {
+        # The child already inherited its environment. Do not keep certificate
+        # passwords or transport settings in the PowerShell process while it runs.
+        Restore-ProcessEnvironment
+    }
+
+    if ($null -eq $process) {
+        throw "Configuration shadow transport acceptance could not start for $Mode."
+    }
+
+    try {
+        $completed = $process.WaitForExit($ClientTimeoutSeconds * 1000)
+        if (-not $completed) {
+            try {
+                Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+                $process.WaitForExit(5000) | Out-Null
+            }
+            catch {
+                # The outer workflow still has a hard timeout as the final guard.
+            }
+            $stdout = Read-AcceptanceProcessLog -Path $stdoutPath
+            $stderr = Read-AcceptanceProcessLog -Path $stderrPath
+            throw "Configuration shadow transport acceptance timed out after $ClientTimeoutSeconds seconds for $Mode.`nSTDOUT:`n$stdout`nSTDERR:`n$stderr"
+        }
+
+        $exitCode = $process.ExitCode
+        $stdout = Read-AcceptanceProcessLog -Path $stdoutPath
+        $stderr = Read-AcceptanceProcessLog -Path $stderrPath
+        if ($stdout -ne "<no output>") {
+            Write-Host $stdout
+        }
+        if ($stderr -ne "<no output>") {
+            Write-Host $stderr -ForegroundColor Yellow
+        }
+        if ($exitCode -ne 0) {
+            throw "Configuration shadow transport acceptance failed for $Mode with exit code $exitCode.`nSTDOUT:`n$stdout`nSTDERR:`n$stderr"
+        }
+    }
+    finally {
+        $process.Dispose()
+    }
+}
+
 function Write-AcceptanceClient {
     New-Item -ItemType Directory -Force -Path $clientRoot | Out-Null
     $projectReference = [Security.SecurityElement]::Escape($authenticationClientProject)
@@ -228,6 +306,7 @@ internal static class Program
         catch (Exception exception)
         {
             Console.Error.WriteLine("[FAIL] " + exception);
+            Console.Error.Flush();
             return 1;
         }
     }
@@ -241,10 +320,13 @@ internal static class Program
             AuthenticationGrpcClientOptions.Load(ClusterNodeRole.World);
 
         ConfigurationTransportResult baseline;
+        Trace("create first transport");
         using (var first = new GrpcClusterConfigurationTransport(options))
         using (var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(15)))
         {
+            Trace("baseline get");
             baseline = first.GetAsync(timeout.Token).GetAwaiter().GetResult();
+            Trace("baseline get completed: " + baseline.Result);
             if (baseline.Result != ConfigurationTransportResultCode.Unavailable &&
                 baseline.Result != ConfigurationTransportResultCode.Success)
             {
@@ -252,42 +334,62 @@ internal static class Program
             }
 
             var snapshot = NewSnapshot(marker);
+            Trace("seed update");
             ConfigurationTransportResult seeded =
                 first.UpdateAsync(snapshot, timeout.Token).GetAwaiter().GetResult();
+            Trace("seed update completed");
             AssertEqual(ConfigurationTransportResultCode.Success, seeded.Result, "seed result");
             AssertEqual(checked(baseline.Generation + 1UL), seeded.Generation, "seed generation");
             AssertSnapshot(snapshot, seeded.Configuration, "seed snapshot");
         }
+        Trace("first transport disposed");
 
+        Trace("create reconnect transport");
         using (var reconnect = new GrpcClusterConfigurationTransport(options))
         using (var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(15)))
         {
             var snapshot = NewSnapshot(marker);
+            Trace("reconnect get");
             ConfigurationTransportResult reread =
                 reconnect.GetAsync(timeout.Token).GetAwaiter().GetResult();
+            Trace("reconnect get completed");
             AssertEqual(ConfigurationTransportResultCode.Success, reread.Result, "reconnect get result");
             AssertEqual(checked(baseline.Generation + 1UL), reread.Generation, "reconnect generation");
             AssertSnapshot(snapshot, reread.Configuration, "reconnect snapshot");
 
+            Trace("duplicate update");
             ConfigurationTransportResult duplicate =
                 reconnect.UpdateAsync(snapshot, timeout.Token).GetAwaiter().GetResult();
+            Trace("duplicate update completed");
             AssertEqual(ConfigurationTransportResultCode.Success, duplicate.Result, "duplicate result");
             AssertEqual(reread.Generation, duplicate.Generation, "duplicate preserves generation");
 
             var changed = NewSnapshot(marker + 1L);
+            Trace("changed update");
             ConfigurationTransportResult updated =
                 reconnect.UpdateAsync(changed, timeout.Token).GetAwaiter().GetResult();
+            Trace("changed update completed");
             AssertEqual(ConfigurationTransportResultCode.Success, updated.Result, "changed result");
             AssertEqual(checked(reread.Generation + 1UL), updated.Generation, "changed generation");
             AssertSnapshot(changed, updated.Configuration, "changed snapshot");
 
+            Trace("final get");
             ConfigurationTransportResult final =
                 reconnect.GetAsync(timeout.Token).GetAwaiter().GetResult();
+            Trace("final get completed");
             AssertEqual(updated.Generation, final.Generation, "final generation");
             AssertSnapshot(changed, final.Configuration, "final snapshot");
         }
+        Trace("reconnect transport disposed");
 
         Console.WriteLine("[PASS] Configuration gRPC shadow transport acceptance");
+        Console.Out.Flush();
+    }
+
+    private static void Trace(string message)
+    {
+        Console.WriteLine("[STEP] " + message);
+        Console.Out.Flush();
     }
 
     private static ConfigurationTransportSnapshot NewSnapshot(long marker)
@@ -313,6 +415,7 @@ internal static class Program
             throw new InvalidOperationException(name + " mismatch.");
         }
         Console.WriteLine("[PASS] " + name);
+        Console.Out.Flush();
     }
 
     private static void AssertEqual<T>(T expected, T actual, string name)
@@ -323,6 +426,7 @@ internal static class Program
                 name + ": expected '" + expected + "', received '" + actual + "'.");
         }
         Console.WriteLine("[PASS] " + name);
+        Console.Out.Flush();
     }
 }
 '@ | Set-Content -LiteralPath $clientSource -Encoding UTF8
@@ -389,11 +493,7 @@ try {
         $values["NOSGM_CONFIGURATION_ACCEPTANCE_MARKER"] = $marker
         Set-ProcessEnvironment -Values $values
         Write-Host "[TEST] Configuration shadow transport over $mode"
-        & $clientExecutable
-        if ($LASTEXITCODE -ne 0) {
-            throw "Configuration shadow transport acceptance failed for $mode."
-        }
-        Restore-ProcessEnvironment
+        Invoke-AcceptanceClient -Mode $mode
     }
 
     if (-not $supportsHttp2) {
