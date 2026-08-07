@@ -67,6 +67,7 @@ function Assert-PowerShellSyntax {
 foreach ($scriptPath in @(
     "scripts\new-local-authentication-certificates.ps1",
     "scripts\start-modern-login-local.ps1",
+    "scripts\start-modern-login-core-local.ps1",
     "scripts\test-authentication-grpc-local.ps1",
     "scripts\test-modern-login-readiness.ps1"
 )) {
@@ -79,6 +80,8 @@ $acceptance = Read-RepositoryFile `
     "scripts\test-authentication-grpc-local.ps1"
 $startup = Read-RepositoryFile `
     "scripts\start-modern-login-local.ps1"
+$coreStartup = Read-RepositoryFile `
+    "scripts\start-modern-login-core-local.ps1"
 $readiness = Read-RepositoryFile `
     "scripts\test-modern-login-readiness.ps1"
 $selfTest = Read-RepositoryFile `
@@ -182,33 +185,35 @@ Require $startup '[string]$AuthenticationTransport = "SCS"' `
     "SCS remains the local startup default"
 Require $startup '[ValidateSet("AUTO", "HTTP2", "GRPCWEB")]' `
     "Local startup exposes one explicit gRPC wire-mode selector"
-Require $startup 'return "GRPCWEB"' `
+Require $startup '& $coreScript @coreParameters' `
+    "Public startup delegates authentication runtime ownership to the core script"
+Require $coreStartup 'return "GRPCWEB"' `
     "Windows 10 selects gRPC-Web before any stateful call begins"
-Require $startup "Windows 11 or Windows Server 2019 or later" `
+Require $coreStartup "Windows 11 or Windows Server 2019 or later" `
     "An unsupported forced HTTP/2 selection fails early"
 Require $startup "Resolve-DotNet10Executable" `
     "Local startup resolves PATH, global, and NosGM-local .NET 10 installations"
-Require $startup "AuthenticationGrpc" `
+Require $coreStartup "AuthenticationGrpc" `
     "Explicit gRPC startup records the authentication runtime"
-Require $startup "ProcessEnvironment" `
+Require $coreStartup "ProcessEnvironment" `
     "Each child receives a separately scoped environment"
-Require $startup "NOSGM_AUTH_GRPC_CLIENT_CERT_PATH" `
+Require $coreStartup "NOSGM_AUTH_GRPC_CLIENT_CERT_PATH" `
     "Caller certificate path is passed only through process memory"
-Require $startup "NOSGM_AUTH_GRPC_WIRE_MODE" `
+Require $coreStartup "NOSGM_AUTH_GRPC_WIRE_MODE" `
     "Caller wire mode is scoped to each selected gRPC process"
-Require $startup "authbridge-local-1" `
+Require $coreStartup "authbridge-local-1" `
     "Master AuthBridge gets its own caller identity"
-Require $startup "login-local-1" `
+Require $coreStartup "login-local-1" `
     "Login gets its own caller identity"
-Require $startup "world-local-1" `
+Require $coreStartup "world-local-1" `
     "World gets its own caller identity"
-Require $startup '$authenticationRuntimeEnvironment.Clear()' `
+Require $coreStartup '$authenticationRuntimeEnvironment.Clear()' `
     "Authentication server plaintext environment values are cleared"
-Forbid $startup 'EnvironmentVariableTarget.User' `
+Forbid $coreStartup 'EnvironmentVariableTarget.User' `
     "Startup never persists authentication values in the user environment"
-Forbid $startup 'EnvironmentVariableTarget.Machine' `
+Forbid $coreStartup 'EnvironmentVariableTarget.Machine' `
     "Startup never persists authentication values in the machine environment"
-Forbid $startup "DangerousAcceptAnyServerCertificateValidator" `
+Forbid $coreStartup "DangerousAcceptAnyServerCertificateValidator" `
     "Startup provides no certificate-validation bypass"
 
 Require $acceptance "Wait-AuthenticationRuntime" `

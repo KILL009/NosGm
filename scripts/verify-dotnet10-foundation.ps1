@@ -153,19 +153,26 @@ foreach ($project in $deferredModern) {
     Write-Host "[DEFERRED] $project" -ForegroundColor Yellow
 }
 
-if ($allProjects.Count -ne 52) {
-    throw "Project inventory changed: expected 52 projects but found $($allProjects.Count). Review the migration matrix."
+# Inventory synchronization notes:
+# - 2026-08-03 converted NosGm.Core and NosGm.DAL from classic
+#   TargetFrameworkVersion projects to SDK-style net481 projects. They remain
+#   deferred legacy targets, but no longer increment legacyOnlyCount above.
+# - 2026-08-04 added NosGM.LiveOperationsPublisher.CompileCheck as an isolated
+#   SDK-style net481 project, increasing the repository project total by one.
+if ($allProjects.Count -ne 53) {
+    throw "Project inventory changed: expected 53 projects but found $($allProjects.Count). Review the migration matrix."
 }
 
 if ($bridgeCount -ne 8) {
     throw "Bridge inventory changed: expected 8 projects but found $bridgeCount."
 }
 
-if ($legacyOnlyCount -ne 21) {
-    throw "Legacy-only inventory changed: expected 21 .NET Framework 4.8.1 projects but found $legacyOnlyCount."
+if ($legacyOnlyCount -ne 19) {
+    throw "Classic legacy inventory changed: expected 19 .NET Framework 4.8.1 projects but found $legacyOnlyCount."
 }
 
 & (Join-Path $PSScriptRoot "verify-scs-transport-contracts.ps1")
+& (Join-Path $PSScriptRoot "verify-configuration-grpc-contract.ps1")
 & (Join-Path $PSScriptRoot "verify-authentication-grpc-runtime.ps1")
 & (Join-Path $PSScriptRoot "verify-communication-grpc-client.ps1")
 & (Join-Path $PSScriptRoot "verify-communication-callback-runtime.ps1")
