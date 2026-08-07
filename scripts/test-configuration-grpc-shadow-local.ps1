@@ -34,6 +34,7 @@ $runtimeAssembly = Join-Path $runtimeOutput "NosGm.Authentication.Server.dll"
 $authenticationClientProject = Join-Path $root "Data\NosGm.Authentication.Client\NosGm.Authentication.Client.csproj"
 $authenticationClientOutput = Join-Path $root "Data\NosGm.Authentication.Client\bin\Release\net481"
 $authenticationClientAssembly = Join-Path $authenticationClientOutput "NosGm.Authentication.Client.dll"
+$clusterContractsAssembly = Join-Path $authenticationClientOutput "NosGm.Cluster.Contracts.dll"
 
 function Resolve-DotNet10Executable {
     $candidates = New-Object System.Collections.Generic.List[string]
@@ -212,6 +213,22 @@ function Read-AcceptanceProcessLog {
     return $content.Trim()
 }
 
+function Stop-ProcessTree {
+    param([Parameter(Mandatory = $true)][Diagnostics.Process]$Process)
+
+    if ($Process.HasExited) {
+        return
+    }
+
+    $taskKill = Join-Path $env:SystemRoot "System32\taskkill.exe"
+    if (Test-Path -LiteralPath $taskKill -PathType Leaf) {
+        & $taskKill /PID $Process.Id /T /F 2>$null | Out-Null
+    }
+    if (-not $Process.HasExited) {
+        Stop-Process -Id $Process.Id -Force -ErrorAction SilentlyContinue
+    }
+}
+
 function Invoke-BoundedDotNet {
     param(
         [Parameter(Mandatory = $true)][string]$Name,
@@ -236,7 +253,7 @@ function Invoke-BoundedDotNet {
     try {
         $completed = $process.WaitForExit($BuildTimeoutSeconds * 1000)
         if (-not $completed) {
-            Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+            Stop-ProcessTree -Process $process
             $process.WaitForExit(5000) | Out-Null
             $stdout = Read-AcceptanceProcessLog -Path $stdoutPath
             $stderr = Read-AcceptanceProcessLog -Path $stderrPath
@@ -294,7 +311,7 @@ function Invoke-AcceptanceClient {
     try {
         $completed = $process.WaitForExit($ClientTimeoutSeconds * 1000)
         if (-not $completed) {
-            Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+            Stop-ProcessTree -Process $process
             $process.WaitForExit(5000) | Out-Null
             $stdout = Read-AcceptanceProcessLog -Path $stdoutPath
             $stderr = Read-AcceptanceProcessLog -Path $stderrPath
@@ -321,8 +338,35 @@ function Invoke-AcceptanceClient {
 
 function Write-AcceptanceClient {
     New-Item -ItemType Directory -Force -Path $clientRoot | Out-Null
-    $projectReference = [Security.SecurityElement]::Escape($authenticationClientProject)
-    @"
+
+    if ((Test-Path -LiteralPath $authenticationClientAssembly -PathType Leaf) -and
+        (Test-Path -LiteralPath $clusterContractsAssembly -PathType Leaf)) {
+        $authenticationClientReference = [Security.SecurityElement]::Escape($authenticationClientAssembly)
+        $clusterContractsReference = [Security.SecurityElement]::Escape($clusterContractsAssembly)
+        @"
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net481</TargetFramework>
+    <AssemblyName>NosGm.Configuration.Grpc.Acceptance</AssemblyName>
+    <LangVersion>latest</LangVersion>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="NosGm.Authentication.Client">
+      <HintPath>$authenticationClientReference</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <Reference Include="NosGm.Cluster.Contracts">
+      <HintPath>$clusterContractsReference</HintPath>
+      <Private>true</Private>
+    </Reference>
+  </ItemGroup>
+</Project>
+"@ | Set-Content -LiteralPath $clientProject -Encoding UTF8
+    }
+    else {
+        $projectReference = [Security.SecurityElement]::Escape($authenticationClientProject)
+        @"
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>Exe</OutputType>
@@ -335,6 +379,7 @@ function Write-AcceptanceClient {
   </ItemGroup>
 </Project>
 "@ | Set-Content -LiteralPath $clientProject -Encoding UTF8
+    }
 
     @'
 using System;
@@ -497,7 +542,8 @@ try {
                 "--nologo"
             )
 
-        if (Test-Path -LiteralPath $authenticationClientAssembly -PathType Leaf) {
+        if ((Test-Path -LiteralPath $authenticationClientAssembly -PathType Leaf) -and
+            (Test-Path -LiteralPath $clusterContractsAssembly -PathType Leaf)) {
             Write-Host "[REUSE] Using the net481 bridge outputs already validated by the .NET 10 foundation build." -ForegroundColor DarkCyan
             Invoke-BoundedDotNet `
                 -Name "Configuration net481 client restore" `
