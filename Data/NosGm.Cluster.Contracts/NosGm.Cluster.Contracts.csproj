@@ -35,5 +35,9 @@
               Link="Protos\cluster_communication_callbacks.proto"
               ProtoRoot="..\..\contracts\cluster\v1"
               GrpcServices="Both" />
+    <Protobuf Include="..\..\contracts\cluster\v1\cluster_configuration.proto"
+              Link="Protos\cluster_configuration.proto"
+              ProtoRoot="..\..\contracts\cluster\v1"
+              GrpcServices="Both" />
   </ItemGroup>
 </Project>
