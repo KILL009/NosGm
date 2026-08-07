@@ -113,3 +113,5 @@ Write-Host "[PASS] Configuration gRPC client is World-only and requests ClusterS
 Write-Host "[PASS] Configuration client contains the existing HTTP/2 and Windows 10 gRPC-Web mTLS implementations." -ForegroundColor Green
 Write-Host "[PASS] Configuration client remains isolated from SCS and the legacy ConfigurationServiceClient." -ForegroundColor Green
 Write-Host "[PASS] Construction self-test remains non-blocking and rejects invalid roles before certificate loading." -ForegroundColor Green
+
+& (Join-Path $PSScriptRoot "verify-configuration-grpc-shadow-adapter.ps1")
