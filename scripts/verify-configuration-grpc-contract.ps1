@@ -25,7 +25,7 @@ foreach ($required in @(
     "rpc GetConfiguration",
     "rpc UpdateConfiguration",
     "message ConfigurationSnapshot",
-    "import \"cluster_control.proto\""
+    'import "cluster_control.proto"'
 )) {
     if (-not $proto.Contains($required)) {
         throw "cluster_configuration.proto is missing '$required'."
