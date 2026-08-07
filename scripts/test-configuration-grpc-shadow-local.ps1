@@ -356,7 +356,7 @@ try {
         NOSGM_AUTH_GRPC_LOGIN_CERT_SHA256 = [string]$manifest.Clients.Login.Sha256
         NOSGM_AUTH_GRPC_WORLD_CERT_SHA256 = [string]$manifest.Clients.World.Sha256
         NOSGM_AUTH_GRPC_MASTER_CERT_SHA256 = [string]$manifest.Clients.Master.Sha256
-        NOSGM_AUTH_GRPC_PORT = $Port.ToString(CultureInfo.InvariantCulture)
+        NOSGM_AUTH_GRPC_PORT = [string]$Port
         NOSGM_AUTH_GRPC_TICKET_TTL_SECONDS = "120"
         NOSGM_AUTH_GRPC_PERMIT_TTL_SECONDS = "120"
         NOSGM_AUTH_GRPC_INSTANCE_ID = "configuration-shadow-acceptance-1"
@@ -374,10 +374,12 @@ try {
         NOSGM_AUTH_GRPC_DEADLINE_MILLISECONDS = "10000"
     }
 
-    foreach ($mode in @("GRPCWEB", $(if ($supportsHttp2) { "HTTP2" } else { $null }))) {
-        if ([string]::IsNullOrWhiteSpace($mode)) {
-            continue
-        }
+    $modes = New-Object System.Collections.Generic.List[string]
+    $modes.Add("GRPCWEB")
+    if ($supportsHttp2) {
+        $modes.Add("HTTP2")
+    }
+    foreach ($mode in $modes) {
         $marker = if ($mode -eq "GRPCWEB") { "2100000100" } else { "2100000200" }
         $values = @{}
         foreach ($entry in $clientBase.GetEnumerator()) {
