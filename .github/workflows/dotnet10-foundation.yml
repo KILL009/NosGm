@@ -138,5 +138,6 @@ jobs:
         run: ./scripts/test-authentication-grpc-local.ps1 -UseFileScopedRootTrust
 
       - name: Verify live net481 Configuration shadow transport
+        timeout-minutes: 4
         shell: powershell
         run: ./scripts/test-configuration-grpc-shadow-local.ps1 -TrustRootForCurrentUser
