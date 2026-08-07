@@ -38,6 +38,7 @@ message GetConfigurationRequest {
 message GetConfigurationResponse {
   ConfigurationResultCode result = 1;
   ConfigurationSnapshot configuration = 2;
+  uint64 generation = 3;
 }
 
 message UpdateConfigurationRequest {
@@ -48,4 +49,5 @@ message UpdateConfigurationRequest {
 message UpdateConfigurationResponse {
   ConfigurationResultCode result = 1;
   ConfigurationSnapshot configuration = 2;
+  uint64 generation = 3;
 }
