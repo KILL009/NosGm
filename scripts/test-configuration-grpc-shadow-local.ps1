@@ -32,6 +32,8 @@ $clientExecutable = Join-Path $clientRoot "bin\Release\net481\NosGm.Configuratio
 $runtimeProject = Join-Path $root "Data\NosGm.Program\NosGm.Authentication.Server\NosGm.Authentication.Server.csproj"
 $runtimeAssembly = Join-Path $runtimeOutput "NosGm.Authentication.Server.dll"
 $authenticationClientProject = Join-Path $root "Data\NosGm.Authentication.Client\NosGm.Authentication.Client.csproj"
+$authenticationClientOutput = Join-Path $root "Data\NosGm.Authentication.Client\bin\Release\net481"
+$authenticationClientAssembly = Join-Path $authenticationClientOutput "NosGm.Authentication.Client.dll"
 
 function Resolve-DotNet10Executable {
     $candidates = New-Object System.Collections.Generic.List[string]
@@ -234,13 +236,8 @@ function Invoke-BoundedDotNet {
     try {
         $completed = $process.WaitForExit($BuildTimeoutSeconds * 1000)
         if (-not $completed) {
-            try {
-                & taskkill.exe /PID $process.Id /T /F 2>$null | Out-Null
-                $process.WaitForExit(5000) | Out-Null
-            }
-            catch {
-                Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
-            }
+            Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+            $process.WaitForExit(5000) | Out-Null
             $stdout = Read-AcceptanceProcessLog -Path $stdoutPath
             $stderr = Read-AcceptanceProcessLog -Path $stderrPath
             throw "$Name timed out after $BuildTimeoutSeconds seconds.`nSTDOUT:`n$stdout`nSTDERR:`n$stderr"
@@ -297,13 +294,8 @@ function Invoke-AcceptanceClient {
     try {
         $completed = $process.WaitForExit($ClientTimeoutSeconds * 1000)
         if (-not $completed) {
-            try {
-                & taskkill.exe /PID $process.Id /T /F 2>$null | Out-Null
-                $process.WaitForExit(5000) | Out-Null
-            }
-            catch {
-                Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
-            }
+            Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+            $process.WaitForExit(5000) | Out-Null
             $stdout = Read-AcceptanceProcessLog -Path $stdoutPath
             $stderr = Read-AcceptanceProcessLog -Path $stderrPath
             throw "Configuration shadow transport acceptance timed out after $ClientTimeoutSeconds seconds for $Mode.`nSTDOUT:`n$stdout`nSTDERR:`n$stderr"
@@ -504,15 +496,52 @@ try {
                 "--output", "`"$runtimeOutput`"",
                 "--nologo"
             )
-        Invoke-BoundedDotNet `
-            -Name "Configuration net481 client build" `
-            -Arguments @(
-                "build",
-                "`"$clientProject`"",
-                "--configuration", "Release",
-                "--nologo",
-                "/p:NosGmLegacyBuild=true"
-            )
+
+        if (Test-Path -LiteralPath $authenticationClientAssembly -PathType Leaf) {
+            Write-Host "[REUSE] Using the net481 bridge outputs already validated by the .NET 10 foundation build." -ForegroundColor DarkCyan
+            Invoke-BoundedDotNet `
+                -Name "Configuration net481 client restore" `
+                -Arguments @(
+                    "restore",
+                    "`"$clientProject`"",
+                    "--nologo",
+                    "/p:RestoreRecursive=false",
+                    "/p:NosGmLegacyBuild=true"
+                )
+            Invoke-BoundedDotNet `
+                -Name "Configuration net481 client build" `
+                -Arguments @(
+                    "build",
+                    "`"$clientProject`"",
+                    "--configuration", "Release",
+                    "--framework", "net481",
+                    "--no-restore",
+                    "--no-dependencies",
+                    "--nologo",
+                    "-m:1",
+                    "-nodeReuse:false",
+                    "/p:NosGmLegacyBuild=true"
+                )
+
+            $clientOutput = Split-Path -Parent $clientExecutable
+            Copy-Item `
+                -Path (Join-Path $authenticationClientOutput "*") `
+                -Destination $clientOutput `
+                -Recurse `
+                -Force
+        }
+        else {
+            Write-Host "[BUILD] net481 bridge output was not present; using the standalone dependency build path." -ForegroundColor DarkCyan
+            Invoke-BoundedDotNet `
+                -Name "Configuration net481 client build" `
+                -Arguments @(
+                    "build",
+                    "`"$clientProject`"",
+                    "--configuration", "Release",
+                    "--nologo",
+                    "/p:NosGmLegacyBuild=true"
+                )
+        }
     }
     foreach ($required in @($runtimeAssembly, $clientExecutable)) {
         if (-not (Test-Path -LiteralPath $required -PathType Leaf)) {
