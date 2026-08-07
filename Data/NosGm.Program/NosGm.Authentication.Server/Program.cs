@@ -51,6 +51,7 @@ builder.Services.AddSingleton<TimeProvider>(TimeProvider.System);
 builder.Services.AddSingleton<CommunicationCallbackRuntimeIdentity>();
 builder.Services.AddSingleton<GameforgeAuthenticationState>();
 builder.Services.AddSingleton<ClusterCommunicationState>();
+builder.Services.AddSingleton<ClusterConfigurationState>();
 builder.Services.AddSingleton<CommunicationCallbackHub>();
 builder.Services.AddSingleton<CommunicationCallbackShadowWorldRegistry>();
 builder.Services.AddSingleton<AuthenticationRequestReplayGuard>();
@@ -69,6 +70,7 @@ app.UseGrpcWeb();
 app.MapGrpcService<GameforgeAuthenticationService>().EnableGrpcWeb();
 app.MapGrpcService<ClusterCommunicationService>().EnableGrpcWeb();
 app.MapGrpcService<ClusterCommunicationCallbackService>().EnableGrpcWeb();
+app.MapGrpcService<ClusterConfigurationService>().EnableGrpcWeb();
 app.Lifetime.ApplicationStopped.Register(serverCertificate.Dispose);
 if (trustedRootCertificate != null)
 {
@@ -79,7 +81,7 @@ if (trustedRootCertificate != null)
 CommunicationCallbackRuntimeIdentity callbackRuntimeIdentity =
     app.Services.GetRequiredService<CommunicationCallbackRuntimeIdentity>();
 app.Logger.LogInformation(
-    "NosGM internal cluster runtime {InstanceId} generation {CallbackGenerationId} listening on loopback port {Port}; authentication, communication state and callback services enabled.",
+    "NosGM internal cluster runtime {InstanceId} generation {CallbackGenerationId} listening on loopback port {Port}; authentication, communication state, callback and shadow configuration services enabled.",
     options.InstanceId,
     callbackRuntimeIdentity.GenerationId,
     options.Port);
