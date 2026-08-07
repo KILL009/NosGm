@@ -88,16 +88,20 @@ foreach ($forbidden in @(
 }
 
 foreach ($required in @(
-    "NOSGM_AUTH_GRPC_LIVE_WORLD_CERT_PATH",
-    "NOSGM_AUTH_GRPC_LIVE_LOGIN_CERT_PATH",
-    "Configuration transport rejects the Login certificate role",
-    "Fresh Configuration shadow host starts at generation zero",
-    "Live World Configuration update succeeds through mTLS",
-    "Live Configuration update advances generation once",
-    "Live World Configuration get succeeds after shadow seed",
-    "Live Configuration read returns the stored snapshot"
+    "[ModuleInitializer]",
+    "Configuration transport rejects missing options",
+    "Configuration transport rejects Login before certificate loading",
+    "Cluster Configuration transport construction self-test"
 )) {
-    Require-Text $selfTest $required "Configuration live transport self-test"
+    Require-Text $selfTest $required "Configuration transport construction self-test"
+}
+foreach ($forbidden in @(
+    "GetAsync(",
+    "UpdateAsync(",
+    "GetAwaiter().GetResult()",
+    "NOSGM_AUTH_GRPC_LIVE_WORLD_CERT_PATH"
+)) {
+    Forbid-Text $selfTest $forbidden "Configuration transport construction self-test"
 }
 
 Require-Text $project "<TargetFramework Condition=" "Configuration client net481 bridge"
@@ -106,6 +110,6 @@ Require-Text $project "Grpc.Net.Client.Web" "Configuration client gRPC-Web packa
 
 Write-Host "[PASS] Configuration client transport preserves wire result codes and generation." -ForegroundColor Green
 Write-Host "[PASS] Configuration gRPC client is World-only and requests ClusterService.Configuration." -ForegroundColor Green
-Write-Host "[PASS] Configuration client supports the existing HTTP/2 and Windows 10 gRPC-Web mTLS paths." -ForegroundColor Green
+Write-Host "[PASS] Configuration client contains the existing HTTP/2 and Windows 10 gRPC-Web mTLS implementations." -ForegroundColor Green
 Write-Host "[PASS] Configuration client remains isolated from SCS and the legacy ConfigurationServiceClient." -ForegroundColor Green
-Write-Host "[PASS] Live acceptance exercises World Get/Update and rejects the Login role." -ForegroundColor Green
+Write-Host "[PASS] Construction self-test remains non-blocking and rejects invalid roles before certificate loading." -ForegroundColor Green
