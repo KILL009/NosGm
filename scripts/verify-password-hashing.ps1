@@ -1,5 +1,5 @@
 param(
-    [string]$AssemblyPath = "Data/NosGm.Core/bin/Release/NosGm.Core.dll"
+    [string]$AssemblyPath = "Data/NosGm.Core/bin/Release/net481/NosGm.Core.dll"
 )
 
 $ErrorActionPreference = "Stop"
