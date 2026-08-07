@@ -24,6 +24,7 @@
   <ItemGroup>
     <ProjectReference Include="..\NosGm.Configuration\NosGm.Configuration.csproj" />
     <ProjectReference Include="..\NosGm.Domain\NosGm.Domain.csproj" />
-    <ProjectReference Include="..\NosGm.Program\NosGm.Logger\NosGm.LogServer.csproj" />
+    <ProjectReference Include="..\NosGm.Program\NosGm.Logger\NosGm.LogServer.csproj"
+                      AdditionalProperties="Platform=x64" />
   </ItemGroup>
 </Project>
