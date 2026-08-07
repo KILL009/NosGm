@@ -140,4 +140,31 @@ jobs:
       - name: Verify live net481 Configuration shadow transport
         timeout-minutes: 10
         shell: powershell
-        run: ./scripts/test-configuration-grpc-shadow-local.ps1 -TrustRootForCurrentUser
+        run: |
+          $manifest = Get-Content -LiteralPath "artifacts/authentication-grpc-local/manifest.json" -Raw | ConvertFrom-Json
+          $rootCertificatePath = [System.IO.Path]::GetFullPath([string]$manifest.RootCertificatePath)
+          $rootThumbprint = [string]$manifest.RootCertificateThumbprint
+          $store = New-Object System.Security.Cryptography.X509Certificates.X509Store("Root", "CurrentUser")
+          $certificate = New-Object System.Security.Cryptography.X509Certificates.X509Certificate2($rootCertificatePath)
+          $installedByStep = $false
+          try {
+            Write-Host "[TRUST] Opening CurrentUser Root store for Configuration net481 acceptance"
+            $store.Open([System.Security.Cryptography.X509Certificates.OpenFlags]::ReadWrite)
+            $existing = @($store.Certificates | Where-Object { $_.Thumbprint -eq $rootThumbprint })
+            if ($existing.Count -eq 0) {
+              $store.Add($certificate)
+              $installedByStep = $true
+              Write-Host "[TRUST] Installed temporary NosGM development root without certificate-provider prompting" -ForegroundColor Green
+            } else {
+              Write-Host "[TRUST] NosGM development root is already trusted for CurrentUser"
+            }
+            ./scripts/test-configuration-grpc-shadow-local.ps1
+          }
+          finally {
+            if ($installedByStep) {
+              $store.Remove($certificate)
+              Write-Host "[CLEANUP] Removed temporary NosGM development root" -ForegroundColor Green
+            }
+            $store.Close()
+            $certificate.Dispose()
+          }
