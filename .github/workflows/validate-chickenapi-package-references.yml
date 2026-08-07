@@ -112,6 +112,10 @@ jobs:
       - name: Restore ChickenAPI PackageReference projects
         shell: pwsh
         run: |
+          $solutionDir = (Resolve-Path ".").Path.TrimEnd(
+            [IO.Path]::DirectorySeparatorChar,
+            [IO.Path]::AltDirectorySeparatorChar
+          ) + [IO.Path]::DirectorySeparatorChar
           $projects = @(
             "Data\NosGm.ChickenAPI\ChickenAPI.Events\ChickenAPI.Events.csproj",
             "Data\NosGm.ChickenAPI\ChickenAPI.Plugins\ChickenAPI.Plugins.csproj"
@@ -125,6 +129,7 @@ jobs:
               /v:minimal `
               /p:RestorePackagesConfig=true `
               /p:NosGmLegacyBuild=true `
+              "/p:SolutionDir=$solutionDir" `
               /p:Configuration="$env:CONFIGURATION" `
               /p:Platform="$env:PLATFORM"
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
@@ -134,6 +139,10 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path "$env:ARTIFACTS" | Out-Null
+          $solutionDir = (Resolve-Path ".").Path.TrimEnd(
+            [IO.Path]::DirectorySeparatorChar,
+            [IO.Path]::AltDirectorySeparatorChar
+          ) + [IO.Path]::DirectorySeparatorChar
           $projects = @(
             "Data\NosGm.ChickenAPI\ChickenAPI.Events\ChickenAPI.Events.csproj",
             "Data\NosGm.ChickenAPI\ChickenAPI.Plugins\ChickenAPI.Plugins.csproj"
@@ -147,6 +156,7 @@ jobs:
               /nr:false `
               /v:minimal `
               /p:NosGmLegacyBuild=true `
+              "/p:SolutionDir=$solutionDir" `
               /p:Configuration="$env:CONFIGURATION" `
               /p:Platform="$env:PLATFORM" `
               /bl:"$env:ARTIFACTS\$name.binlog" `
