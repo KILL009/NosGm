@@ -1,0 +1,51 @@
+syntax = "proto3";
+
+package nosgm.cluster.v1;
+
+option csharp_namespace = "NosGm.Cluster.Wire.V1";
+
+import "cluster_control.proto";
+
+// Typed replacement foundation for the legacy IConfigurationService request/
+// response surface. Authentication is transport identity (mTLS), not an RPC
+// carrying the legacy MasterAuthKey.
+service ClusterConfiguration {
+  rpc GetConfiguration(GetConfigurationRequest)
+      returns (GetConfigurationResponse);
+  rpc UpdateConfiguration(UpdateConfigurationRequest)
+      returns (UpdateConfigurationResponse);
+}
+
+enum ConfigurationResultCode {
+  CONFIGURATION_RESULT_CODE_UNSPECIFIED = 0;
+  CONFIGURATION_RESULT_CODE_SUCCESS = 1;
+  CONFIGURATION_RESULT_CODE_INVALID_REQUEST = 2;
+  CONFIGURATION_RESULT_CODE_UNAUTHORIZED = 3;
+  CONFIGURATION_RESULT_CODE_CONFLICT = 4;
+  CONFIGURATION_RESULT_CODE_UNAVAILABLE = 5;
+}
+
+message ConfigurationSnapshot {
+  int64 max_gold = 1;
+  int64 time_exp_buff_unix_time_ms = 2;
+  int64 time_gold_buff_unix_time_ms = 3;
+}
+
+message GetConfigurationRequest {
+  RequestContext context = 1;
+}
+
+message GetConfigurationResponse {
+  ConfigurationResultCode result = 1;
+  ConfigurationSnapshot configuration = 2;
+}
+
+message UpdateConfigurationRequest {
+  RequestContext context = 1;
+  ConfigurationSnapshot configuration = 2;
+}
+
+message UpdateConfigurationResponse {
+  ConfigurationResultCode result = 1;
+  ConfigurationSnapshot configuration = 2;
+}
