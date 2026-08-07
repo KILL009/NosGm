@@ -8,7 +8,9 @@ param(
     [ValidateRange(10, 120)]
     [int]$StartupTimeoutSeconds = 45,
     [ValidateRange(15, 180)]
-    [int]$ClientTimeoutSeconds = 60
+    [int]$ClientTimeoutSeconds = 60,
+    [ValidateRange(30, 300)]
+    [int]$BuildTimeoutSeconds = 180
 )
 
 $ErrorActionPreference = "Stop"
@@ -23,6 +25,7 @@ $acceptanceRoot = Join-Path $root "artifacts\configuration-grpc-shadow-acceptanc
 $runtimeOutput = Join-Path $acceptanceRoot "runtime"
 $clientRoot = Join-Path $acceptanceRoot "client"
 $clientLogRoot = Join-Path $acceptanceRoot "client-logs"
+$buildLogRoot = Join-Path $acceptanceRoot "build-logs"
 $clientProject = Join-Path $clientRoot "NosGm.Configuration.Grpc.Acceptance.csproj"
 $clientSource = Join-Path $clientRoot "Program.cs"
 $clientExecutable = Join-Path $clientRoot "bin\Release\net481\NosGm.Configuration.Grpc.Acceptance.exe"
@@ -207,6 +210,61 @@ function Read-AcceptanceProcessLog {
     return $content.Trim()
 }
 
+function Invoke-BoundedDotNet {
+    param(
+        [Parameter(Mandatory = $true)][string]$Name,
+        [Parameter(Mandatory = $true)][string[]]$Arguments
+    )
+
+    New-Item -ItemType Directory -Force -Path $buildLogRoot | Out-Null
+    $safeName = ($Name -replace '[^A-Za-z0-9_.-]', '-').ToLowerInvariant()
+    $stdoutPath = Join-Path $buildLogRoot "$safeName.stdout.log"
+    $stderrPath = Join-Path $buildLogRoot "$safeName.stderr.log"
+    Remove-Item -LiteralPath $stdoutPath, $stderrPath -Force -ErrorAction SilentlyContinue
+
+    Write-Host "[BUILD] $Name"
+    $process = Start-Process `
+        -FilePath $dotnet `
+        -ArgumentList $Arguments `
+        -WorkingDirectory $root `
+        -NoNewWindow `
+        -PassThru `
+        -RedirectStandardOutput $stdoutPath `
+        -RedirectStandardError $stderrPath
+    try {
+        $completed = $process.WaitForExit($BuildTimeoutSeconds * 1000)
+        if (-not $completed) {
+            try {
+                & taskkill.exe /PID $process.Id /T /F 2>$null | Out-Null
+                $process.WaitForExit(5000) | Out-Null
+            }
+            catch {
+                Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+            }
+            $stdout = Read-AcceptanceProcessLog -Path $stdoutPath
+            $stderr = Read-AcceptanceProcessLog -Path $stderrPath
+            throw "$Name timed out after $BuildTimeoutSeconds seconds.`nSTDOUT:`n$stdout`nSTDERR:`n$stderr"
+        }
+
+        $exitCode = $process.ExitCode
+        $stdout = Read-AcceptanceProcessLog -Path $stdoutPath
+        $stderr = Read-AcceptanceProcessLog -Path $stderrPath
+        if ($stdout -ne "<no output>") {
+            Write-Host $stdout
+        }
+        if ($stderr -ne "<no output>") {
+            Write-Host $stderr -ForegroundColor Yellow
+        }
+        if ($exitCode -ne 0) {
+            throw "$Name failed with exit code $exitCode.`nSTDOUT:`n$stdout`nSTDERR:`n$stderr"
+        }
+        Write-Host "[PASS] $Name" -ForegroundColor Green
+    }
+    finally {
+        $process.Dispose()
+    }
+}
+
 function Invoke-AcceptanceClient {
     param([Parameter(Mandatory = $true)][string]$Mode)
 
@@ -240,11 +298,11 @@ function Invoke-AcceptanceClient {
         $completed = $process.WaitForExit($ClientTimeoutSeconds * 1000)
         if (-not $completed) {
             try {
-                Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+                & taskkill.exe /PID $process.Id /T /F 2>$null | Out-Null
                 $process.WaitForExit(5000) | Out-Null
             }
             catch {
-                # The outer workflow still has a hard timeout as the final guard.
+                Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
             }
             $stdout = Read-AcceptanceProcessLog -Path $stdoutPath
             $stderr = Read-AcceptanceProcessLog -Path $stderrPath
@@ -437,14 +495,24 @@ try {
     Write-AcceptanceClient
     if (-not $SkipBuild) {
         New-Item -ItemType Directory -Force -Path $runtimeOutput | Out-Null
-        & $dotnet publish $runtimeProject --configuration Release --output $runtimeOutput --nologo
-        if ($LASTEXITCODE -ne 0) {
-            throw "Configuration cluster runtime publish failed."
-        }
-        & $dotnet build $clientProject --configuration Release --nologo /p:NosGmLegacyBuild=true
-        if ($LASTEXITCODE -ne 0) {
-            throw "Configuration net481 acceptance client build failed."
-        }
+        Invoke-BoundedDotNet `
+            -Name "Configuration runtime publish" `
+            -Arguments @(
+                "publish",
+                "`"$runtimeProject`"",
+                "--configuration", "Release",
+                "--output", "`"$runtimeOutput`"",
+                "--nologo"
+            )
+        Invoke-BoundedDotNet `
+            -Name "Configuration net481 client build" `
+            -Arguments @(
+                "build",
+                "`"$clientProject`"",
+                "--configuration", "Release",
+                "--nologo",
+                "/p:NosGmLegacyBuild=true"
+            )
     }
     foreach ($required in @($runtimeAssembly, $clientExecutable)) {
         if (-not (Test-Path -LiteralPath $required -PathType Leaf)) {
