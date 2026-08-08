@@ -128,6 +128,9 @@ try {
         throw "Configuration shadow acceptance exceeded its total $TotalTimeoutSeconds-second budget after $([Math]::Round($stopwatch.Elapsed.TotalSeconds, 1)) seconds.`nLast STDOUT:`n$stdout`nLast STDERR:`n$stderr"
     }
 
+    # The timeout overload established the deadline. Complete the already-ended
+    # process so redirected streams and ExitCode are stable on Windows PowerShell.
+    $process.WaitForExit()
     $exitCode = $process.ExitCode
     $stdout = Read-LogTail -Path $stdoutPath
     $stderr = Read-LogTail -Path $stderrPath

@@ -246,6 +246,10 @@ function Invoke-BoundedDotNet {
             throw "$Name timed out after $BuildTimeoutSeconds seconds.`nSTDOUT:`n$stdout`nSTDERR:`n$stderr"
         }
 
+        # WaitForExit(timeout) only establishes the deadline. Windows PowerShell
+        # 5.1 needs the parameterless call to drain redirected streams and
+        # refresh ExitCode after the child has already terminated.
+        $process.WaitForExit()
         $exitCode = $process.ExitCode
         $stdout = Read-AcceptanceProcessLog -Path $stdoutPath
         $stderr = Read-AcceptanceProcessLog -Path $stderrPath
@@ -304,6 +308,7 @@ function Invoke-AcceptanceClient {
             throw "Configuration shadow transport acceptance timed out after $ClientTimeoutSeconds seconds for $Mode.`nSTDOUT:`n$stdout`nSTDERR:`n$stderr"
         }
 
+        $process.WaitForExit()
         $exitCode = $process.ExitCode
         $stdout = Read-AcceptanceProcessLog -Path $stdoutPath
         $stderr = Read-AcceptanceProcessLog -Path $stderrPath

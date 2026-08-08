@@ -110,6 +110,14 @@ if ($supervisorContent.IndexOf('& $taskKill', [StringComparison]::OrdinalIgnoreC
     throw "Configuration shadow acceptance supervisor must not invoke taskkill without a bounded child process."
 }
 
+if ([Regex]::Matches($content, [Regex]::Escape('$process.WaitForExit()')).Count -lt 2) {
+    throw "Configuration shadow acceptance must finalize both successful build and client processes before reading ExitCode."
+}
+
+if ([Regex]::Matches($supervisorContent, [Regex]::Escape('$process.WaitForExit()')).Count -lt 1) {
+    throw "Configuration shadow acceptance supervisor must finalize the successful harness process before reading ExitCode."
+}
+
 if ($supervisorContent.IndexOf('Join-Path $PSHOME "powershell.exe"', [StringComparison]::OrdinalIgnoreCase) -ge 0) {
     throw "Configuration shadow acceptance supervisor must not derive Windows PowerShell from the active PowerShell host."
 }
@@ -120,6 +128,7 @@ Write-Host "[PASS] Acceptance covers seed, reconnect, duplicate idempotency and 
 Write-Host "[PASS] Per-operation client/build waits remain bounded." -ForegroundColor Green
 Write-Host "[PASS] External supervisor enforces a 420-second total acceptance budget." -ForegroundColor Green
 Write-Host "[PASS] Supervisor process-tree cleanup is itself bounded." -ForegroundColor Green
+Write-Host "[PASS] Successful redirected processes are finalized before ExitCode is evaluated." -ForegroundColor Green
 Write-Host "[PASS] Supervisor resolves Windows PowerShell 5.1 independently from the active PowerShell host." -ForegroundColor Green
 Write-Host "[PASS] Workflow keeps a 10-minute hard limit with headroom for process cleanup." -ForegroundColor Green
 Write-Host "[PASS] CI exercises only native net481 HTTP/2 while the production GRPCWEB fallback remains compiled." -ForegroundColor Green
