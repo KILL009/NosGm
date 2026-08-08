@@ -350,8 +350,7 @@ namespace NosGm.Master.Library.Client
                             {
                                 restorationVerified =
                                     TryRestoreAcceptanceSnapshotEverywhere(
-                                        original,
-                                        before.RuntimeGenerationId);
+                                        original);
                             }
                         }
                     }
@@ -519,8 +518,7 @@ namespace NosGm.Master.Library.Client
         }
 
         private bool TryRestoreAcceptanceSnapshotEverywhere(
-            ConfigurationObject original,
-            string expectedRuntimeGenerationId)
+            ConfigurationObject original)
         {
             for (int attempt = 0;
                  attempt < AcceptancePulseRestoreAttempts;
@@ -538,9 +536,10 @@ namespace NosGm.Master.Library.Client
                 }
 
                 ConfigurationGrpcShadowResult typedUpdateResult;
-                _grpcShadowMirror.TryUpdateAuthoritative(
-                    CloneConfiguration(original),
-                    out typedUpdateResult);
+                bool typedUpdated =
+                    _grpcShadowMirror.TryUpdateAuthoritative(
+                        CloneConfiguration(original),
+                        out typedUpdateResult);
 
                 ConfigurationObject scsCurrent = null;
                 try
@@ -556,12 +555,16 @@ namespace NosGm.Master.Library.Client
                 ConfigurationObject typedCurrent;
                 ConfigurationGrpcShadowResult typedGetResult;
                 bool typedVerified =
+                    typedUpdated &&
                     _grpcShadowMirror.TryGetAuthoritative(
                         out typedCurrent,
                         out typedGetResult) &&
-                    IsExpectedAcceptanceRuntimeResult(
+                    AreSameReachableAcceptanceRuntime(
+                        typedUpdateResult,
                         typedGetResult,
-                        expectedRuntimeGenerationId) &&
+                        out string restoredRuntimeGenerationId) &&
+                    !string.IsNullOrWhiteSpace(
+                        restoredRuntimeGenerationId) &&
                     ConfigurationsAreSemanticallyEqual(
                         original,
                         typedCurrent);
@@ -577,18 +580,46 @@ namespace NosGm.Master.Library.Client
             return false;
         }
 
+        private static bool AreSameReachableAcceptanceRuntime(
+            ConfigurationGrpcShadowResult updateResult,
+            ConfigurationGrpcShadowResult getResult,
+            out string runtimeGenerationId)
+        {
+            runtimeGenerationId = null;
+            if (!IsReachableAcceptanceRuntimeResult(updateResult) ||
+                !IsReachableAcceptanceRuntimeResult(getResult) ||
+                !string.Equals(
+                    updateResult.RuntimeGenerationId,
+                    getResult.RuntimeGenerationId,
+                    StringComparison.Ordinal))
+            {
+                return false;
+            }
+
+            runtimeGenerationId = getResult.RuntimeGenerationId;
+            return true;
+        }
+
         private static bool IsExpectedAcceptanceRuntimeResult(
             ConfigurationGrpcShadowResult result,
             string expectedRuntimeGenerationId)
         {
-            return result != null &&
-                   result.Generation > 0 &&
+            return IsReachableAcceptanceRuntimeResult(result) &&
                    !string.IsNullOrWhiteSpace(
                        expectedRuntimeGenerationId) &&
                    string.Equals(
                        result.RuntimeGenerationId,
                        expectedRuntimeGenerationId,
                        StringComparison.Ordinal);
+        }
+
+        private static bool IsReachableAcceptanceRuntimeResult(
+            ConfigurationGrpcShadowResult result)
+        {
+            return result != null &&
+                   result.Generation > 0 &&
+                   !string.IsNullOrWhiteSpace(
+                       result.RuntimeGenerationId);
         }
 
         private static bool ConfigurationsAreExactlyEqual(
