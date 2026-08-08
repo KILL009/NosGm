@@ -291,12 +291,28 @@ namespace NosGm.Master.Library.Client
                             return false;
                         }
 
+                        before = ConfigurationUpdateObservationLedger.Instance
+                            .LatestParityReport;
+                        if (string.IsNullOrWhiteSpace(
+                                before.RuntimeGenerationId))
+                        {
+                            diagnostic = "typed-runtime-unavailable";
+                            return false;
+                        }
+                        if (before.HasTerminalMismatch)
+                        {
+                            diagnostic = "terminal-parity-" + before.Verdict;
+                            return false;
+                        }
+
                         ConfigurationObject typedOriginal;
                         ConfigurationGrpcShadowResult typedOriginalResult;
                         if (!_grpcShadowMirror.TryGetAuthoritative(
                                 out typedOriginal,
                                 out typedOriginalResult) ||
-                            !IsCurrentAuthorityResult(typedOriginalResult))
+                            !IsExpectedAcceptanceRuntimeResult(
+                                typedOriginalResult,
+                                before.RuntimeGenerationId))
                         {
                             diagnostic = "typed-runtime-unavailable";
                             return false;
@@ -306,24 +322,6 @@ namespace NosGm.Master.Library.Client
                                 typedOriginal))
                         {
                             diagnostic = "typed-configuration-drift";
-                            return false;
-                        }
-
-                        before = ConfigurationUpdateObservationLedger.Instance
-                            .LatestParityReport;
-                        if (string.IsNullOrWhiteSpace(
-                                before.RuntimeGenerationId) ||
-                            !string.Equals(
-                                before.RuntimeGenerationId,
-                                typedOriginalResult.RuntimeGenerationId,
-                                StringComparison.Ordinal))
-                        {
-                            diagnostic = "typed-runtime-unavailable";
-                            return false;
-                        }
-                        if (before.HasTerminalMismatch)
-                        {
-                            diagnostic = "terminal-parity-" + before.Verdict;
                             return false;
                         }
                         if (!isolationStillValid())
@@ -342,7 +340,9 @@ namespace NosGm.Master.Library.Client
                                 "Runtime=" + before.RuntimeGenerationId +
                                 "; no Configuration values are logged.");
                             pulseAttempted = true;
-                            UpdateAcceptanceSnapshotEverywhere(pulse);
+                            UpdateAcceptanceSnapshotEverywhere(
+                                pulse,
+                                before.RuntimeGenerationId);
                         }
                         finally
                         {
@@ -499,7 +499,8 @@ namespace NosGm.Master.Library.Client
         }
 
         private void UpdateAcceptanceSnapshotEverywhere(
-            ConfigurationObject configuration)
+            ConfigurationObject configuration,
+            string expectedRuntimeGenerationId)
         {
             _rollbackTransport.UpdateConfigurationObject(
                 CloneConfiguration(configuration));
@@ -507,7 +508,9 @@ namespace NosGm.Master.Library.Client
             if (!_grpcShadowMirror.TryUpdateAuthoritative(
                     CloneConfiguration(configuration),
                     out typedResult) ||
-                !IsCurrentAuthorityResult(typedResult))
+                !IsExpectedAcceptanceRuntimeResult(
+                    typedResult,
+                    expectedRuntimeGenerationId))
             {
                 throw new InvalidOperationException(
                     "The typed Configuration acceptance write failed closed.");
@@ -533,9 +536,10 @@ namespace NosGm.Master.Library.Client
                 }
 
                 ConfigurationGrpcShadowResult typedUpdateResult;
-                _grpcShadowMirror.TryUpdateAuthoritative(
-                    CloneConfiguration(original),
-                    out typedUpdateResult);
+                bool typedUpdated =
+                    _grpcShadowMirror.TryUpdateAuthoritative(
+                        CloneConfiguration(original),
+                        out typedUpdateResult);
 
                 ConfigurationObject scsCurrent = null;
                 try
@@ -551,10 +555,16 @@ namespace NosGm.Master.Library.Client
                 ConfigurationObject typedCurrent;
                 ConfigurationGrpcShadowResult typedGetResult;
                 bool typedVerified =
+                    typedUpdated &&
                     _grpcShadowMirror.TryGetAuthoritative(
                         out typedCurrent,
                         out typedGetResult) &&
-                    IsCurrentAuthorityResult(typedGetResult) &&
+                    AreSameReachableAcceptanceRuntime(
+                        typedUpdateResult,
+                        typedGetResult,
+                        out string restoredRuntimeGenerationId) &&
+                    !string.IsNullOrWhiteSpace(
+                        restoredRuntimeGenerationId) &&
                     ConfigurationsAreSemanticallyEqual(
                         original,
                         typedCurrent);
@@ -568,6 +578,48 @@ namespace NosGm.Master.Library.Client
             }
 
             return false;
+        }
+
+        private static bool AreSameReachableAcceptanceRuntime(
+            ConfigurationGrpcShadowResult updateResult,
+            ConfigurationGrpcShadowResult getResult,
+            out string runtimeGenerationId)
+        {
+            runtimeGenerationId = null;
+            if (!IsReachableAcceptanceRuntimeResult(updateResult) ||
+                !IsReachableAcceptanceRuntimeResult(getResult) ||
+                !string.Equals(
+                    updateResult.RuntimeGenerationId,
+                    getResult.RuntimeGenerationId,
+                    StringComparison.Ordinal))
+            {
+                return false;
+            }
+
+            runtimeGenerationId = getResult.RuntimeGenerationId;
+            return true;
+        }
+
+        private static bool IsExpectedAcceptanceRuntimeResult(
+            ConfigurationGrpcShadowResult result,
+            string expectedRuntimeGenerationId)
+        {
+            return IsReachableAcceptanceRuntimeResult(result) &&
+                   !string.IsNullOrWhiteSpace(
+                       expectedRuntimeGenerationId) &&
+                   string.Equals(
+                       result.RuntimeGenerationId,
+                       expectedRuntimeGenerationId,
+                       StringComparison.Ordinal);
+        }
+
+        private static bool IsReachableAcceptanceRuntimeResult(
+            ConfigurationGrpcShadowResult result)
+        {
+            return result != null &&
+                   result.Generation > 0 &&
+                   !string.IsNullOrWhiteSpace(
+                       result.RuntimeGenerationId);
         }
 
         private static bool ConfigurationsAreExactlyEqual(
