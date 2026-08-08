@@ -315,16 +315,26 @@ $Configuration GrpcPulse
 ```
 
 The command is single-flight and available only through the existing
-administrator/Operations command boundary. It serializes all Configuration
-mutations, copies the current authoritative object, advances one buff timestamp
-by exactly one millisecond, sends the pulse through the selected joint Update
-path, and restores an independent copy of the original object in a `finally`
-boundary. It then waits at most seven seconds for two new SCS observations, two
-new live typed observations and two ordered semantic matches from the same
-runtime. A timeout, terminal parity verdict, missing subscriber, missing shadow
-transport or concurrent pulse fails closed. Logs contain only the runtime,
-bounded deltas, result and `Restored=True`; they never contain Configuration
-values.
+administrator/Operations command boundary. The local-stack launcher exposes it
+only when both guarded runtime control and Configuration shadow are enabled; a
+normal World process does not receive
+`NOSGM_CONFIGURATION_GRPC_ACCEPTANCE_PULSE_ENABLED=true`. It also requires
+exactly one connected character, no active World XP/gold family buff, and exact
+equality between the live World Configuration and the Master object. This
+prevents a Master round trip from overwriting locally advanced family-buff
+timestamps; any drift rejects the pulse before the first write.
+
+After those barriers pass, the command serializes all Configuration mutations,
+copies the current authoritative object, advances only the global `MaxGold`
+ceiling by one, sends the pulse through the selected joint Update path, and
+restores an independent copy of the original object in a `finally` boundary.
+The isolated acceptance client performs no gameplay action during that bounded
+interval. The command then waits at most seven seconds for two new SCS
+observations, two new live typed observations and two ordered semantic matches
+from the same runtime. A timeout, terminal parity verdict, missing subscriber,
+missing shadow transport, active buff, local drift, additional connected player
+or concurrent pulse fails closed. Logs contain only the runtime, bounded deltas,
+result and `Restored=True`; they never contain Configuration values.
 
 The expected terminal marker for each qualification runtime is:
 
