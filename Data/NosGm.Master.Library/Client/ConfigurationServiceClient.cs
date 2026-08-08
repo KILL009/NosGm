@@ -2,39 +2,19 @@
 using NosGm.Configuration;
 using NosGm.Core;
 using NosGm.Master.Library.Data;
-using NosGm.Master.Library.Interface;
-using NosGm.SCS.Communication.Scs.Communication;
-using NosGm.SCS.Communication.Scs.Communication.EndPoints.Tcp;
-using NosGm.SCS.Communication.ScsServices.Client;
 using System;
-using System.Configuration;
-using System.Threading;
 
 namespace NosGm.Master.Library.Client
 {
-    public class ConfigurationServiceClient : IConfigurationService
+    public class ConfigurationServiceClient
     {
         #region Instantiation
 
         public ConfigurationServiceClient()
         {
-            string ip = ServerConfiguration.IPAddress;
-            int port = Convert.ToInt32(ServerConfiguration.MasterServerPort);
-            _confClient = new ConfigurationClient();
-            _client = ScsServiceClientBuilder.CreateClient<IConfigurationService>(new ScsTcpEndPoint(ip, port),
-                _confClient);
-            Thread.Sleep(1000);
-            while (_client.CommunicationState != CommunicationStates.Connected)
-                try
-                {
-                    _client.Connect();
-                }
-                catch (Exception)
-                {
-                    Logger.Error(Language.Instance.GetMessageFromKey("RETRY_CONNECTION"),
-                        memberName: nameof(CommunicationServiceClient));
-                    Thread.Sleep(1000);
-                }
+            _rollbackTransport =
+                ConfigurationRollbackTransportFactory.Create(
+                    OnConfigurationUpdated);
 
             string authorityDiagnostic;
             if (ConfigurationAuthorityQualificationRuntime.Instance
@@ -132,9 +112,8 @@ namespace NosGm.Master.Library.Client
 
         private static ConfigurationServiceClient _instance;
 
-        private readonly IScsServiceClient<IConfigurationService> _client;
-
-        private readonly ConfigurationClient _confClient;
+        private readonly IConfigurationRollbackTransport
+            _rollbackTransport;
 
         private readonly ConfigurationGrpcShadowMirror _grpcShadowMirror;
 
@@ -148,15 +127,13 @@ namespace NosGm.Master.Library.Client
         public static ConfigurationServiceClient Instance =>
             _instance ?? (_instance = new ConfigurationServiceClient());
 
-        public CommunicationStates CommunicationState => _client.CommunicationState;
-
         #endregion
 
         #region Methods
 
         public bool Authenticate(string authKey, Guid serverId)
         {
-            return _client.ServiceProxy.Authenticate(authKey, serverId);
+            return _rollbackTransport.Authenticate(authKey, serverId);
         }
 
         public ConfigurationObject GetConfigurationObject()
@@ -182,7 +159,7 @@ namespace NosGm.Master.Library.Client
             }
 
             ConfigurationObject authoritative =
-                _client.ServiceProxy.GetConfigurationObject();
+                _rollbackTransport.GetConfigurationObject();
             ObserveAuthoritativeConfiguration(authoritative, "Get");
             return authoritative;
         }
@@ -211,7 +188,8 @@ namespace NosGm.Master.Library.Client
                 RollBackAuthority("Update", typedResult);
             }
 
-            _client.ServiceProxy.UpdateConfigurationObject(configurationObject);
+            _rollbackTransport.UpdateConfigurationObject(
+                configurationObject);
             ObserveAuthoritativeConfiguration(configurationObject, "Update");
         }
 
@@ -276,7 +254,8 @@ namespace NosGm.Master.Library.Client
         {
             try
             {
-                _client.ServiceProxy.UpdateConfigurationObject(configuration);
+                _rollbackTransport.UpdateConfigurationObject(
+                    configuration);
                 Logger.Info(
                     "[CONFIG_GRPC_AUTHORITY] Typed Update generation " +
                     typedResult.Generation +
