@@ -474,6 +474,7 @@ function Write-AcceptanceClient {
 using System;
 using System.Globalization;
 using System.Threading;
+using System.Threading.Tasks;
 using NosGm.Authentication.Client;
 using NosGm.Authentication.Client.Configuration;
 using NosGm.Cluster.Contracts.V1;
@@ -524,13 +525,14 @@ internal static class Program
             Trace("seed update completed");
             AssertEqual(ConfigurationTransportResultCode.Success, seeded.Result, "seed result");
             AssertEqual(checked(baseline.Generation + 1UL), seeded.Generation, "seed generation");
+            AssertCanonicalGuid(seeded.RuntimeGenerationId, "seed runtime generation");
             AssertSnapshot(snapshot, seeded.Configuration, "seed snapshot");
         }
         Trace("first transport disposed");
 
         Trace("create reconnect transport");
         using (var reconnect = new GrpcClusterConfigurationTransport(options))
-        using (var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(15)))
+        using (var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(45)))
         {
             var snapshot = NewSnapshot(marker);
             Trace("reconnect get");
@@ -539,6 +541,7 @@ internal static class Program
             Trace("reconnect get completed");
             AssertEqual(ConfigurationTransportResultCode.Success, reread.Result, "reconnect get result");
             AssertEqual(checked(baseline.Generation + 1UL), reread.Generation, "reconnect generation");
+            AssertCanonicalGuid(reread.RuntimeGenerationId, "reconnect runtime generation");
             AssertSnapshot(snapshot, reread.Configuration, "reconnect snapshot");
 
             Trace("duplicate update");
@@ -548,21 +551,74 @@ internal static class Program
             AssertEqual(ConfigurationTransportResultCode.Success, duplicate.Result, "duplicate result");
             AssertEqual(reread.Generation, duplicate.Generation, "duplicate preserves generation");
 
-            var changed = NewSnapshot(marker + 1L);
-            Trace("changed update");
-            ConfigurationTransportResult updated =
-                reconnect.UpdateAsync(changed, timeout.Token).GetAwaiter().GetResult();
-            Trace("changed update completed");
-            AssertEqual(ConfigurationTransportResultCode.Success, updated.Result, "changed result");
-            AssertEqual(checked(reread.Generation + 1UL), updated.Generation, "changed generation");
-            AssertSnapshot(changed, updated.Configuration, "changed snapshot");
+            var firstObserver = new RecordingUpdateHandler();
+            using (var firstStreamCancellation =
+                   new CancellationTokenSource(TimeSpan.FromSeconds(12)))
+            {
+                Trace("start first Configuration update stream");
+                Task firstStream = reconnect.SubscribeUpdatesAsync(
+                    reread.RuntimeGenerationId,
+                    reread.Generation,
+                    firstObserver,
+                    firstStreamCancellation.Token);
 
-            Trace("final get");
-            ConfigurationTransportResult final =
-                reconnect.GetAsync(timeout.Token).GetAwaiter().GetResult();
-            Trace("final get completed");
-            AssertEqual(updated.Generation, final.Generation, "final generation");
-            AssertSnapshot(changed, final.Configuration, "final snapshot");
+                var changed = NewSnapshot(marker + 1L);
+                Trace("changed update");
+                ConfigurationTransportResult updated =
+                    reconnect.UpdateAsync(changed, timeout.Token).GetAwaiter().GetResult();
+                Trace("changed update completed");
+                AssertEqual(ConfigurationTransportResultCode.Success, updated.Result, "changed result");
+                AssertEqual(checked(reread.Generation + 1UL), updated.Generation, "changed generation");
+                AssertSnapshot(changed, updated.Configuration, "changed snapshot");
+
+                ConfigurationTransportUpdate firstObserved =
+                    firstObserver.Wait(TimeSpan.FromSeconds(10));
+                AssertEqual(updated.Generation, firstObserved.Generation,
+                    "first stream observes changed generation");
+                AssertEqual(reread.RuntimeGenerationId,
+                    firstObserved.RuntimeGenerationId,
+                    "first stream preserves runtime generation");
+                AssertSnapshot(changed, firstObserved.Configuration,
+                    "first stream snapshot");
+                firstStreamCancellation.Cancel();
+                WaitForCancellation(firstStream, "first stream cancellation");
+            }
+
+            var secondObserver = new RecordingUpdateHandler();
+            using (var secondStreamCancellation =
+                   new CancellationTokenSource(TimeSpan.FromSeconds(12)))
+            {
+                Trace("start reconnected Configuration update stream");
+                Task secondStream = reconnect.SubscribeUpdatesAsync(
+                    reread.RuntimeGenerationId,
+                    reread.Generation + 1UL,
+                    secondObserver,
+                    secondStreamCancellation.Token);
+                var changedAfterReconnect = NewSnapshot(marker + 2L);
+                ConfigurationTransportResult reconnectedUpdate =
+                    reconnect.UpdateAsync(changedAfterReconnect, timeout.Token)
+                        .GetAwaiter().GetResult();
+                ConfigurationTransportUpdate secondObserved =
+                    secondObserver.Wait(TimeSpan.FromSeconds(10));
+                AssertEqual(reconnectedUpdate.Generation,
+                    secondObserved.Generation,
+                    "reconnected stream observes exactly the next generation");
+                AssertSnapshot(changedAfterReconnect,
+                    secondObserved.Configuration,
+                    "reconnected stream snapshot");
+                secondStreamCancellation.Cancel();
+                WaitForCancellation(secondStream,
+                    "reconnected stream cancellation");
+
+                Trace("final get");
+                ConfigurationTransportResult final =
+                    reconnect.GetAsync(timeout.Token).GetAwaiter().GetResult();
+                Trace("final get completed");
+                AssertEqual(reconnectedUpdate.Generation, final.Generation,
+                    "final generation");
+                AssertSnapshot(changedAfterReconnect, final.Configuration,
+                    "final snapshot");
+            }
         }
         Trace("reconnect transport disposed");
 
@@ -574,6 +630,62 @@ internal static class Program
     {
         Console.WriteLine("[STEP] " + message);
         Console.Out.Flush();
+    }
+
+    private static void AssertCanonicalGuid(string value, string name)
+    {
+        Guid parsed;
+        if (!Guid.TryParseExact(value, "D", out parsed) ||
+            !string.Equals(value, parsed.ToString("D"),
+                StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException(name + " is invalid.");
+        }
+        Console.WriteLine("[PASS] " + name);
+        Console.Out.Flush();
+    }
+
+    private static void WaitForCancellation(Task task, string name)
+    {
+        try
+        {
+            task.GetAwaiter().GetResult();
+        }
+        catch (Exception exception)
+            when (exception is OperationCanceledException ||
+                  string.Equals(
+                      exception.GetType().FullName,
+                      "Grpc.Core.RpcException",
+                      StringComparison.Ordinal))
+        {
+        }
+        Console.WriteLine("[PASS] " + name);
+        Console.Out.Flush();
+    }
+
+    private sealed class RecordingUpdateHandler
+        : IClusterConfigurationUpdateHandler
+    {
+        private readonly TaskCompletionSource<ConfigurationTransportUpdate>
+            _observed = new TaskCompletionSource<ConfigurationTransportUpdate>();
+
+        public Task ObserveAsync(
+            ConfigurationTransportUpdate update,
+            CancellationToken cancellationToken)
+        {
+            _observed.TrySetResult(update);
+            return Task.CompletedTask;
+        }
+
+        public ConfigurationTransportUpdate Wait(TimeSpan timeout)
+        {
+            if (!_observed.Task.Wait(timeout))
+            {
+                throw new TimeoutException(
+                    "Configuration update stream did not produce an envelope.");
+            }
+            return _observed.Task.GetAwaiter().GetResult();
+        }
     }
 
     private static ConfigurationTransportSnapshot NewSnapshot(long marker)

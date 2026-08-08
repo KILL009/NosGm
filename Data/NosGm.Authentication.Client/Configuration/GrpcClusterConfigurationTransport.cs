@@ -5,15 +5,19 @@ using System.Security.Authentication;
 using System.Security.Cryptography.X509Certificates;
 using System.Threading;
 using System.Threading.Tasks;
+using Grpc.Core;
 using Grpc.Net.Client;
 using Grpc.Net.Client.Web;
+using NosGm.Cluster.Contracts.Configuration.V1;
 using NosGm.Cluster.Contracts.V1;
 using WireV1 = global::NosGm.Cluster.Wire.V1;
 
 namespace NosGm.Authentication.Client.Configuration
 {
     public sealed class GrpcClusterConfigurationTransport
-        : IClusterConfigurationTransport, IDisposable
+        : IClusterConfigurationTransport,
+          IClusterConfigurationUpdateStreamTransport,
+          IDisposable
     {
         private readonly GrpcChannel _channel;
         private readonly WireV1.ClusterConfiguration
@@ -79,7 +83,8 @@ namespace NosGm.Authentication.Client.Configuration
             return ToTransportResult(
                 response.Result,
                 response.Configuration,
-                response.Generation);
+                response.Generation,
+                response.RuntimeGenerationId);
         }
 
         public async Task<ConfigurationTransportResult> UpdateAsync(
@@ -107,7 +112,52 @@ namespace NosGm.Authentication.Client.Configuration
             return ToTransportResult(
                 response.Result,
                 response.Configuration,
-                response.Generation);
+                response.Generation,
+                response.RuntimeGenerationId);
+        }
+
+        public async Task SubscribeUpdatesAsync(
+            string runtimeGenerationId,
+            ulong resumeAfterGeneration,
+            IClusterConfigurationUpdateHandler handler,
+            CancellationToken cancellationToken)
+        {
+            ThrowIfDisposed();
+            if (!IsCanonicalRuntimeGeneration(runtimeGenerationId))
+            {
+                throw new ArgumentException(
+                    "The Configuration runtime generation must be a canonical GUID.",
+                    nameof(runtimeGenerationId));
+            }
+            if (handler == null)
+            {
+                throw new ArgumentNullException(nameof(handler));
+            }
+
+            DateTimeOffset issuedAt = DateTimeOffset.UtcNow;
+            DateTimeOffset setupDeadline =
+                issuedAt.AddMilliseconds(_options.DeadlineMilliseconds);
+            var request = new WireV1.SubscribeConfigurationUpdatesRequest
+            {
+                Context = CreateRequestContext(issuedAt, setupDeadline),
+                RuntimeGenerationId = runtimeGenerationId,
+                ResumeAfterGeneration = resumeAfterGeneration
+            };
+            using AsyncServerStreamingCall<WireV1.ConfigurationUpdateEnvelope>
+                call = _client.SubscribeConfigurationUpdates(
+                    request,
+                    cancellationToken: cancellationToken);
+            while (await call.ResponseStream
+                       .MoveNext(cancellationToken)
+                       .ConfigureAwait(false))
+            {
+                WireV1.ConfigurationUpdateEnvelope current =
+                    call.ResponseStream.Current;
+                await handler.ObserveAsync(
+                        ToTransportUpdate(current),
+                        cancellationToken)
+                    .ConfigureAwait(false);
+            }
         }
 
         public void Dispose()
@@ -127,7 +177,15 @@ namespace NosGm.Authentication.Client.Configuration
             DateTimeOffset issuedAt = DateTimeOffset.UtcNow;
             DateTimeOffset deadline =
                 issuedAt.AddMilliseconds(_options.DeadlineMilliseconds);
-            context = new WireV1.RequestContext
+            context = CreateRequestContext(issuedAt, deadline);
+            return deadline.UtcDateTime;
+        }
+
+        private WireV1.RequestContext CreateRequestContext(
+            DateTimeOffset issuedAt,
+            DateTimeOffset deadline)
+        {
+            return new WireV1.RequestContext
             {
                 Version = new WireV1.ProtocolVersion
                 {
@@ -141,13 +199,13 @@ namespace NosGm.Authentication.Client.Configuration
                 RequestedService = WireV1.ClusterService.Configuration,
                 CallerInstanceId = _options.CallerInstanceId
             };
-            return deadline.UtcDateTime;
         }
 
         private static ConfigurationTransportResult ToTransportResult(
             WireV1.ConfigurationResultCode result,
             WireV1.ConfigurationSnapshot configuration,
-            ulong generation)
+            ulong generation,
+            string runtimeGenerationId)
         {
             var mapped = (ConfigurationTransportResultCode)(int)result;
             if (!Enum.IsDefined(typeof(ConfigurationTransportResultCode), mapped))
@@ -156,10 +214,14 @@ namespace NosGm.Authentication.Client.Configuration
             }
 
             if (mapped == ConfigurationTransportResultCode.Success &&
-                configuration == null)
+                (configuration == null ||
+                 ClusterConfigurationContractValidator.ValidateSnapshot(
+                     configuration) !=
+                     ConfigurationContractValidationError.None ||
+                 !IsCanonicalRuntimeGeneration(runtimeGenerationId)))
             {
                 throw new InvalidOperationException(
-                    "The Configuration gRPC service returned success without a snapshot.");
+                    "The Configuration gRPC service returned success without a valid snapshot runtime identity.");
             }
 
             return new ConfigurationTransportResult
@@ -174,9 +236,51 @@ namespace NosGm.Authentication.Client.Configuration
                             configuration.TimeExpBuffUnixTimeMs,
                         TimeGoldBuffUnixTimeMilliseconds =
                             configuration.TimeGoldBuffUnixTimeMs
-                    },
-                Generation = generation
+                },
+                Generation = generation,
+                RuntimeGenerationId = runtimeGenerationId
             };
+        }
+
+        private static ConfigurationTransportUpdate ToTransportUpdate(
+            WireV1.ConfigurationUpdateEnvelope envelope)
+        {
+            if (envelope == null || envelope.Configuration == null ||
+                envelope.Generation == 0 ||
+                ClusterConfigurationContractValidator.ValidateSnapshot(
+                    envelope.Configuration) !=
+                    ConfigurationContractValidationError.None ||
+                !IsCanonicalRuntimeGeneration(envelope.RuntimeGenerationId))
+            {
+                throw new RpcException(
+                    new Status(
+                        StatusCode.DataLoss,
+                        "The Configuration update stream returned a malformed envelope."));
+            }
+
+            return new ConfigurationTransportUpdate
+            {
+                Configuration = new ConfigurationTransportSnapshot
+                {
+                    MaxGold = envelope.Configuration.MaxGold,
+                    TimeExpBuffUnixTimeMilliseconds =
+                        envelope.Configuration.TimeExpBuffUnixTimeMs,
+                    TimeGoldBuffUnixTimeMilliseconds =
+                        envelope.Configuration.TimeGoldBuffUnixTimeMs
+                },
+                Generation = envelope.Generation,
+                RuntimeGenerationId = envelope.RuntimeGenerationId,
+                Replayed = envelope.Replayed
+            };
+        }
+
+        private static bool IsCanonicalRuntimeGeneration(string value)
+        {
+            return Guid.TryParseExact(value, "D", out Guid parsed) &&
+                   string.Equals(
+                       value,
+                       parsed.ToString("D"),
+                       StringComparison.Ordinal);
         }
 
         private static WireV1.ConfigurationSnapshot ToWireSnapshot(

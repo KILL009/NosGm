@@ -27,7 +27,9 @@
   "callbackBoundary": {
     "legacyInterface": "IConfigurationClient",
     "legacyMethod": "ConfigurationUpdated",
-    "disposition": "deferred",
-    "reason": "The push update requires a typed subscriber with replay/cutover evidence before SCS callback delivery can be removed."
+    "disposition": "shadow_stream",
+    "target": "SubscribeConfigurationUpdates",
+    "authority": "SCS",
+    "reason": "The typed stream observes bounded replay and live generations, but cannot apply gameplay configuration until the joint Configuration cutover is qualified."
   }
 }

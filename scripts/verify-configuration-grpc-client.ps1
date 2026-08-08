@@ -42,6 +42,7 @@ function Forbid-Text {
 
 $contracts = Read-RepoFile "Data\NosGm.Authentication.Client\Configuration\ConfigurationTransportContracts.cs"
 $transport = Read-RepoFile "Data\NosGm.Authentication.Client\Configuration\GrpcClusterConfigurationTransport.cs"
+$subscriber = Read-RepoFile "Data\NosGm.Authentication.Client\Configuration\ConfigurationGrpcShadowSubscriber.cs"
 $options = Read-RepoFile "Data\NosGm.Authentication.Client\AuthenticationGrpcClientOptions.cs"
 $selfTest = Read-RepoFile "tests\NosGm.Authentication.Runtime.SelfTest\ClusterConfigurationTransportLiveSelfTest.cs"
 $project = Read-RepoFile "Data\NosGm.Authentication.Client\NosGm.Authentication.Client.csproj"
@@ -55,6 +56,9 @@ foreach ($required in @(
     "Unavailable = 5",
     "Task<ConfigurationTransportResult> GetAsync",
     "Task<ConfigurationTransportResult> UpdateAsync",
+    "IClusterConfigurationUpdateStreamTransport",
+    "Task SubscribeUpdatesAsync",
+    "IClusterConfigurationUpdateHandler",
     "ulong Generation"
 )) {
     Require-Text $contracts $required "Configuration client transport contracts"
@@ -63,6 +67,9 @@ foreach ($required in @(
 foreach ($required in @(
     "options.CallerRole != ClusterNodeRole.World",
     "WireV1.ClusterService.Configuration",
+    "SubscribeConfigurationUpdates",
+    "ResumeAfterGeneration",
+    "RuntimeGenerationId",
     "ClusterContractVersion.CurrentMajor",
     "ClusterProtocolLimits.MaxInboundMessageBytes",
     "ClusterProtocolLimits.MaxOutboundMessageBytes",
@@ -80,6 +87,19 @@ foreach ($required in @(
     "ObjectDisposedException"
 )) {
     Require-Text $transport $required "Configuration gRPC client transport"
+}
+
+foreach ($required in @(
+    "ConfigurationUpdateCursor",
+    "allowSnapshotRecovery",
+    "ConfigurationUpdateCursorDecision.Duplicate",
+    "ConfigurationUpdateCursorDecision.Gap",
+    "RecoverSnapshotAsync",
+    "IsReconnectable",
+    "SCS result or",
+    "gameplay Configuration object is changed here"
+)) {
+    Require-Text $subscriber $required "Configuration shadow subscriber"
 }
 
 foreach ($forbidden in @(
@@ -121,6 +141,7 @@ Write-Host "[PASS] Configuration client transport preserves wire result codes an
 Write-Host "[PASS] Configuration gRPC client is World-only and requests ClusterService.Configuration." -ForegroundColor Green
 Write-Host "[PASS] Configuration client contains the existing HTTP/2 and Windows 10 gRPC-Web mTLS implementations." -ForegroundColor Green
 Write-Host "[PASS] Configuration client remains isolated from SCS and the legacy ConfigurationServiceClient." -ForegroundColor Green
+Write-Host "[PASS] Configuration shadow subscriber deduplicates, reconnects and recovers by runtime generation." -ForegroundColor Green
 Write-Host "[PASS] Construction self-test remains non-blocking and rejects invalid roles before certificate loading." -ForegroundColor Green
 
 & (Join-Path $PSScriptRoot "verify-configuration-grpc-shadow-adapter.ps1")

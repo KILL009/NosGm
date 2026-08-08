@@ -82,6 +82,7 @@
     <Compile Include="Client\ScsClusterCommunicationTransport.cs" />
     <Compile Include="Client\ConfigurationGrpcShadowMirror.cs" />
     <Compile Include="Client\ConfigurationGrpcShadowOptions.cs" />
+    <Compile Include="Client\ConfigurationGrpcShadowSubscriberLifecycle.cs" />
     <Compile Include="Client\ConfigurationServiceClient.cs" />
     <Compile Include="Client\MailClient.cs" />
     <Compile Include="Client\ConfigurationClient.cs" />

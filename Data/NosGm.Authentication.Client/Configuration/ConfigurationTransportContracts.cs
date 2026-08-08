@@ -29,6 +29,28 @@ namespace NosGm.Authentication.Client.Configuration
         public ConfigurationTransportSnapshot Configuration { get; set; }
 
         public ulong Generation { get; set; }
+
+        public string RuntimeGenerationId { get; set; }
+    }
+
+    public sealed class ConfigurationTransportUpdate
+    {
+        public ConfigurationTransportSnapshot Configuration { get; set; }
+
+        public ulong Generation { get; set; }
+
+        public string RuntimeGenerationId { get; set; }
+
+        public bool Replayed { get; set; }
+
+        public bool RecoveredFromSnapshot { get; set; }
+    }
+
+    public interface IClusterConfigurationUpdateHandler
+    {
+        Task ObserveAsync(
+            ConfigurationTransportUpdate update,
+            CancellationToken cancellationToken);
     }
 
     public interface IClusterConfigurationTransport
@@ -38,6 +60,15 @@ namespace NosGm.Authentication.Client.Configuration
 
         Task<ConfigurationTransportResult> UpdateAsync(
             ConfigurationTransportSnapshot configuration,
+            CancellationToken cancellationToken);
+    }
+
+    public interface IClusterConfigurationUpdateStreamTransport
+    {
+        Task SubscribeUpdatesAsync(
+            string runtimeGenerationId,
+            ulong resumeAfterGeneration,
+            IClusterConfigurationUpdateHandler handler,
             CancellationToken cancellationToken);
     }
 }

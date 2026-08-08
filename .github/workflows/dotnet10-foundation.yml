@@ -41,6 +41,10 @@ on:
       - "scripts/verify-authentication-grpc-runtime.ps1"
       - "scripts/verify-authentication-grpc-local-acceptance.ps1"
       - "scripts/verify-configuration-grpc-shadow-acceptance.ps1"
+      - "scripts/verify-configuration-grpc-contract.ps1"
+      - "scripts/verify-configuration-grpc-state-host.ps1"
+      - "scripts/verify-configuration-grpc-client.ps1"
+      - "scripts/verify-configuration-grpc-shadow-adapter.ps1"
   pull_request:
     branches:
       - main
@@ -81,6 +85,10 @@ on:
       - "scripts/verify-authentication-grpc-runtime.ps1"
       - "scripts/verify-authentication-grpc-local-acceptance.ps1"
       - "scripts/verify-configuration-grpc-shadow-acceptance.ps1"
+      - "scripts/verify-configuration-grpc-contract.ps1"
+      - "scripts/verify-configuration-grpc-state-host.ps1"
+      - "scripts/verify-configuration-grpc-client.ps1"
+      - "scripts/verify-configuration-grpc-shadow-adapter.ps1"
   workflow_dispatch:
 
 permissions:

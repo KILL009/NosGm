@@ -50,6 +50,9 @@ Require-Text $proto "uint64 generation = 3;" "Configuration wire generation"
 if (([regex]::Matches($proto, [regex]::Escape("uint64 generation = 3;"))).Count -ne 2) {
     throw "GetConfigurationResponse and UpdateConfigurationResponse must both expose generation field 3."
 }
+Require-Text $proto "rpc SubscribeConfigurationUpdates" "Configuration update stream"
+Require-Text $proto "runtime_generation_id = 4;" "Configuration response runtime identity"
+Require-Text $proto "resume_after_generation = 3;" "Configuration resume cursor"
 
 foreach ($required in @(
     "private ulong _generation;",
@@ -60,6 +63,18 @@ foreach ($required in @(
     "Clone(_snapshot)"
 )) {
     Require-Text $state $required "Configuration state isolation"
+}
+
+foreach ($required in @(
+    "MaxRetainedUpdates",
+    "MaxPendingUpdatesPerSubscriber",
+    "TryOpenSubscription",
+    "InvalidResumeCursor",
+    "BoundedChannelOptions",
+    "QueueOverflow",
+    "Superseded"
+)) {
+    Require-Text $state $required "Configuration bounded update stream"
 }
 
 foreach ($forbidden in @(
@@ -86,6 +101,16 @@ foreach ($required in @(
 )) {
     Require-Text $service $required "Configuration shadow service guard"
 }
+foreach ($required in @(
+    "SubscribeConfigurationUpdates",
+    "RuntimeGenerationId",
+    "ReadAllAsync",
+    "StatusCode.OutOfRange",
+    "StatusCode.ResourceExhausted",
+    "requireGrpcDeadline: false"
+)) {
+    Require-Text $service $required "Configuration streaming service"
+}
 
 Require-Text $program "AddSingleton<ClusterConfigurationState>()" "Configuration state DI registration"
 Require-Text $program "MapGrpcService<ClusterConfigurationService>()" "Configuration gRPC endpoint registration"
@@ -102,9 +127,19 @@ foreach ($required in @(
 )) {
     Require-Text $selfTest $required "Configuration state self-test"
 }
+foreach ($required in @(
+    "bounded retained replay",
+    "does not publish a duplicate",
+    "published live",
+    "replaces the prior process subscription",
+    "older than bounded replay"
+)) {
+    Require-Text $selfTest $required "Configuration stream state self-test"
+}
 
 Write-Host "[PASS] Configuration gRPC host starts unavailable and owns no legacy default." -ForegroundColor Green
 Write-Host "[PASS] Configuration snapshots are isolated and generation-backed." -ForegroundColor Green
 Write-Host "[PASS] Equivalent multi-World shadow writes preserve the current generation." -ForegroundColor Green
 Write-Host "[PASS] Configuration gRPC service reuses mTLS, deadline, replay and dispatch guards." -ForegroundColor Green
+Write-Host "[PASS] Configuration update streams use bounded replay, queues and reconnect replacement." -ForegroundColor Green
 Write-Host "[PASS] Configuration shadow host has no SCS callback, shared-secret or GameConfiguration dependency." -ForegroundColor Green
