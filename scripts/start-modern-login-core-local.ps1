@@ -794,6 +794,11 @@ if ($AuthenticationTransport -eq "GRPC") {
         $worldEnvironment[
             "NOSGM_CONFIGURATION_GRPC_SHADOW_ENABLED"] = "true"
     }
+    if ($EnableConfigurationRuntimeControl -and
+        $EnableConfigurationGrpcShadow) {
+        $worldEnvironment[
+            "NOSGM_CONFIGURATION_GRPC_ACCEPTANCE_PULSE_ENABLED"] = "true"
+    }
     if (-not [string]::IsNullOrWhiteSpace(
             $ConfigurationAuthorityArmRequestId)) {
         $worldEnvironment[
