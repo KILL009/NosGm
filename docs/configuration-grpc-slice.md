@@ -306,6 +306,35 @@ Run real SCS and typed callback traffic after every restart. Three distinct
 parity windows arm the gate; the next restart creates the fourth activation
 runtime without changing the World process generation.
 
+Logging in or selecting a character does not mutate Configuration and therefore
+cannot create a live parity window. After each guarded restart, an administrator
+must enter the following command from a connected real client:
+
+```text
+$Configuration GrpcPulse
+```
+
+The command is single-flight and available only through the existing
+administrator/Operations command boundary. It serializes all Configuration
+mutations, copies the current authoritative object, advances one buff timestamp
+by exactly one millisecond, sends the pulse through the selected joint Update
+path, and restores an independent copy of the original object in a `finally`
+boundary. It then waits at most seven seconds for two new SCS observations, two
+new live typed observations and two ordered semantic matches from the same
+runtime. A timeout, terminal parity verdict, missing subscriber, missing shadow
+transport or concurrent pulse fails closed. Logs contain only the runtime,
+bounded deltas, result and `Restored=True`; they never contain Configuration
+values.
+
+The expected terminal marker for each qualification runtime is:
+
+```text
+[CONFIG_GRPC_ACCEPTANCE_PULSE] Stage=PASS ... ScsDelta=2 GrpcDelta=2 MatchedDelta=2 Restored=True
+```
+
+Do not perform the next guarded restart until that marker exists for the current
+runtime.
+
 ### Operational evidence collector
 
 After generating real traffic through one continuously running Master + World
