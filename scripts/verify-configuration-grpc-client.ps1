@@ -224,3 +224,4 @@ Write-Host "[PASS] Configuration parity is evaluated automatically with bounded 
 Write-Host "[PASS] Construction self-test remains non-blocking and rejects invalid roles before certificate loading." -ForegroundColor Green
 
 & (Join-Path $PSScriptRoot "verify-configuration-grpc-shadow-adapter.ps1")
+& (Join-Path $PSScriptRoot "verify-configuration-authority-selector.ps1")

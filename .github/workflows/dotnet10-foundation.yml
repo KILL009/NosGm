@@ -45,6 +45,7 @@ on:
       - "scripts/verify-configuration-grpc-state-host.ps1"
       - "scripts/verify-configuration-grpc-client.ps1"
       - "scripts/verify-configuration-grpc-shadow-adapter.ps1"
+      - "scripts/verify-configuration-authority-selector.ps1"
   pull_request:
     branches:
       - main
@@ -89,6 +90,7 @@ on:
       - "scripts/verify-configuration-grpc-state-host.ps1"
       - "scripts/verify-configuration-grpc-client.ps1"
       - "scripts/verify-configuration-grpc-shadow-adapter.ps1"
+      - "scripts/verify-configuration-authority-selector.ps1"
   workflow_dispatch:
 
 permissions:

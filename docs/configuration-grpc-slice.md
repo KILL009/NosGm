@@ -4,7 +4,7 @@
 
 This migration replaces the legacy `IConfigurationService` SCS surface with a typed, mTLS-authenticated gRPC boundary in controlled stages.
 
-SCS is still the runtime authority. The typed contract, shadow state host, isolated World gRPC client transport, opt-in SCS-first shadow adapter, observation-only typed update subscriber, bounded cross-transport callback observation ledger and automatic parity comparator now exist.
+SCS is still the runtime authority. The typed contract, shadow state host, isolated World gRPC client transport, opt-in SCS-first shadow adapter, observation-only typed update subscriber, bounded cross-transport callback observation ledger, automatic parity comparator and production-neutral joint authority foundation now exist.
 
 ## Legacy surface
 
@@ -155,6 +155,18 @@ The report distinguishes:
 
 Eviction, malformed ordering, runtime reuse, fingerprint drift and persistent callback skew all fail closed for future cutover qualification. Reports include the evaluated ledger boundary, runtime window, live and matched counts, recovery/replay counts, first mismatch coordinates and unmatched age. Both observation paths emit deduplicated diagnostics; terminal evidence failures are warnings. These reports are measurement only: SCS authority is unchanged, no typed update is applied to gameplay, and no callback is suppressed or replayed.
 
+## Authority selector foundation (not wired yet)
+
+The client library now contains a production-neutral authority coordinator for the future Configuration cutover. It is deliberately not referenced by `ConfigurationServiceClient` or the typed subscriber lifecycle, so SCS remains the production authority in this slice.
+
+The coordinator can arm only from the latest three successful parity windows. Every window must belong to the same process, use a distinct typed runtime generation, contain matched non-empty live evidence, retain its complete FIFO window and report no mismatch or unmatched age. Activation then requires a fourth, previously unqualified runtime generation from that same process. Reusing one of the three qualification generations cannot activate the gate.
+
+Activation alone does not open typed effects. Recovery must complete for the exact active runtime before one atomic decision selects typed Get, Update and callback. Before that barrier, all three operations remain together on SCS; the selector cannot create a split-authority state.
+
+During the future callback overlap window, the first-arriving semantic copy may apply and one equal opposite-source copy is suppressed. The bounded FIFO guard uses the same normalized SHA-256 snapshot fingerprint as parity evidence, pairs repeated identical updates occurrence by occurrence, expires stale pairs and never stores gameplay objects. This covers both SCS-first and typed-first arrival without applying one logical update twice.
+
+Runtime-generation drift, active-stream loss, a typed callback exception, malformed routing input or overlap-capacity saturation triggers terminal rollback for the process. Typed ingress then stays blocked, while a delayed SCS twin of an already-applied typed update can still be suppressed and new SCS updates continue normally. Production wiring and operator controls remain a later, separately reviewed step.
+
 ### Date/time parity
 
 The adapter only converts legacy values outward for comparison/seeding. It does not reconstruct the gameplay `ConfigurationObject` from gRPC.
@@ -165,11 +177,11 @@ The adapter only converts legacy values outward for comparison/seeding. It does 
 
 ## Callback boundary
 
-`ConfigurationUpdated` remains the blocker for retiring this SCS family. This slice now provides typed subscription, recovery, comparable evidence capture and automatic bounded parity verdicts. Later qualification must still provide:
+`ConfigurationUpdated` remains the blocker for retiring this SCS family. This slice now provides typed subscription, recovery, comparable evidence capture, automatic bounded parity verdicts and an isolated selector/duplicate guard. Later qualification must still provide:
 
 1. explicit local acceptance proving stable parity across live, replay, recovery, restart and reconnect windows;
-2. a fail-closed joint Get/Update/callback authority switch and rollback path;
-3. proof that a World cannot apply the same configuration update twice during overlap or cutover.
+2. operator-controlled production wiring for the fail-closed joint Get/Update/callback selector;
+3. live acceptance proving that the bounded overlap guard prevents duplicate gameplay application during cutover and rollback.
 
 ## Runtime sequence
 
@@ -181,13 +193,14 @@ Completed foundations:
 4. opt-in SCS-first World shadow adapter with bounded best-effort synchronization and idempotent generations;
 5. observation-only typed update subscriber with bounded replay, reconnect deduplication and snapshot recovery;
 6. bounded SCS-versus-gRPC callback observation ledger with normalized SHA-256 semantic fingerprints and explicit delivery phases;
-7. automatic runtime-scoped parity comparator with bounded settlement, ordered fingerprint matching and fail-closed evidence verdicts.
+7. automatic runtime-scoped parity comparator with bounded settlement, ordered fingerprint matching and fail-closed evidence verdicts;
+8. production-neutral joint Get/Update/callback authority gate with three-window qualification, fourth-runtime activation, recovery barrier, bounded semantic overlap deduplication and terminal rollback.
 
 The safe continuation is:
 
 1. run explicit local acceptance with Master + World, shadow enabled, and collect stable comparator parity across live, replay, recovery, restart and reconnect windows;
-2. add a fail-closed Configuration authority selector, rollback state and duplicate-application guard;
-3. switch Get/Update and callback authority together behind that one explicit selector;
+2. bind the Configuration authority coordinator to the World process lifecycle behind immutable operator arm/rollback controls;
+3. switch Get/Update and callback authority together behind that one explicit selector and run live overlap/rollback acceptance;
 4. remove `IConfigurationService`, `IConfigurationClient` and their SCS registration only after acceptance passes.
 
 Until the joint authority switch, `NOSGM_COMMUNICATION_TRANSPORT` and the existing Communication callback cutover are unrelated to this service and must not act as implicit Configuration selectors.
