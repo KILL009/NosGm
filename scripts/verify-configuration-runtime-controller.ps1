@@ -97,7 +97,7 @@ Require $state "The Configuration runtime state is retired." `
 foreach ($required in @(
     "WireV1.ClusterNodeRole.Master",
     "RestartConfigurationRuntime",
-    "ConfigurationRuntimeRestartResult.RuntimeGenerationChanged",
+    ".RuntimeGenerationChanged =>",
     "ConfigurationResultCode.Conflict",
     "ThrowForSubscriptionTermination",
     "The Configuration runtime restarted.",
