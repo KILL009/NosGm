@@ -233,13 +233,13 @@ namespace NosGm.Authentication.Client.Configuration
         {
             if (options.WireMode == AuthenticationGrpcWireMode.GrpcWeb)
             {
+#if NET10_0_OR_GREATER
                 var primaryHandler = new HttpClientHandler
                 {
                     ClientCertificateOptions = ClientCertificateOption.Manual,
                     SslProtocols = SslProtocols.Tls12
                 };
                 primaryHandler.ClientCertificates.Add(certificate);
-#if NET10_0_OR_GREATER
                 if (!string.IsNullOrEmpty(
                         options.TrustedRootCertificatePath))
                 {
@@ -250,6 +250,9 @@ namespace NosGm.Authentication.Client.Configuration
                                 serverCertificate,
                                 errors);
                 }
+#else
+                WinHttpHandler primaryHandler =
+                    CreateLegacyWinHttpHandler(options, certificate);
 #endif
                 return new GrpcWebHandler(
                     GrpcWebMode.GrpcWeb,
@@ -290,16 +293,33 @@ namespace NosGm.Authentication.Client.Configuration
             }
             return handler;
 #else
+            return CreateLegacyWinHttpHandler(options, certificate);
+#endif
+        }
+
+#if !NET10_0_OR_GREATER
+        private static WinHttpHandler CreateLegacyWinHttpHandler(
+            AuthenticationGrpcClientOptions options,
+            X509Certificate2 certificate)
+        {
             var handler = new WinHttpHandler
             {
                 SslProtocols = SslProtocols.Tls12
             };
             handler.ClientCertificates.Add(certificate);
+            if (!string.IsNullOrEmpty(options.TrustedRootCertificatePath))
+            {
+                handler.ServerCertificateValidationCallback =
+                    (_, serverCertificate, _, errors) =>
+                        ValidatePinnedServerCertificate(
+                            options,
+                            serverCertificate,
+                            errors);
+            }
             return handler;
-#endif
         }
+#endif
 
-#if NET10_0_OR_GREATER
         private static bool ValidatePinnedServerCertificate(
             AuthenticationGrpcClientOptions options,
             X509Certificate2 serverCertificate,
@@ -313,15 +333,27 @@ namespace NosGm.Authentication.Client.Configuration
             }
 
             using X509Certificate2 trustedRoot =
+#if NET10_0_OR_GREATER
                 X509CertificateLoader.LoadCertificateFromFile(
                     options.TrustedRootCertificatePath);
+#else
+                new X509Certificate2(options.TrustedRootCertificatePath);
+#endif
             using var chain = new X509Chain();
+#if NET10_0_OR_GREATER
             chain.ChainPolicy.TrustMode = X509ChainTrustMode.CustomRootTrust;
             chain.ChainPolicy.CustomTrustStore.Add(trustedRoot);
+#else
+            chain.ChainPolicy.ExtraStore.Add(trustedRoot);
+            chain.ChainPolicy.VerificationFlags =
+                X509VerificationFlags.AllowUnknownCertificateAuthority;
+#endif
             chain.ChainPolicy.RevocationMode = X509RevocationMode.NoCheck;
+#if NET10_0_OR_GREATER
             chain.ChainPolicy.DisableCertificateDownloads = true;
+#endif
             bool trusted = chain.Build(serverCertificate);
-            if (!trusted)
+            if (!trusted || chain.ChainElements.Count == 0)
             {
                 Console.Error.WriteLine(
                     "[TLS] Configuration server certificate chain rejected: " +
@@ -330,10 +362,36 @@ namespace NosGm.Authentication.Client.Configuration
                         Array.ConvertAll(
                             chain.ChainStatus,
                             status => status.Status.ToString())));
+                return false;
             }
-            return trusted;
-        }
+
+#if !NET10_0_OR_GREATER
+            foreach (X509ChainStatus status in chain.ChainStatus)
+            {
+                if (status.Status != X509ChainStatusFlags.NoError &&
+                    status.Status != X509ChainStatusFlags.UntrustedRoot)
+                {
+                    Console.Error.WriteLine(
+                        "[TLS] Configuration server certificate chain rejected: " +
+                        status.Status);
+                    return false;
+                }
+            }
+
+            X509Certificate2 observedRoot =
+                chain.ChainElements[chain.ChainElements.Count - 1].Certificate;
+            if (!string.Equals(
+                    Convert.ToBase64String(observedRoot.RawData),
+                    Convert.ToBase64String(trustedRoot.RawData),
+                    StringComparison.Ordinal))
+            {
+                Console.Error.WriteLine(
+                    "[TLS] Configuration server certificate root does not match the configured root file.");
+                return false;
+            }
 #endif
+            return true;
+        }
 
         private void ThrowIfDisposed()
         {

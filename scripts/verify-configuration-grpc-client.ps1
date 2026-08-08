@@ -42,6 +42,7 @@ function Forbid-Text {
 
 $contracts = Read-RepoFile "Data\NosGm.Authentication.Client\Configuration\ConfigurationTransportContracts.cs"
 $transport = Read-RepoFile "Data\NosGm.Authentication.Client\Configuration\GrpcClusterConfigurationTransport.cs"
+$options = Read-RepoFile "Data\NosGm.Authentication.Client\AuthenticationGrpcClientOptions.cs"
 $selfTest = Read-RepoFile "tests\NosGm.Authentication.Runtime.SelfTest\ClusterConfigurationTransportLiveSelfTest.cs"
 $project = Read-RepoFile "Data\NosGm.Authentication.Client\NosGm.Authentication.Client.csproj"
 
@@ -70,6 +71,10 @@ foreach ($required in @(
     "SslProtocols.Tls13",
     "TrustedRootCertificatePath",
     "ValidatePinnedServerCertificate",
+    "ServerCertificateValidationCallback",
+    "X509VerificationFlags.AllowUnknownCertificateAuthority",
+    "chain.ChainPolicy.ExtraStore.Add(trustedRoot)",
+    "observedRoot.RawData",
     "success without a snapshot",
     "Interlocked.Exchange",
     "ObjectDisposedException"
@@ -80,12 +85,16 @@ foreach ($required in @(
 foreach ($forbidden in @(
     "NosGm.SCS",
     "MasterAuthKey",
+    "DangerousAcceptAnyServerCertificateValidator",
     "ConfigurationServiceClient",
     "IConfigurationService"
 )) {
     Forbid-Text $transport $forbidden "Configuration gRPC client transport"
     Forbid-Text $contracts $forbidden "Configuration client transport contracts"
 }
+
+Require-Text $options "TrustedRootCertificatePathVariable" "Configuration client file-scoped root option"
+Forbid-Text $options "reserved for the isolated .NET 10 acceptance process" "Configuration client net481 file-scoped root option"
 
 foreach ($required in @(
     "[ModuleInitializer]",
