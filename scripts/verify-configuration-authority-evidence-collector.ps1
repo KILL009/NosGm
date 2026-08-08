@@ -48,6 +48,7 @@ $documentation = Read-RepoFile $DocumentationPath
 
 foreach ($required in @(
     '[ValidateSet("Qualification", "LiveEffects")]',
+    '[ValidateSet(3)]',
     '[CONFIG_GRPC_AUTHORITY_STATE]',
     '[CONFIG_GRPC_PARITY]',
     'Evidence must belong to exactly one World process generation.',
@@ -64,11 +65,15 @@ foreach ($required in @(
     '$_.StreamEnds -gt $active.StreamEnds',
     'configuration-authority-qualification',
     'configuration-authority-live-effects',
-    'The evidence receipt already exists; choose a new output path.',
+    'Write-EvidenceReceiptAtomically',
+    '[IO.FileMode]::CreateNew',
+    '[IO.FileShare]::None',
     'ConvertTo-Json -Depth 6',
     'Cross-process evidence was not rejected.',
     'Terminal parity evidence was not rejected.',
     'Live evidence without duplicate suppression was not rejected.',
+    'Atomic receipt creation did not reject an existing destination.',
+    'Atomic receipt collision changed the original receipt.',
     'Configuration authority evidence collector self-test passed.'
 )) {
     Require $collector $required `
@@ -84,7 +89,9 @@ foreach ($forbidden in @(
     'sourcePath =',
     'sourcePaths =',
     'rawLine =',
-    'rawLines ='
+    'rawLines =',
+    '[ValidateRange(3, 16)]',
+    '[IO.File]::WriteAllText('
 )) {
     Forbid $collector $forbidden `
         "Configuration evidence collector contains forbidden behavior '$forbidden'."
