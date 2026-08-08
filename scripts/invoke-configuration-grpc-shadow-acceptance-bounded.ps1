@@ -16,13 +16,28 @@ $acceptancePath = Join-Path $root "scripts\test-configuration-grpc-shadow-local.
 $logRoot = Join-Path $root "artifacts\configuration-grpc-shadow-acceptance\supervisor-logs"
 $stdoutPath = Join-Path $logRoot "acceptance.stdout.log"
 $stderrPath = Join-Path $logRoot "acceptance.stderr.log"
-$powershell = Join-Path $PSHOME "powershell.exe"
+$windowsPowerShellCandidates = @(
+    (Join-Path $env:SystemRoot "System32\WindowsPowerShell\v1.0\powershell.exe"),
+    (Join-Path $env:SystemRoot "Sysnative\WindowsPowerShell\v1.0\powershell.exe")
+)
+$powershell = $windowsPowerShellCandidates |
+    Where-Object { Test-Path -LiteralPath $_ -PathType Leaf } |
+    Select-Object -First 1
+
+if ([string]::IsNullOrWhiteSpace($powershell)) {
+    $windowsPowerShellCommand = Get-Command powershell.exe -CommandType Application -ErrorAction SilentlyContinue |
+        Select-Object -First 1
+    if ($null -ne $windowsPowerShellCommand) {
+        $powershell = $windowsPowerShellCommand.Source
+    }
+}
 
 if (-not (Test-Path -LiteralPath $acceptancePath -PathType Leaf)) {
     throw "Configuration shadow acceptance script is missing: $acceptancePath"
 }
-if (-not (Test-Path -LiteralPath $powershell -PathType Leaf)) {
-    throw "Windows PowerShell executable is missing: $powershell"
+if ([string]::IsNullOrWhiteSpace($powershell) -or
+    -not (Test-Path -LiteralPath $powershell -PathType Leaf)) {
+    throw "Windows PowerShell 5.1 executable was not found. Checked: $($windowsPowerShellCandidates -join ', ')"
 }
 
 function Read-LogTail {

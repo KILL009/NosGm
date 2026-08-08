@@ -61,6 +61,9 @@ foreach ($required in @(
 foreach ($required in @(
     '[int]$TotalTimeoutSeconds = 420',
     'test-configuration-grpc-shadow-local.ps1',
+    'System32\WindowsPowerShell\v1.0\powershell.exe',
+    'Sysnative\WindowsPowerShell\v1.0\powershell.exe',
+    'Get-Command powershell.exe -CommandType Application',
     '$process.WaitForExit($TotalTimeoutSeconds * 1000)',
     'RedirectStandardOutput $stdoutPath',
     'RedirectStandardError $stderrPath',
@@ -107,13 +110,18 @@ if ($supervisorContent.IndexOf('& $taskKill', [StringComparison]::OrdinalIgnoreC
     throw "Configuration shadow acceptance supervisor must not invoke taskkill without a bounded child process."
 }
 
+if ($supervisorContent.IndexOf('Join-Path $PSHOME "powershell.exe"', [StringComparison]::OrdinalIgnoreCase) -ge 0) {
+    throw "Configuration shadow acceptance supervisor must not derive Windows PowerShell from the active PowerShell host."
+}
+
 Write-Host "[PASS] Configuration shadow acceptance PowerShell syntax is valid." -ForegroundColor Green
 Write-Host "[PASS] Acceptance uses a generated net481 World client over the real gRPC transport." -ForegroundColor Green
 Write-Host "[PASS] Acceptance covers seed, reconnect, duplicate idempotency and changed generation." -ForegroundColor Green
 Write-Host "[PASS] Per-operation client/build waits remain bounded." -ForegroundColor Green
 Write-Host "[PASS] External supervisor enforces a 420-second total acceptance budget." -ForegroundColor Green
 Write-Host "[PASS] Supervisor process-tree cleanup is itself bounded." -ForegroundColor Green
-Write-Host "[PASS] Workflow keeps a 10-minute hard limit with headroom for trust cleanup." -ForegroundColor Green
+Write-Host "[PASS] Supervisor resolves Windows PowerShell 5.1 independently from the active PowerShell host." -ForegroundColor Green
+Write-Host "[PASS] Workflow keeps a 10-minute hard limit with headroom for process cleanup." -ForegroundColor Green
 Write-Host "[PASS] CI exercises only native net481 HTTP/2 while the production GRPCWEB fallback remains compiled." -ForegroundColor Green
 Write-Host "[PASS] Acceptance uses strict file-scoped root trust and never mutates Windows certificate stores." -ForegroundColor Green
 Write-Host "[PASS] Acceptance never persists process secrets or installs LocalMachine trust." -ForegroundColor Green
