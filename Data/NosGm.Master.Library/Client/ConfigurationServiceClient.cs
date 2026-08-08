@@ -3,6 +3,7 @@ using NosGm.Configuration;
 using NosGm.Core;
 using NosGm.Master.Library.Data;
 using System;
+using System.Threading;
 
 namespace NosGm.Master.Library.Client
 {
@@ -113,6 +114,12 @@ namespace NosGm.Master.Library.Client
 
         private static ConfigurationServiceClient _instance;
 
+        private const int AcceptancePulseTimeoutMilliseconds = 7000;
+
+        private int _acceptancePulseRunning;
+
+        private readonly object _configurationMutationRoot = new object();
+
         private readonly IConfigurationRollbackTransport
             _rollbackTransport;
 
@@ -167,6 +174,155 @@ namespace NosGm.Master.Library.Client
 
         public void UpdateConfigurationObject(ConfigurationObject configurationObject)
         {
+            lock (_configurationMutationRoot)
+            {
+                UpdateConfigurationObjectCore(configurationObject);
+            }
+        }
+
+        public bool TryRunGrpcAcceptancePulse(out string diagnostic)
+        {
+            diagnostic = null;
+            if (_grpcShadowMirror == null ||
+                _grpcShadowSubscriberLifecycle == null)
+            {
+                diagnostic = "shadow-unavailable";
+                return false;
+            }
+            if (Interlocked.CompareExchange(
+                    ref _acceptancePulseRunning,
+                    1,
+                    0) != 0)
+            {
+                diagnostic = "pulse-already-running";
+                return false;
+            }
+
+            try
+            {
+                ConfigurationUpdateParityReport before;
+                lock (_configurationMutationRoot)
+                {
+                    ConfigurationObject original =
+                        GetConfigurationObject();
+                    if (original == null || original.MaxGold <= 0)
+                    {
+                        diagnostic = "configuration-unavailable";
+                        return false;
+                    }
+
+                    before = ConfigurationUpdateObservationLedger.Instance
+                        .LatestParityReport;
+                    if (string.IsNullOrWhiteSpace(
+                            before.RuntimeGenerationId))
+                    {
+                        diagnostic = "typed-runtime-unavailable";
+                        return false;
+                    }
+                    if (before.HasTerminalMismatch)
+                    {
+                        diagnostic = "terminal-parity-" + before.Verdict;
+                        return false;
+                    }
+
+                    ConfigurationObject pulse =
+                        CreateGrpcAcceptancePulse(original);
+                    bool pulseAttempted = false;
+                    try
+                    {
+                        Logger.Info(
+                            "[CONFIG_GRPC_ACCEPTANCE_PULSE] Stage=STARTED " +
+                            "Runtime=" + before.RuntimeGenerationId +
+                            "; no Configuration values are logged.");
+                        pulseAttempted = true;
+                        UpdateConfigurationObjectCore(pulse);
+                    }
+                    finally
+                    {
+                        if (pulseAttempted)
+                        {
+                            UpdateConfigurationObjectCore(
+                                CloneConfiguration(original));
+                        }
+                    }
+                }
+
+                DateTime deadline = DateTime.UtcNow.AddMilliseconds(
+                    AcceptancePulseTimeoutMilliseconds);
+                while (DateTime.UtcNow < deadline)
+                {
+                    ConfigurationUpdateParityReport after =
+                        ConfigurationUpdateObservationLedger.Instance
+                            .LatestParityReport;
+                    if (!string.Equals(
+                            before.RuntimeGenerationId,
+                            after.RuntimeGenerationId,
+                            StringComparison.Ordinal))
+                    {
+                        diagnostic = "runtime-changed";
+                        LogAcceptancePulseResult(
+                            "REJECTED",
+                            before,
+                            after);
+                        return false;
+                    }
+                    if (after.HasTerminalMismatch)
+                    {
+                        diagnostic = "terminal-parity-" + after.Verdict;
+                        LogAcceptancePulseResult(
+                            "REJECTED",
+                            before,
+                            after);
+                        return false;
+                    }
+                    if (after.HasParity &&
+                        after.ScsLiveCount >= before.ScsLiveCount + 2 &&
+                        after.GrpcLiveCount >= before.GrpcLiveCount + 2 &&
+                        after.MatchedLiveCount >=
+                            before.MatchedLiveCount + 2)
+                    {
+                        diagnostic = "pass";
+                        LogAcceptancePulseResult(
+                            "PASS",
+                            before,
+                            after);
+                        return true;
+                    }
+                    Thread.Sleep(25);
+                }
+
+                diagnostic = "parity-timeout";
+                LogAcceptancePulseResult(
+                    "TIMEOUT",
+                    before,
+                    ConfigurationUpdateObservationLedger.Instance
+                        .LatestParityReport);
+                return false;
+            }
+            catch (Exception exception)
+            {
+                diagnostic = "pulse-failed-" +
+                    exception.GetType().Name;
+                Logger.Error(
+                    "[CONFIG_GRPC_ACCEPTANCE_PULSE] Stage=FAILED; " +
+                    "the original Configuration restoration was attempted " +
+                    "and no Configuration values were logged.",
+                    exception);
+                return false;
+            }
+            finally
+            {
+                Interlocked.Exchange(ref _acceptancePulseRunning, 0);
+            }
+        }
+
+        private void UpdateConfigurationObjectCore(
+            ConfigurationObject configurationObject)
+        {
+            if (configurationObject == null)
+            {
+                throw new ArgumentNullException(nameof(configurationObject));
+            }
             ConfigurationAuthorityCoordinator authority =
                 ConfigurationAuthorityCoordinator.Instance;
             if (authority.ShouldUse(
@@ -192,6 +348,59 @@ namespace NosGm.Master.Library.Client
             _rollbackTransport.UpdateConfigurationObject(
                 configurationObject);
             ObserveAuthoritativeConfiguration(configurationObject, "Update");
+        }
+
+        private static ConfigurationObject CreateGrpcAcceptancePulse(
+            ConfigurationObject original)
+        {
+            ConfigurationObject pulse = CloneConfiguration(original);
+            long delta = TimeSpan.TicksPerMillisecond;
+            long ticks = pulse.TimeExpBuff.Ticks;
+            ticks = ticks <= DateTime.MaxValue.Ticks - delta
+                ? ticks + delta
+                : ticks - delta;
+            pulse.TimeExpBuff = new DateTime(
+                ticks,
+                pulse.TimeExpBuff.Kind);
+            return pulse;
+        }
+
+        private static ConfigurationObject CloneConfiguration(
+            ConfigurationObject source)
+        {
+            if (source == null)
+            {
+                throw new ArgumentNullException(nameof(source));
+            }
+            return new ConfigurationObject
+            {
+                MaxGold = source.MaxGold,
+                TimeExpBuff = source.TimeExpBuff,
+                TimeGoldBuff = source.TimeGoldBuff
+            };
+        }
+
+        private static void LogAcceptancePulseResult(
+            string stage,
+            ConfigurationUpdateParityReport before,
+            ConfigurationUpdateParityReport after)
+        {
+            int scsDelta = Math.Max(
+                0,
+                after.ScsLiveCount - before.ScsLiveCount);
+            int grpcDelta = Math.Max(
+                0,
+                after.GrpcLiveCount - before.GrpcLiveCount);
+            int matchedDelta = Math.Max(
+                0,
+                after.MatchedLiveCount - before.MatchedLiveCount);
+            Logger.Info(
+                "[CONFIG_GRPC_ACCEPTANCE_PULSE] Stage=" + stage +
+                " Runtime=" + after.RuntimeGenerationId +
+                " ScsDelta=" + scsDelta +
+                " GrpcDelta=" + grpcDelta +
+                " MatchedDelta=" + matchedDelta +
+                " Restored=True; no Configuration values are logged.");
         }
 
         internal void OnConfigurationUpdated(ConfigurationObject configurationObject)
