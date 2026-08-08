@@ -11,6 +11,9 @@ namespace NosGm.Packets.Packets.CommandPackets
         [PacketIndex(0)]
         public string Type { get; set; }
 
+        public static string ReturnHelp() =>
+            "$Configuration <Bazaar|GrpcPulse>";
+
         #endregion
     }
 }

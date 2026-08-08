@@ -49,6 +49,11 @@ $client = Read-RepoFile "Data\NosGm.Master.Library\Client\ConfigurationServiceCl
 $rollbackTransport = Read-RepoFile "Data\NosGm.Master.Library\Client\ConfigurationRollbackTransport.cs"
 $legacyCallback = Read-RepoFile "Data\NosGm.Master.Library\Client\ConfigurationClient.cs"
 $subscriberLifecycle = Read-RepoFile "Data\NosGm.Master.Library\Client\ConfigurationGrpcShadowSubscriberLifecycle.cs"
+$configurationHandler = Read-RepoFile "Data\NosGm.Handler\PacketHandler\Command\ConfigurationPacketHandler.cs"
+$familySkillHandler = Read-RepoFile "Data\NosGm.Handler\PacketHandler\Family\UseFamilySkillPacketHandler.cs"
+$configurationPacket = Read-RepoFile "Data\NosGm.Packets\Packets\CommandPackets\ConfigurationPacket.cs"
+$documentation = Read-RepoFile "docs\configuration-grpc-slice.md"
+$localStack = Read-RepoFile "scripts\start-modern-login-core-local.ps1"
 $project = Read-RepoFile "Data\NosGm.Master.Library\NosGm.Master.Library.csproj"
 
 foreach ($required in @(
@@ -174,6 +179,84 @@ Require-Text $subscriberLifecycle 'authority selection is evaluated separately a
 Require-Text $client 'the authoritative callback will continue unchanged' "Configuration SCS observation isolation"
 Require-Text $subscriberLifecycle 'failed closed to SCS' "Configuration gRPC authority failure isolation"
 
+foreach ($required in @(
+    'TryRunGrpcAcceptancePulse',
+    'NOSGM_CONFIGURATION_GRPC_ACCEPTANCE_PULSE_ENABLED',
+    'diagnostic = "acceptance-pulse-disabled";',
+    'Interlocked.CompareExchange(',
+    'lock (AcceptancePulseIsolationRoot)',
+    'lock (_configurationMutationRoot)',
+    'CreateGrpcAcceptancePulse(original)',
+    'diagnostic = "active-world-buff";',
+    'ConfigurationsAreExactlyEqual(',
+    'diagnostic = "live-world-configuration-drift";',
+    'diagnostic = "max-gold-pulse-unavailable";',
+    'pulse.MaxGold = checked(pulse.MaxGold + 1);',
+    'if (before.HasTerminalMismatch)',
+    'diagnostic = "runtime-changed";',
+    'finally',
+    'TryRestoreAcceptanceSnapshotEverywhere(',
+    'UpdateAcceptanceSnapshotEverywhere(pulse)',
+    'AcceptancePulseRestoreAttempts = 3',
+    'ConfigurationsAreSemanticallyEqual(',
+    'diagnostic = "restoration-verification-failed";',
+    'ConfigurationsAreExactlyEqual(',
+    'AcceptancePulseTimeoutMilliseconds = 7000',
+    'after.ScsLiveCount >= before.ScsLiveCount + 2',
+    'after.GrpcLiveCount >= before.GrpcLiveCount + 2',
+    'before.MatchedLiveCount + 2',
+    '[CONFIG_GRPC_ACCEPTANCE_PULSE]',
+    '" Restored=" + restored'
+)) {
+    Require-Text $client $required "Configuration acceptance pulse"
+}
+Require-Before $client 'UpdateAcceptanceSnapshotEverywhere(pulse)' 'TryRestoreAcceptanceSnapshotEverywhere(' "Configuration pulse restoration order"
+foreach ($forbidden in @(
+    'MaxGold=" +',
+    'TimeExpBuff=" +',
+    'TimeGoldBuff=" +'
+)) {
+    if ($client.IndexOf($forbidden, [StringComparison]::Ordinal) -ge 0) {
+        throw "Configuration acceptance pulse logs forbidden gameplay value '$forbidden'."
+    }
+}
+foreach ($required in @(
+    'case "grpcpulse":',
+    'Func<bool> isWorldIsolated',
+    'diagnostic = "world-not-isolated";',
+    '.TryRunGrpcAcceptancePulse(',
+    'ServerManager.Instance.Configuration',
+    'isWorldIsolated,',
+    'CONFIG_GRPC_ACCEPTANCE_PULSE',
+    'ConfigurationPacket.ReturnHelp()'
+)) {
+    Require-Text $configurationHandler $required "Configuration acceptance command"
+}
+Require-Text $familySkillHandler 'RunWithConfigurationMutationBarrier' "Configuration family-buff mutation barrier"
+Require-Text $familySkillHandler '.TimeExpBuff = DateTime.Now.AddMinutes(60)' "Configuration XP family-buff mutation barrier"
+Require-Text $familySkillHandler '.TimeGoldBuff = DateTime.Now.AddMinutes(60)' "Configuration gold family-buff mutation barrier"
+Require-Text $configurationPacket 'Authority = AuthorityType.ADMIN' "Configuration acceptance command authority"
+Require-Text $configurationPacket '$Configuration <Bazaar|GrpcPulse>' "Configuration acceptance command help"
+foreach ($required in @(
+    '$EnableConfigurationRuntimeControl -and',
+    '$EnableConfigurationGrpcShadow',
+    '"NOSGM_CONFIGURATION_GRPC_ACCEPTANCE_PULSE_ENABLED",',
+    'NOSGM_CONFIGURATION_GRPC_ACCEPTANCE_PULSE_ENABLED"] = "true"'
+)) {
+    Require-Text $localStack $required "Configuration acceptance local-stack opt-in"
+}
+foreach ($required in @(
+    '$Configuration GrpcPulse',
+    'normal World process does not receive',
+    'NOSGM_CONFIGURATION_GRPC_ACCEPTANCE_PULSE_ENABLED=true',
+    'no active World XP/gold family buff',
+    'any drift rejects the pulse before the first write',
+    'ScsDelta=2 GrpcDelta=2 MatchedDelta=2 Restored=True',
+    'Do not perform the next guarded restart'
+)) {
+    Require-Text $documentation $required "Configuration acceptance pulse runbook"
+}
+
 Require-Text $project 'Client\ConfigurationGrpcShadowMirror.cs' "Configuration shadow mirror compile item"
 Require-Text $project 'Client\ConfigurationGrpcShadowOptions.cs' "Configuration shadow options compile item"
 Require-Text $project 'Client\ConfigurationGrpcShadowSubscriberLifecycle.cs' "Configuration subscriber lifecycle compile item"
@@ -187,3 +270,4 @@ Write-Host "[PASS] ConfigurationUpdated and the typed stream share the atomic au
 Write-Host "[PASS] Remaining SCS request/reply and callback registration are isolated behind one rollback adapter." -ForegroundColor Green
 Write-Host "[PASS] SCS and gRPC callbacks enter the bounded parity ledger without duplicating gameplay effects." -ForegroundColor Green
 Write-Host "[PASS] Typed authority failures return Get, Update and callback together to SCS." -ForegroundColor Green
+Write-Host "[PASS] The administrator acceptance pulse is reversible, single-flight, bounded and parity-verified." -ForegroundColor Green

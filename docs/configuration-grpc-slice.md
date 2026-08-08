@@ -306,6 +306,50 @@ Run real SCS and typed callback traffic after every restart. Three distinct
 parity windows arm the gate; the next restart creates the fourth activation
 runtime without changing the World process generation.
 
+Logging in or selecting a character does not mutate Configuration and therefore
+cannot create a live parity window. After each guarded restart, an administrator
+must enter the following command from a connected real client:
+
+```text
+$Configuration GrpcPulse
+```
+
+The command is single-flight and available only through the existing
+administrator/Operations command boundary. The local-stack launcher exposes it
+only when both guarded runtime control and Configuration shadow are enabled; a
+normal World process does not receive
+`NOSGM_CONFIGURATION_GRPC_ACCEPTANCE_PULSE_ENABLED=true`. It also requires
+exactly one connected character, no active World XP/gold family buff, and exact
+equality between the live World Configuration and the Master object. This
+prevents a Master round trip from overwriting locally advanced family-buff
+timestamps; any drift rejects the pulse before the first write.
+
+After those barriers pass, the command serializes all Configuration mutations,
+copies the current authoritative object, advances only the global `MaxGold`
+ceiling by one, writes that pulse explicitly to SCS and gRPC, and restores an
+independent copy of the original object to both stores in a `finally` boundary.
+Restoration is retried and read back from both stores; a partial restoration can
+never report success. A shared mutation barrier blocks XP/gold family-skill
+changes until both restoration callbacks have arrived and the live World object
+exactly matches the original. The isolated acceptance client performs no
+gameplay action during that bounded interval. The command then waits at most
+seven seconds for two new SCS
+observations, two new live typed observations and two ordered semantic matches
+from the same runtime. A timeout, terminal parity verdict, missing subscriber,
+missing shadow transport, active buff, local drift, additional connected player
+or concurrent pulse fails closed. Logs contain only the runtime, bounded deltas,
+result and the verified restoration flag; they never contain Configuration
+values.
+
+The expected terminal marker for each qualification runtime is:
+
+```text
+[CONFIG_GRPC_ACCEPTANCE_PULSE] Stage=PASS ... ScsDelta=2 GrpcDelta=2 MatchedDelta=2 Restored=True
+```
+
+Do not perform the next guarded restart until that marker exists for the current
+runtime.
+
 ### Operational evidence collector
 
 After generating real traffic through one continuously running Master + World

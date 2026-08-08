@@ -5,6 +5,7 @@ using NosGm.Domain;
 using NosGm.GameObject;
 using NosGm.GameObject.Extension;
 using NosGm.GameObject.Networking;
+using NosGm.Master.Library.Client;
 using System;
 using System.Linq;
 using System.Reactive.Linq;
@@ -41,29 +42,40 @@ namespace NosGm.Handler.PacketHandler.Family
                     switch (fwsPacket.ItemVNum)
                     {
                         case 9600:
-                            ServerManager.Instance.Configuration.TimeExpBuff = DateTime.Now.AddMinutes(60);
-
-                            foreach (ClientSession s in ServerManager.Instance.Sessions)
-                            {
-                                s.Character.AddStaticBuff(new StaticBuffDTO
+                            ConfigurationServiceClient
+                                .RunWithConfigurationMutationBarrier(() =>
                                 {
-                                    CardId = 360,
-                                    CharacterId = s.Character.CharacterId,
-                                    RemainingTime = (int)(ServerManager.Instance.Configuration.TimeExpBuff - DateTime.Now).TotalSeconds
+                                    ServerManager.Instance.Configuration
+                                        .TimeExpBuff = DateTime.Now.AddMinutes(60);
+                                    foreach (ClientSession s in
+                                             ServerManager.Instance.Sessions)
+                                    {
+                                        s.Character.AddStaticBuff(new StaticBuffDTO
+                                        {
+                                            CardId = 360,
+                                            CharacterId = s.Character.CharacterId,
+                                            RemainingTime = (int)(ServerManager.Instance.Configuration.TimeExpBuff - DateTime.Now).TotalSeconds
+                                        });
+                                    }
                                 });
-                            }
                             break;
                         case 9601:
-                            ServerManager.Instance.Configuration.TimeGoldBuff = DateTime.Now.AddMinutes(60);
-                            foreach (ClientSession s in ServerManager.Instance.Sessions)
-                            {
-                                s.Character.AddStaticBuff(new StaticBuffDTO
+                            ConfigurationServiceClient
+                                .RunWithConfigurationMutationBarrier(() =>
                                 {
-                                    CardId = 361,
-                                    CharacterId = s.Character.CharacterId,
-                                    RemainingTime = (int)(ServerManager.Instance.Configuration.TimeGoldBuff - DateTime.Now).TotalSeconds
+                                    ServerManager.Instance.Configuration
+                                        .TimeGoldBuff = DateTime.Now.AddMinutes(60);
+                                    foreach (ClientSession s in
+                                             ServerManager.Instance.Sessions)
+                                    {
+                                        s.Character.AddStaticBuff(new StaticBuffDTO
+                                        {
+                                            CardId = 361,
+                                            CharacterId = s.Character.CharacterId,
+                                            RemainingTime = (int)(ServerManager.Instance.Configuration.TimeGoldBuff - DateTime.Now).TotalSeconds
+                                        });
+                                    }
                                 });
-                            }
                             break;
                         case 9602:
                             if (ServerManager.Instance.ChannelId != 51) return;
