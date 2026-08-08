@@ -118,6 +118,18 @@ if ([Regex]::Matches($supervisorContent, [Regex]::Escape('$process.WaitForExit()
     throw "Configuration shadow acceptance supervisor must finalize the successful harness process before reading ExitCode."
 }
 
+if ([Regex]::Matches($content, [Regex]::Escape('-WindowStyle Hidden')).Count -lt 3) {
+    throw "Configuration shadow acceptance must hide build, client and runtime processes without using NoNewWindow."
+}
+
+if ([Regex]::Matches($supervisorContent, [Regex]::Escape('-WindowStyle Hidden')).Count -lt 1) {
+    throw "Configuration shadow acceptance supervisor must hide the harness without using NoNewWindow."
+}
+
+if ($content.IndexOf('-NoNewWindow', [StringComparison]::OrdinalIgnoreCase) -ge 0) {
+    throw "Configuration shadow acceptance must not use NoNewWindow because it can suppress process ExitCode."
+}
+
 if ($supervisorContent.IndexOf('Join-Path $PSHOME "powershell.exe"', [StringComparison]::OrdinalIgnoreCase) -ge 0) {
     throw "Configuration shadow acceptance supervisor must not derive Windows PowerShell from the active PowerShell host."
 }
@@ -129,6 +141,7 @@ Write-Host "[PASS] Per-operation client/build waits remain bounded." -Foreground
 Write-Host "[PASS] External supervisor enforces a 420-second total acceptance budget." -ForegroundColor Green
 Write-Host "[PASS] Supervisor process-tree cleanup is itself bounded." -ForegroundColor Green
 Write-Host "[PASS] Successful redirected processes are finalized before ExitCode is evaluated." -ForegroundColor Green
+Write-Host "[PASS] Evaluated child processes remain hidden without the NoNewWindow ExitCode defect." -ForegroundColor Green
 Write-Host "[PASS] Supervisor resolves Windows PowerShell 5.1 independently from the active PowerShell host." -ForegroundColor Green
 Write-Host "[PASS] Workflow keeps a 10-minute hard limit with headroom for process cleanup." -ForegroundColor Green
 Write-Host "[PASS] CI exercises only native net481 HTTP/2 while the production GRPCWEB fallback remains compiled." -ForegroundColor Green

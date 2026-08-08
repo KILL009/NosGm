@@ -114,7 +114,7 @@ try {
         -FilePath $powershell `
         -ArgumentList @("-NoLogo", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", $quotedAcceptancePath) `
         -WorkingDirectory $root `
-        -NoNewWindow `
+        -WindowStyle Hidden `
         -PassThru `
         -RedirectStandardOutput $stdoutPath `
         -RedirectStandardError $stderrPath

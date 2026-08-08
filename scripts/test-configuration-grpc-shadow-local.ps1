@@ -232,7 +232,7 @@ function Invoke-BoundedDotNet {
         -FilePath $dotnet `
         -ArgumentList $Arguments `
         -WorkingDirectory $root `
-        -NoNewWindow `
+        -WindowStyle Hidden `
         -PassThru `
         -RedirectStandardOutput $stdoutPath `
         -RedirectStandardError $stderrPath
@@ -283,7 +283,7 @@ function Invoke-AcceptanceClient {
         $process = Start-Process `
             -FilePath $clientExecutable `
             -WorkingDirectory (Split-Path -Parent $clientExecutable) `
-            -NoNewWindow `
+            -WindowStyle Hidden `
             -PassThru `
             -RedirectStandardOutput $stdoutPath `
             -RedirectStandardError $stderrPath
@@ -599,7 +599,7 @@ try {
         NOSGM_AUTH_GRPC_PERMIT_TTL_SECONDS = "120"
         NOSGM_AUTH_GRPC_INSTANCE_ID = "configuration-shadow-acceptance-1"
     }
-    $runtimeProcess = Start-Process -FilePath $dotnet -ArgumentList @($runtimeAssembly) -WorkingDirectory $runtimeOutput -NoNewWindow -PassThru
+    $runtimeProcess = Start-Process -FilePath $dotnet -ArgumentList @($runtimeAssembly) -WorkingDirectory $runtimeOutput -WindowStyle Hidden -PassThru
     Restore-ProcessEnvironment
     Wait-ConfigurationRuntime -Process $runtimeProcess
 
