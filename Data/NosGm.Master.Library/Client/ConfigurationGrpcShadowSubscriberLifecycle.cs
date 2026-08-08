@@ -8,6 +8,63 @@ using System.Threading.Tasks;
 
 namespace NosGm.Master.Library.Client
 {
+    internal static class ConfigurationAuthorityDiagnostics
+    {
+        private static readonly object SyncRoot = new object();
+        private static string _lastDiagnostic = string.Empty;
+
+        internal static void Observe(string stage)
+        {
+            try
+            {
+                ConfigurationAuthorityStatus authority =
+                    ConfigurationAuthorityCoordinator.Instance.GetStatus();
+                ConfigurationAuthorityQualificationStatus qualification =
+                    ConfigurationAuthorityQualificationRuntime.Instance
+                        .GetStatus();
+                string diagnostic =
+                    "[CONFIG_GRPC_AUTHORITY_STATE] Stage=" + stage +
+                    " Process=" + authority.ConfiguredProcessGenerationId +
+                    " Runtime=" + authority.LastObservedRuntimeGenerationId +
+                    " State=" + authority.State +
+                    " Effects=" + authority.EffectRoutingEnabled +
+                    " Ready=" + authority.TypedIngressReady +
+                    " Blocked=" + authority.Blocked +
+                    " Active=" + authority.ActiveRuntimeGenerationId +
+                    " Recovered=" + authority.LastRecoveredRuntimeGenerationId +
+                    " Retained=" + qualification.RetainedRuntimeCount +
+                    " Accepted=" + qualification.AcceptedReports +
+                    " Replaced=" + qualification.ReplacedReports +
+                    " Evicted=" + qualification.EvictedReports +
+                    " PendingOverlap=" + authority.PendingOverlapUpdates +
+                    " DuplicateSuppressed=" +
+                        authority.OverlapDuplicatesSuppressed +
+                    " StreamEnds=" + authority.StreamEndObservations + ".";
+
+                lock (SyncRoot)
+                {
+                    if (string.Equals(
+                            _lastDiagnostic,
+                            diagnostic,
+                            StringComparison.Ordinal))
+                    {
+                        return;
+                    }
+                    _lastDiagnostic = diagnostic;
+                }
+
+                Logger.Info(diagnostic);
+            }
+            catch (Exception exception)
+            {
+                Logger.Warn(
+                    "[CONFIG_GRPC_AUTHORITY_STATE] Sanitized state observation " +
+                    "was unavailable. Reason=" +
+                    exception.GetType().Name);
+            }
+        }
+    }
+
     internal static class ConfigurationUpdateParityDiagnostics
     {
         private static readonly object SyncRoot = new object();
@@ -56,6 +113,7 @@ namespace NosGm.Master.Library.Client
 
             string diagnostic =
                 "[CONFIG_GRPC_PARITY] Verdict=" + report.Verdict +
+                " Process=" + report.ProcessGenerationId +
                 " Runtime=" + report.RuntimeGenerationId +
                 " Through=" + report.EvaluatedThroughLedgerOrdinal +
                 " WindowStart=" + report.WindowStartLedgerOrdinal +
@@ -116,6 +174,12 @@ namespace NosGm.Master.Library.Client
                         ledger.ProcessGenerationId,
                         update);
                 bool applied = _authorityCallback(update);
+                ConfigurationAuthorityDiagnostics.Observe(
+                    update.RecoveredFromSnapshot
+                        ? "TYPED_RECOVERY"
+                        : update.Replayed
+                            ? "TYPED_REPLAY"
+                            : "TYPED_LIVE");
                 Logger.Info(
                     applied
                         ? "[CONFIG_GRPC_AUTHORITY] Applied typed Configuration update " +
@@ -133,6 +197,8 @@ namespace NosGm.Master.Library.Client
                     "or selected callback failed closed to SCS; " +
                     "the subscriber will continue only as diagnostic input. Reason=" +
                     exception.GetType().Name);
+                ConfigurationAuthorityDiagnostics.Observe(
+                    "TYPED_OBSERVATION_FAILED");
             }
             return Task.CompletedTask;
         }
@@ -143,6 +209,7 @@ namespace NosGm.Master.Library.Client
         {
             ConfigurationAuthorityQualificationRuntime.Instance
                 .ObserveStreamEnded(runtimeGenerationId, reason);
+            ConfigurationAuthorityDiagnostics.Observe("STREAM_ENDED");
         }
     }
 
