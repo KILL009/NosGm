@@ -135,8 +135,8 @@ function Read-ConfigurationEvidence {
     }
 
     return [pscustomobject]@{
-        Authority = @($authority)
-        Parity = @($parity)
+        Authority = $authority.ToArray()
+        Parity = $parity.ToArray()
         MarkerLines = $authority.Count + $parity.Count
     }
 }
@@ -170,7 +170,7 @@ function Get-QualifyingParityRuntimes {
     foreach ($runtime in $runtimeOrder) {
         [void]$result.Add($byRuntime[$runtime])
     }
-    return @($result)
+    return $result.ToArray()
 }
 
 function Assert-CommonEvidence {
@@ -396,7 +396,7 @@ function Resolve-WorldLogPaths {
                 "World log does not exist: $fullPath"
             [void]$resolved.Add($fullPath)
         }
-        return @($resolved)
+        return $resolved.ToArray()
     }
 
     $statePath = Join-Path $root "artifacts\modern-login-local\processes.json"
@@ -431,7 +431,7 @@ function Invoke-CollectorSelfTest {
     }
     [void]$lines.Add(
         "[CONFIG_GRPC_AUTHORITY_STATE] Stage=TYPED_RECOVERY Process=$process Runtime=$($runtimes[3]) State=TypedGrpcAuthoritative Effects=False Ready=False Blocked=False Active=$($runtimes[3]) Recovered=$($runtimes[3]) Retained=3 Accepted=3 Replaced=0 Evicted=0 PendingOverlap=0 DuplicateSuppressed=0 StreamEnds=0.")
-    $qualificationEvidence = Read-ConfigurationEvidence -Lines @($lines)
+    $qualificationEvidence = Read-ConfigurationEvidence -Lines $lines.ToArray()
     $qualification = New-EvidenceReceipt `
         -EvidenceMode "Qualification" `
         -Evidence $qualificationEvidence `
@@ -448,7 +448,7 @@ function Invoke-CollectorSelfTest {
         "[CONFIG_GRPC_AUTHORITY_STATE] Stage=TYPED_RECOVERY Process=$process Runtime=$($runtimes[3]) State=TypedGrpcAuthoritative Effects=True Ready=True Blocked=False Active=$($runtimes[3]) Recovered=$($runtimes[3]) Retained=3 Accepted=3 Replaced=0 Evicted=0 PendingOverlap=1 DuplicateSuppressed=0 StreamEnds=0.")
     [void]$liveLines.Add(
         "[CONFIG_GRPC_AUTHORITY_STATE] Stage=STREAM_ENDED Process=$process Runtime=$($runtimes[3]) State=RolledBack Effects=True Ready=False Blocked=True Active= Recovered=$($runtimes[3]) Retained=3 Accepted=3 Replaced=0 Evicted=0 PendingOverlap=0 DuplicateSuppressed=2 StreamEnds=1.")
-    $liveEvidence = Read-ConfigurationEvidence -Lines @($liveLines)
+    $liveEvidence = Read-ConfigurationEvidence -Lines $liveLines.ToArray()
     $live = New-EvidenceReceipt `
         -EvidenceMode "LiveEffects" `
         -Evidence $liveEvidence `
@@ -457,7 +457,7 @@ function Invoke-CollectorSelfTest {
     Assert-Condition ($live.authority.duplicatesSuppressed -eq 2) `
         "Live-effects self-test lost duplicate suppression evidence."
 
-    $crossProcess = @($liveLines)
+    $crossProcess = @($liveLines.ToArray())
     $crossProcess += $crossProcess[0].Replace(
         $process,
         "71000000-0000-0000-0000-000000000002")
@@ -476,7 +476,7 @@ function Invoke-CollectorSelfTest {
     Assert-Condition $rejected `
         "Cross-process evidence was not rejected."
 
-    $terminalLines = @($liveLines)
+    $terminalLines = @($liveLines.ToArray())
     $terminalLines +=
         "[CONFIG_GRPC_PARITY] Verdict=OrderMismatch Process=$process Runtime=$($runtimes[3]) Through=50 WindowStart=40 ScsLive=1 GrpcLive=1 Matched=0 Recovery=1 Replay=0 Evicted=0; authority selection is evaluated separately."
     $rejected = $false
@@ -494,7 +494,7 @@ function Invoke-CollectorSelfTest {
     Assert-Condition $rejected `
         "Terminal parity evidence was not rejected."
 
-    $unsuppressedLines = @($liveLines | ForEach-Object {
+    $unsuppressedLines = @($liveLines.ToArray() | ForEach-Object {
         $_.Replace("DuplicateSuppressed=2", "DuplicateSuppressed=0")
     })
     $rejected = $false
@@ -532,7 +532,7 @@ foreach ($path in $resolvedPaths) {
     }
 }
 
-$evidence = Read-ConfigurationEvidence -Lines @($allLines)
+$evidence = Read-ConfigurationEvidence -Lines $allLines.ToArray()
 $receipt = New-EvidenceReceipt `
     -EvidenceMode $Mode `
     -Evidence $evidence `
