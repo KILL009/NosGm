@@ -180,6 +180,8 @@ Once typed authority is ready, an early SCS callback is rejected even if its typ
 
 Every successful typed Get or Update response must carry the exact active runtime generation and a positive generation. After a typed Update succeeds, the client synchronizes the same object to SCS as a rollback standby; the resulting SCS callback is rejected or paired as the opposite-source twin while typed authority remains selected. A standby synchronization failure closes typed authority and remains visible to the caller instead of pretending that failback is safe.
 
+The remaining World-side SCS dependency is now confined to `ScsConfigurationRollbackTransport`, which implements the narrow internal `IConfigurationRollbackTransport` boundary. `ConfigurationServiceClient` no longer implements `IConfigurationService`, constructs an SCS client, accesses a service proxy or owns the legacy callback client. The callback adapter receives an explicit delegate instead of reaching back through the global singleton. This is intentionally an isolation step, not removal: SCS still supplies the default and terminal rollback paths until live acceptance is complete.
+
 A timeout, unavailable transport, malformed response, runtime-generation drift, active-stream loss, typed callback exception, malformed routing input or overlap-capacity saturation triggers terminal rollback for the process. Typed ingress then stays blocked, while a delayed SCS twin of an already-applied typed update can still be suppressed and new SCS operations continue normally.
 
 ### Date/time parity
@@ -213,12 +215,13 @@ Completed foundations:
 8. production-neutral joint Get/Update/callback authority gate with three-window qualification, fourth-runtime activation, recovery barrier, bounded semantic overlap deduplication and terminal rollback;
 9. immutable World operator controls and dry-run lifecycle binding that observes evidence, recovery, generations and stream faults;
 10. production joint authority routing for Get, Update and callback with a separate live-effects authorization, exact runtime identity checks and terminal SCS rollback.
+11. one isolated World-side SCS rollback adapter, leaving the gameplay-facing Configuration facade transport-neutral and making the final deletion boundary explicit.
 
 The safe continuation is:
 
 1. run explicit local acceptance with Master + World, shadow enabled, and collect stable comparator parity across live, replay, recovery, restart and reconnect windows;
 2. collect dry-run qualification evidence with an explicit arm request across three parity runtimes and a fourth activation runtime;
 3. run live overlap/rollback acceptance with both the arm request and effects authorization;
-4. remove `IConfigurationService`, `IConfigurationClient` and their SCS registration only after acceptance passes.
+4. remove `ScsConfigurationRollbackTransport`, `IConfigurationService`, `IConfigurationClient` and their Master registration only after acceptance passes; `ConfigurationServiceClient` must remain unchanged by that deletion.
 
 `NOSGM_COMMUNICATION_TRANSPORT` and the existing Communication callback cutover are unrelated to this service and must not act as implicit Configuration selectors.
