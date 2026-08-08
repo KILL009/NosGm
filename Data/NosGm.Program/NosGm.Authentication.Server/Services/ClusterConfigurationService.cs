@@ -297,21 +297,25 @@ public sealed class ClusterConfigurationService
                          subscription.ReplayUpdates)
                 {
                     linked.Token.ThrowIfCancellationRequested();
-                    await responseStream.WriteAsync(
+                    await WriteEnvelopeAsync(
+                        responseStream,
                         ToEnvelope(
                             replay,
                             replayed: true,
-                            runtimeGenerationId));
+                            runtimeGenerationId),
+                        linked.Token);
                 }
 
                 await foreach (ClusterConfigurationState.SnapshotState update in
                                subscription.PendingUpdates.ReadAllAsync(linked.Token))
                 {
-                    await responseStream.WriteAsync(
+                    await WriteEnvelopeAsync(
+                        responseStream,
                         ToEnvelope(
                             update,
                             replayed: false,
-                            runtimeGenerationId));
+                            runtimeGenerationId),
+                        linked.Token);
                 }
 
                 ThrowForSubscriptionTermination(
@@ -453,6 +457,14 @@ public sealed class ClusterConfigurationService
             RuntimeGenerationId = runtimeGenerationId.ToString("D"),
             Replayed = replayed
         };
+    }
+
+    private static Task WriteEnvelopeAsync(
+        IServerStreamWriter<WireV1.ConfigurationUpdateEnvelope> writer,
+        WireV1.ConfigurationUpdateEnvelope envelope,
+        CancellationToken cancellationToken)
+    {
+        return writer.WriteAsync(envelope, cancellationToken);
     }
 
     private static void ThrowForSubscriptionOpenResult(

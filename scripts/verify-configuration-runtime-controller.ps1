@@ -99,6 +99,7 @@ foreach ($required in @(
     "RestartConfigurationRuntime",
     ".RuntimeGenerationChanged =>",
     "ConfigurationResultCode.Conflict",
+    "writer.WriteAsync(envelope, cancellationToken)",
     "ThrowForSubscriptionTermination",
     "The Configuration runtime restarted.",
     'runtimeGenerationId.ToString("D")'

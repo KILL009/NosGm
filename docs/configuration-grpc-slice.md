@@ -269,9 +269,10 @@ Configuration now owns a runtime controller independent from the Authentication
 process and the Communication callback runtime. A restart replaces only the
 typed Configuration state epoch, gives it a new canonical runtime generation,
 preserves the current typed snapshot as generation one, and terminates every old
-Configuration subscriber with an explicit runtime-restarted boundary. Kestrel,
-Authentication, Master, World, Login and the Communication callback generation
-remain alive and unchanged.
+Configuration subscriber with an explicit runtime-restarted boundary, including
+an in-flight write blocked by HTTP/2 flow control. Kestrel, Authentication,
+Master, World, Login and the Communication callback generation remain alive and
+unchanged.
 
 The control surface is disabled by default. Local operational acceptance must
 start the stack explicitly with:
