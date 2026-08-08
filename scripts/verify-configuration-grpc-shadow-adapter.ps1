@@ -196,8 +196,10 @@ foreach ($required in @(
     'diagnostic = "runtime-changed";',
     'finally',
     'TryRestoreAcceptanceSnapshotEverywhere(',
-    'UpdateAcceptanceSnapshotEverywhere(pulse)',
+    'UpdateAcceptanceSnapshotEverywhere(',
     'AcceptancePulseRestoreAttempts = 3',
+    'IsExpectedAcceptanceRuntimeResult(',
+    'expectedRuntimeGenerationId',
     'ConfigurationsAreSemanticallyEqual(',
     'diagnostic = "restoration-verification-failed";',
     'ConfigurationsAreExactlyEqual(',
@@ -210,7 +212,29 @@ foreach ($required in @(
 )) {
     Require-Text $client $required "Configuration acceptance pulse"
 }
-Require-Before $client 'UpdateAcceptanceSnapshotEverywhere(pulse)' 'TryRestoreAcceptanceSnapshotEverywhere(' "Configuration pulse restoration order"
+$acceptanceStart = $client.IndexOf(
+    'public bool TryRunGrpcAcceptancePulse(',
+    [StringComparison]::Ordinal)
+if ($acceptanceStart -lt 0) {
+    throw "Unable to locate the Configuration acceptance pulse body."
+}
+$acceptanceEnd = $client.IndexOf(
+    'private void UpdateConfigurationObjectCore(',
+    $acceptanceStart,
+    [StringComparison]::Ordinal)
+if ($acceptanceEnd -le $acceptanceStart) {
+    throw "Unable to isolate the Configuration acceptance pulse body."
+}
+$acceptanceBody = $client.Substring(
+    $acceptanceStart,
+    $acceptanceEnd - $acceptanceStart)
+Require-Before $acceptanceBody 'UpdateAcceptanceSnapshotEverywhere(' 'TryRestoreAcceptanceSnapshotEverywhere(' "Configuration pulse restoration order"
+Require-Before $acceptanceBody 'before = ConfigurationUpdateObservationLedger.Instance' '_grpcShadowMirror.TryGetAuthoritative(' "Configuration pulse observed-runtime identity order"
+if ($acceptanceBody.IndexOf(
+        'IsCurrentAuthorityResult(',
+        [StringComparison]::Ordinal) -ge 0) {
+    throw "Configuration acceptance must bind to observed runtime identity, not active cutover identity."
+}
 foreach ($forbidden in @(
     'MaxGold=" +',
     'TimeExpBuff=" +',
