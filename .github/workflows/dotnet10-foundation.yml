@@ -149,7 +149,7 @@ jobs:
         shell: powershell
         run: ./scripts/test-authentication-grpc-local.ps1 -UseFileScopedRootTrust
 
-      - name: Verify live net481 Configuration shadow transport
+      - name: Verify live net481 Configuration transport and authority cutover
         timeout-minutes: 10
         shell: pwsh
         run: ./scripts/invoke-configuration-grpc-shadow-acceptance-bounded.ps1 -TotalTimeoutSeconds 420
