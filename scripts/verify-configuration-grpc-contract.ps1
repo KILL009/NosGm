@@ -80,10 +80,10 @@ $callback = $map.callbackBoundary
 if ($null -eq $callback -or
     $callback.legacyInterface -ne "IConfigurationClient" -or
     $callback.legacyMethod -ne "ConfigurationUpdated" -or
-    $callback.disposition -ne "shadow_stream" -or
+    $callback.disposition -ne "typed_stream" -or
     $callback.target -ne "SubscribeConfigurationUpdates" -or
-    $callback.authority -ne "SCS") {
-    throw "ConfigurationUpdated must map to a typed shadow stream while SCS remains authoritative."
+    $callback.authority -ne "joint_selector") {
+    throw "ConfigurationUpdated must map to the typed stream behind the joint authority selector."
 }
 
 $legacyService = [System.IO.File]::ReadAllText($servicePath)
@@ -133,5 +133,5 @@ foreach ($required in @(
 
 Write-Host "[PASS] Configuration legacy methods are completely mapped." -ForegroundColor Green
 Write-Host "[PASS] MasterAuthKey is excluded from the typed Configuration protocol." -ForegroundColor Green
-Write-Host "[PASS] ConfigurationUpdated maps to a typed shadow stream without changing SCS authority." -ForegroundColor Green
+Write-Host "[PASS] ConfigurationUpdated maps to the typed stream behind the fail-closed joint selector." -ForegroundColor Green
 Write-Host "[PASS] Configuration contract validator and runtime self-test are wired." -ForegroundColor Green
