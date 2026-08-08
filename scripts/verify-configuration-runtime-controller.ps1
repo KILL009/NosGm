@@ -101,7 +101,7 @@ foreach ($required in @(
     "ConfigurationResultCode.Conflict",
     "ThrowForSubscriptionTermination",
     "The Configuration runtime restarted.",
-    "runtimeGenerationId.ToString(\"D\")"
+    'runtimeGenerationId.ToString("D")'
 )) {
     Require $service $required "Configuration runtime control service"
 }
