@@ -50,6 +50,7 @@ $rollbackTransport = Read-RepoFile "Data\NosGm.Master.Library\Client\Configurati
 $legacyCallback = Read-RepoFile "Data\NosGm.Master.Library\Client\ConfigurationClient.cs"
 $subscriberLifecycle = Read-RepoFile "Data\NosGm.Master.Library\Client\ConfigurationGrpcShadowSubscriberLifecycle.cs"
 $configurationHandler = Read-RepoFile "Data\NosGm.Handler\PacketHandler\Command\ConfigurationPacketHandler.cs"
+$familySkillHandler = Read-RepoFile "Data\NosGm.Handler\PacketHandler\Family\UseFamilySkillPacketHandler.cs"
 $configurationPacket = Read-RepoFile "Data\NosGm.Packets\Packets\CommandPackets\ConfigurationPacket.cs"
 $documentation = Read-RepoFile "docs\configuration-grpc-slice.md"
 $localStack = Read-RepoFile "scripts\start-modern-login-core-local.ps1"
@@ -183,6 +184,7 @@ foreach ($required in @(
     'NOSGM_CONFIGURATION_GRPC_ACCEPTANCE_PULSE_ENABLED',
     'diagnostic = "acceptance-pulse-disabled";',
     'Interlocked.CompareExchange(',
+    'lock (AcceptancePulseIsolationRoot)',
     'lock (_configurationMutationRoot)',
     'CreateGrpcAcceptancePulse(original)',
     'diagnostic = "active-world-buff";',
@@ -193,17 +195,22 @@ foreach ($required in @(
     'if (before.HasTerminalMismatch)',
     'diagnostic = "runtime-changed";',
     'finally',
-    'CloneConfiguration(original)',
+    'TryRestoreAcceptanceSnapshotEverywhere(',
+    'UpdateAcceptanceSnapshotEverywhere(pulse)',
+    'AcceptancePulseRestoreAttempts = 3',
+    'ConfigurationsAreSemanticallyEqual(',
+    'diagnostic = "restoration-verification-failed";',
+    'ConfigurationsAreExactlyEqual(',
     'AcceptancePulseTimeoutMilliseconds = 7000',
     'after.ScsLiveCount >= before.ScsLiveCount + 2',
     'after.GrpcLiveCount >= before.GrpcLiveCount + 2',
     'before.MatchedLiveCount + 2',
     '[CONFIG_GRPC_ACCEPTANCE_PULSE]',
-    'Restored=True; no Configuration values are logged.'
+    '" Restored=" + restored'
 )) {
     Require-Text $client $required "Configuration acceptance pulse"
 }
-Require-Before $client 'UpdateConfigurationObjectCore(pulse)' 'CloneConfiguration(original)' "Configuration pulse restoration order"
+Require-Before $client 'UpdateAcceptanceSnapshotEverywhere(pulse)' 'TryRestoreAcceptanceSnapshotEverywhere(' "Configuration pulse restoration order"
 foreach ($forbidden in @(
     'MaxGold=" +',
     'TimeExpBuff=" +',
@@ -215,20 +222,25 @@ foreach ($forbidden in @(
 }
 foreach ($required in @(
     'case "grpcpulse":',
-    'connectedCharacters != 1',
+    'Func<bool> isWorldIsolated',
     'diagnostic = "world-not-isolated";',
     '.TryRunGrpcAcceptancePulse(',
     'ServerManager.Instance.Configuration',
+    'isWorldIsolated,',
     'CONFIG_GRPC_ACCEPTANCE_PULSE',
     'ConfigurationPacket.ReturnHelp()'
 )) {
     Require-Text $configurationHandler $required "Configuration acceptance command"
 }
+Require-Text $familySkillHandler 'RunWithConfigurationMutationBarrier' "Configuration family-buff mutation barrier"
+Require-Text $familySkillHandler '.TimeExpBuff = DateTime.Now.AddMinutes(60)' "Configuration XP family-buff mutation barrier"
+Require-Text $familySkillHandler '.TimeGoldBuff = DateTime.Now.AddMinutes(60)' "Configuration gold family-buff mutation barrier"
 Require-Text $configurationPacket 'Authority = AuthorityType.ADMIN' "Configuration acceptance command authority"
 Require-Text $configurationPacket '$Configuration <Bazaar|GrpcPulse>' "Configuration acceptance command help"
 foreach ($required in @(
     '$EnableConfigurationRuntimeControl -and',
     '$EnableConfigurationGrpcShadow',
+    '"NOSGM_CONFIGURATION_GRPC_ACCEPTANCE_PULSE_ENABLED",',
     'NOSGM_CONFIGURATION_GRPC_ACCEPTANCE_PULSE_ENABLED"] = "true"'
 )) {
     Require-Text $localStack $required "Configuration acceptance local-stack opt-in"
