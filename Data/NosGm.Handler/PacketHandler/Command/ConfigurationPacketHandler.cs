@@ -55,12 +55,12 @@ namespace NosGm.Handler.PacketHandler.Command
                     case "grpcpulse":
                     case "grpc-pulse":
                         string diagnostic;
-                        int connectedCharacters = ServerManager.Instance
-                            .Sessions.Count(session =>
+                        Func<bool> isWorldIsolated = () =>
+                            ServerManager.Instance.Sessions.Count(session =>
                                 session != null &&
-                                session.Character != null);
+                                session.Character != null) == 1;
                         bool passed;
-                        if (connectedCharacters != 1)
+                        if (!isWorldIsolated())
                         {
                             diagnostic = "world-not-isolated";
                             passed = false;
@@ -70,6 +70,7 @@ namespace NosGm.Handler.PacketHandler.Command
                             passed = ConfigurationServiceClient.Instance
                                 .TryRunGrpcAcceptancePulse(
                                     ServerManager.Instance.Configuration,
+                                    isWorldIsolated,
                                     out diagnostic);
                         }
                         MessageExtension.SendGrey(
