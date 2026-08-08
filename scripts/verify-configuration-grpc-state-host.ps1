@@ -60,7 +60,8 @@ foreach ($required in @(
     "if (_snapshot == null)",
     "AreEqual(_snapshot, snapshot)",
     "_generation++;",
-    "Clone(_snapshot)"
+    "NewState(_snapshot, _generation)",
+    "new SnapshotState(Clone(snapshot), generation)"
 )) {
     Require-Text $state $required "Configuration state isolation"
 }
