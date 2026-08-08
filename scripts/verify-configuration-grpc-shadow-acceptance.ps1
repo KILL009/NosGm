@@ -82,6 +82,12 @@ foreach ($required in @(
 foreach ($required in @(
     'scripts/invoke-configuration-grpc-shadow-acceptance-bounded.ps1',
     'timeout-minutes: 10',
+    'shell: pwsh',
+    'System32\certutil.exe',
+    '$process.WaitForExit(30000)',
+    'Stop-Process -Id $process.Id -Force',
+    '@("-user", "-f", "-addstore", "Root"',
+    '@("-user", "-delstore", "Root"',
     './scripts/invoke-configuration-grpc-shadow-acceptance-bounded.ps1 -TotalTimeoutSeconds 420'
 )) {
     if ($workflowContent.IndexOf($required, [StringComparison]::Ordinal) -lt 0) {
@@ -107,6 +113,10 @@ if ($supervisorContent.IndexOf('& $taskKill', [StringComparison]::OrdinalIgnoreC
     throw "Configuration shadow acceptance supervisor must not invoke taskkill without a bounded child process."
 }
 
+if ($workflowContent.IndexOf('X509Store("Root", "CurrentUser")', [StringComparison]::OrdinalIgnoreCase) -ge 0) {
+    throw "Configuration shadow acceptance workflow must not use the X509Store path that can block before the bounded harness starts."
+}
+
 $importIndex = $content.IndexOf('Import-Certificate', [StringComparison]::Ordinal)
 $cleanupIndex = $content.LastIndexOf('Remove-Item -LiteralPath $trustedRootStorePath -Force', [StringComparison]::Ordinal)
 if ($importIndex -lt 0 -or $cleanupIndex -le $importIndex) {
@@ -120,5 +130,6 @@ Write-Host "[PASS] Per-operation client/build waits remain bounded." -Foreground
 Write-Host "[PASS] External supervisor enforces a 420-second total acceptance budget." -ForegroundColor Green
 Write-Host "[PASS] Supervisor process-tree cleanup is itself bounded." -ForegroundColor Green
 Write-Host "[PASS] Workflow keeps a 10-minute hard limit with headroom for trust cleanup." -ForegroundColor Green
+Write-Host "[PASS] Workflow bounds CurrentUser root inspection, installation and removal through certutil." -ForegroundColor Green
 Write-Host "[PASS] Windows trust changes are current-user scoped, explicit and cleaned up." -ForegroundColor Green
 Write-Host "[PASS] Acceptance never persists process secrets or installs LocalMachine trust." -ForegroundColor Green
