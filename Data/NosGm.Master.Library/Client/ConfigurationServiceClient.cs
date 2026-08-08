@@ -291,12 +291,28 @@ namespace NosGm.Master.Library.Client
                             return false;
                         }
 
+                        before = ConfigurationUpdateObservationLedger.Instance
+                            .LatestParityReport;
+                        if (string.IsNullOrWhiteSpace(
+                                before.RuntimeGenerationId))
+                        {
+                            diagnostic = "typed-runtime-unavailable";
+                            return false;
+                        }
+                        if (before.HasTerminalMismatch)
+                        {
+                            diagnostic = "terminal-parity-" + before.Verdict;
+                            return false;
+                        }
+
                         ConfigurationObject typedOriginal;
                         ConfigurationGrpcShadowResult typedOriginalResult;
                         if (!_grpcShadowMirror.TryGetAuthoritative(
                                 out typedOriginal,
                                 out typedOriginalResult) ||
-                            !IsCurrentAuthorityResult(typedOriginalResult))
+                            !IsExpectedAcceptanceRuntimeResult(
+                                typedOriginalResult,
+                                before.RuntimeGenerationId))
                         {
                             diagnostic = "typed-runtime-unavailable";
                             return false;
@@ -306,24 +322,6 @@ namespace NosGm.Master.Library.Client
                                 typedOriginal))
                         {
                             diagnostic = "typed-configuration-drift";
-                            return false;
-                        }
-
-                        before = ConfigurationUpdateObservationLedger.Instance
-                            .LatestParityReport;
-                        if (string.IsNullOrWhiteSpace(
-                                before.RuntimeGenerationId) ||
-                            !string.Equals(
-                                before.RuntimeGenerationId,
-                                typedOriginalResult.RuntimeGenerationId,
-                                StringComparison.Ordinal))
-                        {
-                            diagnostic = "typed-runtime-unavailable";
-                            return false;
-                        }
-                        if (before.HasTerminalMismatch)
-                        {
-                            diagnostic = "terminal-parity-" + before.Verdict;
                             return false;
                         }
                         if (!isolationStillValid())
@@ -342,7 +340,9 @@ namespace NosGm.Master.Library.Client
                                 "Runtime=" + before.RuntimeGenerationId +
                                 "; no Configuration values are logged.");
                             pulseAttempted = true;
-                            UpdateAcceptanceSnapshotEverywhere(pulse);
+                            UpdateAcceptanceSnapshotEverywhere(
+                                pulse,
+                                before.RuntimeGenerationId);
                         }
                         finally
                         {
@@ -350,7 +350,8 @@ namespace NosGm.Master.Library.Client
                             {
                                 restorationVerified =
                                     TryRestoreAcceptanceSnapshotEverywhere(
-                                        original);
+                                        original,
+                                        before.RuntimeGenerationId);
                             }
                         }
                     }
@@ -499,7 +500,8 @@ namespace NosGm.Master.Library.Client
         }
 
         private void UpdateAcceptanceSnapshotEverywhere(
-            ConfigurationObject configuration)
+            ConfigurationObject configuration,
+            string expectedRuntimeGenerationId)
         {
             _rollbackTransport.UpdateConfigurationObject(
                 CloneConfiguration(configuration));
@@ -507,7 +509,9 @@ namespace NosGm.Master.Library.Client
             if (!_grpcShadowMirror.TryUpdateAuthoritative(
                     CloneConfiguration(configuration),
                     out typedResult) ||
-                !IsCurrentAuthorityResult(typedResult))
+                !IsExpectedAcceptanceRuntimeResult(
+                    typedResult,
+                    expectedRuntimeGenerationId))
             {
                 throw new InvalidOperationException(
                     "The typed Configuration acceptance write failed closed.");
@@ -515,7 +519,8 @@ namespace NosGm.Master.Library.Client
         }
 
         private bool TryRestoreAcceptanceSnapshotEverywhere(
-            ConfigurationObject original)
+            ConfigurationObject original,
+            string expectedRuntimeGenerationId)
         {
             for (int attempt = 0;
                  attempt < AcceptancePulseRestoreAttempts;
@@ -554,7 +559,9 @@ namespace NosGm.Master.Library.Client
                     _grpcShadowMirror.TryGetAuthoritative(
                         out typedCurrent,
                         out typedGetResult) &&
-                    IsCurrentAuthorityResult(typedGetResult) &&
+                    IsExpectedAcceptanceRuntimeResult(
+                        typedGetResult,
+                        expectedRuntimeGenerationId) &&
                     ConfigurationsAreSemanticallyEqual(
                         original,
                         typedCurrent);
@@ -568,6 +575,20 @@ namespace NosGm.Master.Library.Client
             }
 
             return false;
+        }
+
+        private static bool IsExpectedAcceptanceRuntimeResult(
+            ConfigurationGrpcShadowResult result,
+            string expectedRuntimeGenerationId)
+        {
+            return result != null &&
+                   result.Generation > 0 &&
+                   !string.IsNullOrWhiteSpace(
+                       expectedRuntimeGenerationId) &&
+                   string.Equals(
+                       result.RuntimeGenerationId,
+                       expectedRuntimeGenerationId,
+                       StringComparison.Ordinal);
         }
 
         private static bool ConfigurationsAreExactlyEqual(
