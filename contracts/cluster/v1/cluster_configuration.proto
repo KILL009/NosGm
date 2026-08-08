@@ -14,6 +14,11 @@ service ClusterConfiguration {
       returns (GetConfigurationResponse);
   rpc UpdateConfiguration(UpdateConfigurationRequest)
       returns (UpdateConfigurationResponse);
+  // Shadow-only typed replacement for IConfigurationClient.ConfigurationUpdated.
+  // Worlds recover from a snapshot, then resume after the last observed
+  // generation. SCS remains authoritative until the joint cutover gate lands.
+  rpc SubscribeConfigurationUpdates(SubscribeConfigurationUpdatesRequest)
+      returns (stream ConfigurationUpdateEnvelope);
 }
 
 enum ConfigurationResultCode {
@@ -39,6 +44,7 @@ message GetConfigurationResponse {
   ConfigurationResultCode result = 1;
   ConfigurationSnapshot configuration = 2;
   uint64 generation = 3;
+  string runtime_generation_id = 4;
 }
 
 message UpdateConfigurationRequest {
@@ -50,4 +56,23 @@ message UpdateConfigurationResponse {
   ConfigurationResultCode result = 1;
   ConfigurationSnapshot configuration = 2;
   uint64 generation = 3;
+  string runtime_generation_id = 4;
+}
+
+message SubscribeConfigurationUpdatesRequest {
+  RequestContext context = 1;
+  // Runtime identity returned by GetConfiguration. It changes on every
+  // Authentication runtime restart so a numeric generation is never reused
+  // across processes accidentally.
+  string runtime_generation_id = 2;
+  // Last generation already observed by this World process. Newer retained
+  // snapshots are replayed before live delivery begins.
+  uint64 resume_after_generation = 3;
+}
+
+message ConfigurationUpdateEnvelope {
+  ConfigurationSnapshot configuration = 1;
+  uint64 generation = 2;
+  string runtime_generation_id = 3;
+  bool replayed = 4;
 }

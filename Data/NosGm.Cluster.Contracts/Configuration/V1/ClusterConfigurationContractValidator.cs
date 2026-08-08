@@ -23,6 +23,9 @@ namespace NosGm.Cluster.Contracts.Configuration.V1
         // that the legacy ConfigurationObject can be reconstructed safely.
         public const long MinimumDateTimeUnixMilliseconds = -62135596800000L;
         public const long MaximumDateTimeUnixMilliseconds = 253402300799999L;
+        public const int MaxRetainedUpdates = 256;
+        public const int MaxPendingUpdatesPerSubscriber = 32;
+        public const int MaxConcurrentSubscribers = 128;
     }
 
     public static class ClusterConfigurationContractValidator
@@ -45,6 +48,12 @@ namespace NosGm.Cluster.Contracts.Configuration.V1
             }
 
             return ValidateSnapshot(request.Configuration);
+        }
+
+        public static ConfigurationContractValidationError Validate(
+            WireV1.SubscribeConfigurationUpdatesRequest request)
+        {
+            return ValidateRequest(request, request?.Context);
         }
 
         public static ConfigurationContractValidationError ValidateSnapshot(

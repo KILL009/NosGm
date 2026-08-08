@@ -43,6 +43,11 @@ foreach ($required in @(
     'duplicate preserves generation',
     'reconnect generation',
     'changed generation',
+    'SubscribeUpdatesAsync',
+    'first stream observes changed generation',
+    'reconnected stream observes exactly the next generation',
+    'RecordingUpdateHandler',
+    'seed runtime generation',
     'NOSGM_AUTH_GRPC_TRUSTED_ROOT_CERT_PATH = $rootCertificatePath',
     'NOSGM_AUTH_GRPC_WIRE_MODE"] = "HTTP2"',
     'requires native HTTP/2 on Windows 11 or Windows Server 2019',
@@ -142,7 +147,7 @@ if ($supervisorContent.IndexOf('Join-Path $PSHOME "powershell.exe"', [StringComp
 
 Write-Host "[PASS] Configuration shadow acceptance PowerShell syntax is valid." -ForegroundColor Green
 Write-Host "[PASS] Acceptance uses a generated net481 World client over the real gRPC transport." -ForegroundColor Green
-Write-Host "[PASS] Acceptance covers seed, reconnect, duplicate idempotency and changed generation." -ForegroundColor Green
+Write-Host "[PASS] Acceptance covers seed, duplicate idempotency, typed stream delivery and stream reconnection." -ForegroundColor Green
 Write-Host "[PASS] Per-operation client/build waits remain bounded." -ForegroundColor Green
 Write-Host "[PASS] External supervisor enforces a 420-second total acceptance budget." -ForegroundColor Green
 Write-Host "[PASS] Supervisor process-tree cleanup is itself bounded." -ForegroundColor Green

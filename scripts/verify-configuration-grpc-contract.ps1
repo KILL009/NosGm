@@ -24,6 +24,8 @@ foreach ($required in @(
     "service ClusterConfiguration",
     "rpc GetConfiguration",
     "rpc UpdateConfiguration",
+    "rpc SubscribeConfigurationUpdates",
+    "stream ConfigurationUpdateEnvelope",
     "message ConfigurationSnapshot",
     'import "cluster_control.proto"'
 )) {
@@ -78,8 +80,10 @@ $callback = $map.callbackBoundary
 if ($null -eq $callback -or
     $callback.legacyInterface -ne "IConfigurationClient" -or
     $callback.legacyMethod -ne "ConfigurationUpdated" -or
-    $callback.disposition -ne "deferred") {
-    throw "ConfigurationUpdated must remain an explicit deferred callback boundary."
+    $callback.disposition -ne "shadow_stream" -or
+    $callback.target -ne "SubscribeConfigurationUpdates" -or
+    $callback.authority -ne "SCS") {
+    throw "ConfigurationUpdated must map to a typed shadow stream while SCS remains authoritative."
 }
 
 $legacyService = [System.IO.File]::ReadAllText($servicePath)
@@ -129,5 +133,5 @@ foreach ($required in @(
 
 Write-Host "[PASS] Configuration legacy methods are completely mapped." -ForegroundColor Green
 Write-Host "[PASS] MasterAuthKey is excluded from the typed Configuration protocol." -ForegroundColor Green
-Write-Host "[PASS] ConfigurationUpdated remains an explicit deferred SCS callback boundary." -ForegroundColor Green
+Write-Host "[PASS] ConfigurationUpdated maps to a typed shadow stream without changing SCS authority." -ForegroundColor Green
 Write-Host "[PASS] Configuration contract validator and runtime self-test are wired." -ForegroundColor Green

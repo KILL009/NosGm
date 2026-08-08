@@ -54,6 +54,27 @@ namespace NosGm.Master.Library.Client
                     "[CONFIG_GRPC_SHADOW] Shadow mirror unavailable; continuing with SCS authority. Reason=" +
                     (shadowDiagnostic ?? "unknown"));
             }
+
+            string subscriberDiagnostic;
+            ConfigurationGrpcShadowSubscriberLifecycle subscriberLifecycle;
+            if (ConfigurationGrpcShadowSubscriberLifecycle
+                    .TryStartFromEnvironment(
+                        out subscriberLifecycle,
+                        out subscriberDiagnostic))
+            {
+                _grpcShadowSubscriberLifecycle = subscriberLifecycle;
+                Logger.Info(
+                    "[CONFIG_GRPC_SHADOW] Typed Configuration update subscriber started; SCS callback remains authoritative.");
+            }
+            else if (!string.Equals(
+                         subscriberDiagnostic,
+                         "disabled",
+                         StringComparison.Ordinal))
+            {
+                Logger.Warn(
+                    "[CONFIG_GRPC_SHADOW] Typed update subscriber unavailable; continuing with SCS callback authority. Reason=" +
+                    (subscriberDiagnostic ?? "unknown"));
+            }
         }
 
         #endregion
@@ -73,6 +94,9 @@ namespace NosGm.Master.Library.Client
         private readonly ConfigurationClient _confClient;
 
         private readonly ConfigurationGrpcShadowMirror _grpcShadowMirror;
+
+        private readonly ConfigurationGrpcShadowSubscriberLifecycle
+            _grpcShadowSubscriberLifecycle;
 
         #endregion
 

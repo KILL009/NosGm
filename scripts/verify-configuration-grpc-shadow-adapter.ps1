@@ -46,6 +46,7 @@ function Require-Before {
 $options = Read-RepoFile "Data\NosGm.Master.Library\Client\ConfigurationGrpcShadowOptions.cs"
 $mirror = Read-RepoFile "Data\NosGm.Master.Library\Client\ConfigurationGrpcShadowMirror.cs"
 $client = Read-RepoFile "Data\NosGm.Master.Library\Client\ConfigurationServiceClient.cs"
+$subscriberLifecycle = Read-RepoFile "Data\NosGm.Master.Library\Client\ConfigurationGrpcShadowSubscriberLifecycle.cs"
 $project = Read-RepoFile "Data\NosGm.Master.Library\NosGm.Master.Library.csproj"
 
 foreach ($required in @(
@@ -88,6 +89,15 @@ Require-Before $client '_client.ServiceProxy.UpdateConfigurationObject(configura
 Require-Before $client 'ObserveAuthoritativeConfiguration(authoritative, "Get")' 'return authoritative;' "Configuration Get preserves the SCS object"
 Require-Text $client 'SCS remains authoritative' "Configuration shadow authority log"
 Require-Text $client 'SCS result remains authoritative' "Configuration shadow failure log"
+Require-Text $client 'Typed Configuration update subscriber started' "Configuration subscriber startup"
+foreach ($required in @(
+    'ConfigurationGrpcShadowSubscriber',
+    'RecoveredFromSnapshot',
+    'SCS callback remains authoritative',
+    'no gameplay state was applied'
+)) {
+    Require-Text $subscriberLifecycle $required "Configuration shadow subscriber lifecycle"
+}
 
 $callbackPattern = '(?s)internal void OnConfigurationUpdated\(ConfigurationObject configurationObject\)\s*\{(?<body>.*?)\n\s*\}'
 $callbackMatch = [regex]::Match($client, $callbackPattern)
@@ -100,9 +110,10 @@ if ($callbackMatch.Groups['body'].Value.IndexOf('ObserveAuthoritativeConfigurati
 
 Require-Text $project 'Client\ConfigurationGrpcShadowMirror.cs' "Configuration shadow mirror compile item"
 Require-Text $project 'Client\ConfigurationGrpcShadowOptions.cs' "Configuration shadow options compile item"
+Require-Text $project 'Client\ConfigurationGrpcShadowSubscriberLifecycle.cs' "Configuration subscriber lifecycle compile item"
 
 Write-Host "[PASS] Configuration gRPC shadow mode is explicit, disabled by default and timeout-bounded." -ForegroundColor Green
 Write-Host "[PASS] SCS Get/Update remain authoritative and execute before shadow synchronization." -ForegroundColor Green
 Write-Host "[PASS] Configuration shadow compares before writing and tolerates gRPC timeout/failure." -ForegroundColor Green
 Write-Host "[PASS] Legacy DateTime conversion handles Unspecified values as local wall time explicitly." -ForegroundColor Green
-Write-Host "[PASS] ConfigurationUpdated callback remains SCS-only in this slice." -ForegroundColor Green
+Write-Host "[PASS] ConfigurationUpdated remains SCS-authoritative while the typed stream is observation-only." -ForegroundColor Green

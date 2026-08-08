@@ -10,9 +10,33 @@ internal static class ClusterConfigurationContractSelfTest
     {
         VerifyGetContract();
         VerifyUpdateContract();
+        VerifySubscribeContract();
         VerifySnapshotBounds();
 
         Console.WriteLine("[PASS] Cluster configuration contract self-test");
+    }
+
+    private static void VerifySubscribeContract()
+    {
+        var request = new WireV1.SubscribeConfigurationUpdatesRequest
+        {
+            Context = CreateContext(
+                WireV1.ClusterNodeRole.World,
+                WireV1.ClusterService.Configuration),
+            RuntimeGenerationId =
+                "11111111-2222-3333-4444-555555555555",
+            ResumeAfterGeneration = 4
+        };
+        AssertEqual(
+            ConfigurationContractValidationError.None,
+            ClusterConfigurationContractValidator.Validate(request),
+            "Configuration Subscribe accepts World context");
+
+        request.Context.CallerRole = WireV1.ClusterNodeRole.Login;
+        AssertEqual(
+            ConfigurationContractValidationError.InvalidCallerRole,
+            ClusterConfigurationContractValidator.Validate(request),
+            "Configuration Subscribe rejects Login caller role");
     }
 
     private static void VerifyGetContract()
