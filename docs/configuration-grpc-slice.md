@@ -324,6 +324,12 @@ equality between the live World Configuration and the Master object. This
 prevents a Master round trip from overwriting locally advanced family-buff
 timestamps; any drift rejects the pulse before the first write.
 
+The pulse binds its typed reads and writes to the runtime generation observed by
+the parity ledger. It deliberately does not require
+`ActiveRuntimeGenerationId`: that field remains empty while SCS is the selected
+authority during dry-run qualification, even though the typed runtime and its
+subscriber are healthy.
+
 After those barriers pass, the command serializes all Configuration mutations,
 copies the current authoritative object, advances only the global `MaxGold`
 ceiling by one, writes that pulse explicitly to SCS and gRPC, and restores an
