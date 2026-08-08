@@ -235,7 +235,7 @@ foreach ($required in @(
 }
 foreach ($required in @(
     '$Configuration GrpcPulse',
-    'a normal World process does not receive',
+    'normal World process does not receive',
     'NOSGM_CONFIGURATION_GRPC_ACCEPTANCE_PULSE_ENABLED=true',
     'no active World XP/gold family buff',
     'any drift rejects the pulse before the first write',
