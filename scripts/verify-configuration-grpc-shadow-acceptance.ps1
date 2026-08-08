@@ -51,7 +51,13 @@ foreach ($required in @(
     '[int]$BuildTimeoutSeconds = 180',
     '$process.WaitForExit($ClientTimeoutSeconds * 1000)',
     '$process.WaitForExit($BuildTimeoutSeconds * 1000)',
-    'Stop-Process -Id $runtimeProcess.Id -Force'
+    'Stop-Process -Id $runtimeProcess.Id -Force',
+    'invoke-process-with-exit-code.ps1',
+    'Start-TrackedProcess',
+    'Read-TrackedProcessExitCode',
+    '[IO.File]::WriteAllText($ExitCodePath',
+    'ToBase64String',
+    'FromBase64String'
 )) {
     if ($content.IndexOf($required, [StringComparison]::Ordinal) -lt 0) {
         throw "Configuration shadow acceptance is missing '$required'."
@@ -118,8 +124,8 @@ if ([Regex]::Matches($supervisorContent, [Regex]::Escape('$process.WaitForExit()
     throw "Configuration shadow acceptance supervisor must finalize the successful harness process before reading ExitCode."
 }
 
-if ([Regex]::Matches($content, [Regex]::Escape('-WindowStyle Hidden')).Count -lt 3) {
-    throw "Configuration shadow acceptance must hide build, client and runtime processes without using NoNewWindow."
+if ([Regex]::Matches($content, [Regex]::Escape('-WindowStyle Hidden')).Count -lt 2) {
+    throw "Configuration shadow acceptance must hide the tracked wrapper and runtime processes without using NoNewWindow."
 }
 
 if ([Regex]::Matches($supervisorContent, [Regex]::Escape('-WindowStyle Hidden')).Count -lt 1) {
@@ -142,6 +148,7 @@ Write-Host "[PASS] External supervisor enforces a 420-second total acceptance bu
 Write-Host "[PASS] Supervisor process-tree cleanup is itself bounded." -ForegroundColor Green
 Write-Host "[PASS] Successful redirected processes are finalized before ExitCode is evaluated." -ForegroundColor Green
 Write-Host "[PASS] Evaluated child processes remain hidden without the NoNewWindow ExitCode defect." -ForegroundColor Green
+Write-Host "[PASS] Build and client exit codes use a deterministic child-written sidecar." -ForegroundColor Green
 Write-Host "[PASS] Supervisor resolves Windows PowerShell 5.1 independently from the active PowerShell host." -ForegroundColor Green
 Write-Host "[PASS] Workflow keeps a 10-minute hard limit with headroom for process cleanup." -ForegroundColor Green
 Write-Host "[PASS] CI exercises only native net481 HTTP/2 while the production GRPCWEB fallback remains compiled." -ForegroundColor Green

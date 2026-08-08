@@ -25,6 +25,7 @@ $runtimeOutput = Join-Path $acceptanceRoot "runtime"
 $clientRoot = Join-Path $acceptanceRoot "client"
 $clientLogRoot = Join-Path $acceptanceRoot "client-logs"
 $buildLogRoot = Join-Path $acceptanceRoot "build-logs"
+$processWrapperPath = Join-Path $acceptanceRoot "invoke-process-with-exit-code.ps1"
 $clientProject = Join-Path $clientRoot "NosGm.Configuration.Grpc.Acceptance.csproj"
 $clientSource = Join-Path $clientRoot "Program.cs"
 $clientExecutable = Join-Path $clientRoot "bin\Release\net481\NosGm.Configuration.Grpc.Acceptance.exe"
@@ -199,6 +200,105 @@ function Read-AcceptanceProcessLog {
     return $content.Trim()
 }
 
+function Write-ProcessExitCodeWrapper {
+    New-Item -ItemType Directory -Force -Path $acceptanceRoot | Out-Null
+    @'
+[CmdletBinding()]
+param(
+    [Parameter(Mandatory = $true)][string]$ExecutablePath,
+    [Parameter(Mandatory = $true)][string]$WorkingDirectory,
+    [Parameter(Mandatory = $true)][string]$ExitCodePath,
+    [Parameter(Mandatory = $true)][string]$ArgumentPayload
+)
+
+$ErrorActionPreference = "Stop"
+$exitCode = 1
+try {
+    Set-Location -LiteralPath $WorkingDirectory
+    $json = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($ArgumentPayload))
+    $decoded = ConvertFrom-Json -InputObject $json
+    $arguments = @()
+    if ($null -ne $decoded) {
+        $arguments = @($decoded | ForEach-Object { [string]$_ })
+    }
+    & $ExecutablePath @arguments
+    if ($null -ne $LASTEXITCODE) {
+        $exitCode = [int]$LASTEXITCODE
+    }
+    elseif ($?) {
+        $exitCode = 0
+    }
+}
+catch {
+    [Console]::Error.WriteLine($_.Exception.ToString())
+    $exitCode = 1
+}
+finally {
+    [IO.File]::WriteAllText($ExitCodePath, $exitCode.ToString([Globalization.CultureInfo]::InvariantCulture))
+}
+exit $exitCode
+'@ | Set-Content -LiteralPath $processWrapperPath -Encoding UTF8
+}
+
+function Quote-ProcessArgument {
+    param([Parameter(Mandatory = $true)][string]$Value)
+
+    return '"' + $Value.Replace('"', '\"') + '"'
+}
+
+function Start-TrackedProcess {
+    param(
+        [Parameter(Mandatory = $true)][string]$ExecutablePath,
+        [Parameter(Mandatory = $true)][AllowEmptyCollection()][string[]]$Arguments,
+        [Parameter(Mandatory = $true)][string]$WorkingDirectory,
+        [Parameter(Mandatory = $true)][string]$ExitCodePath,
+        [Parameter(Mandatory = $true)][string]$StandardOutputPath,
+        [Parameter(Mandatory = $true)][string]$StandardErrorPath
+    )
+
+    $argumentJson = if ($Arguments.Count -eq 0) {
+        "[]"
+    }
+    else {
+        ConvertTo-Json -InputObject @($Arguments) -Compress
+    }
+    $argumentPayload = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($argumentJson))
+    $windowsPowerShell = Join-Path $PSHOME "powershell.exe"
+    if (-not (Test-Path -LiteralPath $windowsPowerShell -PathType Leaf)) {
+        throw "Windows PowerShell process wrapper is missing: $windowsPowerShell"
+    }
+
+    return Start-Process `
+        -FilePath $windowsPowerShell `
+        -ArgumentList @(
+            "-NoLogo", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
+            "-File", (Quote-ProcessArgument $processWrapperPath),
+            "-ExecutablePath", (Quote-ProcessArgument $ExecutablePath),
+            "-WorkingDirectory", (Quote-ProcessArgument $WorkingDirectory),
+            "-ExitCodePath", (Quote-ProcessArgument $ExitCodePath),
+            "-ArgumentPayload", $argumentPayload
+        ) `
+        -WindowStyle Hidden `
+        -PassThru `
+        -RedirectStandardOutput $StandardOutputPath `
+        -RedirectStandardError $StandardErrorPath
+}
+
+function Read-TrackedProcessExitCode {
+    param([Parameter(Mandatory = $true)][string]$Path)
+
+    if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
+        throw "Tracked child process did not record an exit code: $Path"
+    }
+    $raw = (Get-Content -LiteralPath $Path -Raw).Trim()
+    $value = 0
+    if (-not [int]::TryParse($raw, [Globalization.NumberStyles]::Integer,
+        [Globalization.CultureInfo]::InvariantCulture, [ref]$value)) {
+        throw "Tracked child process recorded an invalid exit code '$raw': $Path"
+    }
+    return $value
+}
+
 function Stop-ProcessTree {
     param([Parameter(Mandatory = $true)][Diagnostics.Process]$Process)
 
@@ -225,17 +325,17 @@ function Invoke-BoundedDotNet {
     $safeName = ($Name -replace '[^A-Za-z0-9_.-]', '-').ToLowerInvariant()
     $stdoutPath = Join-Path $buildLogRoot "$safeName.stdout.log"
     $stderrPath = Join-Path $buildLogRoot "$safeName.stderr.log"
-    Remove-Item -LiteralPath $stdoutPath, $stderrPath -Force -ErrorAction SilentlyContinue
+    $exitCodePath = Join-Path $buildLogRoot "$safeName.exitcode"
+    Remove-Item -LiteralPath $stdoutPath, $stderrPath, $exitCodePath -Force -ErrorAction SilentlyContinue
 
     Write-Host "[BUILD] $Name"
-    $process = Start-Process `
-        -FilePath $dotnet `
-        -ArgumentList $Arguments `
+    $process = Start-TrackedProcess `
+        -ExecutablePath $dotnet `
+        -Arguments $Arguments `
         -WorkingDirectory $root `
-        -WindowStyle Hidden `
-        -PassThru `
-        -RedirectStandardOutput $stdoutPath `
-        -RedirectStandardError $stderrPath
+        -ExitCodePath $exitCodePath `
+        -StandardOutputPath $stdoutPath `
+        -StandardErrorPath $stderrPath
     try {
         $completed = $process.WaitForExit($BuildTimeoutSeconds * 1000)
         if (-not $completed) {
@@ -246,11 +346,8 @@ function Invoke-BoundedDotNet {
             throw "$Name timed out after $BuildTimeoutSeconds seconds.`nSTDOUT:`n$stdout`nSTDERR:`n$stderr"
         }
 
-        # WaitForExit(timeout) only establishes the deadline. Windows PowerShell
-        # 5.1 needs the parameterless call to drain redirected streams and
-        # refresh ExitCode after the child has already terminated.
         $process.WaitForExit()
-        $exitCode = $process.ExitCode
+        $exitCode = Read-TrackedProcessExitCode -Path $exitCodePath
         $stdout = Read-AcceptanceProcessLog -Path $stdoutPath
         $stderr = Read-AcceptanceProcessLog -Path $stderrPath
         if ($stdout -ne "<no output>") {
@@ -276,17 +373,18 @@ function Invoke-AcceptanceClient {
     $modeName = $Mode.ToLowerInvariant()
     $stdoutPath = Join-Path $clientLogRoot "$modeName.stdout.log"
     $stderrPath = Join-Path $clientLogRoot "$modeName.stderr.log"
-    Remove-Item -LiteralPath $stdoutPath, $stderrPath -Force -ErrorAction SilentlyContinue
+    $exitCodePath = Join-Path $clientLogRoot "$modeName.exitcode"
+    Remove-Item -LiteralPath $stdoutPath, $stderrPath, $exitCodePath -Force -ErrorAction SilentlyContinue
 
     $process = $null
     try {
-        $process = Start-Process `
-            -FilePath $clientExecutable `
+        $process = Start-TrackedProcess `
+            -ExecutablePath $clientExecutable `
+            -Arguments @() `
             -WorkingDirectory (Split-Path -Parent $clientExecutable) `
-            -WindowStyle Hidden `
-            -PassThru `
-            -RedirectStandardOutput $stdoutPath `
-            -RedirectStandardError $stderrPath
+            -ExitCodePath $exitCodePath `
+            -StandardOutputPath $stdoutPath `
+            -StandardErrorPath $stderrPath
     }
     finally {
         # The child already inherited its environment. Do not keep certificate
@@ -309,7 +407,7 @@ function Invoke-AcceptanceClient {
         }
 
         $process.WaitForExit()
-        $exitCode = $process.ExitCode
+        $exitCode = Read-TrackedProcessExitCode -Path $exitCodePath
         $stdout = Read-AcceptanceProcessLog -Path $stdoutPath
         $stderr = Read-AcceptanceProcessLog -Path $stderrPath
         if ($stdout -ne "<no output>") {
@@ -520,6 +618,7 @@ internal static class Program
 
 $runtimeProcess = $null
 try {
+    Write-ProcessExitCodeWrapper
     Write-AcceptanceClient
     if (-not $SkipBuild) {
         New-Item -ItemType Directory -Force -Path $runtimeOutput | Out-Null
