@@ -5,7 +5,7 @@ param(
     [string]$Mode,
     [string[]]$WorldLogPath,
     [string]$OutputPath,
-    [ValidateRange(3, 16)]
+    [ValidateSet(3)]
     [int]$RequiredParityRuntimes = 3,
     [ValidateRange(1000, 200000)]
     [int]$MaxLogLines = 50000,
@@ -387,6 +387,39 @@ function New-EvidenceReceipt {
         -SourceCount $SourceCount
 }
 
+function Write-EvidenceReceiptAtomically {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][string]$Json
+    )
+
+    $stream = $null
+    $writer = $null
+    try {
+        $stream = [IO.File]::Open(
+            $Path,
+            [IO.FileMode]::CreateNew,
+            [IO.FileAccess]::Write,
+            [IO.FileShare]::None)
+        $writer = New-Object IO.StreamWriter(
+            $stream,
+            (New-Object Text.UTF8Encoding($false)))
+        $writer.Write($Json + [Environment]::NewLine)
+        $writer.Flush()
+    }
+    catch [IO.IOException] {
+        throw "The evidence receipt could not be created atomically; choose a new output path and retry."
+    }
+    finally {
+        if ($null -ne $writer) {
+            $writer.Dispose()
+        }
+        elseif ($null -ne $stream) {
+            $stream.Dispose()
+        }
+    }
+}
+
 function Resolve-WorldLogPaths {
     if ($null -ne $WorldLogPath -and @($WorldLogPath).Count -gt 0) {
         $resolved = New-Object Collections.Generic.List[string]
@@ -512,6 +545,33 @@ function Invoke-CollectorSelfTest {
     Assert-Condition $rejected `
         "Live evidence without duplicate suppression was not rejected."
 
+    $atomicDirectory = Join-Path (
+        [IO.Path]::GetTempPath()) (
+        "nosgm-configuration-authority-" + [Guid]::NewGuid().ToString("N"))
+    $atomicPath = Join-Path $atomicDirectory "receipt.json"
+    New-Item -ItemType Directory -Path $atomicDirectory | Out-Null
+    try {
+        $atomicJson = '{"schemaVersion":1,"verdict":"pass"}'
+        Write-EvidenceReceiptAtomically -Path $atomicPath -Json $atomicJson
+        Assert-Condition ((Get-Content -LiteralPath $atomicPath -Raw).Trim() -ceq $atomicJson) `
+            "Atomic receipt creation changed the receipt payload."
+
+        $rejected = $false
+        try {
+            Write-EvidenceReceiptAtomically -Path $atomicPath -Json $atomicJson
+        }
+        catch {
+            $rejected = $true
+        }
+        Assert-Condition $rejected `
+            "Atomic receipt creation did not reject an existing destination."
+        Assert-Condition ((Get-Content -LiteralPath $atomicPath -Raw).Trim() -ceq $atomicJson) `
+            "Atomic receipt collision changed the original receipt."
+    }
+    finally {
+        Remove-Item -LiteralPath $atomicDirectory -Recurse -Force -ErrorAction SilentlyContinue
+    }
+
     Write-Host "Configuration authority evidence collector self-test passed." -ForegroundColor Green
 }
 
@@ -546,8 +606,6 @@ if ([string]::IsNullOrWhiteSpace($OutputPath)) {
         "artifacts\configuration-authority-evidence\configuration-authority-$fileMode-$timestamp.json"
 }
 $OutputPath = [IO.Path]::GetFullPath($OutputPath)
-Assert-Condition (-not (Test-Path -LiteralPath $OutputPath)) `
-    "The evidence receipt already exists; choose a new output path."
 $outputDirectory = Split-Path -Parent $OutputPath
 New-Item -ItemType Directory -Path $outputDirectory -Force | Out-Null
 
@@ -566,10 +624,7 @@ foreach ($forbidden in @(
         [StringComparison]::OrdinalIgnoreCase) -lt 0) `
         "The evidence receipt contains forbidden text '$forbidden'."
 }
-[IO.File]::WriteAllText(
-    $OutputPath,
-    $json + [Environment]::NewLine,
-    (New-Object Text.UTF8Encoding($false)))
+Write-EvidenceReceiptAtomically -Path $OutputPath -Json $json
 
 $roundTrip = Get-Content -LiteralPath $OutputPath -Raw | ConvertFrom-Json
 Assert-Condition ($roundTrip.schemaVersion -eq 1 -and $roundTrip.verdict -ceq "pass") `
