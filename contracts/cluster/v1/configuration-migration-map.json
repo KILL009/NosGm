@@ -27,9 +27,9 @@
   "callbackBoundary": {
     "legacyInterface": "IConfigurationClient",
     "legacyMethod": "ConfigurationUpdated",
-    "disposition": "shadow_stream",
+    "disposition": "typed_stream",
     "target": "SubscribeConfigurationUpdates",
-    "authority": "SCS",
-    "reason": "The typed stream observes bounded replay and live generations, but cannot apply gameplay configuration until the joint Configuration cutover is qualified."
+    "authority": "joint_selector",
+    "reason": "SCS is the fail-closed default. The typed stream may apply gameplay configuration only after immutable operator effect authorization, three qualified parity runtimes, a fourth activation runtime, and successful snapshot recovery select Get, Update, and callback together."
   }
 }
