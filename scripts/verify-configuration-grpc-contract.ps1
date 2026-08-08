@@ -25,6 +25,8 @@ foreach ($required in @(
     "rpc GetConfiguration",
     "rpc UpdateConfiguration",
     "rpc SubscribeConfigurationUpdates",
+    "rpc GetConfigurationRuntimeInfo",
+    "rpc RestartConfigurationRuntime",
     "stream ConfigurationUpdateEnvelope",
     "message ConfigurationSnapshot",
     'import "cluster_control.proto"'
@@ -115,6 +117,8 @@ $validator = [System.IO.File]::ReadAllText($validatorPath)
 foreach ($required in @(
     "ClusterService.Configuration",
     "ClusterNodeRole.World",
+    "ClusterNodeRole.Master",
+    "InvalidRuntimeGeneration",
     "InvalidMaxGold",
     "InvalidExpBuffTimestamp",
     "InvalidGoldBuffTimestamp"
@@ -132,7 +136,9 @@ foreach ($required in @(
     "MissingConfiguration",
     "InvalidMaxGold",
     "InvalidExpBuffTimestamp",
-    "InvalidGoldBuffTimestamp"
+    "InvalidGoldBuffTimestamp",
+    "Configuration runtime status accepts Master context",
+    "Configuration runtime restart rejects malformed generation"
 )) {
     if ($selfTest.IndexOf($required, [StringComparison]::Ordinal) -lt 0) {
         throw "Configuration contract self-test is missing '$required'."

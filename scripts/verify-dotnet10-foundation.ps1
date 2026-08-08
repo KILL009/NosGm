@@ -95,6 +95,7 @@ $explicitNet10Projects = @(
     "Tools\NosGM.PacketCatalog\NosGM.PacketCatalog.csproj",
     "Tools\NosGM.ResourceExplorer\NosGM.ResourceExplorer.csproj",
     "Tools\NosGM.TimeSpaceParser\NosGM.TimeSpaceParser.csproj",
+    "Tools\NosGM.ConfigurationRuntimeController\NosGM.ConfigurationRuntimeController.csproj",
     "tests\NosGm.Cluster.Contracts.SelfTest\NosGm.Cluster.Contracts.SelfTest.csproj",
     "Data\NosGm.Program\NosGm.Authentication.Server\NosGm.Authentication.Server.csproj",
     "tests\NosGm.Authentication.Runtime.SelfTest\NosGm.Authentication.Runtime.SelfTest.csproj"
@@ -159,8 +160,8 @@ foreach ($project in $deferredModern) {
 #   deferred legacy targets, but no longer increment legacyOnlyCount above.
 # - 2026-08-04 added NosGM.LiveOperationsPublisher.CompileCheck as an isolated
 #   SDK-style net481 project, increasing the repository project total by one.
-if ($allProjects.Count -ne 53) {
-    throw "Project inventory changed: expected 53 projects but found $($allProjects.Count). Review the migration matrix."
+if ($allProjects.Count -ne 54) {
+    throw "Project inventory changed: expected 54 projects but found $($allProjects.Count). Review the migration matrix."
 }
 
 if ($bridgeCount -ne 8) {
@@ -175,6 +176,9 @@ if ($legacyOnlyCount -ne 19) {
 & (Join-Path $PSScriptRoot "verify-configuration-grpc-contract.ps1")
 & (Join-Path $PSScriptRoot "verify-configuration-grpc-state-host.ps1")
 & (Join-Path $PSScriptRoot "verify-configuration-grpc-client.ps1")
+& (Join-Path `
+    $PSScriptRoot `
+    "verify-configuration-runtime-controller.ps1")
 & (Join-Path `
     $PSScriptRoot `
     "verify-configuration-authority-evidence-collector.ps1")

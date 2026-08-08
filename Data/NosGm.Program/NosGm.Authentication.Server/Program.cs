@@ -8,12 +8,24 @@ using NosGm.Authentication.Server.Security;
 using NosGm.Authentication.Server.Services;
 using NosGm.Authentication.Server.State;
 using NosGm.Cluster.Contracts.V1;
+using WireV1 = global::NosGm.Cluster.Wire.V1;
 
 WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
 AuthenticationServerOptions options =
     AuthenticationServerOptions.Load(builder.Configuration);
 CommunicationRuntimeOptions communicationOptions =
     CommunicationRuntimeOptions.Load(builder.Configuration);
+ConfigurationRuntimeControlOptions configurationRuntimeControlOptions =
+    ConfigurationRuntimeControlOptions.Load(builder.Configuration);
+if (configurationRuntimeControlOptions.Enabled &&
+    (!options.AllowedFingerprints.TryGetValue(
+         WireV1.ClusterNodeRole.Master,
+         out IReadOnlyCollection<string> masterFingerprints) ||
+     masterFingerprints.Count == 0))
+{
+    throw new InvalidOperationException(
+        "Configuration runtime control requires at least one Master mTLS certificate fingerprint.");
+}
 var roleMap = new ClientCertificateRoleMap(options);
 var serverCertificate = options.LoadServerCertificate();
 var trustedRootCertificate = options.LoadTrustedRootCertificate();
@@ -46,12 +58,13 @@ builder.WebHost.ConfigureKestrel(kestrel =>
 
 builder.Services.AddSingleton(options);
 builder.Services.AddSingleton(communicationOptions);
+builder.Services.AddSingleton(configurationRuntimeControlOptions);
 builder.Services.AddSingleton(roleMap);
 builder.Services.AddSingleton<TimeProvider>(TimeProvider.System);
 builder.Services.AddSingleton<CommunicationCallbackRuntimeIdentity>();
 builder.Services.AddSingleton<GameforgeAuthenticationState>();
 builder.Services.AddSingleton<ClusterCommunicationState>();
-builder.Services.AddSingleton<ClusterConfigurationState>();
+builder.Services.AddSingleton<ConfigurationRuntimeController>();
 builder.Services.AddSingleton<CommunicationCallbackHub>();
 builder.Services.AddSingleton<CommunicationCallbackShadowWorldRegistry>();
 builder.Services.AddSingleton<AuthenticationRequestReplayGuard>();
@@ -80,10 +93,15 @@ if (trustedRootCertificate != null)
 
 CommunicationCallbackRuntimeIdentity callbackRuntimeIdentity =
     app.Services.GetRequiredService<CommunicationCallbackRuntimeIdentity>();
+ConfigurationRuntimeStatus configurationRuntime =
+    app.Services.GetRequiredService<ConfigurationRuntimeController>()
+        .GetStatus();
 app.Logger.LogInformation(
-    "NosGM internal cluster runtime {InstanceId} generation {CallbackGenerationId} listening on loopback port {Port}; authentication, communication state, callback and shadow configuration services enabled.",
+    "NosGM internal cluster runtime {InstanceId} callback generation {CallbackGenerationId} Configuration generation {ConfigurationGenerationId} control enabled {ConfigurationRuntimeControlEnabled} listening on loopback port {Port}; authentication, communication state, callback and shadow configuration services enabled.",
     options.InstanceId,
     callbackRuntimeIdentity.GenerationId,
+    configurationRuntime.RuntimeGenerationId,
+    configurationRuntime.ControlEnabled,
     options.Port);
 app.Run();
 
