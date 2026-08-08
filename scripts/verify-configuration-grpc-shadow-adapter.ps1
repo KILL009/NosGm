@@ -52,6 +52,7 @@ $subscriberLifecycle = Read-RepoFile "Data\NosGm.Master.Library\Client\Configura
 $configurationHandler = Read-RepoFile "Data\NosGm.Handler\PacketHandler\Command\ConfigurationPacketHandler.cs"
 $configurationPacket = Read-RepoFile "Data\NosGm.Packets\Packets\CommandPackets\ConfigurationPacket.cs"
 $documentation = Read-RepoFile "docs\configuration-grpc-slice.md"
+$localStack = Read-RepoFile "scripts\start-modern-login-core-local.ps1"
 $project = Read-RepoFile "Data\NosGm.Master.Library\NosGm.Master.Library.csproj"
 
 foreach ($required in @(
@@ -179,10 +180,16 @@ Require-Text $subscriberLifecycle 'failed closed to SCS' "Configuration gRPC aut
 
 foreach ($required in @(
     'TryRunGrpcAcceptancePulse',
+    'NOSGM_CONFIGURATION_GRPC_ACCEPTANCE_PULSE_ENABLED',
+    'diagnostic = "acceptance-pulse-disabled";',
     'Interlocked.CompareExchange(',
     'lock (_configurationMutationRoot)',
     'CreateGrpcAcceptancePulse(original)',
-    'TimeSpan.TicksPerMillisecond',
+    'diagnostic = "active-world-buff";',
+    'ConfigurationsAreExactlyEqual(',
+    'diagnostic = "live-world-configuration-drift";',
+    'diagnostic = "max-gold-pulse-unavailable";',
+    'pulse.MaxGold = checked(pulse.MaxGold + 1);',
     'if (before.HasTerminalMismatch)',
     'diagnostic = "runtime-changed";',
     'finally',
@@ -208,7 +215,10 @@ foreach ($forbidden in @(
 }
 foreach ($required in @(
     'case "grpcpulse":',
-    '.TryRunGrpcAcceptancePulse(out diagnostic)',
+    'connectedCharacters != 1',
+    'diagnostic = "world-not-isolated";',
+    '.TryRunGrpcAcceptancePulse(',
+    'ServerManager.Instance.Configuration',
     'CONFIG_GRPC_ACCEPTANCE_PULSE',
     'ConfigurationPacket.ReturnHelp()'
 )) {
@@ -217,7 +227,18 @@ foreach ($required in @(
 Require-Text $configurationPacket 'Authority = AuthorityType.ADMIN' "Configuration acceptance command authority"
 Require-Text $configurationPacket '$Configuration <Bazaar|GrpcPulse>' "Configuration acceptance command help"
 foreach ($required in @(
+    '$EnableConfigurationRuntimeControl -and',
+    '$EnableConfigurationGrpcShadow',
+    'NOSGM_CONFIGURATION_GRPC_ACCEPTANCE_PULSE_ENABLED"] = "true"'
+)) {
+    Require-Text $localStack $required "Configuration acceptance local-stack opt-in"
+}
+foreach ($required in @(
     '$Configuration GrpcPulse',
+    'a normal World process does not receive',
+    'NOSGM_CONFIGURATION_GRPC_ACCEPTANCE_PULSE_ENABLED=true',
+    'no active World XP/gold family buff',
+    'any drift rejects the pulse before the first write',
     'ScsDelta=2 GrpcDelta=2 MatchedDelta=2 Restored=True',
     'Do not perform the next guarded restart'
 )) {
