@@ -139,14 +139,6 @@ namespace NosGm.Authentication.Client
                     TrustedRootCertificatePathVariable +
                     " must be an absolute path.");
             }
-#if !NET10_0_OR_GREATER
-            if (!string.IsNullOrEmpty(trustedRootCertificatePath))
-            {
-                throw new InvalidOperationException(
-                    TrustedRootCertificatePathVariable +
-                    " is reserved for the isolated .NET 10 acceptance process.");
-            }
-#endif
             string callerInstanceId = ReadBoundedValue(
                 readVariable(CallerInstanceIdVariable),
                 CallerInstanceIdVariable,

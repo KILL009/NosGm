@@ -2,7 +2,6 @@
 param(
     [string]$CertificateManifest,
     [switch]$SkipBuild,
-    [switch]$TrustRootForCurrentUser,
     [ValidateRange(1024, 65535)]
     [int]$Port = 7443,
     [ValidateRange(10, 120)]
@@ -141,19 +140,6 @@ if ($credentials.SchemaVersion -ne 1) {
 }
 
 $rootCertificatePath = [System.IO.Path]::GetFullPath([string]$manifest.RootCertificatePath)
-$rootThumbprint = [string]$manifest.RootCertificateThumbprint
-$trustedRootStorePath = "Cert:\CurrentUser\Root\$rootThumbprint"
-$installedRootByTest = $false
-if (-not (Test-Path -LiteralPath $trustedRootStorePath)) {
-    if (-not $TrustRootForCurrentUser) {
-        throw "The net481 World client requires the NosGM development root in Cert:\CurrentUser\Root. Re-run with -TrustRootForCurrentUser to install it temporarily."
-    }
-    Import-Certificate -FilePath $rootCertificatePath -CertStoreLocation "Cert:\CurrentUser\Root" | Out-Null
-    if (-not (Test-Path -LiteralPath $trustedRootStorePath)) {
-        throw "The temporary NosGM development root could not be installed for the current user."
-    }
-    $installedRootByTest = $true
-}
 
 $environmentVariableNames = @(
     "NOSGM_AUTH_GRPC_SERVER_CERT_PATH",
@@ -617,31 +603,24 @@ try {
         NOSGM_AUTH_GRPC_URL = "https://127.0.0.1:$Port"
         NOSGM_AUTH_GRPC_CLIENT_CERT_PATH = [string]$manifest.Clients.World.CertificatePath
         NOSGM_AUTH_GRPC_CLIENT_CERT_PASSWORD = $worldPassword
+        NOSGM_AUTH_GRPC_TRUSTED_ROOT_CERT_PATH = $rootCertificatePath
         NOSGM_AUTH_GRPC_CALLER_INSTANCE_ID = "configuration-shadow-world-1"
         NOSGM_AUTH_GRPC_DEADLINE_MILLISECONDS = "10000"
     }
 
-    $modes = New-Object System.Collections.Generic.List[string]
-    $modes.Add("GRPCWEB")
-    if ($supportsHttp2) {
-        $modes.Add("HTTP2")
-    }
-    foreach ($mode in $modes) {
-        $marker = if ($mode -eq "GRPCWEB") { "2100000100" } else { "2100000200" }
-        $values = @{}
-        foreach ($entry in $clientBase.GetEnumerator()) {
-            $values[$entry.Key] = $entry.Value
-        }
-        $values["NOSGM_AUTH_GRPC_WIRE_MODE"] = $mode
-        $values["NOSGM_CONFIGURATION_ACCEPTANCE_MARKER"] = $marker
-        Set-ProcessEnvironment -Values $values
-        Write-Host "[TEST] Configuration shadow transport over $mode"
-        Invoke-AcceptanceClient -Mode $mode
+    if (-not $supportsHttp2) {
+        throw "The live net481 Configuration acceptance requires native HTTP/2 on Windows 11 or Windows Server 2019 and later. The production GRPCWEB fallback remains available for Windows 10."
     }
 
-    if (-not $supportsHttp2) {
-        Write-Host "[SKIP] Native HTTP/2 is unavailable to net481 callers on this Windows version; GRPCWEB acceptance passed." -ForegroundColor Yellow
+    $values = @{}
+    foreach ($entry in $clientBase.GetEnumerator()) {
+        $values[$entry.Key] = $entry.Value
     }
+    $values["NOSGM_AUTH_GRPC_WIRE_MODE"] = "HTTP2"
+    $values["NOSGM_CONFIGURATION_ACCEPTANCE_MARKER"] = "2100000200"
+    Set-ProcessEnvironment -Values $values
+    Write-Host "[TEST] Configuration shadow transport over native HTTP2"
+    Invoke-AcceptanceClient -Mode "HTTP2"
 
     Write-Host "NosGM Configuration gRPC shadow transport acceptance passed." -ForegroundColor Green
 }
@@ -656,9 +635,5 @@ finally {
         finally {
             $runtimeProcess.Dispose()
         }
-    }
-    if ($installedRootByTest -and (Test-Path -LiteralPath $trustedRootStorePath)) {
-        Remove-Item -LiteralPath $trustedRootStorePath -Force
-        Write-Host "[CLEANUP] Removed temporary NosGM root from Cert:\CurrentUser\Root." -ForegroundColor Green
     }
 }

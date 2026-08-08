@@ -35,11 +35,6 @@ $supervisorContent = [System.IO.File]::ReadAllText($supervisorPath)
 $workflowContent = [System.IO.File]::ReadAllText($workflowPath)
 
 foreach ($required in @(
-    '[switch]$TrustRootForCurrentUser',
-    'Cert:\CurrentUser\Root',
-    '$installedRootByTest = $false',
-    'Import-Certificate',
-    'Remove-Item -LiteralPath $trustedRootStorePath -Force',
     '<TargetFramework>net481</TargetFramework>',
     '/p:NosGmLegacyBuild=true',
     'GrpcClusterConfigurationTransport',
@@ -48,8 +43,9 @@ foreach ($required in @(
     'duplicate preserves generation',
     'reconnect generation',
     'changed generation',
-    '$modes.Add("GRPCWEB")',
-    '$modes.Add("HTTP2")',
+    'NOSGM_AUTH_GRPC_TRUSTED_ROOT_CERT_PATH = $rootCertificatePath',
+    'NOSGM_AUTH_GRPC_WIRE_MODE"] = "HTTP2"',
+    'requires native HTTP/2 on Windows 11 or Windows Server 2019',
     'Restore-ProcessEnvironment',
     '[int]$ClientTimeoutSeconds = 60',
     '[int]$BuildTimeoutSeconds = 180',
@@ -83,11 +79,6 @@ foreach ($required in @(
     'scripts/invoke-configuration-grpc-shadow-acceptance-bounded.ps1',
     'timeout-minutes: 10',
     'shell: pwsh',
-    'System32\certutil.exe',
-    '$process.WaitForExit(30000)',
-    'Stop-Process -Id $process.Id -Force',
-    '@("-user", "-f", "-addstore", "Root"',
-    '@("-user", "-delstore", "Root"',
     './scripts/invoke-configuration-grpc-shadow-acceptance-bounded.ps1 -TotalTimeoutSeconds 420'
 )) {
     if ($workflowContent.IndexOf($required, [StringComparison]::Ordinal) -lt 0) {
@@ -97,6 +88,9 @@ foreach ($required in @(
 
 foreach ($forbidden in @(
     'Cert:\LocalMachine\Root',
+    'Cert:\CurrentUser\Root',
+    'Import-Certificate',
+    'certutil.exe',
     'EnvironmentVariableTarget.User',
     'EnvironmentVariableTarget.Machine',
     'DangerousAcceptAnyServerCertificateValidator',
@@ -113,16 +107,6 @@ if ($supervisorContent.IndexOf('& $taskKill', [StringComparison]::OrdinalIgnoreC
     throw "Configuration shadow acceptance supervisor must not invoke taskkill without a bounded child process."
 }
 
-if ($workflowContent.IndexOf('X509Store("Root", "CurrentUser")', [StringComparison]::OrdinalIgnoreCase) -ge 0) {
-    throw "Configuration shadow acceptance workflow must not use the X509Store path that can block before the bounded harness starts."
-}
-
-$importIndex = $content.IndexOf('Import-Certificate', [StringComparison]::Ordinal)
-$cleanupIndex = $content.LastIndexOf('Remove-Item -LiteralPath $trustedRootStorePath -Force', [StringComparison]::Ordinal)
-if ($importIndex -lt 0 -or $cleanupIndex -le $importIndex) {
-    throw "Temporary current-user root cleanup must remain after certificate import."
-}
-
 Write-Host "[PASS] Configuration shadow acceptance PowerShell syntax is valid." -ForegroundColor Green
 Write-Host "[PASS] Acceptance uses a generated net481 World client over the real gRPC transport." -ForegroundColor Green
 Write-Host "[PASS] Acceptance covers seed, reconnect, duplicate idempotency and changed generation." -ForegroundColor Green
@@ -130,6 +114,6 @@ Write-Host "[PASS] Per-operation client/build waits remain bounded." -Foreground
 Write-Host "[PASS] External supervisor enforces a 420-second total acceptance budget." -ForegroundColor Green
 Write-Host "[PASS] Supervisor process-tree cleanup is itself bounded." -ForegroundColor Green
 Write-Host "[PASS] Workflow keeps a 10-minute hard limit with headroom for trust cleanup." -ForegroundColor Green
-Write-Host "[PASS] Workflow bounds CurrentUser root inspection, installation and removal through certutil." -ForegroundColor Green
-Write-Host "[PASS] Windows trust changes are current-user scoped, explicit and cleaned up." -ForegroundColor Green
+Write-Host "[PASS] CI exercises only native net481 HTTP/2 while the production GRPCWEB fallback remains compiled." -ForegroundColor Green
+Write-Host "[PASS] Acceptance uses strict file-scoped root trust and never mutates Windows certificate stores." -ForegroundColor Green
 Write-Host "[PASS] Acceptance never persists process secrets or installs LocalMachine trust." -ForegroundColor Green
