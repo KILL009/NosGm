@@ -234,11 +234,34 @@ $acceptanceBody = $client.Substring(
     $acceptanceEnd - $acceptanceStart)
 Require-Before $acceptanceBody 'UpdateAcceptanceSnapshotEverywhere(' 'TryRestoreAcceptanceSnapshotEverywhere(' "Configuration pulse restoration order"
 Require-Before $acceptanceBody 'before = ConfigurationUpdateObservationLedger.Instance' '_grpcShadowMirror.TryGetAuthoritative(' "Configuration pulse observed-runtime identity order"
-Require-Before $client 'TryUpdateAuthoritative(' 'AreSameReachableAcceptanceRuntime(' "Configuration restoration reachable-runtime verification order"
 if ($acceptanceBody.IndexOf(
         'IsCurrentAuthorityResult(',
         [StringComparison]::Ordinal) -ge 0) {
     throw "Configuration acceptance must bind to observed runtime identity, not active cutover identity."
+}
+$restoreStart = $client.IndexOf(
+    'private bool TryRestoreAcceptanceSnapshotEverywhere(',
+    [StringComparison]::Ordinal)
+if ($restoreStart -lt 0) {
+    throw "Unable to locate the Configuration acceptance restoration body."
+}
+$restoreEnd = $client.IndexOf(
+    'private static bool AreSameReachableAcceptanceRuntime(',
+    $restoreStart,
+    [StringComparison]::Ordinal)
+if ($restoreEnd -le $restoreStart) {
+    throw "Unable to isolate the Configuration acceptance restoration body."
+}
+$restoreBody = $client.Substring(
+    $restoreStart,
+    $restoreEnd - $restoreStart)
+Require-Before $restoreBody 'TryUpdateAuthoritative(' 'AreSameReachableAcceptanceRuntime(' "Configuration restoration reachable-runtime verification order"
+Require-Text $restoreBody 'typedUpdateResult,' "Configuration restoration typed Update correlation"
+Require-Text $restoreBody 'typedGetResult,' "Configuration restoration typed readback correlation"
+if ($restoreBody.IndexOf(
+        'IsExpectedAcceptanceRuntimeResult(',
+        [StringComparison]::Ordinal) -ge 0) {
+    throw "Configuration restoration must verify the currently reachable runtime, not the retired pulse runtime."
 }
 foreach ($forbidden in @(
     'MaxGold=" +',
