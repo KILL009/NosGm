@@ -8,18 +8,24 @@ namespace NosGm.Authentication.Client.Configuration
             "NOSGM_CONFIGURATION_GRPC_AUTHORITY_ARM_REQUEST_ID";
         public const string RollbackRequestVariable =
             "NOSGM_CONFIGURATION_GRPC_AUTHORITY_ROLLBACK_REQUESTED";
+        public const string EffectRoutingVariable =
+            "NOSGM_CONFIGURATION_GRPC_AUTHORITY_EFFECTS_ENABLED";
 
         private ConfigurationAuthorityOperatorOptions(
             string armRequestId,
-            bool rollbackRequested)
+            bool rollbackRequested,
+            bool effectRoutingRequested)
         {
             ArmRequestId = armRequestId ?? string.Empty;
             RollbackRequested = rollbackRequested;
+            EffectRoutingRequested = effectRoutingRequested;
         }
 
         public string ArmRequestId { get; }
 
         public bool RollbackRequested { get; }
+
+        public bool EffectRoutingRequested { get; }
 
         public bool HasArmRequest =>
             !string.IsNullOrEmpty(ArmRequestId);
@@ -36,19 +42,32 @@ namespace NosGm.Authentication.Client.Configuration
                 readVariable(RollbackRequestVariable),
                 defaultValue: false,
                 RollbackRequestVariable);
+            bool effectRoutingRequested = ReadBoolean(
+                readVariable(EffectRoutingVariable),
+                defaultValue: false,
+                EffectRoutingVariable);
 
             if (rollbackRequested &&
-                !string.IsNullOrEmpty(armRequestId))
+                (!string.IsNullOrEmpty(armRequestId) ||
+                 effectRoutingRequested))
             {
                 throw new InvalidOperationException(
                     ArmRequestVariable + " and " +
-                    RollbackRequestVariable +
-                    " cannot be requested together.");
+                    EffectRoutingVariable + " cannot be combined with " +
+                    RollbackRequestVariable + ".");
+            }
+            if (effectRoutingRequested &&
+                string.IsNullOrEmpty(armRequestId))
+            {
+                throw new InvalidOperationException(
+                    EffectRoutingVariable +
+                    " requires an explicit " + ArmRequestVariable + ".");
             }
 
             return new ConfigurationAuthorityOperatorOptions(
                 armRequestId,
-                rollbackRequested);
+                rollbackRequested,
+                effectRoutingRequested);
         }
 
         private static string ReadOptionalCanonicalGuid(
