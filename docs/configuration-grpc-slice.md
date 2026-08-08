@@ -235,6 +235,27 @@ operator must still collect three distinct Master + World runtime windows and
 one fourth activation runtime from the real deployment before final SCS
 removal.
 
+## Operational state evidence
+
+World now emits deduplicated `[CONFIG_GRPC_AUTHORITY_STATE]` records at startup,
+SCS parity evaluation, typed recovery/replay/live delivery, terminal stream end
+and rollback. Each record is a bounded state snapshot containing only the
+process and runtime generation identifiers, authority state, immutable effect
+authorization, ready/blocked flags, active/recovered generation identifiers and
+qualification, overlap and stream-end counters.
+
+The existing `[CONFIG_GRPC_PARITY]` record now also includes the process
+generation identifier. This lets an acceptance collector prove that all three
+qualification runtimes and the fourth activation runtime belong to one World
+process instead of accidentally combining evidence across restarts.
+
+These records deliberately exclude Configuration fields, gameplay values,
+snapshots, payloads, account data, credentials, passwords and certificate
+paths. Repeating the exact same state at the same observation stage is
+suppressed, while a generation, state or counter transition produces a new
+record. Diagnostics are best-effort and can never block the authoritative SCS
+callback path.
+
 ## Runtime sequence
 
 Completed foundations:
@@ -251,6 +272,7 @@ Completed foundations:
 10. production joint authority routing for Get, Update and callback with a separate live-effects authorization, exact runtime identity checks and terminal SCS rollback.
 11. one isolated World-side SCS rollback adapter, leaving the gameplay-facing Configuration facade transport-neutral and making the final deletion boundary explicit.
 12. one bounded Windows acceptance that combines the real net481-to-.NET 10 mTLS transport with dry-run activation, effect-authorized overlap, terminal rollback and a sanitized machine-readable receipt.
+13. deduplicated payload-free World authority-state records that bind operational parity, activation and rollback evidence to one process generation.
 
 The safe continuation is:
 
