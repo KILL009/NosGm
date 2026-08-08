@@ -201,6 +201,40 @@ The adapter converts legacy values outward for comparison/seeding and reconstruc
 3. live acceptance with `NOSGM_CONFIGURATION_GRPC_AUTHORITY_EFFECTS_ENABLED=true` proving that the bounded overlap guard prevents duplicate gameplay application during cutover and rollback;
 4. removal acceptance after the SCS interfaces and Master registration are deleted.
 
+## Bounded cutover acceptance
+
+The Windows acceptance harness now joins the real net481 World transport test
+to the production Configuration authority coordinator. The client first reaches
+the .NET 10 state host through file-scoped mTLS, proves request/reply
+idempotency, consumes typed stream updates and reconnects the stream. It then
+uses the runtime generation returned by that live host as the fourth activation
+generation after three bounded semantic-parity windows.
+
+The same executable proves both immutable operator modes:
+
+- dry-run activation records the fourth runtime and its recovery while Get,
+  Update and callback remain together on SCS;
+- effect-authorized activation opens typed ingress for that exact runtime,
+  routes all three operations together, applies typed-first and SCS-first
+  overlap occurrences once, terminates the active stream, suppresses the
+  delayed semantic twin and accepts the next SCS update after rollback.
+
+On success it writes
+`artifacts/configuration-grpc-shadow-acceptance/configuration-authority-cutover-receipt.json`.
+The receipt contains only a schema/version verdict, wire mode, process and
+runtime generation identifiers, transport generation, authority states and
+bounded counters. It never contains a Configuration snapshot, gameplay value,
+certificate path, credential, password or transport payload. The harness reads
+the file back and rejects an unexpected schema, state transition, counter or
+forbidden field before CI can pass.
+
+This is automated cutover-mechanism acceptance, not permission to delete the
+rollback adapter by itself. The three qualification windows are deterministic
+bounded ledger evidence so CI can test the state machine reproducibly; the
+operator must still collect three distinct Master + World runtime windows and
+one fourth activation runtime from the real deployment before final SCS
+removal.
+
 ## Runtime sequence
 
 Completed foundations:
@@ -216,6 +250,7 @@ Completed foundations:
 9. immutable World operator controls and dry-run lifecycle binding that observes evidence, recovery, generations and stream faults;
 10. production joint authority routing for Get, Update and callback with a separate live-effects authorization, exact runtime identity checks and terminal SCS rollback.
 11. one isolated World-side SCS rollback adapter, leaving the gameplay-facing Configuration facade transport-neutral and making the final deletion boundary explicit.
+12. one bounded Windows acceptance that combines the real net481-to-.NET 10 mTLS transport with dry-run activation, effect-authorized overlap, terminal rollback and a sanitized machine-readable receipt.
 
 The safe continuation is:
 
