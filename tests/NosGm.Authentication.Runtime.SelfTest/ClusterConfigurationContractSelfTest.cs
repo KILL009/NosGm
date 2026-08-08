@@ -11,9 +11,52 @@ internal static class ClusterConfigurationContractSelfTest
         VerifyGetContract();
         VerifyUpdateContract();
         VerifySubscribeContract();
+        VerifyRuntimeControlContract();
         VerifySnapshotBounds();
 
         Console.WriteLine("[PASS] Cluster configuration contract self-test");
+    }
+
+    private static void VerifyRuntimeControlContract()
+    {
+        var status = new WireV1.GetConfigurationRuntimeInfoRequest
+        {
+            Context = CreateContext(
+                WireV1.ClusterNodeRole.Master,
+                WireV1.ClusterService.Configuration)
+        };
+        AssertEqual(
+            ConfigurationContractValidationError.None,
+            ClusterConfigurationContractValidator.Validate(status),
+            "Configuration runtime status accepts Master context");
+        status.Context.CallerRole = WireV1.ClusterNodeRole.World;
+        AssertEqual(
+            ConfigurationContractValidationError.InvalidCallerRole,
+            ClusterConfigurationContractValidator.Validate(status),
+            "Configuration runtime status rejects World caller role");
+
+        var restart = new WireV1.RestartConfigurationRuntimeRequest
+        {
+            Context = CreateContext(
+                WireV1.ClusterNodeRole.Master,
+                WireV1.ClusterService.Configuration),
+            ExpectedRuntimeGenerationId =
+                "11111111-2222-3333-4444-555555555555"
+        };
+        AssertEqual(
+            ConfigurationContractValidationError.None,
+            ClusterConfigurationContractValidator.Validate(restart),
+            "Configuration runtime restart accepts canonical generation");
+        restart.ExpectedRuntimeGenerationId = Guid.Empty.ToString("D");
+        AssertEqual(
+            ConfigurationContractValidationError.InvalidRuntimeGeneration,
+            ClusterConfigurationContractValidator.Validate(restart),
+            "Configuration runtime restart rejects empty generation");
+        restart.ExpectedRuntimeGenerationId = "NOT-A-GENERATION";
+        AssertEqual(
+            ConfigurationContractValidationError.InvalidRuntimeGeneration,
+            ClusterConfigurationContractValidator.Validate(restart),
+            "Configuration runtime restart rejects malformed generation");
     }
 
     private static void VerifySubscribeContract()

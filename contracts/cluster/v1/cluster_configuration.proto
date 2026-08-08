@@ -19,6 +19,12 @@ service ClusterConfiguration {
   // generation. SCS remains authoritative until the joint cutover gate lands.
   rpc SubscribeConfigurationUpdates(SubscribeConfigurationUpdatesRequest)
       returns (stream ConfigurationUpdateEnvelope);
+  // Master-only operational surface. Runtime control is disabled unless the
+  // Authentication process explicitly enables it at startup.
+  rpc GetConfigurationRuntimeInfo(GetConfigurationRuntimeInfoRequest)
+      returns (GetConfigurationRuntimeInfoResponse);
+  rpc RestartConfigurationRuntime(RestartConfigurationRuntimeRequest)
+      returns (RestartConfigurationRuntimeResponse);
 }
 
 enum ConfigurationResultCode {
@@ -62,8 +68,8 @@ message UpdateConfigurationResponse {
 message SubscribeConfigurationUpdatesRequest {
   RequestContext context = 1;
   // Runtime identity returned by GetConfiguration. It changes on every
-  // Authentication runtime restart so a numeric generation is never reused
-  // across processes accidentally.
+  // Configuration runtime start or guarded in-process restart so a numeric
+  // generation is never reused across runtime windows accidentally.
   string runtime_generation_id = 2;
   // Last generation already observed by this World process. Newer retained
   // snapshots are replayed before live delivery begins.
@@ -75,4 +81,35 @@ message ConfigurationUpdateEnvelope {
   uint64 generation = 2;
   string runtime_generation_id = 3;
   bool replayed = 4;
+}
+
+message GetConfigurationRuntimeInfoRequest {
+  RequestContext context = 1;
+}
+
+message GetConfigurationRuntimeInfoResponse {
+  ConfigurationResultCode result = 1;
+  string runtime_generation_id = 2;
+  int64 started_at_unix_time_ms = 3;
+  uint64 configuration_generation = 4;
+  bool seeded = 5;
+  uint32 active_subscribers = 6;
+  uint32 restart_count = 7;
+  bool control_enabled = 8;
+}
+
+message RestartConfigurationRuntimeRequest {
+  RequestContext context = 1;
+  string expected_runtime_generation_id = 2;
+}
+
+message RestartConfigurationRuntimeResponse {
+  ConfigurationResultCode result = 1;
+  string previous_runtime_generation_id = 2;
+  string runtime_generation_id = 3;
+  int64 started_at_unix_time_ms = 4;
+  uint64 configuration_generation = 5;
+  uint32 active_subscribers = 6;
+  uint32 restart_count = 7;
+  bool control_enabled = 8;
 }

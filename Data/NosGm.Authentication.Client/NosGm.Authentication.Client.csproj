@@ -21,4 +21,8 @@
   <ItemGroup>
     <ProjectReference Include="..\NosGm.Cluster.Contracts\NosGm.Cluster.Contracts.csproj" />
   </ItemGroup>
+
+  <ItemGroup Condition="'$(TargetFramework)' == 'net481'">
+    <Compile Remove="Configuration\ConfigurationRuntimeControllerClient.cs" />
+  </ItemGroup>
 </Project>

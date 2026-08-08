@@ -42,6 +42,7 @@ function Forbid-Text {
 
 $proto = Read-RepoFile "contracts\cluster\v1\cluster_configuration.proto"
 $state = Read-RepoFile "Data\NosGm.Program\NosGm.Authentication.Server\State\ClusterConfigurationState.cs"
+$controller = Read-RepoFile "Data\NosGm.Program\NosGm.Authentication.Server\State\ConfigurationRuntimeController.cs"
 $service = Read-RepoFile "Data\NosGm.Program\NosGm.Authentication.Server\Services\ClusterConfigurationService.cs"
 $program = Read-RepoFile "Data\NosGm.Program\NosGm.Authentication.Server\Program.cs"
 $selfTest = Read-RepoFile "tests\NosGm.Authentication.Runtime.SelfTest\ClusterConfigurationStateSelfTest.cs"
@@ -113,9 +114,18 @@ foreach ($required in @(
     Require-Text $service $required "Configuration streaming service"
 }
 
-Require-Text $program "AddSingleton<ClusterConfigurationState>()" "Configuration state DI registration"
+Require-Text $program "AddSingleton<ConfigurationRuntimeController>()" "Configuration runtime controller DI registration"
 Require-Text $program "MapGrpcService<ClusterConfigurationService>()" "Configuration gRPC endpoint registration"
 Require-Text $program "shadow configuration services enabled" "Configuration shadow runtime log"
+
+foreach ($required in @(
+    "private ClusterConfigurationState _state;",
+    "replacement.Update(current.Configuration)",
+    "RetireForRuntimeRestart",
+    "RuntimeGenerationChanged"
+)) {
+    Require-Text $controller $required "Configuration isolated runtime controller"
+}
 
 foreach ($required in @(
     "[ModuleInitializer]",
@@ -143,4 +153,5 @@ Write-Host "[PASS] Configuration snapshots are isolated and generation-backed." 
 Write-Host "[PASS] Equivalent multi-World shadow writes preserve the current generation." -ForegroundColor Green
 Write-Host "[PASS] Configuration gRPC service reuses mTLS, deadline, replay and dispatch guards." -ForegroundColor Green
 Write-Host "[PASS] Configuration update streams use bounded replay, queues and reconnect replacement." -ForegroundColor Green
+Write-Host "[PASS] Configuration owns a separately restartable state epoch with explicit old-stream termination." -ForegroundColor Green
 Write-Host "[PASS] Configuration shadow host has no SCS callback, shared-secret or GameConfiguration dependency." -ForegroundColor Green

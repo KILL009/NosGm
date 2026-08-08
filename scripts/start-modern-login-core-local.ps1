@@ -3,6 +3,11 @@ param(
     [switch]$SkipBuild,
     [switch]$SkipLauncher,
     [switch]$ConfigureUrlAcl,
+    [switch]$EnableConfigurationRuntimeControl,
+    [switch]$EnableConfigurationGrpcShadow,
+    [string]$ConfigurationAuthorityArmRequestId,
+    [switch]$EnableConfigurationAuthorityEffects,
+    [switch]$RequestConfigurationAuthorityRollback,
     [ValidateSet("SCS", "GRPC")]
     [string]$AuthenticationTransport = "SCS",
     [ValidateSet("AUTO", "HTTP2", "GRPCWEB")]
@@ -23,6 +28,45 @@ Set-StrictMode -Version Latest
 
 if ($env:OS -ne "Windows_NT") {
     throw "The local modern Login stack requires Windows."
+}
+
+if (($EnableConfigurationRuntimeControl -or
+     $EnableConfigurationGrpcShadow -or
+     -not [string]::IsNullOrWhiteSpace(
+         $ConfigurationAuthorityArmRequestId) -or
+     $EnableConfigurationAuthorityEffects -or
+     $RequestConfigurationAuthorityRollback) -and
+    $AuthenticationTransport -ne "GRPC") {
+    throw "Configuration gRPC shadow, authority, and runtime control options require -AuthenticationTransport GRPC."
+}
+if ($EnableConfigurationRuntimeControl -and
+    -not $EnableConfigurationGrpcShadow) {
+    throw "Configuration runtime control requires -EnableConfigurationGrpcShadow so every new runtime can recover through the live World subscriber."
+}
+if ($EnableConfigurationAuthorityEffects -and
+    ([string]::IsNullOrWhiteSpace(
+        $ConfigurationAuthorityArmRequestId) -or
+     -not $EnableConfigurationGrpcShadow)) {
+    throw "Configuration authority effects require shadow mode and an explicit arm request ID."
+}
+if ($RequestConfigurationAuthorityRollback -and
+    (-not [string]::IsNullOrWhiteSpace(
+         $ConfigurationAuthorityArmRequestId) -or
+     $EnableConfigurationAuthorityEffects)) {
+    throw "Configuration rollback is mutually exclusive with arm and live-effects authorization."
+}
+if (-not [string]::IsNullOrWhiteSpace(
+        $ConfigurationAuthorityArmRequestId)) {
+    $parsedArmRequest = [Guid]::Empty
+    if (-not [Guid]::TryParseExact(
+            $ConfigurationAuthorityArmRequestId,
+            "D",
+            [ref]$parsedArmRequest) -or
+        $parsedArmRequest -eq [Guid]::Empty -or
+        $parsedArmRequest.ToString("D") -cne
+            $ConfigurationAuthorityArmRequestId) {
+        throw "ConfigurationAuthorityArmRequestId must be a lowercase canonical non-empty GUID."
+    }
 }
 
 $root = Split-Path -Parent $PSScriptRoot
@@ -57,6 +101,12 @@ $environmentVariableNames = @(
     "NOSGM_AUTH_GRPC_AUTHBRIDGE_CERT_SHA256",
     "NOSGM_AUTH_GRPC_LOGIN_CERT_SHA256",
     "NOSGM_AUTH_GRPC_WORLD_CERT_SHA256",
+    "NOSGM_AUTH_GRPC_MASTER_CERT_SHA256",
+    "NOSGM_CONFIGURATION_GRPC_RUNTIME_CONTROL_ENABLED",
+    "NOSGM_CONFIGURATION_GRPC_SHADOW_ENABLED",
+    "NOSGM_CONFIGURATION_GRPC_AUTHORITY_ARM_REQUEST_ID",
+    "NOSGM_CONFIGURATION_GRPC_AUTHORITY_EFFECTS_ENABLED",
+    "NOSGM_CONFIGURATION_GRPC_AUTHORITY_ROLLBACK_REQUESTED",
     "NOSGM_AUTH_GRPC_PORT",
     "NOSGM_AUTH_GRPC_TICKET_TTL_SECONDS",
     "NOSGM_AUTH_GRPC_PERMIT_TTL_SECONDS",
@@ -491,9 +541,34 @@ if ($AuthenticationTransport -eq "GRPC") {
 
     $authenticationBundle = Import-LocalAuthenticationBundle `
         -ManifestPath $AuthenticationCertificateManifest
+
+    if ($EnableConfigurationRuntimeControl) {
+        $manifest = $authenticationBundle.Manifest
+        $credentials = $authenticationBundle.Credentials
+        if ($manifest.Clients.PSObject.Properties.Name -notcontains
+                "Master" -or
+            $credentials.PSObject.Properties.Name -notcontains
+                "Master" -or
+            $credentials.Master -isnot [Security.SecureString] -or
+            [string]::IsNullOrWhiteSpace(
+                [string]$manifest.Clients.Master.CertificatePath) -or
+            -not [IO.Path]::IsPathRooted(
+                [string]$manifest.Clients.Master.CertificatePath) -or
+            -not (Test-Path `
+                -LiteralPath `
+                    ([string]$manifest.Clients.Master.CertificatePath) `
+                -PathType Leaf) -or
+            [string]$manifest.Clients.Master.Sha256 -notmatch
+                '^[A-Fa-f0-9]{64}$') {
+            throw "Configuration runtime control requires a valid Master certificate and DPAPI credential. Generate a fresh local authentication certificate bundle."
+        }
+    }
 }
 elseif ($AuthenticationGrpcWireMode -ne "AUTO") {
     throw "-AuthenticationGrpcWireMode applies only when -AuthenticationTransport GRPC is selected."
+}
+elseif ($EnableConfigurationRuntimeControl) {
+    throw "-EnableConfigurationRuntimeControl requires -AuthenticationTransport GRPC."
 }
 
 $dotnetExecutable = $null
@@ -667,6 +742,14 @@ if ($AuthenticationTransport -eq "GRPC") {
         NOSGM_AUTH_GRPC_PERMIT_TTL_SECONDS = "120"
         NOSGM_AUTH_GRPC_INSTANCE_ID = "authentication-local-1"
     }
+    if ($EnableConfigurationRuntimeControl) {
+        $authenticationRuntimeEnvironment[
+            "NOSGM_AUTH_GRPC_MASTER_CERT_SHA256"] =
+                [string]$manifest.Clients.Master.Sha256
+        $authenticationRuntimeEnvironment[
+            "NOSGM_CONFIGURATION_GRPC_RUNTIME_CONTROL_ENABLED"] =
+                "true"
+    }
 
     $masterEnvironment = Merge-ProcessEnvironment `
         -Base $sharedServerEnvironment `
@@ -707,6 +790,26 @@ if ($AuthenticationTransport -eq "GRPC") {
             NOSGM_AUTH_GRPC_WIRE_MODE =
                 $resolvedAuthenticationGrpcWireMode
         }
+    if ($EnableConfigurationGrpcShadow) {
+        $worldEnvironment[
+            "NOSGM_CONFIGURATION_GRPC_SHADOW_ENABLED"] = "true"
+    }
+    if (-not [string]::IsNullOrWhiteSpace(
+            $ConfigurationAuthorityArmRequestId)) {
+        $worldEnvironment[
+            "NOSGM_CONFIGURATION_GRPC_AUTHORITY_ARM_REQUEST_ID"] =
+                $ConfigurationAuthorityArmRequestId
+    }
+    if ($EnableConfigurationAuthorityEffects) {
+        $worldEnvironment[
+            "NOSGM_CONFIGURATION_GRPC_AUTHORITY_EFFECTS_ENABLED"] =
+                "true"
+    }
+    if ($RequestConfigurationAuthorityRollback) {
+        $worldEnvironment[
+            "NOSGM_CONFIGURATION_GRPC_AUTHORITY_ROLLBACK_REQUESTED"] =
+                "true"
+    }
 }
 
 try {
@@ -791,6 +894,14 @@ try {
             else {
                 $null
             }
+        ConfigurationRuntimeControlEnabled =
+            [bool]$EnableConfigurationRuntimeControl
+        ConfigurationGrpcShadowEnabled =
+            [bool]$EnableConfigurationGrpcShadow
+        ConfigurationAuthorityEffectsEnabled =
+            [bool]$EnableConfigurationAuthorityEffects
+        ConfigurationAuthorityRollbackRequested =
+            [bool]$RequestConfigurationAuthorityRollback
         HealthEndpoint = $healthEndpoint
         SpanishLoginPort = $spanishLoginPort
         WorldPort = $WorldPort
@@ -825,6 +936,28 @@ try {
     if ($AuthenticationTransport -eq "GRPC") {
         Write-Host "Authentication gRPC endpoint: $authenticationGrpcEndpoint"
         Write-Host "Authentication wire mode: $resolvedAuthenticationGrpcWireMode"
+        if ($EnableConfigurationRuntimeControl) {
+            Write-Host "Configuration runtime control: enabled (Master mTLS, generation compare-and-swap)"
+            Write-Host "Restart only Configuration gRPC with: ./scripts/invoke-configuration-grpc-runtime-control.ps1 -Operation Restart"
+        }
+        if ($EnableConfigurationGrpcShadow) {
+            Write-Host "Configuration gRPC shadow: enabled"
+            $configurationAuthorityMode =
+                if ($EnableConfigurationAuthorityEffects) {
+                    "live effects"
+                }
+                elseif (-not [string]::IsNullOrWhiteSpace(
+                        $ConfigurationAuthorityArmRequestId)) {
+                    "dry-run arm"
+                }
+                elseif ($RequestConfigurationAuthorityRollback) {
+                    "explicit rollback"
+                }
+                else {
+                    "unarmed observation"
+                }
+            Write-Host "Configuration authority mode: $configurationAuthorityMode"
+        }
     }
     Write-Host "Health endpoint: $healthEndpoint"
     Write-Host "Launcher language: Español (region 5 / Login $spanishLoginPort)"

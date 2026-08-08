@@ -30,6 +30,10 @@ The legacy configuration payload contains only:
 - `UpdateConfiguration`
 - `SubscribeConfigurationUpdates`
 
+It also exposes the disabled-by-default, Master-only operational RPCs
+`GetConfigurationRuntimeInfo` and `RestartConfigurationRuntime`. They rotate
+only the typed Configuration epoch; they are not part of the World data path.
+
 The payload is `ConfigurationSnapshot` with `MaxGold` and the two buff timestamps encoded as Unix milliseconds. Get and Update responses expose a monotonic `generation` plus a process-scoped `runtime_generation_id`. The stream resumes after a numeric generation only inside that runtime identity, preventing cursor reuse after a restart.
 
 The contract deliberately has no `Authenticate` RPC. World callers authenticate through the existing certificate identity model. The legacy shared secret must not be copied into a Protobuf request or logged as migration metadata.
@@ -41,14 +45,17 @@ The contract deliberately has no `Authenticate` RPC. World callers authenticate 
 - the request or context is missing;
 - the protocol context is invalid;
 - the requested service is not `Configuration`;
-- the caller role is not `World`;
+- the caller role is not `World` for data RPCs or `Master` for runtime-control
+  RPCs;
 - an update omits its snapshot;
 - `MaxGold` is not positive;
 - either timestamp cannot be represented by the legacy .NET `DateTime` range.
 
 ## Typed state host
 
-`NosGm.Authentication.Server` hosts `ClusterConfigurationService` and `ClusterConfigurationState` beside the existing authentication and communication services.
+`NosGm.Authentication.Server` hosts `ClusterConfigurationService` and a
+`ConfigurationRuntimeController`-owned `ClusterConfigurationState` beside the
+existing authentication and communication services.
 
 This state host starts non-authoritative and becomes selectable only through the joint authority barriers:
 
@@ -256,6 +263,48 @@ suppressed, while a generation, state or counter transition produces a new
 record. Diagnostics are best-effort and can never block the authoritative SCS
 callback path.
 
+### Guarded Configuration-only runtime restart
+
+Configuration now owns a runtime controller independent from the Authentication
+process and the Communication callback runtime. A restart replaces only the
+typed Configuration state epoch, gives it a new canonical runtime generation,
+preserves the current typed snapshot as generation one, and terminates every old
+Configuration subscriber with an explicit runtime-restarted boundary. Kestrel,
+Authentication, Master, World, Login and the Communication callback generation
+remain alive and unchanged.
+
+The control surface is disabled by default. Local operational acceptance must
+start the stack explicitly with:
+
+```powershell
+./scripts/start-modern-login-core-local.ps1 `
+  -AuthenticationTransport GRPC `
+  -EnableConfigurationGrpcShadow `
+  -EnableConfigurationRuntimeControl
+```
+
+The restart RPC accepts only the separately configured Master mTLS identity,
+reuses the bounded deadline and replay guards, and requires the exact current
+runtime generation as a compare-and-swap token. A stale token cannot restart
+anything. Enabling the surface without at least one configured Master
+certificate fingerprint fails server startup. An unavailable/unseeded
+Configuration runtime also refuses restart, so the controller never creates a
+new epoch without a safe recovery seed.
+
+Inspect or restart the runtime on Windows with:
+
+```powershell
+./scripts/invoke-configuration-grpc-runtime-control.ps1 -Operation Status
+./scripts/invoke-configuration-grpc-runtime-control.ps1 -Operation Restart
+```
+
+The wrapper reads the Master certificate password only from the existing
+DPAPI-protected local credential bundle, passes it to the short-lived .NET 10
+controller process, restores the parent environment, and emits sanitized JSON.
+Run real SCS and typed callback traffic after every restart. Three distinct
+parity windows arm the gate; the next restart creates the fourth activation
+runtime without changing the World process generation.
+
 ### Operational evidence collector
 
 After generating real traffic through one continuously running Master + World
@@ -312,11 +361,12 @@ Completed foundations:
 12. one bounded Windows acceptance that combines the real net481-to-.NET 10 mTLS transport with dry-run activation, effect-authorized overlap, terminal rollback and a sanitized machine-readable receipt.
 13. deduplicated payload-free World authority-state records that bind operational parity, activation and rollback evidence to one process generation.
 14. one fail-closed operational collector that produces separate sanitized qualification and live-effects receipts from real World evidence.
+15. one disabled-by-default, Master-mTLS Configuration runtime controller that rotates only the typed Configuration epoch while preserving the World process and callback runtime identities.
 
 The safe continuation is:
 
-1. run explicit local acceptance with Master + World, shadow enabled, and collect stable comparator parity across live, replay, recovery, restart and reconnect windows;
-2. collect and review the dry-run qualification receipt with an explicit arm request across three parity runtimes and a fourth activation runtime;
+1. run explicit local acceptance with Master + World, shadow and guarded runtime control enabled, and collect stable comparator parity across live, replay, recovery, Configuration-only restart and reconnect windows;
+2. use three guarded Configuration-only restarts plus real traffic to collect and review the dry-run qualification receipt with an explicit arm request across three parity runtimes and a fourth activation runtime;
 3. collect and review the live-effects receipt after overlap/rollback acceptance with both the arm request and effects authorization;
 4. remove `ScsConfigurationRollbackTransport`, `IConfigurationService`, `IConfigurationClient` and their Master registration only after acceptance passes; `ConfigurationServiceClient` must remain unchanged by that deletion.
 

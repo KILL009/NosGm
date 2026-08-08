@@ -13,7 +13,8 @@ namespace NosGm.Cluster.Contracts.Configuration.V1
         MissingConfiguration = 4,
         InvalidMaxGold = 5,
         InvalidExpBuffTimestamp = 6,
-        InvalidGoldBuffTimestamp = 7
+        InvalidGoldBuffTimestamp = 7,
+        InvalidRuntimeGeneration = 8
     }
 
     public static class ConfigurationContractLimits
@@ -33,7 +34,10 @@ namespace NosGm.Cluster.Contracts.Configuration.V1
         public static ConfigurationContractValidationError Validate(
             WireV1.GetConfigurationRequest request)
         {
-            return ValidateRequest(request, request?.Context);
+            return ValidateRequest(
+                request,
+                request?.Context,
+                ClusterNodeRole.World);
         }
 
         public static ConfigurationContractValidationError Validate(
@@ -41,7 +45,8 @@ namespace NosGm.Cluster.Contracts.Configuration.V1
         {
             ConfigurationContractValidationError error = ValidateRequest(
                 request,
-                request?.Context);
+                request?.Context,
+                ClusterNodeRole.World);
             if (error != ConfigurationContractValidationError.None)
             {
                 return error;
@@ -53,7 +58,38 @@ namespace NosGm.Cluster.Contracts.Configuration.V1
         public static ConfigurationContractValidationError Validate(
             WireV1.SubscribeConfigurationUpdatesRequest request)
         {
-            return ValidateRequest(request, request?.Context);
+            return ValidateRequest(
+                request,
+                request?.Context,
+                ClusterNodeRole.World);
+        }
+
+        public static ConfigurationContractValidationError Validate(
+            WireV1.GetConfigurationRuntimeInfoRequest request)
+        {
+            return ValidateRequest(
+                request,
+                request?.Context,
+                ClusterNodeRole.Master);
+        }
+
+        public static ConfigurationContractValidationError Validate(
+            WireV1.RestartConfigurationRuntimeRequest request)
+        {
+            ConfigurationContractValidationError error = ValidateRequest(
+                request,
+                request?.Context,
+                ClusterNodeRole.Master);
+            if (error != ConfigurationContractValidationError.None)
+            {
+                return error;
+            }
+
+            return IsCanonicalRuntimeGeneration(
+                    request.ExpectedRuntimeGenerationId)
+                ? ConfigurationContractValidationError.None
+                : ConfigurationContractValidationError
+                    .InvalidRuntimeGeneration;
         }
 
         public static ConfigurationContractValidationError ValidateSnapshot(
@@ -86,7 +122,8 @@ namespace NosGm.Cluster.Contracts.Configuration.V1
 
         private static ConfigurationContractValidationError ValidateRequest(
             object request,
-            WireV1.RequestContext context)
+            WireV1.RequestContext context,
+            ClusterNodeRole expectedRole)
         {
             if (request == null)
             {
@@ -121,9 +158,19 @@ namespace NosGm.Cluster.Contracts.Configuration.V1
                 return ConfigurationContractValidationError.InvalidContext;
             }
 
-            return contractContext.CallerRole == ClusterNodeRole.World
+            return contractContext.CallerRole == expectedRole
                 ? ConfigurationContractValidationError.None
                 : ConfigurationContractValidationError.InvalidCallerRole;
+        }
+
+        private static bool IsCanonicalRuntimeGeneration(string value)
+        {
+            return Guid.TryParseExact(value, "D", out Guid parsed) &&
+                   parsed != Guid.Empty &&
+                   string.Equals(
+                       value,
+                       parsed.ToString("D"),
+                       StringComparison.Ordinal);
         }
 
         private static bool IsValidDateTimeUnixMilliseconds(long value)

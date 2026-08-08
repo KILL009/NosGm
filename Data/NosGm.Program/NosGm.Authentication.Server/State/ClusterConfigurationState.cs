@@ -9,14 +9,16 @@ public enum ConfigurationSubscriptionOpenResult
     Success = 0,
     Unavailable = 1,
     InvalidResumeCursor = 2,
-    CapacityExceeded = 3
+    CapacityExceeded = 3,
+    RuntimeChanged = 4
 }
 
 public enum ConfigurationSubscriptionTerminationReason
 {
     None = 0,
     QueueOverflow = 1,
-    Superseded = 2
+    Superseded = 2,
+    RuntimeRestarted = 3
 }
 
 public sealed class ClusterConfigurationSubscription : IAsyncDisposable
@@ -114,6 +116,7 @@ public sealed class ClusterConfigurationState
         new(StringComparer.Ordinal);
     private readonly object _sync = new();
     private ulong _generation;
+    private bool _retired;
     private WireV1.ConfigurationSnapshot _snapshot;
 
     public int SubscriptionCount
@@ -131,7 +134,7 @@ public sealed class ClusterConfigurationState
     {
         lock (_sync)
         {
-            if (_snapshot == null)
+            if (_retired || _snapshot == null)
             {
                 state = default;
                 return false;
@@ -148,6 +151,11 @@ public sealed class ClusterConfigurationState
 
         lock (_sync)
         {
+            if (_retired)
+            {
+                throw new InvalidOperationException(
+                    "The Configuration runtime state is retired.");
+            }
             if (_snapshot != null && AreEqual(_snapshot, snapshot))
             {
                 return NewState(_snapshot, _generation);
@@ -197,6 +205,10 @@ public sealed class ClusterConfigurationState
 
         lock (_sync)
         {
+            if (_retired)
+            {
+                return ConfigurationSubscriptionOpenResult.RuntimeChanged;
+            }
             if (_snapshot == null)
             {
                 return ConfigurationSubscriptionOpenResult.Unavailable;
@@ -275,6 +287,28 @@ public sealed class ClusterConfigurationState
         }
 
         active.Dispose();
+    }
+
+    internal void RetireForRuntimeRestart()
+    {
+        ActiveSubscription[] subscriptions;
+        lock (_sync)
+        {
+            if (_retired)
+            {
+                return;
+            }
+            _retired = true;
+            subscriptions = _subscriptions.Values.ToArray();
+            _subscriptions.Clear();
+        }
+
+        foreach (ActiveSubscription subscription in subscriptions)
+        {
+            subscription.Terminate(
+                ConfigurationSubscriptionTerminationReason
+                    .RuntimeRestarted);
+        }
     }
 
     private static SnapshotState NewState(
