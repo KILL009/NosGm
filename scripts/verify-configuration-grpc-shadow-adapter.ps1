@@ -199,6 +199,10 @@ foreach ($required in @(
     'UpdateAcceptanceSnapshotEverywhere(',
     'AcceptancePulseRestoreAttempts = 3',
     'IsExpectedAcceptanceRuntimeResult(',
+    'AreSameReachableAcceptanceRuntime(',
+    'IsReachableAcceptanceRuntimeResult(',
+    'updateResult.RuntimeGenerationId',
+    'getResult.RuntimeGenerationId',
     'expectedRuntimeGenerationId',
     'ConfigurationsAreSemanticallyEqual(',
     'diagnostic = "restoration-verification-failed";',
@@ -230,6 +234,7 @@ $acceptanceBody = $client.Substring(
     $acceptanceEnd - $acceptanceStart)
 Require-Before $acceptanceBody 'UpdateAcceptanceSnapshotEverywhere(' 'TryRestoreAcceptanceSnapshotEverywhere(' "Configuration pulse restoration order"
 Require-Before $acceptanceBody 'before = ConfigurationUpdateObservationLedger.Instance' '_grpcShadowMirror.TryGetAuthoritative(' "Configuration pulse observed-runtime identity order"
+Require-Before $client 'TryUpdateAuthoritative(' 'AreSameReachableAcceptanceRuntime(' "Configuration restoration reachable-runtime verification order"
 if ($acceptanceBody.IndexOf(
         'IsCurrentAuthorityResult(',
         [StringComparison]::Ordinal) -ge 0) {
