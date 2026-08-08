@@ -226,7 +226,11 @@ foreach ($required in @(
     "synchronized the SCS rollback standby",
     "RollBackAuthority",
     "TryApplyCallback",
-    "ObserveParity(report)"
+    "ObserveParity(report)",
+    "ConfigurationAuthorityDiagnostics.Observe(\"STARTUP\")",
+    "ConfigurationAuthorityDiagnostics.Observe(\"SCS_PARITY\")",
+    "ConfigurationAuthorityDiagnostics.Observe(",
+    "\"AUTHORITY_ROLLBACK\""
 )) {
     Require-Text $legacyClient $required "Configuration joint authority routing"
 }
@@ -243,6 +247,17 @@ foreach ($required in @(
 }
 
 foreach ($required in @(
+    "ConfigurationAuthorityDiagnostics",
+    "[CONFIG_GRPC_AUTHORITY_STATE] Stage=",
+    "ConfiguredProcessGenerationId",
+    "LastObservedRuntimeGenerationId",
+    "EffectRoutingEnabled",
+    "TypedIngressReady",
+    "RetainedRuntimeCount",
+    "AcceptedReports",
+    "OverlapDuplicatesSuppressed",
+    "StreamEndObservations",
+    "Process=\" + report.ProcessGenerationId",
     "IConfigurationGrpcShadowStreamLifecycleObserver",
     "Func<ConfigurationTransportUpdate, bool>",
     "_authorityCallback(update)",
@@ -252,6 +267,17 @@ foreach ($required in @(
     "ConfigurationAuthorityQualificationRuntime.Instance"
 )) {
     Require-Text $typedLifecycle $required "typed Configuration lifecycle binding"
+}
+
+foreach ($forbidden in @(
+    "MaxGold",
+    "CertificatePath",
+    "Password",
+    "Credential",
+    "Payload"
+)) {
+    Forbid-Text $typedLifecycle $forbidden `
+        "sanitized Configuration authority diagnostics"
 }
 
 foreach ($required in @(
@@ -275,3 +301,4 @@ Write-Host "[PASS] Typed ingress remains closed until active-runtime recovery co
 Write-Host "[PASS] Active typed authority rejects early SCS callbacks and suppresses delayed semantic twins." -ForegroundColor Green
 Write-Host "[PASS] Runtime drift, typed failure and capacity saturation roll back terminally to SCS." -ForegroundColor Green
 Write-Host "[PASS] Production Get, Update and callback route together only after explicit effect authorization." -ForegroundColor Green
+Write-Host "[PASS] Deduplicated Configuration authority transitions expose only sanitized identities, states and bounded counters." -ForegroundColor Green
