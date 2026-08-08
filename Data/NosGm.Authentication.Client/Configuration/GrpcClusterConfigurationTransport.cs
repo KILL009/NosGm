@@ -221,7 +221,7 @@ namespace NosGm.Authentication.Client.Configuration
                  !IsCanonicalRuntimeGeneration(runtimeGenerationId)))
             {
                 throw new InvalidOperationException(
-                    "The Configuration gRPC service returned success without a valid snapshot runtime identity.");
+                    "The Configuration gRPC service returned success without a snapshot or valid runtime identity.");
             }
 
             return new ConfigurationTransportResult
