@@ -25,6 +25,7 @@ $runtimeOutput = Join-Path $acceptanceRoot "runtime"
 $clientRoot = Join-Path $acceptanceRoot "client"
 $clientLogRoot = Join-Path $acceptanceRoot "client-logs"
 $buildLogRoot = Join-Path $acceptanceRoot "build-logs"
+$authorityReceiptPath = Join-Path $acceptanceRoot "configuration-authority-cutover-receipt.json"
 $processWrapperPath = Join-Path $acceptanceRoot "invoke-process-with-exit-code.ps1"
 $clientProject = Join-Path $clientRoot "NosGm.Configuration.Grpc.Acceptance.csproj"
 $clientSource = Join-Path $clientRoot "Program.cs"
@@ -160,7 +161,8 @@ $environmentVariableNames = @(
     "NOSGM_AUTH_GRPC_CALLER_INSTANCE_ID",
     "NOSGM_AUTH_GRPC_DEADLINE_MILLISECONDS",
     "NOSGM_AUTH_GRPC_WIRE_MODE",
-    "NOSGM_CONFIGURATION_ACCEPTANCE_MARKER"
+    "NOSGM_CONFIGURATION_ACCEPTANCE_MARKER",
+    "NOSGM_CONFIGURATION_AUTHORITY_ACCEPTANCE_RECEIPT_PATH"
 )
 $previousEnvironment = @{}
 foreach ($name in $environmentVariableNames) {
@@ -472,7 +474,10 @@ function Write-AcceptanceClient {
 
     @'
 using System;
+using System.Collections.Generic;
 using System.Globalization;
+using System.IO;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using NosGm.Authentication.Client;
@@ -505,6 +510,7 @@ internal static class Program
             AuthenticationGrpcClientOptions.Load(ClusterNodeRole.World);
 
         ConfigurationTransportResult baseline;
+        ConfigurationTransportResult finalResult = null;
         Trace("create first transport");
         using (var first = new GrpcClusterConfigurationTransport(options))
         using (var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(15)))
@@ -618,12 +624,363 @@ internal static class Program
                     "final generation");
                 AssertSnapshot(changedAfterReconnect, final.Configuration,
                     "final snapshot");
+                finalResult = final;
             }
         }
         Trace("reconnect transport disposed");
 
+        if (finalResult == null)
+        {
+            throw new InvalidOperationException(
+                "Configuration acceptance did not retain a final transport result.");
+        }
+
+        RunAuthorityCutoverAcceptance(finalResult);
+
         Console.WriteLine("[PASS] Configuration gRPC shadow transport acceptance");
         Console.Out.Flush();
+    }
+
+    private static void RunAuthorityCutoverAcceptance(
+        ConfigurationTransportResult liveResult)
+    {
+        IReadOnlyList<ConfigurationUpdateParityReport> reports =
+            BuildParityReports(liveResult.Configuration);
+        string processGenerationId = reports[0].ProcessGenerationId;
+
+        var dryCoordinator = new ConfigurationAuthorityCoordinator();
+        var dryRuntime = new ConfigurationAuthorityQualificationRuntime(
+            dryCoordinator,
+            evidenceCapacity: 4);
+        dryRuntime.Configure(
+            processGenerationId,
+            NewOperatorOptions(effectRoutingRequested: false));
+        ObserveQualificationWindows(dryRuntime, reports, "dry run");
+        AssertEqual(
+            true,
+            dryRuntime.ObserveTypedUpdate(
+                processGenerationId,
+                NewTransportUpdate(
+                    liveResult.RuntimeGenerationId,
+                    liveResult.Configuration,
+                    liveResult.Generation,
+                    recovered: true)),
+            "fourth live runtime activates dry-run authority");
+        AssertEqual(
+            false,
+            dryCoordinator.GetStatus().TypedIngressReady,
+            "dry-run activation keeps typed effects closed");
+        AssertAllOperationsSelected(
+            dryCoordinator,
+            ConfigurationAuthoritySource.Scs,
+            "dry-run activation keeps every operation on SCS");
+
+        var liveCoordinator = new ConfigurationAuthorityCoordinator();
+        var liveRuntime = new ConfigurationAuthorityQualificationRuntime(
+            liveCoordinator,
+            evidenceCapacity: 4);
+        liveRuntime.Configure(
+            processGenerationId,
+            NewOperatorOptions(effectRoutingRequested: true));
+        ObserveQualificationWindows(liveRuntime, reports, "live run");
+        AssertEqual(
+            true,
+            liveRuntime.ObserveTypedUpdate(
+                processGenerationId,
+                NewTransportUpdate(
+                    liveResult.RuntimeGenerationId,
+                    liveResult.Configuration,
+                    liveResult.Generation,
+                    recovered: true)),
+            "fourth live runtime activates effect-authorized authority");
+        AssertEqual(
+            true,
+            liveCoordinator.GetStatus().TypedIngressReady,
+            "active-runtime recovery opens typed ingress");
+        AssertAllOperationsSelected(
+            liveCoordinator,
+            ConfigurationAuthoritySource.TypedGrpc,
+            "effect authorization selects typed Get Update and callback together");
+
+        int typedEffects = 0;
+        int scsEffects = 0;
+        ConfigurationTransportSnapshot typedFirst =
+            CopySnapshot(liveResult.Configuration, 10L);
+        AssertEqual(
+            true,
+            liveCoordinator.TryApplyCallback(
+                ConfigurationAuthoritySource.TypedGrpc,
+                typedFirst,
+                () => typedEffects++),
+            "typed-first overlap applies one live effect");
+        AssertEqual(
+            false,
+            liveCoordinator.TryApplyCallback(
+                ConfigurationAuthoritySource.Scs,
+                typedFirst,
+                () => scsEffects++),
+            "typed-first overlap suppresses its SCS twin");
+
+        ConfigurationTransportSnapshot scsFirst =
+            CopySnapshot(liveResult.Configuration, 20L);
+        AssertEqual(
+            false,
+            liveCoordinator.TryApplyCallback(
+                ConfigurationAuthoritySource.Scs,
+                scsFirst,
+                () => scsEffects++),
+            "active typed authority rejects an early SCS twin");
+        AssertEqual(
+            true,
+            liveCoordinator.TryApplyCallback(
+                ConfigurationAuthoritySource.TypedGrpc,
+                scsFirst,
+                () => typedEffects++),
+            "typed callback applies after the rejected early SCS twin");
+
+        AssertEqual(
+            true,
+            liveRuntime.ObserveStreamEnded(
+                liveResult.RuntimeGenerationId,
+                new InvalidOperationException(
+                    "bounded acceptance requested stream termination")),
+            "active typed stream termination closes ready ingress");
+        AssertEqual(
+            ConfigurationAuthorityState.RolledBack,
+            liveCoordinator.GetStatus().State,
+            "typed stream termination rolls authority back to SCS");
+        AssertEqual(
+            false,
+            liveCoordinator.TryApplyCallback(
+                ConfigurationAuthoritySource.Scs,
+                scsFirst,
+                () => scsEffects++),
+            "rollback suppresses the delayed SCS twin already applied by typed gRPC");
+        AssertEqual(
+            true,
+            liveCoordinator.TryApplyCallback(
+                ConfigurationAuthoritySource.Scs,
+                CopySnapshot(liveResult.Configuration, 30L),
+                () => scsEffects++),
+            "rollback accepts a new authoritative SCS update");
+        AssertAllOperationsSelected(
+            liveCoordinator,
+            ConfigurationAuthoritySource.Scs,
+            "rollback restores Get Update and callback together to SCS");
+        AssertEqual(2, typedEffects,
+            "cutover applies exactly two selected typed effects");
+        AssertEqual(1, scsEffects,
+            "rollback applies exactly one new SCS effect");
+
+        ConfigurationAuthorityStatus status = liveCoordinator.GetStatus();
+        AssertEqual(2L, status.OverlapDuplicatesSuppressed,
+            "cutover suppresses both opposite-source semantic twins");
+        AssertEqual(1L, status.StreamEndObservations,
+            "cutover records one terminal stream observation");
+        WriteAuthorityReceipt(
+            processGenerationId,
+            liveResult,
+            dryCoordinator.GetStatus(),
+            status,
+            typedEffects,
+            scsEffects);
+    }
+
+    private static IReadOnlyList<ConfigurationUpdateParityReport>
+        BuildParityReports(ConfigurationTransportSnapshot liveSnapshot)
+    {
+        var ledger = new ConfigurationUpdateObservationLedger(
+            64,
+            TimeSpan.FromMilliseconds(100));
+        string[] runtimes =
+        {
+            "51000000-0000-0000-0000-000000000001",
+            "51000000-0000-0000-0000-000000000002",
+            "51000000-0000-0000-0000-000000000003"
+        };
+        var reports = new List<ConfigurationUpdateParityReport>();
+        DateTimeOffset evaluatedAt = new DateTimeOffset(
+            2035, 1, 1, 0, 0, 0, TimeSpan.Zero);
+
+        for (int index = 0; index < runtimes.Length; index++)
+        {
+            ConfigurationTransportSnapshot recovered =
+                CopySnapshot(liveSnapshot, 100L + (index * 10L));
+            ConfigurationTransportSnapshot changed =
+                CopySnapshot(liveSnapshot, 101L + (index * 10L));
+            ledger.RecordGrpc(
+                NewTransportUpdate(
+                    runtimes[index],
+                    recovered,
+                    1UL,
+                    recovered: true));
+            ledger.RecordScs(changed);
+            ledger.RecordGrpc(
+                NewTransportUpdate(
+                    runtimes[index],
+                    changed,
+                    2UL,
+                    recovered: false));
+            ConfigurationUpdateParityReport report =
+                ledger.EvaluateParity(evaluatedAt.AddMinutes(index));
+            AssertEqual(
+                ConfigurationUpdateParityVerdict.Parity,
+                report.Verdict,
+                "qualification window " + (index + 1) + " has semantic parity");
+            reports.Add(report);
+        }
+
+        return reports.AsReadOnly();
+    }
+
+    private static void ObserveQualificationWindows(
+        ConfigurationAuthorityQualificationRuntime runtime,
+        IReadOnlyList<ConfigurationUpdateParityReport> reports,
+        string name)
+    {
+        AssertEqual(false, runtime.ObserveParity(reports[0]),
+            name + " retains first parity runtime");
+        AssertEqual(false, runtime.ObserveParity(reports[1]),
+            name + " retains second parity runtime");
+        AssertEqual(true, runtime.ObserveParity(reports[2]),
+            name + " arms after three distinct parity runtimes");
+    }
+
+    private static ConfigurationAuthorityOperatorOptions NewOperatorOptions(
+        bool effectRoutingRequested)
+    {
+        string armRequestId = Guid.NewGuid().ToString("D");
+        return ConfigurationAuthorityOperatorOptions.Load(
+            variableName =>
+                variableName ==
+                    ConfigurationAuthorityOperatorOptions.ArmRequestVariable
+                    ? armRequestId
+                    : variableName ==
+                        ConfigurationAuthorityOperatorOptions.EffectRoutingVariable
+                        ? effectRoutingRequested ? "true" : null
+                        : null);
+    }
+
+    private static ConfigurationTransportUpdate NewTransportUpdate(
+        string runtimeGenerationId,
+        ConfigurationTransportSnapshot snapshot,
+        ulong generation,
+        bool recovered)
+    {
+        return new ConfigurationTransportUpdate
+        {
+            Configuration = snapshot,
+            Generation = generation,
+            RuntimeGenerationId = runtimeGenerationId,
+            RecoveredFromSnapshot = recovered
+        };
+    }
+
+    private static ConfigurationTransportSnapshot CopySnapshot(
+        ConfigurationTransportSnapshot source,
+        long offset)
+    {
+        return new ConfigurationTransportSnapshot
+        {
+            MaxGold = checked(source.MaxGold + offset),
+            TimeExpBuffUnixTimeMilliseconds = checked(
+                source.TimeExpBuffUnixTimeMilliseconds + offset),
+            TimeGoldBuffUnixTimeMilliseconds = checked(
+                source.TimeGoldBuffUnixTimeMilliseconds + offset)
+        };
+    }
+
+    private static void AssertAllOperationsSelected(
+        ConfigurationAuthorityCoordinator coordinator,
+        ConfigurationAuthoritySource selectedSource,
+        string name)
+    {
+        foreach (ConfigurationAuthorityOperation operation in new[]
+        {
+            ConfigurationAuthorityOperation.Get,
+            ConfigurationAuthorityOperation.Update,
+            ConfigurationAuthorityOperation.Callback
+        })
+        {
+            AssertEqual(
+                true,
+                coordinator.ShouldUse(selectedSource, operation),
+                name + " (" + operation + ")");
+            ConfigurationAuthoritySource opposite =
+                selectedSource == ConfigurationAuthoritySource.Scs
+                    ? ConfigurationAuthoritySource.TypedGrpc
+                    : ConfigurationAuthoritySource.Scs;
+            AssertEqual(
+                false,
+                coordinator.ShouldUse(opposite, operation),
+                name + " rejects opposite source (" + operation + ")");
+        }
+    }
+
+    private static void WriteAuthorityReceipt(
+        string processGenerationId,
+        ConfigurationTransportResult liveResult,
+        ConfigurationAuthorityStatus dryStatus,
+        ConfigurationAuthorityStatus liveStatus,
+        int typedEffects,
+        int scsEffects)
+    {
+        string path = Environment.GetEnvironmentVariable(
+            "NOSGM_CONFIGURATION_AUTHORITY_ACCEPTANCE_RECEIPT_PATH");
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            throw new InvalidOperationException(
+                "Configuration authority acceptance receipt path is missing.");
+        }
+
+        string wireMode = Environment.GetEnvironmentVariable(
+            AuthenticationGrpcClientOptions.WireModeVariable) ?? string.Empty;
+        var json = new StringBuilder();
+        json.AppendLine("{");
+        json.AppendLine("  \"schemaVersion\": 1,");
+        json.AppendLine("  \"verdict\": \"pass\",");
+        json.AppendLine("  \"transport\": {");
+        json.AppendLine("    \"wireMode\": \"" + JsonEscape(wireMode) + "\",");
+        json.AppendLine("    \"runtimeGenerationId\": \"" +
+            JsonEscape(liveResult.RuntimeGenerationId) + "\",");
+        json.AppendLine("    \"generation\": " +
+            liveResult.Generation.ToString(CultureInfo.InvariantCulture));
+        json.AppendLine("  },");
+        json.AppendLine("  \"authority\": {");
+        json.AppendLine("    \"processGenerationId\": \"" +
+            JsonEscape(processGenerationId) + "\",");
+        json.AppendLine("    \"requiredParityRuntimes\": 3,");
+        json.AppendLine("    \"dryRunState\": \"" + dryStatus.State + "\",");
+        json.AppendLine("    \"dryRunTypedIngressReady\": " +
+            JsonBoolean(dryStatus.TypedIngressReady) + ",");
+        json.AppendLine("    \"finalState\": \"" + liveStatus.State + "\",");
+        json.AppendLine("    \"typedIngressReady\": " +
+            JsonBoolean(liveStatus.TypedIngressReady) + ",");
+        json.AppendLine("    \"typedEffectsApplied\": " + typedEffects + ",");
+        json.AppendLine("    \"scsEffectsAfterRollback\": " + scsEffects + ",");
+        json.AppendLine("    \"duplicatesSuppressed\": " +
+            liveStatus.OverlapDuplicatesSuppressed.ToString(
+                CultureInfo.InvariantCulture) + ",");
+        json.AppendLine("    \"streamEndObservations\": " +
+            liveStatus.StreamEndObservations.ToString(
+                CultureInfo.InvariantCulture));
+        json.AppendLine("  }");
+        json.AppendLine("}");
+        File.WriteAllText(path, json.ToString(), new UTF8Encoding(false));
+        Console.WriteLine("[PASS] sanitized Configuration authority receipt written");
+        Console.Out.Flush();
+    }
+
+    private static string JsonEscape(string value)
+    {
+        return (value ?? string.Empty)
+            .Replace("\\", "\\\\")
+            .Replace("\"", "\\\"");
+    }
+
+    private static string JsonBoolean(bool value)
+    {
+        return value ? "true" : "false";
     }
 
     private static void Trace(string message)
@@ -834,9 +1191,46 @@ try {
     }
     $values["NOSGM_AUTH_GRPC_WIRE_MODE"] = "HTTP2"
     $values["NOSGM_CONFIGURATION_ACCEPTANCE_MARKER"] = "2100000200"
+    $values["NOSGM_CONFIGURATION_AUTHORITY_ACCEPTANCE_RECEIPT_PATH"] = $authorityReceiptPath
+    Remove-Item -LiteralPath $authorityReceiptPath -Force -ErrorAction SilentlyContinue
     Set-ProcessEnvironment -Values $values
     Write-Host "[TEST] Configuration shadow transport over native HTTP2"
     Invoke-AcceptanceClient -Mode "HTTP2"
+
+    if (-not (Test-Path -LiteralPath $authorityReceiptPath -PathType Leaf)) {
+        throw "Configuration authority acceptance did not write its sanitized receipt."
+    }
+    $receiptContent = Get-Content -LiteralPath $authorityReceiptPath -Raw
+    $receipt = $receiptContent | ConvertFrom-Json
+    if ($receipt.schemaVersion -ne 1 -or
+        $receipt.verdict -ne "pass" -or
+        $receipt.transport.wireMode -ne "HTTP2" -or
+        $receipt.authority.requiredParityRuntimes -ne 3 -or
+        $receipt.authority.dryRunState -ne "TypedGrpcAuthoritative" -or
+        $receipt.authority.dryRunTypedIngressReady -ne $false -or
+        $receipt.authority.finalState -ne "RolledBack" -or
+        $receipt.authority.typedIngressReady -ne $false -or
+        $receipt.authority.typedEffectsApplied -ne 2 -or
+        $receipt.authority.scsEffectsAfterRollback -ne 1 -or
+        $receipt.authority.duplicatesSuppressed -ne 2 -or
+        $receipt.authority.streamEndObservations -ne 1) {
+        throw "Configuration authority acceptance receipt contains an unexpected verdict."
+    }
+    foreach ($forbiddenReceiptText in @(
+        "MaxGold",
+        "Snapshot",
+        "Payload",
+        "Password",
+        "CertificatePath",
+        "Credential"
+    )) {
+        if ($receiptContent.IndexOf(
+                $forbiddenReceiptText,
+                [StringComparison]::OrdinalIgnoreCase) -ge 0) {
+            throw "Configuration authority acceptance receipt contains forbidden text '$forbiddenReceiptText'."
+        }
+    }
+    Write-Host "[PASS] Sanitized Configuration authority cutover receipt: $authorityReceiptPath" -ForegroundColor Green
 
     Write-Host "NosGM Configuration gRPC shadow transport acceptance passed." -ForegroundColor Green
 }
