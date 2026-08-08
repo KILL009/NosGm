@@ -227,10 +227,10 @@ foreach ($required in @(
     "RollBackAuthority",
     "TryApplyCallback",
     "ObserveParity(report)",
-    "ConfigurationAuthorityDiagnostics.Observe(\"STARTUP\")",
-    "ConfigurationAuthorityDiagnostics.Observe(\"SCS_PARITY\")",
+    'ConfigurationAuthorityDiagnostics.Observe("STARTUP")',
+    'ConfigurationAuthorityDiagnostics.Observe("SCS_PARITY")',
     "ConfigurationAuthorityDiagnostics.Observe(",
-    "\"AUTHORITY_ROLLBACK\""
+    '"AUTHORITY_ROLLBACK"'
 )) {
     Require-Text $legacyClient $required "Configuration joint authority routing"
 }
@@ -257,7 +257,7 @@ foreach ($required in @(
     "AcceptedReports",
     "OverlapDuplicatesSuppressed",
     "StreamEndObservations",
-    "Process=\" + report.ProcessGenerationId",
+    'Process=" + report.ProcessGenerationId',
     "IConfigurationGrpcShadowStreamLifecycleObserver",
     "Func<ConfigurationTransportUpdate, bool>",
     "_authorityCallback(update)",
