@@ -24,6 +24,8 @@ namespace NosGm.Master.Library.Client
         public ulong Generation { get; set; }
 
         public ConfigurationTransportResultCode TransportResult { get; set; }
+
+        public string RuntimeGenerationId { get; set; }
     }
 
     internal sealed class ConfigurationGrpcShadowMirror : IDisposable
@@ -172,6 +174,93 @@ namespace NosGm.Master.Library.Client
             }
         }
 
+        internal bool TryGetAuthoritative(
+            out ConfigurationObject configuration,
+            out ConfigurationGrpcShadowResult result)
+        {
+            ThrowIfDisposed();
+            configuration = null;
+            try
+            {
+                using (var cancellation =
+                       new CancellationTokenSource(_timeoutMilliseconds))
+                {
+                    ConfigurationTransportResult current =
+                        _transport.GetAsync(cancellation.Token)
+                            .GetAwaiter()
+                            .GetResult();
+                    result = ToAuthorityResult(current);
+                    if (current == null ||
+                        current.Result !=
+                            ConfigurationTransportResultCode.Success ||
+                        current.Configuration == null ||
+                        current.Generation == 0)
+                    {
+                        return false;
+                    }
+
+                    configuration = FromTransportSnapshot(
+                        current.Configuration);
+                    return true;
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                result = NewFailureResult(
+                    ConfigurationGrpcShadowStatus.TimedOut);
+                return false;
+            }
+            catch (Exception)
+            {
+                result = NewFailureResult(
+                    ConfigurationGrpcShadowStatus.Faulted);
+                return false;
+            }
+        }
+
+        internal bool TryUpdateAuthoritative(
+            ConfigurationObject configuration,
+            out ConfigurationGrpcShadowResult result)
+        {
+            ThrowIfDisposed();
+            if (configuration == null)
+            {
+                throw new ArgumentNullException(nameof(configuration));
+            }
+
+            try
+            {
+                ConfigurationTransportSnapshot expected =
+                    ToTransportSnapshot(configuration);
+                using (var cancellation =
+                       new CancellationTokenSource(_timeoutMilliseconds))
+                {
+                    ConfigurationTransportResult updated =
+                        _transport.UpdateAsync(expected, cancellation.Token)
+                            .GetAwaiter()
+                            .GetResult();
+                    result = ToAuthorityResult(updated);
+                    return updated != null &&
+                           updated.Result ==
+                               ConfigurationTransportResultCode.Success &&
+                           updated.Generation > 0 &&
+                           AreEqual(updated.Configuration, expected);
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                result = NewFailureResult(
+                    ConfigurationGrpcShadowStatus.TimedOut);
+                return false;
+            }
+            catch (Exception)
+            {
+                result = NewFailureResult(
+                    ConfigurationGrpcShadowStatus.Faulted);
+                return false;
+            }
+        }
+
         public void Dispose()
         {
             if (Interlocked.Exchange(ref _disposed, 1) != 0)
@@ -200,6 +289,26 @@ namespace NosGm.Master.Library.Client
             };
         }
 
+        internal static ConfigurationObject FromTransportSnapshot(
+            ConfigurationTransportSnapshot configuration)
+        {
+            if (configuration == null)
+            {
+                throw new ArgumentNullException(nameof(configuration));
+            }
+
+            return new ConfigurationObject
+            {
+                MaxGold = configuration.MaxGold,
+                TimeExpBuff = DateTimeOffset.FromUnixTimeMilliseconds(
+                        configuration.TimeExpBuffUnixTimeMilliseconds)
+                    .LocalDateTime,
+                TimeGoldBuff = DateTimeOffset.FromUnixTimeMilliseconds(
+                        configuration.TimeGoldBuffUnixTimeMilliseconds)
+                    .LocalDateTime
+            };
+        }
+
         internal static bool AreEqual(
             ConfigurationTransportSnapshot left,
             ConfigurationTransportSnapshot right)
@@ -223,6 +332,38 @@ namespace NosGm.Master.Library.Client
             }
 
             return new DateTimeOffset(value).ToUnixTimeMilliseconds();
+        }
+
+        private static ConfigurationGrpcShadowResult ToAuthorityResult(
+            ConfigurationTransportResult result)
+        {
+            if (result == null)
+            {
+                return NewFailureResult(
+                    ConfigurationGrpcShadowStatus.Faulted);
+            }
+
+            return new ConfigurationGrpcShadowResult
+            {
+                Status = result.Result ==
+                    ConfigurationTransportResultCode.Success
+                        ? ConfigurationGrpcShadowStatus.Matched
+                        : ConfigurationGrpcShadowStatus.Unavailable,
+                Generation = result.Generation,
+                TransportResult = result.Result,
+                RuntimeGenerationId = result.RuntimeGenerationId
+            };
+        }
+
+        private static ConfigurationGrpcShadowResult NewFailureResult(
+            ConfigurationGrpcShadowStatus status)
+        {
+            return new ConfigurationGrpcShadowResult
+            {
+                Status = status,
+                TransportResult =
+                    ConfigurationTransportResultCode.Unavailable
+            };
         }
 
         private void ThrowIfDisposed()
