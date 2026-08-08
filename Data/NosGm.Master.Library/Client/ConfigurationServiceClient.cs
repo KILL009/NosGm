@@ -36,6 +36,25 @@ namespace NosGm.Master.Library.Client
                     Thread.Sleep(1000);
                 }
 
+            string authorityDiagnostic;
+            if (ConfigurationAuthorityQualificationRuntime.Instance
+                    .TryConfigureFromEnvironment(
+                        effectRoutingEnabled: false,
+                        out authorityDiagnostic))
+            {
+                Logger.Info(
+                    "[CONFIG_GRPC_AUTHORITY] Lifecycle observation enabled in " +
+                    authorityDiagnostic +
+                    " mode; SCS remains the immutable production authority.");
+            }
+            else
+            {
+                Logger.Warn(
+                    "[CONFIG_GRPC_AUTHORITY] Operator controls failed closed; " +
+                    "SCS remains authoritative. Reason=" +
+                    (authorityDiagnostic ?? "unknown"));
+            }
+
             string shadowDiagnostic;
             ConfigurationGrpcShadowMirror shadowMirror;
             if (ConfigurationGrpcShadowMirror.TryCreateFromEnvironment(
@@ -147,8 +166,11 @@ namespace NosGm.Master.Library.Client
                 ledger.RecordScs(
                     ConfigurationGrpcShadowMirror.ToTransportSnapshot(
                         configurationObject));
-                ConfigurationUpdateParityDiagnostics.Observe(
-                    ledger.LatestParityReport);
+                ConfigurationUpdateParityReport report =
+                    ledger.LatestParityReport;
+                ConfigurationUpdateParityDiagnostics.Observe(report);
+                ConfigurationAuthorityQualificationRuntime.Instance
+                    .ObserveParity(report);
             }
             catch (Exception exception)
             {

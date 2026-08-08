@@ -155,9 +155,18 @@ The report distinguishes:
 
 Eviction, malformed ordering, runtime reuse, fingerprint drift and persistent callback skew all fail closed for future cutover qualification. Reports include the evaluated ledger boundary, runtime window, live and matched counts, recovery/replay counts, first mismatch coordinates and unmatched age. Both observation paths emit deduplicated diagnostics; terminal evidence failures are warnings. These reports are measurement only: SCS authority is unchanged, no typed update is applied to gameplay, and no callback is suppressed or replayed.
 
-## Authority selector foundation (not wired yet)
+## Authority lifecycle binding (dry-run)
 
-The client library now contains a production-neutral authority coordinator for the future Configuration cutover. It is deliberately not referenced by `ConfigurationServiceClient` or the typed subscriber lifecycle, so SCS remains the production authority in this slice.
+The World process now binds the production-neutral authority coordinator to the real Configuration lifecycle. Successful SCS and typed gRPC observations feed the same bounded qualification runtime; typed recovery, runtime generation changes, stream termination and terminal subscriber faults are also reported to the coordinator. This exercises the complete future handoff state machine while SCS remains the production authority.
+
+Two immutable process-start controls exist:
+
+- `NOSGM_CONFIGURATION_GRPC_AUTHORITY_ARM_REQUEST_ID` accepts one exact lowercase canonical non-empty GUID and allows three distinct successful parity runtimes to arm the dry-run gate.
+- `NOSGM_CONFIGURATION_GRPC_AUTHORITY_ROLLBACK_REQUESTED=true` blocks qualification explicitly. It is mutually exclusive with the arm request.
+
+Missing controls leave the runtime unarmed. Whitespace, malformed GUIDs, non-boolean rollback values, conflicting controls, process-generation drift or any attempt to mutate the controls inside one process fail closed. The process must be restarted to change the requested mode.
+
+In this slice, the World integration passes `effectRoutingEnabled: false` as a literal: effect routing is compiled off at the production binding point. The state machine may retain qualification evidence and observe a fourth runtime activation, but typed ingress never opens; Get, Update and callback effects remain entirely on SCS. Neither `ShouldUse` nor `TryApplyCallback` is called by a production World path yet.
 
 The coordinator can arm only from the latest three successful parity windows. Every window must belong to the same process, use a distinct typed runtime generation, contain matched non-empty live evidence, retain its complete FIFO window and report no mismatch or unmatched age. Activation then requires a fourth, previously unqualified runtime generation from that same process. Reusing one of the three qualification generations cannot activate the gate.
 
@@ -165,7 +174,7 @@ Activation alone does not open typed effects. Recovery must complete for the exa
 
 During the future callback overlap window, the first-arriving semantic copy may apply and one equal opposite-source copy is suppressed. The bounded FIFO guard uses the same normalized SHA-256 snapshot fingerprint as parity evidence, pairs repeated identical updates occurrence by occurrence, expires stale pairs and never stores gameplay objects. This covers both SCS-first and typed-first arrival without applying one logical update twice.
 
-Runtime-generation drift, active-stream loss, a typed callback exception, malformed routing input or overlap-capacity saturation triggers terminal rollback for the process. Typed ingress then stays blocked, while a delayed SCS twin of an already-applied typed update can still be suppressed and new SCS updates continue normally. Production wiring and operator controls remain a later, separately reviewed step.
+Runtime-generation drift, active-stream loss, a typed callback exception, malformed routing input or overlap-capacity saturation triggers terminal rollback for the process. Typed ingress then stays blocked, while a delayed SCS twin of an already-applied typed update can still be suppressed and new SCS updates continue normally. The actual joint authority switch remains a later, separately reviewed step.
 
 ### Date/time parity
 
@@ -180,7 +189,7 @@ The adapter only converts legacy values outward for comparison/seeding. It does 
 `ConfigurationUpdated` remains the blocker for retiring this SCS family. This slice now provides typed subscription, recovery, comparable evidence capture, automatic bounded parity verdicts and an isolated selector/duplicate guard. Later qualification must still provide:
 
 1. explicit local acceptance proving stable parity across live, replay, recovery, restart and reconnect windows;
-2. operator-controlled production wiring for the fail-closed joint Get/Update/callback selector;
+2. dry-run collection across three parity runtimes and a fourth activation runtime using an explicit arm request;
 3. live acceptance proving that the bounded overlap guard prevents duplicate gameplay application during cutover and rollback.
 
 ## Runtime sequence
@@ -194,12 +203,13 @@ Completed foundations:
 5. observation-only typed update subscriber with bounded replay, reconnect deduplication and snapshot recovery;
 6. bounded SCS-versus-gRPC callback observation ledger with normalized SHA-256 semantic fingerprints and explicit delivery phases;
 7. automatic runtime-scoped parity comparator with bounded settlement, ordered fingerprint matching and fail-closed evidence verdicts;
-8. production-neutral joint Get/Update/callback authority gate with three-window qualification, fourth-runtime activation, recovery barrier, bounded semantic overlap deduplication and terminal rollback.
+8. production-neutral joint Get/Update/callback authority gate with three-window qualification, fourth-runtime activation, recovery barrier, bounded semantic overlap deduplication and terminal rollback;
+9. immutable World operator controls and dry-run lifecycle binding that observes evidence, recovery, generations and stream faults while effect routing is compiled off.
 
 The safe continuation is:
 
 1. run explicit local acceptance with Master + World, shadow enabled, and collect stable comparator parity across live, replay, recovery, restart and reconnect windows;
-2. bind the Configuration authority coordinator to the World process lifecycle behind immutable operator arm/rollback controls;
+2. collect dry-run qualification evidence with an explicit arm request across three parity runtimes and a fourth activation runtime;
 3. switch Get/Update and callback authority together behind that one explicit selector and run live overlap/rollback acceptance;
 4. remove `IConfigurationService`, `IConfigurationClient` and their SCS registration only after acceptance passes.
 

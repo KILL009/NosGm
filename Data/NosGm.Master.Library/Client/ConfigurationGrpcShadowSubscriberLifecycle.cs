@@ -78,7 +78,8 @@ namespace NosGm.Master.Library.Client
     }
 
     internal sealed class ConfigurationGrpcShadowUpdateObserver
-        : IClusterConfigurationUpdateHandler
+        : IClusterConfigurationUpdateHandler,
+          IConfigurationGrpcShadowStreamLifecycleObserver
     {
         public Task ObserveAsync(
             ConfigurationTransportUpdate update,
@@ -95,8 +96,15 @@ namespace NosGm.Master.Library.Client
                 ConfigurationUpdateObservationLedger ledger =
                     ConfigurationUpdateObservationLedger.Instance;
                 ledger.RecordGrpc(update);
-                ConfigurationUpdateParityDiagnostics.Observe(
-                    ledger.LatestParityReport);
+                ConfigurationUpdateParityReport report =
+                    ledger.LatestParityReport;
+                ConfigurationUpdateParityDiagnostics.Observe(report);
+                ConfigurationAuthorityQualificationRuntime.Instance
+                    .ObserveParity(report);
+                ConfigurationAuthorityQualificationRuntime.Instance
+                    .ObserveTypedUpdate(
+                        ledger.ProcessGenerationId,
+                        update);
             }
             catch (Exception exception)
             {
@@ -111,6 +119,14 @@ namespace NosGm.Master.Library.Client
                 "generation " + update.Generation + " during " + phase +
                 "; SCS callback remains authoritative and no gameplay state was applied.");
             return Task.CompletedTask;
+        }
+
+        public void ObserveStreamEnded(
+            string runtimeGenerationId,
+            Exception reason)
+        {
+            ConfigurationAuthorityQualificationRuntime.Instance
+                .ObserveStreamEnded(runtimeGenerationId, reason);
         }
     }
 
@@ -197,6 +213,8 @@ namespace NosGm.Master.Library.Client
                 }
                 catch (Exception exception)
                 {
+                    ConfigurationAuthorityQualificationRuntime.Instance
+                        .Invalidate(exception);
                     Logger.Warn(
                         "[CONFIG_GRPC_SHADOW] Typed Configuration subscriber stopped; " +
                         "SCS callback authority is unchanged. Reason=" +

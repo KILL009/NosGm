@@ -18,6 +18,7 @@ internal static class ConfigurationAuthorityCoordinatorSelfTest
     internal static void Run()
     {
         DefaultAndQualificationRemainScsAuthoritative();
+        OperatorControlsAreStrictAndImmutable();
         ActivationAndRecoverySwitchEveryOperationTogether();
         OverlapSuppressesSemanticTwinsInEitherArrivalOrder();
         RepeatedIdenticalUpdatesRemainOccurrenceBound();
@@ -42,6 +43,18 @@ internal static class ConfigurationAuthorityCoordinatorSelfTest
             false,
             coordinator.ObserveQualification(
                 evidence.Reports.Take(2).ToArray()),
+            "Unconfigured Configuration authority cannot arm");
+        AssertEqual(
+            true,
+            coordinator.Configure(
+                evidence.ProcessGenerationId,
+                NewOperatorOptions(),
+                effectRoutingEnabled: false),
+            "Immutable operator controls configure dry-run authority once");
+        AssertEqual(
+            false,
+            coordinator.ObserveQualification(
+                evidence.Reports.Take(2).ToArray()),
             "Fewer than three parity runtimes cannot arm Configuration authority");
         AssertEqual(
             true,
@@ -61,6 +74,57 @@ internal static class ConfigurationAuthorityCoordinatorSelfTest
                 evidence.ProcessGenerationId,
                 RuntimeC),
             "A qualification runtime cannot activate Configuration authority");
+    }
+
+    private static void OperatorControlsAreStrictAndImmutable()
+    {
+        AssertThrows<InvalidOperationException>(
+            () => ConfigurationAuthorityOperatorOptions.Load(
+                variableName => variableName ==
+                    ConfigurationAuthorityOperatorOptions.ArmRequestVariable
+                        ? " 20000000-0000-0000-0000-000000000001"
+                        : null),
+            "Configuration arm request rejects surrounding whitespace");
+        AssertThrows<InvalidOperationException>(
+            () => ConfigurationAuthorityOperatorOptions.Load(
+                variableName => variableName ==
+                    ConfigurationAuthorityOperatorOptions.ArmRequestVariable
+                        ? "20000000-0000-0000-0000-000000000001"
+                        : variableName ==
+                            ConfigurationAuthorityOperatorOptions
+                                .RollbackRequestVariable
+                            ? "true"
+                            : null),
+            "Configuration arm and rollback controls are mutually exclusive");
+
+        QualifiedEvidence evidence = BuildQualifiedEvidence();
+        var coordinator = new ConfigurationAuthorityCoordinator();
+        ConfigurationAuthorityOperatorOptions options =
+            NewOperatorOptions();
+        AssertEqual(
+            true,
+            coordinator.Configure(
+                evidence.ProcessGenerationId,
+                options,
+                effectRoutingEnabled: false),
+            "Configuration operator controls bind to one process generation");
+        AssertEqual(
+            false,
+            coordinator.Configure(
+                evidence.ProcessGenerationId,
+                options,
+                effectRoutingEnabled: false),
+            "Identical Configuration operator controls are idempotent");
+        AssertThrows<InvalidOperationException>(
+            () => coordinator.Configure(
+                evidence.ProcessGenerationId,
+                options,
+                effectRoutingEnabled: true),
+            "Configuration effect-routing mutation fails closed inside one process");
+        AssertEqual(
+            true,
+            coordinator.GetStatus().Blocked,
+            "Configuration operator mutation blocks the process terminally");
     }
 
     private static void ActivationAndRecoverySwitchEveryOperationTogether()
@@ -303,6 +367,13 @@ internal static class ConfigurationAuthorityCoordinatorSelfTest
             overlapCapacity);
         AssertEqual(
             true,
+            coordinator.Configure(
+                evidence.ProcessGenerationId,
+                NewOperatorOptions(),
+                effectRoutingEnabled: true),
+            "Qualified Configuration coordinator enables effect routing explicitly");
+        AssertEqual(
+            true,
             coordinator.ObserveQualification(evidence.Reports),
             "Qualified Configuration evidence arms the coordinator");
         return new QualifiedCoordinator(
@@ -376,6 +447,15 @@ internal static class ConfigurationAuthorityCoordinatorSelfTest
             TimeExpBuffUnixTimeMilliseconds = 1700000000000,
             TimeGoldBuffUnixTimeMilliseconds = 1700000001000
         };
+    }
+
+    private static ConfigurationAuthorityOperatorOptions NewOperatorOptions()
+    {
+        return ConfigurationAuthorityOperatorOptions.Load(
+            variableName => variableName ==
+                ConfigurationAuthorityOperatorOptions.ArmRequestVariable
+                    ? "20000000-0000-0000-0000-000000000001"
+                    : null);
     }
 
     private static ConfigurationTransportUpdate NewUpdate(
