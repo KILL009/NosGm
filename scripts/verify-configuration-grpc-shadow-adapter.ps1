@@ -93,7 +93,8 @@ Require-Text $client 'Typed Configuration update subscriber started' "Configurat
 foreach ($required in @(
     'ConfigurationGrpcShadowSubscriber',
     'RecoveredFromSnapshot',
-    'ConfigurationUpdateObservationLedger.Instance.RecordGrpc(update)',
+    'ledger.RecordGrpc(update)',
+    'ConfigurationUpdateParityDiagnostics.Observe',
     'SCS callback remains authoritative',
     'no gameplay state was applied'
 )) {
@@ -110,7 +111,11 @@ if ($callbackMatch.Groups['body'].Value.IndexOf('ObserveAuthoritativeConfigurati
 }
 Require-Text $callbackMatch.Groups['body'].Value 'ObserveScsConfigurationCallback(configurationObject)' "ConfigurationUpdated SCS observation"
 Require-Before $client 'ObserveScsConfigurationCallback(configurationObject)' 'ConfigurationUpdate?.Invoke(configurationObject, null)' "Configuration callback observation order"
-Require-Text $client 'ConfigurationUpdateObservationLedger.Instance.RecordScs' "Configuration SCS callback ledger"
+Require-Text $client 'ledger.RecordScs' "Configuration SCS callback ledger"
+Require-Before $client 'ledger.RecordScs' 'ConfigurationUpdateParityDiagnostics.Observe' "Configuration SCS parity evaluation order"
+Require-Before $subscriberLifecycle 'ledger.RecordGrpc(update)' 'ConfigurationUpdateParityDiagnostics.Observe' "Configuration gRPC parity evaluation order"
+Require-Text $subscriberLifecycle 'report.HasTerminalMismatch' "Configuration terminal parity diagnostic severity"
+Require-Text $subscriberLifecycle 'SCS authority is unchanged and this evidence has no gameplay effect' "Configuration parity evidence isolation"
 Require-Text $client 'the authoritative callback will continue unchanged' "Configuration SCS observation isolation"
 Require-Text $subscriberLifecycle 'the subscriber will continue without applying gameplay state' "Configuration gRPC observation isolation"
 
@@ -124,3 +129,4 @@ Write-Host "[PASS] Configuration shadow compares before writing and tolerates gR
 Write-Host "[PASS] Legacy DateTime conversion handles Unspecified values as local wall time explicitly." -ForegroundColor Green
 Write-Host "[PASS] ConfigurationUpdated remains SCS-authoritative while the typed stream is observation-only." -ForegroundColor Green
 Write-Host "[PASS] SCS and gRPC callbacks enter the bounded parity ledger without duplicating gameplay effects." -ForegroundColor Green
+Write-Host "[PASS] Both callback paths emit automatic parity evidence without changing SCS authority." -ForegroundColor Green

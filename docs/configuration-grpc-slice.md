@@ -4,7 +4,7 @@
 
 This migration replaces the legacy `IConfigurationService` SCS surface with a typed, mTLS-authenticated gRPC boundary in controlled stages.
 
-SCS is still the runtime authority. The typed contract, shadow state host, isolated World gRPC client transport, opt-in SCS-first shadow adapter, observation-only typed update subscriber and bounded cross-transport callback observation ledger now exist.
+SCS is still the runtime authority. The typed contract, shadow state host, isolated World gRPC client transport, opt-in SCS-first shadow adapter, observation-only typed update subscriber, bounded cross-transport callback observation ledger and automatic parity comparator now exist.
 
 ## Legacy surface
 
@@ -134,7 +134,26 @@ Each retained observation includes:
 - a SHA-256 semantic fingerprint over those normalized values;
 - the UTC observation timestamp.
 
-Equivalent SCS and gRPC payloads therefore produce the same fingerprint without storing a legacy object reference or applying a second gameplay effect. The default retention is 512 observations with a hard maximum of 4096; oldest evidence is evicted first and eviction is counted explicitly. This ledger captures comparable evidence only. It does not declare parity, change authority, replay callbacks or deduplicate gameplay effects.
+Equivalent SCS and gRPC payloads therefore produce the same fingerprint without storing a legacy object reference or applying a second gameplay effect. The default retention is 512 observations with a hard maximum of 4096; oldest evidence is evicted first and eviction is counted explicitly. The ledger captures comparable evidence only; it does not change authority, replay callbacks or deduplicate gameplay effects.
+
+## Automatic bounded parity comparator
+
+Every successful SCS or gRPC ledger insertion now reevaluates an immutable parity snapshot. The default arrival-skew settlement window is 5 seconds and the implementation accepts only bounded values from 100 milliseconds through 60 seconds. A transient one-sided delivery is `InProgress`; it becomes `CountMismatch` only when reevaluated after the oldest unmatched observation has exceeded that window.
+
+Parity is scoped to the latest typed `runtime_generation_id`. Recovery starts a new comparison window after an Authentication runtime restart. Recovery and replay observations remain visible as evidence but never count as live callback matches, and SCS observations from an earlier runtime window are excluded explicitly.
+
+The report distinguishes:
+
+- waiting for a typed runtime;
+- a recovered runtime with no live observations yet;
+- transient arrival skew;
+- proven ordered semantic parity;
+- ordered payload mismatch;
+- persistent count mismatch;
+- incomplete evidence after FIFO eviction;
+- structurally invalid evidence.
+
+Eviction, malformed ordering, runtime reuse, fingerprint drift and persistent callback skew all fail closed for future cutover qualification. Reports include the evaluated ledger boundary, runtime window, live and matched counts, recovery/replay counts, first mismatch coordinates and unmatched age. Both observation paths emit deduplicated diagnostics; terminal evidence failures are warnings. These reports are measurement only: SCS authority is unchanged, no typed update is applied to gameplay, and no callback is suppressed or replayed.
 
 ### Date/time parity
 
@@ -146,9 +165,9 @@ The adapter only converts legacy values outward for comparison/seeding. It does 
 
 ## Callback boundary
 
-`ConfigurationUpdated` remains the blocker for retiring this SCS family. This slice now provides the typed subscription, recovery and comparable evidence-capture foundations. Later qualification must still provide:
+`ConfigurationUpdated` remains the blocker for retiring this SCS family. This slice now provides typed subscription, recovery, comparable evidence capture and automatic bounded parity verdicts. Later qualification must still provide:
 
-1. a bounded comparator that qualifies matching legacy and typed observations across live, replay, recovery, restart and reconnect windows;
+1. explicit local acceptance proving stable parity across live, replay, recovery, restart and reconnect windows;
 2. a fail-closed joint Get/Update/callback authority switch and rollback path;
 3. proof that a World cannot apply the same configuration update twice during overlap or cutover.
 
@@ -161,13 +180,14 @@ Completed foundations:
 3. isolated World-only gRPC client transport;
 4. opt-in SCS-first World shadow adapter with bounded best-effort synchronization and idempotent generations;
 5. observation-only typed update subscriber with bounded replay, reconnect deduplication and snapshot recovery;
-6. bounded SCS-versus-gRPC callback observation ledger with normalized SHA-256 semantic fingerprints and explicit delivery phases.
+6. bounded SCS-versus-gRPC callback observation ledger with normalized SHA-256 semantic fingerprints and explicit delivery phases;
+7. automatic runtime-scoped parity comparator with bounded settlement, ordered fingerprint matching and fail-closed evidence verdicts.
 
 The safe continuation is:
 
-1. run explicit local acceptance with Master + World, shadow enabled, and verify SCS startup output plus typed host parity across reconnects;
-2. compare retained legacy and typed snapshots/delivery across live, replay, recovery, restart and reconnect windows;
-3. switch Get/Update and callback authority together behind one explicit Configuration selector;
+1. run explicit local acceptance with Master + World, shadow enabled, and collect stable comparator parity across live, replay, recovery, restart and reconnect windows;
+2. add a fail-closed Configuration authority selector, rollback state and duplicate-application guard;
+3. switch Get/Update and callback authority together behind that one explicit selector;
 4. remove `IConfigurationService`, `IConfigurationClient` and their SCS registration only after acceptance passes.
 
 Until the joint authority switch, `NOSGM_COMMUNICATION_TRANSPORT` and the existing Communication callback cutover are unrelated to this service and must not act as implicit Configuration selectors.

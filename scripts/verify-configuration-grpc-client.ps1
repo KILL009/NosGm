@@ -44,9 +44,11 @@ $contracts = Read-RepoFile "Data\NosGm.Authentication.Client\Configuration\Confi
 $transport = Read-RepoFile "Data\NosGm.Authentication.Client\Configuration\GrpcClusterConfigurationTransport.cs"
 $subscriber = Read-RepoFile "Data\NosGm.Authentication.Client\Configuration\ConfigurationGrpcShadowSubscriber.cs"
 $observationLedger = Read-RepoFile "Data\NosGm.Authentication.Client\Configuration\ConfigurationUpdateObservationLedger.cs"
+$parityComparator = Read-RepoFile "Data\NosGm.Authentication.Client\Configuration\ConfigurationUpdateParityComparator.cs"
 $options = Read-RepoFile "Data\NosGm.Authentication.Client\AuthenticationGrpcClientOptions.cs"
 $selfTest = Read-RepoFile "tests\NosGm.Authentication.Runtime.SelfTest\ClusterConfigurationTransportLiveSelfTest.cs"
 $observationSelfTest = Read-RepoFile "tests\NosGm.Authentication.Runtime.SelfTest\ConfigurationUpdateObservationLedgerSelfTest.cs"
+$paritySelfTest = Read-RepoFile "tests\NosGm.Authentication.Runtime.SelfTest\ConfigurationUpdateParityComparatorSelfTest.cs"
 $project = Read-RepoFile "Data\NosGm.Authentication.Client\NosGm.Authentication.Client.csproj"
 
 foreach ($required in @(
@@ -124,10 +126,58 @@ foreach ($required in @(
     "ConfigurationUpdateObservationPhase.Live",
     "SHA256.Create()",
     "GetObservationSnapshot",
+    "CaptureSnapshot",
+    "EvaluateParity",
+    "LatestParityReport",
     "EvictedObservations",
     "ProcessGenerationId"
 )) {
     Require-Text $observationLedger $required "Configuration observation ledger"
+}
+
+foreach ($required in @(
+    "DefaultSettlementWindowMilliseconds = 5000",
+    "MinimumSettlementWindowMilliseconds = 100",
+    "MaximumSettlementWindowMilliseconds = 60000",
+    "WaitingForTypedRuntime",
+    "NoLiveObservations",
+    "InProgress",
+    "IncompleteEvidence",
+    "OrderMismatch",
+    "CountMismatch",
+    "InvalidEvidence",
+    "Parity",
+    "HasTerminalMismatch",
+    "EvictedObservations != 0",
+    "oldestUnmatched.ObservedAt",
+    "currentRuntimeGenerationId",
+    "grpcRecoveryCount",
+    "grpcReplayCount"
+)) {
+    Require-Text $parityComparator $required "Configuration automatic parity comparator"
+}
+foreach ($forbidden in @(
+    "NosGm.SCS",
+    "ConfigurationServiceClient",
+    "IConfigurationService",
+    "Task.Run",
+    "System.Threading.Timer"
+)) {
+    Forbid-Text $parityComparator $forbidden "Configuration automatic parity comparator"
+}
+
+foreach ($required in @(
+    "Configuration parity waits for a typed runtime identity",
+    "Snapshot recovery is evidence but never a live callback match",
+    "Equivalent SCS-first and gRPC-second callbacks reach parity",
+    "Equivalent gRPC-first and SCS-second callbacks reach parity",
+    "Different live semantic fingerprints fail closed as order mismatch",
+    "An unmatched callback fails closed after settlement expires",
+    "A runtime restart starts a fresh live qualification window",
+    "FIFO eviction prevents a false Configuration parity claim",
+    "Configuration parity rejects an unsafe settlement window"
+)) {
+    Require-Text $paritySelfTest $required "Configuration automatic parity comparator self-test"
 }
 
 foreach ($required in @(
@@ -170,6 +220,7 @@ Write-Host "[PASS] Configuration client contains the existing HTTP/2 and Windows
 Write-Host "[PASS] Configuration client remains isolated from SCS and the legacy ConfigurationServiceClient." -ForegroundColor Green
 Write-Host "[PASS] Configuration shadow subscriber deduplicates, reconnects and recovers by runtime generation." -ForegroundColor Green
 Write-Host "[PASS] Configuration callback observations share a bounded transport-neutral SHA-256 ledger." -ForegroundColor Green
+Write-Host "[PASS] Configuration parity is evaluated automatically with bounded skew, runtime windows and fail-closed evidence." -ForegroundColor Green
 Write-Host "[PASS] Construction self-test remains non-blocking and rejects invalid roles before certificate loading." -ForegroundColor Green
 
 & (Join-Path $PSScriptRoot "verify-configuration-grpc-shadow-adapter.ps1")
