@@ -21,6 +21,18 @@ namespace NosGm.Master.Library.Client
                 : update.Replayed
                     ? "replay"
                     : "live";
+            try
+            {
+                ConfigurationUpdateObservationLedger.Instance.RecordGrpc(update);
+            }
+            catch (Exception exception)
+            {
+                Logger.Warn(
+                    "[CONFIG_GRPC_SHADOW] Typed Configuration observation " +
+                    "could not enter the parity ledger; " +
+                    "the subscriber will continue without applying gameplay state. Reason=" +
+                    exception.GetType().Name);
+            }
             Logger.Info(
                 "[CONFIG_GRPC_SHADOW] Observed typed Configuration update " +
                 "generation " + update.Generation + " during " + phase +

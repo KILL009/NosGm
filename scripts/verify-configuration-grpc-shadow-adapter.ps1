@@ -93,6 +93,7 @@ Require-Text $client 'Typed Configuration update subscriber started' "Configurat
 foreach ($required in @(
     'ConfigurationGrpcShadowSubscriber',
     'RecoveredFromSnapshot',
+    'ConfigurationUpdateObservationLedger.Instance.RecordGrpc(update)',
     'SCS callback remains authoritative',
     'no gameplay state was applied'
 )) {
@@ -107,6 +108,11 @@ if (-not $callbackMatch.Success) {
 if ($callbackMatch.Groups['body'].Value.IndexOf('ObserveAuthoritativeConfiguration', [StringComparison]::Ordinal) -ge 0) {
     throw "ConfigurationUpdated callback must not mirror into gRPC during this slice."
 }
+Require-Text $callbackMatch.Groups['body'].Value 'ObserveScsConfigurationCallback(configurationObject)' "ConfigurationUpdated SCS observation"
+Require-Before $client 'ObserveScsConfigurationCallback(configurationObject)' 'ConfigurationUpdate?.Invoke(configurationObject, null)' "Configuration callback observation order"
+Require-Text $client 'ConfigurationUpdateObservationLedger.Instance.RecordScs' "Configuration SCS callback ledger"
+Require-Text $client 'the authoritative callback will continue unchanged' "Configuration SCS observation isolation"
+Require-Text $subscriberLifecycle 'the subscriber will continue without applying gameplay state' "Configuration gRPC observation isolation"
 
 Require-Text $project 'Client\ConfigurationGrpcShadowMirror.cs' "Configuration shadow mirror compile item"
 Require-Text $project 'Client\ConfigurationGrpcShadowOptions.cs' "Configuration shadow options compile item"
@@ -117,3 +123,4 @@ Write-Host "[PASS] SCS Get/Update remain authoritative and execute before shadow
 Write-Host "[PASS] Configuration shadow compares before writing and tolerates gRPC timeout/failure." -ForegroundColor Green
 Write-Host "[PASS] Legacy DateTime conversion handles Unspecified values as local wall time explicitly." -ForegroundColor Green
 Write-Host "[PASS] ConfigurationUpdated remains SCS-authoritative while the typed stream is observation-only." -ForegroundColor Green
+Write-Host "[PASS] SCS and gRPC callbacks enter the bounded parity ledger without duplicating gameplay effects." -ForegroundColor Green

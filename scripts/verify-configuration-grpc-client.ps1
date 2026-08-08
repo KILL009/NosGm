@@ -43,8 +43,10 @@ function Forbid-Text {
 $contracts = Read-RepoFile "Data\NosGm.Authentication.Client\Configuration\ConfigurationTransportContracts.cs"
 $transport = Read-RepoFile "Data\NosGm.Authentication.Client\Configuration\GrpcClusterConfigurationTransport.cs"
 $subscriber = Read-RepoFile "Data\NosGm.Authentication.Client\Configuration\ConfigurationGrpcShadowSubscriber.cs"
+$observationLedger = Read-RepoFile "Data\NosGm.Authentication.Client\Configuration\ConfigurationUpdateObservationLedger.cs"
 $options = Read-RepoFile "Data\NosGm.Authentication.Client\AuthenticationGrpcClientOptions.cs"
 $selfTest = Read-RepoFile "tests\NosGm.Authentication.Runtime.SelfTest\ClusterConfigurationTransportLiveSelfTest.cs"
+$observationSelfTest = Read-RepoFile "tests\NosGm.Authentication.Runtime.SelfTest\ConfigurationUpdateObservationLedgerSelfTest.cs"
 $project = Read-RepoFile "Data\NosGm.Authentication.Client\NosGm.Authentication.Client.csproj"
 
 foreach ($required in @(
@@ -111,6 +113,31 @@ foreach ($forbidden in @(
 )) {
     Forbid-Text $transport $forbidden "Configuration gRPC client transport"
     Forbid-Text $contracts $forbidden "Configuration client transport contracts"
+    Forbid-Text $observationLedger $forbidden "Configuration observation ledger"
+}
+
+foreach ($required in @(
+    "DefaultObservationCapacity = 512",
+    "MaximumObservationCapacity = 4096",
+    "ConfigurationUpdateObservationPhase.Recovery",
+    "ConfigurationUpdateObservationPhase.Replay",
+    "ConfigurationUpdateObservationPhase.Live",
+    "SHA256.Create()",
+    "GetObservationSnapshot",
+    "EvictedObservations",
+    "ProcessGenerationId"
+)) {
+    Require-Text $observationLedger $required "Configuration observation ledger"
+}
+
+foreach ($required in @(
+    "Equivalent SCS and gRPC Configuration payloads share one semantic fingerprint",
+    "Snapshot recovery is not mistaken for live callback parity",
+    "The combined ledger preserves cross-transport arrival order",
+    "Configuration observation retention remains bounded",
+    "One typed observation cannot be both replay and recovery"
+)) {
+    Require-Text $observationSelfTest $required "Configuration observation ledger self-test"
 }
 
 Require-Text $options "TrustedRootCertificatePathVariable" "Configuration client file-scoped root option"
@@ -142,6 +169,7 @@ Write-Host "[PASS] Configuration gRPC client is World-only and requests ClusterS
 Write-Host "[PASS] Configuration client contains the existing HTTP/2 and Windows 10 gRPC-Web mTLS implementations." -ForegroundColor Green
 Write-Host "[PASS] Configuration client remains isolated from SCS and the legacy ConfigurationServiceClient." -ForegroundColor Green
 Write-Host "[PASS] Configuration shadow subscriber deduplicates, reconnects and recovers by runtime generation." -ForegroundColor Green
+Write-Host "[PASS] Configuration callback observations share a bounded transport-neutral SHA-256 ledger." -ForegroundColor Green
 Write-Host "[PASS] Construction self-test remains non-blocking and rejects invalid roles before certificate loading." -ForegroundColor Green
 
 & (Join-Path $PSScriptRoot "verify-configuration-grpc-shadow-adapter.ps1")

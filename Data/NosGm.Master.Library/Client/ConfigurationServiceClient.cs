@@ -1,4 +1,5 @@
-﻿using NosGm.Configuration;
+﻿using NosGm.Authentication.Client.Configuration;
+using NosGm.Configuration;
 using NosGm.Core;
 using NosGm.Master.Library.Data;
 using NosGm.Master.Library.Interface;
@@ -132,7 +133,26 @@ namespace NosGm.Master.Library.Client
 
         internal void OnConfigurationUpdated(ConfigurationObject configurationObject)
         {
+            ObserveScsConfigurationCallback(configurationObject);
             ConfigurationUpdate?.Invoke(configurationObject, null);
+        }
+
+        private static void ObserveScsConfigurationCallback(
+            ConfigurationObject configurationObject)
+        {
+            try
+            {
+                ConfigurationUpdateObservationLedger.Instance.RecordScs(
+                    ConfigurationGrpcShadowMirror.ToTransportSnapshot(
+                        configurationObject));
+            }
+            catch (Exception exception)
+            {
+                Logger.Warn(
+                    "[CONFIG_GRPC_SHADOW] SCS callback observation failed; " +
+                    "the authoritative callback will continue unchanged. Reason=" +
+                    exception.GetType().Name);
+            }
         }
 
         private void ObserveAuthoritativeConfiguration(

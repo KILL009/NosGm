@@ -4,7 +4,7 @@
 
 This migration replaces the legacy `IConfigurationService` SCS surface with a typed, mTLS-authenticated gRPC boundary in controlled stages.
 
-SCS is still the runtime authority. The typed contract, shadow state host, isolated World gRPC client transport, opt-in SCS-first shadow adapter and an observation-only typed update subscriber now exist.
+SCS is still the runtime authority. The typed contract, shadow state host, isolated World gRPC client transport, opt-in SCS-first shadow adapter, observation-only typed update subscriber and bounded cross-transport callback observation ledger now exist.
 
 ## Legacy surface
 
@@ -120,6 +120,22 @@ The subscriber:
 
 Therefore the typed path can be measured during overlap, but an unavailable or malformed stream cannot alter an SCS result, block World startup or apply a gameplay effect.
 
+## Bounded callback parity ledger
+
+The legacy `ConfigurationUpdated` callback and every accepted typed update now enter one process-local, transport-neutral observation ledger. Recording remains best effort: a malformed observation or ledger failure is logged and isolated before the authoritative SCS callback continues.
+
+Each retained observation includes:
+
+- one process generation identity and combined FIFO ordinal;
+- an independent SCS or gRPC source ordinal;
+- the source and typed delivery phase (`recovery`, `replay` or `live`);
+- typed runtime generation and numeric generation when available;
+- the normalized primitive snapshot values;
+- a SHA-256 semantic fingerprint over those normalized values;
+- the UTC observation timestamp.
+
+Equivalent SCS and gRPC payloads therefore produce the same fingerprint without storing a legacy object reference or applying a second gameplay effect. The default retention is 512 observations with a hard maximum of 4096; oldest evidence is evicted first and eviction is counted explicitly. This ledger captures comparable evidence only. It does not declare parity, change authority, replay callbacks or deduplicate gameplay effects.
+
 ### Date/time parity
 
 The adapter only converts legacy values outward for comparison/seeding. It does not reconstruct the gameplay `ConfigurationObject` from gRPC.
@@ -130,9 +146,9 @@ The adapter only converts legacy values outward for comparison/seeding. It does 
 
 ## Callback boundary
 
-`ConfigurationUpdated` remains the blocker for retiring this SCS family. This slice provides the typed subscription and recovery foundation. Later qualification must still provide:
+`ConfigurationUpdated` remains the blocker for retiring this SCS family. This slice now provides the typed subscription, recovery and comparable evidence-capture foundations. Later qualification must still provide:
 
-1. parity evidence between each legacy callback and typed observation;
+1. a bounded comparator that qualifies matching legacy and typed observations across live, replay, recovery, restart and reconnect windows;
 2. a fail-closed joint Get/Update/callback authority switch and rollback path;
 3. proof that a World cannot apply the same configuration update twice during overlap or cutover.
 
@@ -144,14 +160,14 @@ Completed foundations:
 2. shadow .NET 10 Configuration state host;
 3. isolated World-only gRPC client transport;
 4. opt-in SCS-first World shadow adapter with bounded best-effort synchronization and idempotent generations;
-5. observation-only typed update subscriber with bounded replay, reconnect deduplication and snapshot recovery.
+5. observation-only typed update subscriber with bounded replay, reconnect deduplication and snapshot recovery;
+6. bounded SCS-versus-gRPC callback observation ledger with normalized SHA-256 semantic fingerprints and explicit delivery phases.
 
 The safe continuation is:
 
 1. run explicit local acceptance with Master + World, shadow enabled, and verify SCS startup output plus typed host parity across reconnects;
-2. record comparable legacy callback observations without applying a second gameplay effect;
-3. compare legacy and typed snapshots/delivery across restart and reconnect windows;
-4. switch Get/Update and callback authority together behind one explicit Configuration selector;
-5. remove `IConfigurationService`, `IConfigurationClient` and their SCS registration only after acceptance passes.
+2. compare retained legacy and typed snapshots/delivery across live, replay, recovery, restart and reconnect windows;
+3. switch Get/Update and callback authority together behind one explicit Configuration selector;
+4. remove `IConfigurationService`, `IConfigurationClient` and their SCS registration only after acceptance passes.
 
 Until the joint authority switch, `NOSGM_COMMUNICATION_TRANSPORT` and the existing Communication callback cutover are unrelated to this service and must not act as implicit Configuration selectors.
