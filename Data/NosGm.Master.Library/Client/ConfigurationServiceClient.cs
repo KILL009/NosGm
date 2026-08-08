@@ -116,10 +116,15 @@ namespace NosGm.Master.Library.Client
 
         private const int AcceptancePulseTimeoutMilliseconds = 7000;
 
+        private const int AcceptancePulseRestoreAttempts = 3;
+
         private const string AcceptancePulseEnabledEnvironmentVariable =
             "NOSGM_CONFIGURATION_GRPC_ACCEPTANCE_PULSE_ENABLED";
 
         private int _acceptancePulseRunning;
+
+        private static readonly object AcceptancePulseIsolationRoot =
+            new object();
 
         private readonly object _configurationMutationRoot = new object();
 
@@ -177,14 +182,32 @@ namespace NosGm.Master.Library.Client
 
         public void UpdateConfigurationObject(ConfigurationObject configurationObject)
         {
-            lock (_configurationMutationRoot)
+            lock (AcceptancePulseIsolationRoot)
             {
-                UpdateConfigurationObjectCore(configurationObject);
+                lock (_configurationMutationRoot)
+                {
+                    UpdateConfigurationObjectCore(configurationObject);
+                }
+            }
+        }
+
+        public static void RunWithConfigurationMutationBarrier(
+            Action mutation)
+        {
+            if (mutation == null)
+            {
+                throw new ArgumentNullException(nameof(mutation));
+            }
+
+            lock (AcceptancePulseIsolationRoot)
+            {
+                mutation();
             }
         }
 
         public bool TryRunGrpcAcceptancePulse(
             ConfigurationObject liveWorldConfiguration,
+            Func<bool> isolationStillValid,
             out string diagnostic)
         {
             diagnostic = null;
@@ -200,6 +223,11 @@ namespace NosGm.Master.Library.Client
             if (liveWorldConfiguration == null)
             {
                 diagnostic = "live-world-configuration-unavailable";
+                return false;
+            }
+            if (isolationStillValid == null)
+            {
+                diagnostic = "isolation-check-unavailable";
                 return false;
             }
             if (_grpcShadowMirror == null ||
@@ -219,126 +247,196 @@ namespace NosGm.Master.Library.Client
 
             try
             {
-                ConfigurationUpdateParityReport before;
-                lock (_configurationMutationRoot)
+                lock (AcceptancePulseIsolationRoot)
                 {
-                    ConfigurationObject liveWorld =
-                        CloneConfiguration(liveWorldConfiguration);
-                    DateTime worldNow = DateTime.Now;
-                    if (liveWorld.TimeExpBuff > worldNow ||
-                        liveWorld.TimeGoldBuff > worldNow)
+                    bool isolationLost = false;
+                    bool restorationVerified = true;
+                    ConfigurationObject original;
+                    ConfigurationUpdateParityReport before;
+                    lock (_configurationMutationRoot)
                     {
-                        diagnostic = "active-world-buff";
-                        return false;
-                    }
-
-                    ConfigurationObject original =
-                        GetConfigurationObject();
-                    if (original == null || original.MaxGold <= 0)
-                    {
-                        diagnostic = "configuration-unavailable";
-                        return false;
-                    }
-                    if (!ConfigurationsAreExactlyEqual(
-                            liveWorld,
-                            original))
-                    {
-                        diagnostic = "live-world-configuration-drift";
-                        return false;
-                    }
-                    if (original.MaxGold == long.MaxValue)
-                    {
-                        diagnostic = "max-gold-pulse-unavailable";
-                        return false;
-                    }
-
-                    before = ConfigurationUpdateObservationLedger.Instance
-                        .LatestParityReport;
-                    if (string.IsNullOrWhiteSpace(
-                            before.RuntimeGenerationId))
-                    {
-                        diagnostic = "typed-runtime-unavailable";
-                        return false;
-                    }
-                    if (before.HasTerminalMismatch)
-                    {
-                        diagnostic = "terminal-parity-" + before.Verdict;
-                        return false;
-                    }
-
-                    ConfigurationObject pulse =
-                        CreateGrpcAcceptancePulse(original);
-                    bool pulseAttempted = false;
-                    try
-                    {
-                        Logger.Info(
-                            "[CONFIG_GRPC_ACCEPTANCE_PULSE] Stage=STARTED " +
-                            "Runtime=" + before.RuntimeGenerationId +
-                            "; no Configuration values are logged.");
-                        pulseAttempted = true;
-                        UpdateConfigurationObjectCore(pulse);
-                    }
-                    finally
-                    {
-                        if (pulseAttempted)
+                        if (!isolationStillValid())
                         {
-                            UpdateConfigurationObjectCore(
-                                CloneConfiguration(original));
+                            diagnostic = "world-not-isolated";
+                            return false;
+                        }
+
+                        ConfigurationObject liveWorld =
+                            CloneConfiguration(liveWorldConfiguration);
+                        DateTime worldNow = DateTime.Now;
+                        if (liveWorld.TimeExpBuff > worldNow ||
+                            liveWorld.TimeGoldBuff > worldNow)
+                        {
+                            diagnostic = "active-world-buff";
+                            return false;
+                        }
+
+                        original = _rollbackTransport
+                            .GetConfigurationObject();
+                        if (original == null || original.MaxGold <= 0)
+                        {
+                            diagnostic = "configuration-unavailable";
+                            return false;
+                        }
+                        if (!ConfigurationsAreExactlyEqual(
+                                liveWorld,
+                                original))
+                        {
+                            diagnostic = "live-world-configuration-drift";
+                            return false;
+                        }
+                        if (original.MaxGold == long.MaxValue)
+                        {
+                            diagnostic = "max-gold-pulse-unavailable";
+                            return false;
+                        }
+
+                        ConfigurationObject typedOriginal;
+                        ConfigurationGrpcShadowResult typedOriginalResult;
+                        if (!_grpcShadowMirror.TryGetAuthoritative(
+                                out typedOriginal,
+                                out typedOriginalResult) ||
+                            !IsCurrentAuthorityResult(typedOriginalResult))
+                        {
+                            diagnostic = "typed-runtime-unavailable";
+                            return false;
+                        }
+                        if (!ConfigurationsAreSemanticallyEqual(
+                                original,
+                                typedOriginal))
+                        {
+                            diagnostic = "typed-configuration-drift";
+                            return false;
+                        }
+
+                        before = ConfigurationUpdateObservationLedger.Instance
+                            .LatestParityReport;
+                        if (string.IsNullOrWhiteSpace(
+                                before.RuntimeGenerationId) ||
+                            !string.Equals(
+                                before.RuntimeGenerationId,
+                                typedOriginalResult.RuntimeGenerationId,
+                                StringComparison.Ordinal))
+                        {
+                            diagnostic = "typed-runtime-unavailable";
+                            return false;
+                        }
+                        if (before.HasTerminalMismatch)
+                        {
+                            diagnostic = "terminal-parity-" + before.Verdict;
+                            return false;
+                        }
+                        if (!isolationStillValid())
+                        {
+                            diagnostic = "world-not-isolated";
+                            return false;
+                        }
+
+                        ConfigurationObject pulse =
+                            CreateGrpcAcceptancePulse(original);
+                        bool pulseAttempted = false;
+                        try
+                        {
+                            Logger.Info(
+                                "[CONFIG_GRPC_ACCEPTANCE_PULSE] Stage=STARTED " +
+                                "Runtime=" + before.RuntimeGenerationId +
+                                "; no Configuration values are logged.");
+                            pulseAttempted = true;
+                            UpdateAcceptanceSnapshotEverywhere(pulse);
+                        }
+                        finally
+                        {
+                            if (pulseAttempted)
+                            {
+                                restorationVerified =
+                                    TryRestoreAcceptanceSnapshotEverywhere(
+                                        original);
+                            }
                         }
                     }
-                }
 
-                DateTime deadline = DateTime.UtcNow.AddMilliseconds(
-                    AcceptancePulseTimeoutMilliseconds);
-                while (DateTime.UtcNow < deadline)
-                {
-                    ConfigurationUpdateParityReport after =
+                    if (!restorationVerified)
+                    {
+                        diagnostic = "restoration-verification-failed";
+                        LogAcceptancePulseResult(
+                            "FAILED",
+                            before,
+                            ConfigurationUpdateObservationLedger.Instance
+                                .LatestParityReport,
+                            false);
+                        return false;
+                    }
+
+                    DateTime deadline = DateTime.UtcNow.AddMilliseconds(
+                        AcceptancePulseTimeoutMilliseconds);
+                    while (DateTime.UtcNow < deadline)
+                    {
+                        if (!isolationStillValid())
+                        {
+                            isolationLost = true;
+                        }
+
+                        ConfigurationUpdateParityReport after =
+                            ConfigurationUpdateObservationLedger.Instance
+                                .LatestParityReport;
+                        if (!string.Equals(
+                                before.RuntimeGenerationId,
+                                after.RuntimeGenerationId,
+                                StringComparison.Ordinal))
+                        {
+                            diagnostic = "runtime-changed";
+                            LogAcceptancePulseResult(
+                                "REJECTED",
+                                before,
+                                after,
+                                true);
+                            return false;
+                        }
+                        if (after.HasTerminalMismatch)
+                        {
+                            diagnostic = "terminal-parity-" + after.Verdict;
+                            LogAcceptancePulseResult(
+                                "REJECTED",
+                                before,
+                                after,
+                                true);
+                            return false;
+                        }
+                        if (after.HasParity &&
+                            after.ScsLiveCount >= before.ScsLiveCount + 2 &&
+                            after.GrpcLiveCount >= before.GrpcLiveCount + 2 &&
+                            after.MatchedLiveCount >=
+                                before.MatchedLiveCount + 2 &&
+                            ConfigurationsAreExactlyEqual(
+                                liveWorldConfiguration,
+                                original))
+                        {
+                            diagnostic = isolationLost
+                                ? "world-isolation-lost"
+                                : "pass";
+                            LogAcceptancePulseResult(
+                                isolationLost ? "REJECTED" : "PASS",
+                                before,
+                                after,
+                                true);
+                            return !isolationLost;
+                        }
+                        Thread.Sleep(25);
+                    }
+
+                    diagnostic = ConfigurationsAreExactlyEqual(
+                        liveWorldConfiguration,
+                        original)
+                        ? "parity-timeout"
+                        : "live-world-restore-timeout";
+                    LogAcceptancePulseResult(
+                        "TIMEOUT",
+                        before,
                         ConfigurationUpdateObservationLedger.Instance
-                            .LatestParityReport;
-                    if (!string.Equals(
-                            before.RuntimeGenerationId,
-                            after.RuntimeGenerationId,
-                            StringComparison.Ordinal))
-                    {
-                        diagnostic = "runtime-changed";
-                        LogAcceptancePulseResult(
-                            "REJECTED",
-                            before,
-                            after);
-                        return false;
-                    }
-                    if (after.HasTerminalMismatch)
-                    {
-                        diagnostic = "terminal-parity-" + after.Verdict;
-                        LogAcceptancePulseResult(
-                            "REJECTED",
-                            before,
-                            after);
-                        return false;
-                    }
-                    if (after.HasParity &&
-                        after.ScsLiveCount >= before.ScsLiveCount + 2 &&
-                        after.GrpcLiveCount >= before.GrpcLiveCount + 2 &&
-                        after.MatchedLiveCount >=
-                            before.MatchedLiveCount + 2)
-                    {
-                        diagnostic = "pass";
-                        LogAcceptancePulseResult(
-                            "PASS",
-                            before,
-                            after);
-                        return true;
-                    }
-                    Thread.Sleep(25);
+                            .LatestParityReport,
+                        true);
+                    return false;
                 }
-
-                diagnostic = "parity-timeout";
-                LogAcceptancePulseResult(
-                    "TIMEOUT",
-                    before,
-                    ConfigurationUpdateObservationLedger.Instance
-                        .LatestParityReport);
-                return false;
             }
             catch (Exception exception)
             {
@@ -346,7 +444,8 @@ namespace NosGm.Master.Library.Client
                     exception.GetType().Name;
                 Logger.Error(
                     "[CONFIG_GRPC_ACCEPTANCE_PULSE] Stage=FAILED; " +
-                    "the original Configuration restoration was attempted " +
+                    "every changed Configuration store was restored and " +
+                    "verified when reachable, " +
                     "and no Configuration values were logged.",
                     exception);
                 return false;
@@ -399,6 +498,78 @@ namespace NosGm.Master.Library.Client
             return pulse;
         }
 
+        private void UpdateAcceptanceSnapshotEverywhere(
+            ConfigurationObject configuration)
+        {
+            _rollbackTransport.UpdateConfigurationObject(
+                CloneConfiguration(configuration));
+            ConfigurationGrpcShadowResult typedResult;
+            if (!_grpcShadowMirror.TryUpdateAuthoritative(
+                    CloneConfiguration(configuration),
+                    out typedResult) ||
+                !IsCurrentAuthorityResult(typedResult))
+            {
+                throw new InvalidOperationException(
+                    "The typed Configuration acceptance write failed closed.");
+            }
+        }
+
+        private bool TryRestoreAcceptanceSnapshotEverywhere(
+            ConfigurationObject original)
+        {
+            for (int attempt = 0;
+                 attempt < AcceptancePulseRestoreAttempts;
+                 attempt++)
+            {
+                try
+                {
+                    _rollbackTransport.UpdateConfigurationObject(
+                        CloneConfiguration(original));
+                }
+                catch (Exception)
+                {
+                    // Verification below decides whether another attempt is
+                    // required without exposing Configuration values.
+                }
+
+                ConfigurationGrpcShadowResult typedUpdateResult;
+                _grpcShadowMirror.TryUpdateAuthoritative(
+                    CloneConfiguration(original),
+                    out typedUpdateResult);
+
+                ConfigurationObject scsCurrent = null;
+                try
+                {
+                    scsCurrent = _rollbackTransport
+                        .GetConfigurationObject();
+                }
+                catch (Exception)
+                {
+                    // A failed read cannot verify restoration.
+                }
+
+                ConfigurationObject typedCurrent;
+                ConfigurationGrpcShadowResult typedGetResult;
+                bool typedVerified =
+                    _grpcShadowMirror.TryGetAuthoritative(
+                        out typedCurrent,
+                        out typedGetResult) &&
+                    IsCurrentAuthorityResult(typedGetResult) &&
+                    ConfigurationsAreSemanticallyEqual(
+                        original,
+                        typedCurrent);
+                if (ConfigurationsAreExactlyEqual(original, scsCurrent) &&
+                    typedVerified)
+                {
+                    return true;
+                }
+
+                Thread.Sleep(25);
+            }
+
+            return false;
+        }
+
         private static bool ConfigurationsAreExactlyEqual(
             ConfigurationObject left,
             ConfigurationObject right)
@@ -410,6 +581,26 @@ namespace NosGm.Master.Library.Client
                    left.TimeExpBuff.Kind == right.TimeExpBuff.Kind &&
                    left.TimeGoldBuff.Ticks == right.TimeGoldBuff.Ticks &&
                    left.TimeGoldBuff.Kind == right.TimeGoldBuff.Kind;
+        }
+
+        private static bool ConfigurationsAreSemanticallyEqual(
+            ConfigurationObject left,
+            ConfigurationObject right)
+        {
+            if (left == null || right == null)
+            {
+                return false;
+            }
+
+            ConfigurationTransportSnapshot leftSnapshot =
+                ConfigurationGrpcShadowMirror.ToTransportSnapshot(left);
+            ConfigurationTransportSnapshot rightSnapshot =
+                ConfigurationGrpcShadowMirror.ToTransportSnapshot(right);
+            return leftSnapshot.MaxGold == rightSnapshot.MaxGold &&
+                   leftSnapshot.TimeExpBuffUnixTimeMilliseconds ==
+                       rightSnapshot.TimeExpBuffUnixTimeMilliseconds &&
+                   leftSnapshot.TimeGoldBuffUnixTimeMilliseconds ==
+                       rightSnapshot.TimeGoldBuffUnixTimeMilliseconds;
         }
 
         private static ConfigurationObject CloneConfiguration(
@@ -430,7 +621,8 @@ namespace NosGm.Master.Library.Client
         private static void LogAcceptancePulseResult(
             string stage,
             ConfigurationUpdateParityReport before,
-            ConfigurationUpdateParityReport after)
+            ConfigurationUpdateParityReport after,
+            bool restored)
         {
             int scsDelta = Math.Max(
                 0,
@@ -447,7 +639,8 @@ namespace NosGm.Master.Library.Client
                 " ScsDelta=" + scsDelta +
                 " GrpcDelta=" + grpcDelta +
                 " MatchedDelta=" + matchedDelta +
-                " Restored=True; no Configuration values are logged.");
+                " Restored=" + restored +
+                "; no Configuration values are logged.");
         }
 
         internal void OnConfigurationUpdated(ConfigurationObject configurationObject)
