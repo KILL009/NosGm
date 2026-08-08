@@ -256,6 +256,44 @@ suppressed, while a generation, state or counter transition produces a new
 record. Diagnostics are best-effort and can never block the authoritative SCS
 callback path.
 
+### Operational evidence collector
+
+After generating real traffic through one continuously running Master + World
+pair, collect the dry-run qualification receipt with:
+
+```powershell
+./scripts/collect-configuration-authority-evidence.ps1 -Mode Qualification
+```
+
+The collector reads only the bounded tail of the active `nosgm-world.log` (or
+the explicit files supplied through `-WorldLogPath`). It rejects evidence that
+does not belong to exactly one World process generation, contains a terminal
+parity verdict, has evicted observations, or cannot prove three distinct parity
+runtimes followed by a recovered fourth activation runtime. Qualification also
+requires effects and typed ingress to remain disabled.
+
+Run the live-effects exercise under a separate, explicitly effect-authorized
+World process and collect its receipt with:
+
+```powershell
+./scripts/collect-configuration-authority-evidence.ps1 -Mode LiveEffects
+```
+
+Live acceptance requires the same three-runtime qualification, a distinct
+recovered fourth runtime with typed ingress ready, at least two suppressed
+opposite-source semantic twins, and a later terminal stream observation that
+leaves the final authority state blocked and rolled back to SCS. The receipt
+contains only generation identifiers, bounded counters, state flags and its
+verdict. It never contains source paths, log lines, Configuration values,
+snapshots, gameplay data, account data or credentials, and an existing receipt
+is never overwritten.
+
+Each successful mode writes a separate schema-versioned JSON receipt under
+`artifacts/configuration-authority-evidence/`. A qualification receipt or a
+live-effects receipt by itself does not authorize SCS removal. Final removal
+requires both receipts from controlled real-client exercises, operator review,
+and the remaining service-wide acceptance gates.
+
 ## Runtime sequence
 
 Completed foundations:
@@ -273,12 +311,13 @@ Completed foundations:
 11. one isolated World-side SCS rollback adapter, leaving the gameplay-facing Configuration facade transport-neutral and making the final deletion boundary explicit.
 12. one bounded Windows acceptance that combines the real net481-to-.NET 10 mTLS transport with dry-run activation, effect-authorized overlap, terminal rollback and a sanitized machine-readable receipt.
 13. deduplicated payload-free World authority-state records that bind operational parity, activation and rollback evidence to one process generation.
+14. one fail-closed operational collector that produces separate sanitized qualification and live-effects receipts from real World evidence.
 
 The safe continuation is:
 
 1. run explicit local acceptance with Master + World, shadow enabled, and collect stable comparator parity across live, replay, recovery, restart and reconnect windows;
-2. collect dry-run qualification evidence with an explicit arm request across three parity runtimes and a fourth activation runtime;
-3. run live overlap/rollback acceptance with both the arm request and effects authorization;
+2. collect and review the dry-run qualification receipt with an explicit arm request across three parity runtimes and a fourth activation runtime;
+3. collect and review the live-effects receipt after overlap/rollback acceptance with both the arm request and effects authorization;
 4. remove `ScsConfigurationRollbackTransport`, `IConfigurationService`, `IConfigurationClient` and their Master registration only after acceptance passes; `ConfigurationServiceClient` must remain unchanged by that deletion.
 
 `NOSGM_COMMUNICATION_TRANSPORT` and the existing Communication callback cutover are unrelated to this service and must not act as implicit Configuration selectors.

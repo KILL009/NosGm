@@ -46,6 +46,8 @@ on:
       - "scripts/verify-configuration-grpc-client.ps1"
       - "scripts/verify-configuration-grpc-shadow-adapter.ps1"
       - "scripts/verify-configuration-authority-selector.ps1"
+      - "scripts/collect-configuration-authority-evidence.ps1"
+      - "scripts/verify-configuration-authority-evidence-collector.ps1"
   pull_request:
     branches:
       - main
@@ -91,6 +93,8 @@ on:
       - "scripts/verify-configuration-grpc-client.ps1"
       - "scripts/verify-configuration-grpc-shadow-adapter.ps1"
       - "scripts/verify-configuration-authority-selector.ps1"
+      - "scripts/collect-configuration-authority-evidence.ps1"
+      - "scripts/verify-configuration-authority-evidence-collector.ps1"
   workflow_dispatch:
 
 permissions:
