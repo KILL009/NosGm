@@ -326,15 +326,20 @@ timestamps; any drift rejects the pulse before the first write.
 
 After those barriers pass, the command serializes all Configuration mutations,
 copies the current authoritative object, advances only the global `MaxGold`
-ceiling by one, sends the pulse through the selected joint Update path, and
-restores an independent copy of the original object in a `finally` boundary.
-The isolated acceptance client performs no gameplay action during that bounded
-interval. The command then waits at most seven seconds for two new SCS
+ceiling by one, writes that pulse explicitly to SCS and gRPC, and restores an
+independent copy of the original object to both stores in a `finally` boundary.
+Restoration is retried and read back from both stores; a partial restoration can
+never report success. A shared mutation barrier blocks XP/gold family-skill
+changes until both restoration callbacks have arrived and the live World object
+exactly matches the original. The isolated acceptance client performs no
+gameplay action during that bounded interval. The command then waits at most
+seven seconds for two new SCS
 observations, two new live typed observations and two ordered semantic matches
 from the same runtime. A timeout, terminal parity verdict, missing subscriber,
 missing shadow transport, active buff, local drift, additional connected player
 or concurrent pulse fails closed. Logs contain only the runtime, bounded deltas,
-result and `Restored=True`; they never contain Configuration values.
+result and the verified restoration flag; they never contain Configuration
+values.
 
 The expected terminal marker for each qualification runtime is:
 
