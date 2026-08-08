@@ -123,6 +123,7 @@ namespace NosGm.Authentication.Client.Configuration
 
         private readonly int _capacity;
         private readonly Queue<ConfigurationUpdateObservation> _observations;
+        private readonly TimeSpan _paritySettlementWindow;
         private readonly string _processGenerationId =
             Guid.NewGuid().ToString("D");
         private readonly object _syncRoot = new object();
@@ -132,9 +133,11 @@ namespace NosGm.Authentication.Client.Configuration
         private long _observedGrpc;
         private long _observedScs;
         private long _scsOrdinal;
+        private ConfigurationUpdateParityReport _latestParityReport;
 
         public ConfigurationUpdateObservationLedger(
-            int observationCapacity = DefaultObservationCapacity)
+            int observationCapacity = DefaultObservationCapacity,
+            TimeSpan? paritySettlementWindow = null)
         {
             if (observationCapacity <= 0 ||
                 observationCapacity > MaximumObservationCapacity)
@@ -146,8 +149,16 @@ namespace NosGm.Authentication.Client.Configuration
             }
 
             _capacity = observationCapacity;
+            _paritySettlementWindow =
+                ConfigurationUpdateParityComparator
+                    .NormalizeSettlementWindow(paritySettlementWindow);
             _observations =
                 new Queue<ConfigurationUpdateObservation>(observationCapacity);
+            _latestParityReport =
+                ConfigurationUpdateParityComparator.Compare(
+                    CreateSnapshotLocked(),
+                    DateTimeOffset.UtcNow,
+                    _paritySettlementWindow);
         }
 
         public static ConfigurationUpdateObservationLedger Instance =>
@@ -163,6 +174,17 @@ namespace NosGm.Authentication.Client.Configuration
 
         public long EvictedObservations =>
             Interlocked.Read(ref _evictedObservations);
+
+        public ConfigurationUpdateParityReport LatestParityReport
+        {
+            get
+            {
+                lock (_syncRoot)
+                {
+                    return _latestParityReport;
+                }
+            }
+        }
 
         public ConfigurationUpdateObservation RecordScs(
             ConfigurationTransportSnapshot snapshot)
@@ -205,9 +227,28 @@ namespace NosGm.Authentication.Client.Configuration
         public IReadOnlyList<ConfigurationUpdateObservation>
             GetObservationSnapshot()
         {
+            return CaptureSnapshot().Observations;
+        }
+
+        public ConfigurationUpdateObservationLedgerSnapshot CaptureSnapshot()
+        {
             lock (_syncRoot)
             {
-                return _observations.ToArray();
+                return CreateSnapshotLocked();
+            }
+        }
+
+        public ConfigurationUpdateParityReport EvaluateParity(
+            DateTimeOffset evaluatedAt)
+        {
+            lock (_syncRoot)
+            {
+                _latestParityReport =
+                    ConfigurationUpdateParityComparator.Compare(
+                        CreateSnapshotLocked(),
+                        evaluatedAt,
+                        _paritySettlementWindow);
+                return _latestParityReport;
             }
         }
 
@@ -243,6 +284,7 @@ namespace NosGm.Authentication.Client.Configuration
                     Interlocked.Increment(ref _evictedObservations);
                 }
 
+                DateTimeOffset observedAt = DateTimeOffset.UtcNow;
                 var observation = new ConfigurationUpdateObservation(
                     _processGenerationId,
                     checked((ulong)nextLedgerOrdinal),
@@ -253,7 +295,7 @@ namespace NosGm.Authentication.Client.Configuration
                     generation,
                     snapshot,
                     fingerprint,
-                    DateTimeOffset.UtcNow);
+                    observedAt);
                 _observations.Enqueue(observation);
                 if (source == ConfigurationUpdateObservationSource.Scs)
                 {
@@ -263,8 +305,24 @@ namespace NosGm.Authentication.Client.Configuration
                 {
                     Interlocked.Increment(ref _observedGrpc);
                 }
+                _latestParityReport =
+                    ConfigurationUpdateParityComparator.Compare(
+                        CreateSnapshotLocked(),
+                        observedAt,
+                        _paritySettlementWindow);
                 return observation;
             }
+        }
+
+        private ConfigurationUpdateObservationLedgerSnapshot
+            CreateSnapshotLocked()
+        {
+            return new ConfigurationUpdateObservationLedgerSnapshot(
+                _processGenerationId,
+                _observedScs,
+                _observedGrpc,
+                _evictedObservations,
+                _observations.ToArray());
         }
 
         private static bool IsCanonicalNonEmptyGuid(string value)

@@ -8,6 +8,75 @@ using System.Threading.Tasks;
 
 namespace NosGm.Master.Library.Client
 {
+    internal static class ConfigurationUpdateParityDiagnostics
+    {
+        private static readonly object SyncRoot = new object();
+        private static string _lastProcessGenerationId = string.Empty;
+        private static string _lastRuntimeGenerationId = string.Empty;
+        private static ulong _lastEvaluatedThroughLedgerOrdinal;
+        private static ConfigurationUpdateParityVerdict _lastVerdict;
+
+        internal static void Observe(ConfigurationUpdateParityReport report)
+        {
+            if (report == null)
+            {
+                throw new ArgumentNullException(nameof(report));
+            }
+
+            lock (SyncRoot)
+            {
+                bool sameProcess = string.Equals(
+                    _lastProcessGenerationId,
+                    report.ProcessGenerationId,
+                    StringComparison.Ordinal);
+                if (sameProcess &&
+                    report.EvaluatedThroughLedgerOrdinal <
+                        _lastEvaluatedThroughLedgerOrdinal)
+                {
+                    return;
+                }
+                if (sameProcess &&
+                    string.Equals(
+                        _lastRuntimeGenerationId,
+                        report.RuntimeGenerationId,
+                        StringComparison.Ordinal) &&
+                    _lastEvaluatedThroughLedgerOrdinal ==
+                        report.EvaluatedThroughLedgerOrdinal &&
+                    _lastVerdict == report.Verdict)
+                {
+                    return;
+                }
+
+                _lastProcessGenerationId = report.ProcessGenerationId;
+                _lastRuntimeGenerationId = report.RuntimeGenerationId;
+                _lastEvaluatedThroughLedgerOrdinal =
+                    report.EvaluatedThroughLedgerOrdinal;
+                _lastVerdict = report.Verdict;
+            }
+
+            string diagnostic =
+                "[CONFIG_GRPC_PARITY] Verdict=" + report.Verdict +
+                " Runtime=" + report.RuntimeGenerationId +
+                " Through=" + report.EvaluatedThroughLedgerOrdinal +
+                " WindowStart=" + report.WindowStartLedgerOrdinal +
+                " ScsLive=" + report.ScsLiveCount +
+                " GrpcLive=" + report.GrpcLiveCount +
+                " Matched=" + report.MatchedLiveCount +
+                " Recovery=" + report.GrpcRecoveryCount +
+                " Replay=" + report.GrpcReplayCount +
+                " Evicted=" + report.EvictedObservations +
+                "; SCS authority is unchanged and this evidence has no gameplay effect.";
+            if (report.HasTerminalMismatch)
+            {
+                Logger.Warn(diagnostic);
+            }
+            else
+            {
+                Logger.Info(diagnostic);
+            }
+        }
+    }
+
     internal sealed class ConfigurationGrpcShadowUpdateObserver
         : IClusterConfigurationUpdateHandler
     {
@@ -23,7 +92,11 @@ namespace NosGm.Master.Library.Client
                     : "live";
             try
             {
-                ConfigurationUpdateObservationLedger.Instance.RecordGrpc(update);
+                ConfigurationUpdateObservationLedger ledger =
+                    ConfigurationUpdateObservationLedger.Instance;
+                ledger.RecordGrpc(update);
+                ConfigurationUpdateParityDiagnostics.Observe(
+                    ledger.LatestParityReport);
             }
             catch (Exception exception)
             {

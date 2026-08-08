@@ -142,9 +142,13 @@ namespace NosGm.Master.Library.Client
         {
             try
             {
-                ConfigurationUpdateObservationLedger.Instance.RecordScs(
+                ConfigurationUpdateObservationLedger ledger =
+                    ConfigurationUpdateObservationLedger.Instance;
+                ledger.RecordScs(
                     ConfigurationGrpcShadowMirror.ToTransportSnapshot(
                         configurationObject));
+                ConfigurationUpdateParityDiagnostics.Observe(
+                    ledger.LatestParityReport);
             }
             catch (Exception exception)
             {
