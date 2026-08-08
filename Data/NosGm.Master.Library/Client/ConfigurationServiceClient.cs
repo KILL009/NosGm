@@ -116,6 +116,9 @@ namespace NosGm.Master.Library.Client
 
         private const int AcceptancePulseTimeoutMilliseconds = 7000;
 
+        private const string AcceptancePulseEnabledEnvironmentVariable =
+            "NOSGM_CONFIGURATION_GRPC_ACCEPTANCE_PULSE_ENABLED";
+
         private int _acceptancePulseRunning;
 
         private readonly object _configurationMutationRoot = new object();
@@ -180,9 +183,25 @@ namespace NosGm.Master.Library.Client
             }
         }
 
-        public bool TryRunGrpcAcceptancePulse(out string diagnostic)
+        public bool TryRunGrpcAcceptancePulse(
+            ConfigurationObject liveWorldConfiguration,
+            out string diagnostic)
         {
             diagnostic = null;
+            if (!string.Equals(
+                    Environment.GetEnvironmentVariable(
+                        AcceptancePulseEnabledEnvironmentVariable),
+                    "true",
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                diagnostic = "acceptance-pulse-disabled";
+                return false;
+            }
+            if (liveWorldConfiguration == null)
+            {
+                diagnostic = "live-world-configuration-unavailable";
+                return false;
+            }
             if (_grpcShadowMirror == null ||
                 _grpcShadowSubscriberLifecycle == null)
             {
@@ -203,11 +222,33 @@ namespace NosGm.Master.Library.Client
                 ConfigurationUpdateParityReport before;
                 lock (_configurationMutationRoot)
                 {
+                    ConfigurationObject liveWorld =
+                        CloneConfiguration(liveWorldConfiguration);
+                    DateTime worldNow = DateTime.Now;
+                    if (liveWorld.TimeExpBuff > worldNow ||
+                        liveWorld.TimeGoldBuff > worldNow)
+                    {
+                        diagnostic = "active-world-buff";
+                        return false;
+                    }
+
                     ConfigurationObject original =
                         GetConfigurationObject();
                     if (original == null || original.MaxGold <= 0)
                     {
                         diagnostic = "configuration-unavailable";
+                        return false;
+                    }
+                    if (!ConfigurationsAreExactlyEqual(
+                            liveWorld,
+                            original))
+                    {
+                        diagnostic = "live-world-configuration-drift";
+                        return false;
+                    }
+                    if (original.MaxGold == long.MaxValue)
+                    {
+                        diagnostic = "max-gold-pulse-unavailable";
                         return false;
                     }
 
@@ -354,15 +395,21 @@ namespace NosGm.Master.Library.Client
             ConfigurationObject original)
         {
             ConfigurationObject pulse = CloneConfiguration(original);
-            long delta = TimeSpan.TicksPerMillisecond;
-            long ticks = pulse.TimeExpBuff.Ticks;
-            ticks = ticks <= DateTime.MaxValue.Ticks - delta
-                ? ticks + delta
-                : ticks - delta;
-            pulse.TimeExpBuff = new DateTime(
-                ticks,
-                pulse.TimeExpBuff.Kind);
+            pulse.MaxGold = checked(pulse.MaxGold + 1);
             return pulse;
+        }
+
+        private static bool ConfigurationsAreExactlyEqual(
+            ConfigurationObject left,
+            ConfigurationObject right)
+        {
+            return left != null &&
+                   right != null &&
+                   left.MaxGold == right.MaxGold &&
+                   left.TimeExpBuff.Ticks == right.TimeExpBuff.Ticks &&
+                   left.TimeExpBuff.Kind == right.TimeExpBuff.Kind &&
+                   left.TimeGoldBuff.Ticks == right.TimeGoldBuff.Ticks &&
+                   left.TimeGoldBuff.Kind == right.TimeGoldBuff.Kind;
         }
 
         private static ConfigurationObject CloneConfiguration(
