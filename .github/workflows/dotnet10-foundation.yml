@@ -141,22 +141,49 @@ jobs:
 
       - name: Verify live net481 Configuration shadow transport
         timeout-minutes: 10
-        shell: powershell
+        shell: pwsh
         run: |
           $manifest = Get-Content -LiteralPath "artifacts/authentication-grpc-local/manifest.json" -Raw | ConvertFrom-Json
           $rootCertificatePath = [System.IO.Path]::GetFullPath([string]$manifest.RootCertificatePath)
           $rootThumbprint = [string]$manifest.RootCertificateThumbprint
-          $store = New-Object System.Security.Cryptography.X509Certificates.X509Store("Root", "CurrentUser")
-          $certificate = New-Object System.Security.Cryptography.X509Certificates.X509Certificate2($rootCertificatePath)
+          $certutil = Join-Path $env:SystemRoot "System32\certutil.exe"
           $installedByStep = $false
+
+          function Invoke-BoundedCertUtil {
+            param(
+              [Parameter(Mandatory = $true)][string[]]$Arguments,
+              [Parameter(Mandatory = $true)][string]$Operation
+            )
+
+            $process = Start-Process -FilePath $certutil -ArgumentList $Arguments -NoNewWindow -PassThru
+            try {
+              if (-not $process.WaitForExit(30000)) {
+                Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+                $process.WaitForExit(5000) | Out-Null
+                throw "certutil timed out while $Operation."
+              }
+              return $process.ExitCode
+            }
+            finally {
+              $process.Dispose()
+            }
+          }
+
           try {
-            Write-Host "[TRUST] Opening CurrentUser Root store for Configuration net481 acceptance"
-            $store.Open([System.Security.Cryptography.X509Certificates.OpenFlags]::ReadWrite)
-            $existing = @($store.Certificates | Where-Object { $_.Thumbprint -eq $rootThumbprint })
-            if ($existing.Count -eq 0) {
-              $store.Add($certificate)
+            Write-Host "[TRUST] Inspecting CurrentUser Root with bounded certutil"
+            $lookupExitCode = Invoke-BoundedCertUtil `
+              -Arguments @("-user", "-silent", "-store", "Root", $rootThumbprint) `
+              -Operation "checking the NosGM development root"
+            if ($lookupExitCode -ne 0) {
+              $quotedRootCertificatePath = '"' + $rootCertificatePath + '"'
+              $installExitCode = Invoke-BoundedCertUtil `
+                -Arguments @("-user", "-f", "-addstore", "Root", $quotedRootCertificatePath) `
+                -Operation "installing the NosGM development root"
+              if ($installExitCode -ne 0) {
+                throw "certutil failed to install the temporary CurrentUser root with exit code $installExitCode."
+              }
               $installedByStep = $true
-              Write-Host "[TRUST] Installed temporary NosGM development root without certificate-provider prompting" -ForegroundColor Green
+              Write-Host "[TRUST] Installed temporary NosGM development root with bounded certutil" -ForegroundColor Green
             } else {
               Write-Host "[TRUST] NosGM development root is already trusted for CurrentUser"
             }
@@ -164,9 +191,12 @@ jobs:
           }
           finally {
             if ($installedByStep) {
-              $store.Remove($certificate)
+              $removeExitCode = Invoke-BoundedCertUtil `
+                -Arguments @("-user", "-delstore", "Root", $rootThumbprint) `
+                -Operation "removing the NosGM development root"
+              if ($removeExitCode -ne 0) {
+                throw "certutil failed to remove the temporary CurrentUser root with exit code $removeExitCode."
+              }
               Write-Host "[CLEANUP] Removed temporary NosGM development root" -ForegroundColor Green
             }
-            $store.Close()
-            $certificate.Dispose()
           }
