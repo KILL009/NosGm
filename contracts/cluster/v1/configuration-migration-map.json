@@ -31,5 +31,12 @@
     "target": "SubscribeConfigurationUpdates",
     "authority": "joint_selector",
     "reason": "SCS is the fail-closed default. The typed stream may apply gameplay configuration only after immutable operator effect authorization, three qualified parity runtimes, a fourth activation runtime, and successful snapshot recovery select Get, Update, and callback together."
+  },
+  "rollbackBoundary": {
+    "adapter": "ScsConfigurationRollbackTransport",
+    "contract": "IConfigurationRollbackTransport",
+    "owner": "NosGm.Master.Library.Client",
+    "isolatedFacade": "ConfigurationServiceClient",
+    "reason": "All remaining World-side SCS Configuration calls and callback registration are isolated behind one rollback adapter. The gameplay-facing facade has no direct SCS or IConfigurationService dependency, so final removal cannot bypass the joint selector."
   }
 }
