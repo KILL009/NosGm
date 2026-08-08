@@ -153,6 +153,13 @@ namespace NosGm.Authentication.Client.Configuration
         Task RunAsync(CancellationToken cancellationToken);
     }
 
+    public interface IConfigurationGrpcShadowStreamLifecycleObserver
+    {
+        void ObserveStreamEnded(
+            string runtimeGenerationId,
+            Exception reason);
+    }
+
     public sealed class ConfigurationGrpcShadowSubscriber
         : IConfigurationGrpcShadowSubscriberRunner,
           IClusterConfigurationUpdateHandler
@@ -218,12 +225,33 @@ namespace NosGm.Authentication.Client.Configuration
                     {
                         recovered = await RecoverSnapshotAsync(cancellationToken)
                             .ConfigureAwait(false);
-                        await _streamTransport.SubscribeUpdatesAsync(
-                                _cursor.RuntimeGenerationId,
-                                _cursor.Generation,
-                                this,
-                                cancellationToken)
-                            .ConfigureAwait(false);
+                        Exception streamEndReason = null;
+                        try
+                        {
+                            await _streamTransport.SubscribeUpdatesAsync(
+                                    _cursor.RuntimeGenerationId,
+                                    _cursor.Generation,
+                                    this,
+                                    cancellationToken)
+                                .ConfigureAwait(false);
+                        }
+                        catch (Exception exception)
+                        {
+                            streamEndReason = exception;
+                            throw;
+                        }
+                        finally
+                        {
+                            if (!cancellationToken.IsCancellationRequested &&
+                                _observer is
+                                    IConfigurationGrpcShadowStreamLifecycleObserver
+                                        lifecycleObserver)
+                            {
+                                lifecycleObserver.ObserveStreamEnded(
+                                    _cursor.RuntimeGenerationId,
+                                    streamEndReason);
+                            }
+                        }
                     }
                     catch (OperationCanceledException)
                         when (cancellationToken.IsCancellationRequested)

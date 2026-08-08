@@ -42,8 +42,11 @@ function Forbid-Text {
 
 $gate = Read-RepoFile "Data\NosGm.Authentication.Client\Configuration\ConfigurationAuthorityGate.cs"
 $coordinator = Read-RepoFile "Data\NosGm.Authentication.Client\Configuration\ConfigurationAuthorityCoordinator.cs"
+$operatorOptions = Read-RepoFile "Data\NosGm.Authentication.Client\Configuration\ConfigurationAuthorityOperatorOptions.cs"
+$qualificationRuntime = Read-RepoFile "Data\NosGm.Authentication.Client\Configuration\ConfigurationAuthorityQualificationRuntime.cs"
 $overlap = Read-RepoFile "Data\NosGm.Authentication.Client\Configuration\ConfigurationUpdateOverlapDeduplicationLedger.cs"
 $selfTest = Read-RepoFile "tests\NosGm.Authentication.Runtime.SelfTest\ConfigurationAuthorityCoordinatorSelfTest.cs"
+$runtimeSelfTest = Read-RepoFile "tests\NosGm.Authentication.Runtime.SelfTest\ConfigurationAuthorityQualificationRuntimeSelfTest.cs"
 $legacyClient = Read-RepoFile "Data\NosGm.Master.Library\Client\ConfigurationServiceClient.cs"
 $typedLifecycle = Read-RepoFile "Data\NosGm.Master.Library\Client\ConfigurationGrpcShadowSubscriberLifecycle.cs"
 $documentation = Read-RepoFile "docs\configuration-grpc-slice.md"
@@ -70,6 +73,14 @@ foreach ($required in @(
 }
 
 foreach ($required in @(
+    "public static ConfigurationAuthorityCoordinator Instance",
+    "public bool Configure",
+    "effectRoutingEnabled",
+    "OperatorRollbackRequested",
+    "ConfiguredProcessGenerationId",
+    "ArmRequestId",
+    "LastRecoveredRuntimeGenerationId",
+    "StreamEndObservations",
     "ObserveQualification",
     "ObserveRuntimeGeneration",
     "CompleteRecovery",
@@ -87,6 +98,32 @@ foreach ($required in @(
     "_overlapLedger.RecordApplied"
 )) {
     Require-Text $coordinator $required "Configuration authority coordinator"
+}
+
+foreach ($required in @(
+    "NOSGM_CONFIGURATION_GRPC_AUTHORITY_ARM_REQUEST_ID",
+    "NOSGM_CONFIGURATION_GRPC_AUTHORITY_ROLLBACK_REQUESTED",
+    "must be an exact lowercase canonical non-empty GUID",
+    "must be true or false without surrounding whitespace",
+    "cannot be requested together"
+)) {
+    Require-Text $operatorOptions $required "Configuration authority operator controls"
+}
+
+foreach ($required in @(
+    "DefaultEvidenceCapacity = 16",
+    "MaximumEvidenceCapacity = 64",
+    "LinkedList<ConfigurationUpdateParityReport>",
+    "TryConfigureFromEnvironment",
+    "ObserveParity",
+    "ObserveTypedUpdate",
+    "ObserveStreamEnded",
+    "FindRuntimeLocked",
+    "_coordinator.ObserveQualification",
+    "_coordinator.CompleteRecovery",
+    "_coordinator.RequestRollback"
+)) {
+    Require-Text $qualificationRuntime $required "Configuration qualification runtime"
 }
 
 foreach ($required in @(
@@ -123,6 +160,16 @@ foreach ($pureFile in @(
     }
 }
 
+foreach ($forbidden in @(
+    "NosGm.SCS",
+    "ConfigurationServiceClient",
+    "IConfigurationService",
+    "Task.Run",
+    "System.Threading.Timer"
+)) {
+    Forbid-Text $qualificationRuntime $forbidden "Configuration qualification runtime"
+}
+
 foreach ($required in @(
     "SCS owns Get, Update and callback by default",
     "Fewer than three parity runtimes cannot arm Configuration authority",
@@ -142,6 +189,17 @@ foreach ($required in @(
     Require-Text $selfTest $required "Configuration joint authority self-test"
 }
 
+foreach ($required in @(
+    "Configuration dry-run lifecycle binds immutable controls",
+    "Third Configuration parity runtime arms the dry-run gate",
+    "Fourth Configuration runtime activates the dry-run handshake",
+    "Disabled effect routing keeps typed ingress closed",
+    "Configuration dry-run keeps callback effects on SCS",
+    "Qualification runtime retains one bounded report per runtime"
+)) {
+    Require-Text $runtimeSelfTest $required "Configuration qualification runtime self-test"
+}
+
 foreach ($productionFile in @(
     @{ Content = $legacyClient; Name = "legacy Configuration client" },
     @{ Content = $typedLifecycle; Name = "typed Configuration subscriber lifecycle" }
@@ -149,10 +207,34 @@ foreach ($productionFile in @(
     Forbid-Text $productionFile.Content "ConfigurationAuthorityCoordinator" $productionFile.Name
     Forbid-Text $productionFile.Content "ConfigurationAuthorityGate" $productionFile.Name
     Forbid-Text $productionFile.Content "ConfigurationUpdateOverlapDeduplicationLedger" $productionFile.Name
+    Forbid-Text $productionFile.Content ".ShouldUse(" $productionFile.Name
+    Forbid-Text $productionFile.Content ".TryApplyCallback(" $productionFile.Name
 }
 
 foreach ($required in @(
-    "Authority selector foundation (not wired yet)",
+    "ConfigurationAuthorityQualificationRuntime.Instance",
+    "TryConfigureFromEnvironment",
+    "effectRoutingEnabled: false",
+    "SCS remains the immutable production authority",
+    "ObserveParity(report)"
+)) {
+    Require-Text $legacyClient $required "legacy Configuration lifecycle binding"
+}
+
+foreach ($required in @(
+    "IConfigurationGrpcShadowStreamLifecycleObserver",
+    "ObserveTypedUpdate",
+    "ObserveStreamEnded",
+    "ConfigurationAuthorityQualificationRuntime.Instance"
+)) {
+    Require-Text $typedLifecycle $required "typed Configuration lifecycle binding"
+}
+
+foreach ($required in @(
+    "Authority lifecycle binding (dry-run)",
+    "NOSGM_CONFIGURATION_GRPC_AUTHORITY_ARM_REQUEST_ID",
+    "NOSGM_CONFIGURATION_GRPC_AUTHORITY_ROLLBACK_REQUESTED",
+    "effect routing is compiled off",
     "three successful parity windows",
     "fourth, previously unqualified runtime generation",
     "Get, Update and callback",
@@ -168,4 +250,4 @@ Write-Host "[PASS] Three parity runtimes and a fourth activation runtime prevent
 Write-Host "[PASS] Typed ingress remains closed until active-runtime recovery completes." -ForegroundColor Green
 Write-Host "[PASS] Overlap applies one semantic effect and suppresses its opposite-source twin." -ForegroundColor Green
 Write-Host "[PASS] Runtime drift, typed failure and capacity saturation roll back terminally to SCS." -ForegroundColor Green
-Write-Host "[PASS] The selector foundation is not wired into production Configuration paths." -ForegroundColor Green
+Write-Host "[PASS] Production lifecycle observation is wired with Configuration effect routing compiled off." -ForegroundColor Green
