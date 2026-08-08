@@ -65,7 +65,7 @@ namespace NosGm.Master.Library.Client
                 " Recovery=" + report.GrpcRecoveryCount +
                 " Replay=" + report.GrpcReplayCount +
                 " Evicted=" + report.EvictedObservations +
-                "; SCS authority is unchanged and this evidence has no gameplay effect.";
+                "; authority selection is evaluated separately and this evidence has no direct gameplay effect.";
             if (report.HasTerminalMismatch)
             {
                 Logger.Warn(diagnostic);
@@ -81,6 +81,16 @@ namespace NosGm.Master.Library.Client
         : IClusterConfigurationUpdateHandler,
           IConfigurationGrpcShadowStreamLifecycleObserver
     {
+        private readonly Func<ConfigurationTransportUpdate, bool>
+            _authorityCallback;
+
+        internal ConfigurationGrpcShadowUpdateObserver(
+            Func<ConfigurationTransportUpdate, bool> authorityCallback)
+        {
+            _authorityCallback = authorityCallback ??
+                throw new ArgumentNullException(nameof(authorityCallback));
+        }
+
         public Task ObserveAsync(
             ConfigurationTransportUpdate update,
             CancellationToken cancellationToken)
@@ -105,19 +115,25 @@ namespace NosGm.Master.Library.Client
                     .ObserveTypedUpdate(
                         ledger.ProcessGenerationId,
                         update);
+                bool applied = _authorityCallback(update);
+                Logger.Info(
+                    applied
+                        ? "[CONFIG_GRPC_AUTHORITY] Applied typed Configuration update " +
+                          "generation " + update.Generation + " during " + phase + "."
+                        : "[CONFIG_GRPC_SHADOW] Observed typed Configuration update " +
+                          "generation " + update.Generation + " during " + phase +
+                          "; the current authority selector applied no typed gameplay effect.");
             }
             catch (Exception exception)
             {
+                ConfigurationAuthorityQualificationRuntime.Instance
+                    .Invalidate(exception);
                 Logger.Warn(
                     "[CONFIG_GRPC_SHADOW] Typed Configuration observation " +
-                    "could not enter the parity ledger; " +
-                    "the subscriber will continue without applying gameplay state. Reason=" +
+                    "or selected callback failed closed to SCS; " +
+                    "the subscriber will continue only as diagnostic input. Reason=" +
                     exception.GetType().Name);
             }
-            Logger.Info(
-                "[CONFIG_GRPC_SHADOW] Observed typed Configuration update " +
-                "generation " + update.Generation + " during " + phase +
-                "; SCS callback remains authoritative and no gameplay state was applied.");
             return Task.CompletedTask;
         }
 
@@ -148,6 +164,7 @@ namespace NosGm.Master.Library.Client
         }
 
         internal static bool TryStartFromEnvironment(
+            Func<ConfigurationTransportUpdate, bool> authorityCallback,
             out ConfigurationGrpcShadowSubscriberLifecycle lifecycle,
             out string diagnostic)
         {
@@ -170,7 +187,8 @@ namespace NosGm.Master.Library.Client
                 var subscriber = new ConfigurationGrpcShadowSubscriber(
                     transport,
                     transport,
-                    new ConfigurationGrpcShadowUpdateObserver());
+                    new ConfigurationGrpcShadowUpdateObserver(
+                        authorityCallback));
                 lifecycle = new ConfigurationGrpcShadowSubscriberLifecycle(
                     subscriber);
                 transport = null;

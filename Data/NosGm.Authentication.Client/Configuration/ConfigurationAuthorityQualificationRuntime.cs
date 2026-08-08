@@ -93,7 +93,6 @@ namespace NosGm.Authentication.Client.Configuration
             LazyInstance.Value;
 
         public bool TryConfigureFromEnvironment(
-            bool effectRoutingEnabled,
             out string diagnostic)
         {
             try
@@ -104,13 +103,14 @@ namespace NosGm.Authentication.Client.Configuration
                     ConfigurationAuthorityOperatorOptions.Load();
                 Configure(
                     ledger.ProcessGenerationId,
-                    options,
-                    effectRoutingEnabled);
+                    options);
                 diagnostic = options.RollbackRequested
                     ? "rollback-requested"
-                    : options.HasArmRequest
-                        ? "armed-for-qualification"
-                        : "unarmed";
+                    : options.EffectRoutingRequested
+                        ? "effect-routing-requested"
+                        : options.HasArmRequest
+                            ? "armed-for-qualification"
+                            : "unarmed";
                 return true;
             }
             catch (Exception exception)
@@ -123,13 +123,11 @@ namespace NosGm.Authentication.Client.Configuration
 
         public bool Configure(
             string processGenerationId,
-            ConfigurationAuthorityOperatorOptions options,
-            bool effectRoutingEnabled)
+            ConfigurationAuthorityOperatorOptions options)
         {
             bool configured = _coordinator.Configure(
                 processGenerationId,
-                options,
-                effectRoutingEnabled);
+                options);
             lock (_syncRoot)
             {
                 if (!_configured)

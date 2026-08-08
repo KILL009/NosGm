@@ -71,6 +71,10 @@ foreach ($required in @(
     'ConfigurationGrpcShadowStatus.Resynchronized',
     'catch (OperationCanceledException)',
     'catch (Exception)',
+    'TryGetAuthoritative',
+    'TryUpdateAuthoritative',
+    'FromTransportSnapshot',
+    'RuntimeGenerationId = result.RuntimeGenerationId',
     'value.Kind == DateTimeKind.Unspecified',
     'TimeZoneInfo.Local.GetUtcOffset(value)'
 )) {
@@ -95,8 +99,9 @@ foreach ($required in @(
     'RecoveredFromSnapshot',
     'ledger.RecordGrpc(update)',
     'ConfigurationUpdateParityDiagnostics.Observe',
-    'SCS callback remains authoritative',
-    'no gameplay state was applied'
+    '_authorityCallback(update)',
+    'Applied typed Configuration update',
+    'current authority selector applied no typed gameplay effect'
 )) {
     Require-Text $subscriberLifecycle $required "Configuration shadow subscriber lifecycle"
 }
@@ -110,23 +115,38 @@ if ($callbackMatch.Groups['body'].Value.IndexOf('ObserveAuthoritativeConfigurati
     throw "ConfigurationUpdated callback must not mirror into gRPC during this slice."
 }
 Require-Text $callbackMatch.Groups['body'].Value 'ObserveScsConfigurationCallback(configurationObject)' "ConfigurationUpdated SCS observation"
-Require-Before $client 'ObserveScsConfigurationCallback(configurationObject)' 'ConfigurationUpdate?.Invoke(configurationObject, null)' "Configuration callback observation order"
+Require-Before $client 'ObserveScsConfigurationCallback(configurationObject)' 'ConfigurationAuthorityCoordinator.Instance.TryApplyCallback' "Configuration callback observation order"
+foreach ($required in @(
+    'ConfigurationAuthorityOperation.Get',
+    'ConfigurationAuthorityOperation.Update',
+    'ConfigurationAuthorityOperation.Callback',
+    'TryGetAuthoritative',
+    'TryUpdateAuthoritative',
+    'IsCurrentAuthorityResult',
+    'SynchronizeScsStandby',
+    'SCS rollback standby',
+    'RollBackAuthority',
+    'ConfigurationAuthoritySource.Scs',
+    'ConfigurationAuthoritySource.TypedGrpc'
+)) {
+    Require-Text $client $required "Configuration joint authority client"
+}
 Require-Text $client 'ledger.RecordScs' "Configuration SCS callback ledger"
 Require-Before $client 'ledger.RecordScs' 'ConfigurationUpdateParityDiagnostics.Observe' "Configuration SCS parity evaluation order"
 Require-Before $subscriberLifecycle 'ledger.RecordGrpc(update)' 'ConfigurationUpdateParityDiagnostics.Observe' "Configuration gRPC parity evaluation order"
 Require-Text $subscriberLifecycle 'report.HasTerminalMismatch' "Configuration terminal parity diagnostic severity"
-Require-Text $subscriberLifecycle 'SCS authority is unchanged and this evidence has no gameplay effect' "Configuration parity evidence isolation"
+Require-Text $subscriberLifecycle 'authority selection is evaluated separately and this evidence has no direct gameplay effect' "Configuration parity evidence isolation"
 Require-Text $client 'the authoritative callback will continue unchanged' "Configuration SCS observation isolation"
-Require-Text $subscriberLifecycle 'the subscriber will continue without applying gameplay state' "Configuration gRPC observation isolation"
+Require-Text $subscriberLifecycle 'failed closed to SCS' "Configuration gRPC authority failure isolation"
 
 Require-Text $project 'Client\ConfigurationGrpcShadowMirror.cs' "Configuration shadow mirror compile item"
 Require-Text $project 'Client\ConfigurationGrpcShadowOptions.cs' "Configuration shadow options compile item"
 Require-Text $project 'Client\ConfigurationGrpcShadowSubscriberLifecycle.cs' "Configuration subscriber lifecycle compile item"
 
 Write-Host "[PASS] Configuration gRPC shadow mode is explicit, disabled by default and timeout-bounded." -ForegroundColor Green
-Write-Host "[PASS] SCS Get/Update remain authoritative and execute before shadow synchronization." -ForegroundColor Green
+Write-Host "[PASS] SCS Get/Update remain the default and shadow synchronization follows SCS fallback." -ForegroundColor Green
 Write-Host "[PASS] Configuration shadow compares before writing and tolerates gRPC timeout/failure." -ForegroundColor Green
 Write-Host "[PASS] Legacy DateTime conversion handles Unspecified values as local wall time explicitly." -ForegroundColor Green
-Write-Host "[PASS] ConfigurationUpdated remains SCS-authoritative while the typed stream is observation-only." -ForegroundColor Green
+Write-Host "[PASS] ConfigurationUpdated and the typed stream share the atomic authority selector." -ForegroundColor Green
 Write-Host "[PASS] SCS and gRPC callbacks enter the bounded parity ledger without duplicating gameplay effects." -ForegroundColor Green
-Write-Host "[PASS] Both callback paths emit automatic parity evidence without changing SCS authority." -ForegroundColor Green
+Write-Host "[PASS] Typed authority failures return Get, Update and callback together to SCS." -ForegroundColor Green

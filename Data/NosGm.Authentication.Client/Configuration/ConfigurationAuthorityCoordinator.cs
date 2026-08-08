@@ -148,17 +148,8 @@ namespace NosGm.Authentication.Client.Configuration
             string processGenerationId,
             ConfigurationAuthorityOperatorOptions options)
         {
-            return Configure(
-                processGenerationId,
-                options,
-                effectRoutingEnabled: false);
-        }
-
-        public bool Configure(
-            string processGenerationId,
-            ConfigurationAuthorityOperatorOptions options,
-            bool effectRoutingEnabled)
-        {
+            bool effectRoutingEnabled = options != null &&
+                options.EffectRoutingRequested;
             ValidateConfiguration(
                 processGenerationId,
                 options,
@@ -170,8 +161,7 @@ namespace NosGm.Authentication.Client.Configuration
                     bool sameConfiguration =
                         IsSameOperatorConfiguration(
                             processGenerationId,
-                            options) &&
-                        _effectRoutingEnabled == effectRoutingEnabled;
+                            options);
                     if (sameConfiguration)
                     {
                         return false;
@@ -480,14 +470,17 @@ namespace NosGm.Authentication.Client.Configuration
                     return false;
                 }
 
-                bool typedSelected =
-                    source == ConfigurationAuthoritySource.TypedGrpc &&
+                bool typedAuthorityReady =
                     !_blocked &&
                     _typedIngressReady &&
                     state ==
                         ConfigurationAuthorityState.TypedGrpcAuthoritative;
+                bool typedSelected =
+                    source == ConfigurationAuthoritySource.TypedGrpc &&
+                    typedAuthorityReady;
                 bool scsSelected =
-                    source == ConfigurationAuthoritySource.Scs;
+                    source == ConfigurationAuthoritySource.Scs &&
+                    !typedAuthorityReady;
                 if (!typedSelected && !scsSelected)
                 {
                     return false;
@@ -583,7 +576,9 @@ namespace NosGm.Authentication.Client.Configuration
                        options.ArmRequestId,
                        StringComparison.Ordinal) &&
                    _operatorRollbackRequested ==
-                       options.RollbackRequested;
+                       options.RollbackRequested &&
+                   _effectRoutingEnabled ==
+                       options.EffectRoutingRequested;
         }
 
         private static void ValidateConfiguration(
@@ -600,6 +595,12 @@ namespace NosGm.Authentication.Client.Configuration
             if (options == null)
             {
                 throw new ArgumentNullException(nameof(options));
+            }
+            if (effectRoutingEnabled !=
+                options.EffectRoutingRequested)
+            {
+                throw new InvalidOperationException(
+                    "Configuration effect routing must come from immutable operator controls.");
             }
             if (effectRoutingEnabled && !options.HasArmRequest)
             {

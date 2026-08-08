@@ -34,8 +34,7 @@ internal static class ConfigurationAuthorityQualificationRuntimeSelfTest
             true,
             runtime.Configure(
                 processGenerationId,
-                NewOperatorOptions(),
-                effectRoutingEnabled: false),
+                NewOperatorOptions()),
             "Configuration dry-run lifecycle binds immutable controls");
 
         AssertEqual(false, runtime.ObserveParity(reports[0]),

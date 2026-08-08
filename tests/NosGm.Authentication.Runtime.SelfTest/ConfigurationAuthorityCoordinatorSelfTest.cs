@@ -48,8 +48,7 @@ internal static class ConfigurationAuthorityCoordinatorSelfTest
             true,
             coordinator.Configure(
                 evidence.ProcessGenerationId,
-                NewOperatorOptions(),
-                effectRoutingEnabled: false),
+                NewOperatorOptions(effectRoutingRequested: false)),
             "Immutable operator controls configure dry-run authority once");
         AssertEqual(
             false,
@@ -96,30 +95,35 @@ internal static class ConfigurationAuthorityCoordinatorSelfTest
                             ? "true"
                             : null),
             "Configuration arm and rollback controls are mutually exclusive");
+        AssertThrows<InvalidOperationException>(
+            () => ConfigurationAuthorityOperatorOptions.Load(
+                variableName => variableName ==
+                    ConfigurationAuthorityOperatorOptions
+                        .EffectRoutingVariable
+                        ? "true"
+                        : null),
+            "Configuration effect routing requires an explicit arm request");
 
         QualifiedEvidence evidence = BuildQualifiedEvidence();
         var coordinator = new ConfigurationAuthorityCoordinator();
         ConfigurationAuthorityOperatorOptions options =
-            NewOperatorOptions();
+            NewOperatorOptions(effectRoutingRequested: false);
         AssertEqual(
             true,
             coordinator.Configure(
                 evidence.ProcessGenerationId,
-                options,
-                effectRoutingEnabled: false),
+                options),
             "Configuration operator controls bind to one process generation");
         AssertEqual(
             false,
             coordinator.Configure(
                 evidence.ProcessGenerationId,
-                options,
-                effectRoutingEnabled: false),
+                options),
             "Identical Configuration operator controls are idempotent");
         AssertThrows<InvalidOperationException>(
             () => coordinator.Configure(
                 evidence.ProcessGenerationId,
-                options,
-                effectRoutingEnabled: true),
+                NewOperatorOptions(effectRoutingRequested: true)),
             "Configuration effect-routing mutation fails closed inside one process");
         AssertEqual(
             true,
@@ -162,23 +166,23 @@ internal static class ConfigurationAuthorityCoordinatorSelfTest
         int scsEffects = 0;
         int typedEffects = 0;
         AssertEqual(
-            true,
+            false,
             scsFirst.Coordinator.TryApplyCallback(
                 ConfigurationAuthoritySource.Scs,
                 first,
                 () => scsEffects++),
-            "SCS-first overlap applies the first semantic Configuration update");
+            "Typed authority rejects an SCS callback even when it arrives first");
         AssertEqual(
-            false,
+            true,
             scsFirst.Coordinator.TryApplyCallback(
                 ConfigurationAuthoritySource.TypedGrpc,
                 first,
                 () => typedEffects++),
-            "Typed semantic twin is suppressed after SCS-first overlap");
-        AssertEqual(1, scsEffects,
-            "SCS-first overlap executes exactly one effect");
-        AssertEqual(0, typedEffects,
-            "Suppressed typed twin cannot execute an effect");
+            "Selected typed callback applies after an early SCS callback");
+        AssertEqual(0, scsEffects,
+            "Rejected early SCS callback cannot execute an effect");
+        AssertEqual(1, typedEffects,
+            "Selected typed callback executes exactly one effect");
 
         QualifiedCoordinator typedFirst = ActivatedCoordinator();
         ConfigurationTransportSnapshot second = NewSnapshot(5000002);
@@ -196,9 +200,9 @@ internal static class ConfigurationAuthorityCoordinatorSelfTest
                 second,
                 () => scsEffects++),
             "SCS semantic twin is suppressed after typed-first overlap");
-        AssertEqual(1, typedEffects,
+        AssertEqual(2, typedEffects,
             "Typed-first overlap executes exactly one effect");
-        AssertEqual(1, scsEffects,
+        AssertEqual(0, scsEffects,
             "Suppressed SCS twin cannot execute another effect");
     }
 
@@ -213,14 +217,14 @@ internal static class ConfigurationAuthorityCoordinatorSelfTest
             AssertEqual(
                 true,
                 active.Coordinator.TryApplyCallback(
-                    ConfigurationAuthoritySource.Scs,
+                    ConfigurationAuthoritySource.TypedGrpc,
                     snapshot,
                     () => effects++),
                 "Each repeated Configuration occurrence applies once");
             AssertEqual(
                 false,
                 active.Coordinator.TryApplyCallback(
-                    ConfigurationAuthoritySource.TypedGrpc,
+                    ConfigurationAuthoritySource.Scs,
                     snapshot,
                     () => effects++),
                 "Each repeated Configuration occurrence suppresses one twin");
@@ -369,8 +373,7 @@ internal static class ConfigurationAuthorityCoordinatorSelfTest
             true,
             coordinator.Configure(
                 evidence.ProcessGenerationId,
-                NewOperatorOptions(),
-                effectRoutingEnabled: true),
+                NewOperatorOptions(effectRoutingRequested: true)),
             "Qualified Configuration coordinator enables effect routing explicitly");
         AssertEqual(
             true,
@@ -449,13 +452,24 @@ internal static class ConfigurationAuthorityCoordinatorSelfTest
         };
     }
 
-    private static ConfigurationAuthorityOperatorOptions NewOperatorOptions()
+    private static ConfigurationAuthorityOperatorOptions NewOperatorOptions(
+        bool effectRoutingRequested)
     {
         return ConfigurationAuthorityOperatorOptions.Load(
-            variableName => variableName ==
-                ConfigurationAuthorityOperatorOptions.ArmRequestVariable
-                    ? "20000000-0000-0000-0000-000000000001"
-                    : null);
+            variableName =>
+            {
+                if (variableName ==
+                    ConfigurationAuthorityOperatorOptions.ArmRequestVariable)
+                {
+                    return "20000000-0000-0000-0000-000000000001";
+                }
+                return variableName ==
+                       ConfigurationAuthorityOperatorOptions
+                           .EffectRoutingVariable &&
+                       effectRoutingRequested
+                    ? "true"
+                    : null;
+            });
     }
 
     private static ConfigurationTransportUpdate NewUpdate(

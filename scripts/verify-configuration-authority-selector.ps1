@@ -48,6 +48,7 @@ $overlap = Read-RepoFile "Data\NosGm.Authentication.Client\Configuration\Configu
 $selfTest = Read-RepoFile "tests\NosGm.Authentication.Runtime.SelfTest\ConfigurationAuthorityCoordinatorSelfTest.cs"
 $runtimeSelfTest = Read-RepoFile "tests\NosGm.Authentication.Runtime.SelfTest\ConfigurationAuthorityQualificationRuntimeSelfTest.cs"
 $legacyClient = Read-RepoFile "Data\NosGm.Master.Library\Client\ConfigurationServiceClient.cs"
+$transportClient = Read-RepoFile "Data\NosGm.Master.Library\Client\ConfigurationGrpcShadowMirror.cs"
 $typedLifecycle = Read-RepoFile "Data\NosGm.Master.Library\Client\ConfigurationGrpcShadowSubscriberLifecycle.cs"
 $documentation = Read-RepoFile "docs\configuration-grpc-slice.md"
 
@@ -103,9 +104,12 @@ foreach ($required in @(
 foreach ($required in @(
     "NOSGM_CONFIGURATION_GRPC_AUTHORITY_ARM_REQUEST_ID",
     "NOSGM_CONFIGURATION_GRPC_AUTHORITY_ROLLBACK_REQUESTED",
+    "NOSGM_CONFIGURATION_GRPC_AUTHORITY_EFFECTS_ENABLED",
+    "EffectRoutingRequested",
+    "requires an explicit",
     "must be an exact lowercase canonical non-empty GUID",
     "must be true or false without surrounding whitespace",
-    "cannot be requested together"
+    "cannot be combined with"
 )) {
     Require-Text $operatorOptions $required "Configuration authority operator controls"
 }
@@ -177,7 +181,8 @@ foreach ($required in @(
     "A qualification runtime cannot activate Configuration authority",
     "A fourth runtime generation activates the joint authority gate",
     "Recovery atomically selects typed Get, Update and callback",
-    "Typed semantic twin is suppressed after SCS-first overlap",
+    "Typed authority rejects an SCS callback even when it arrives first",
+    "Selected typed callback applies after an early SCS callback",
     "SCS semantic twin is suppressed after typed-first overlap",
     "Two identical occurrences remain two effects, never four",
     "Runtime drift makes Configuration rollback terminal",
@@ -200,47 +205,63 @@ foreach ($required in @(
     Require-Text $runtimeSelfTest $required "Configuration qualification runtime self-test"
 }
 
-foreach ($productionFile in @(
-    @{ Content = $legacyClient; Name = "legacy Configuration client" },
-    @{ Content = $typedLifecycle; Name = "typed Configuration subscriber lifecycle" }
-)) {
-    Forbid-Text $productionFile.Content "ConfigurationAuthorityCoordinator" $productionFile.Name
-    Forbid-Text $productionFile.Content "ConfigurationAuthorityGate" $productionFile.Name
-    Forbid-Text $productionFile.Content "ConfigurationUpdateOverlapDeduplicationLedger" $productionFile.Name
-    Forbid-Text $productionFile.Content ".ShouldUse(" $productionFile.Name
-    Forbid-Text $productionFile.Content ".TryApplyCallback(" $productionFile.Name
-}
-
 foreach ($required in @(
     "ConfigurationAuthorityQualificationRuntime.Instance",
     "TryConfigureFromEnvironment",
-    "effectRoutingEnabled: false",
-    "SCS remains the immutable production authority",
+    "Joint Get/Update/callback",
+    "finalAuthorityStatus.EffectRoutingEnabled",
+    "_grpcShadowMirror == null",
+    "_grpcShadowSubscriberLifecycle == null",
+    "ConfigurationAuthorityCoordinator.Instance",
+    "ConfigurationAuthorityOperation.Get",
+    "ConfigurationAuthorityOperation.Update",
+    "ConfigurationAuthorityOperation.Callback",
+    "TryGetAuthoritative",
+    "TryUpdateAuthoritative",
+    "IsCurrentAuthorityResult",
+    "SynchronizeScsStandby",
+    "synchronized the SCS rollback standby",
+    "RollBackAuthority",
+    "TryApplyCallback",
     "ObserveParity(report)"
 )) {
-    Require-Text $legacyClient $required "legacy Configuration lifecycle binding"
+    Require-Text $legacyClient $required "Configuration joint authority routing"
+}
+
+foreach ($required in @(
+    "TryGetAuthoritative",
+    "TryUpdateAuthoritative",
+    "FromTransportSnapshot",
+    "new CancellationTokenSource(_timeoutMilliseconds)",
+    "updated.Generation > 0",
+    "RuntimeGenerationId = result.RuntimeGenerationId"
+)) {
+    Require-Text $transportClient $required "Configuration typed authority transport"
 }
 
 foreach ($required in @(
     "IConfigurationGrpcShadowStreamLifecycleObserver",
+    "Func<ConfigurationTransportUpdate, bool>",
+    "_authorityCallback(update)",
     "ObserveTypedUpdate",
     "ObserveStreamEnded",
+    ".Invalidate(exception)",
     "ConfigurationAuthorityQualificationRuntime.Instance"
 )) {
     Require-Text $typedLifecycle $required "typed Configuration lifecycle binding"
 }
 
 foreach ($required in @(
-    "Authority lifecycle binding (dry-run)",
+    "Joint authority routing",
     "NOSGM_CONFIGURATION_GRPC_AUTHORITY_ARM_REQUEST_ID",
     "NOSGM_CONFIGURATION_GRPC_AUTHORITY_ROLLBACK_REQUESTED",
-    "effect routing is compiled off",
+    "NOSGM_CONFIGURATION_GRPC_AUTHORITY_EFFECTS_ENABLED",
     "three successful parity windows",
     "fourth, previously unqualified runtime generation",
     "Get, Update and callback",
-    "first-arriving semantic copy",
+    "runtime generation",
     "terminal rollback",
-    "SCS remains the production authority"
+    "SCS is the fail-closed default"
 )) {
     Require-Text $documentation $required "Configuration gRPC slice documentation"
 }
@@ -248,6 +269,6 @@ foreach ($required in @(
 Write-Host "[PASS] Configuration Get, Update and callback share one atomic authority gate." -ForegroundColor Green
 Write-Host "[PASS] Three parity runtimes and a fourth activation runtime prevent evidence reuse." -ForegroundColor Green
 Write-Host "[PASS] Typed ingress remains closed until active-runtime recovery completes." -ForegroundColor Green
-Write-Host "[PASS] Overlap applies one semantic effect and suppresses its opposite-source twin." -ForegroundColor Green
+Write-Host "[PASS] Active typed authority rejects early SCS callbacks and suppresses delayed semantic twins." -ForegroundColor Green
 Write-Host "[PASS] Runtime drift, typed failure and capacity saturation roll back terminally to SCS." -ForegroundColor Green
-Write-Host "[PASS] Production lifecycle observation is wired with Configuration effect routing compiled off." -ForegroundColor Green
+Write-Host "[PASS] Production Get, Update and callback route together only after explicit effect authorization." -ForegroundColor Green
