@@ -46,6 +46,8 @@ function Require-Before {
 $options = Read-RepoFile "Data\NosGm.Master.Library\Client\ConfigurationGrpcShadowOptions.cs"
 $mirror = Read-RepoFile "Data\NosGm.Master.Library\Client\ConfigurationGrpcShadowMirror.cs"
 $client = Read-RepoFile "Data\NosGm.Master.Library\Client\ConfigurationServiceClient.cs"
+$rollbackTransport = Read-RepoFile "Data\NosGm.Master.Library\Client\ConfigurationRollbackTransport.cs"
+$legacyCallback = Read-RepoFile "Data\NosGm.Master.Library\Client\ConfigurationClient.cs"
 $subscriberLifecycle = Read-RepoFile "Data\NosGm.Master.Library\Client\ConfigurationGrpcShadowSubscriberLifecycle.cs"
 $project = Read-RepoFile "Data\NosGm.Master.Library\NosGm.Master.Library.csproj"
 
@@ -88,8 +90,8 @@ foreach ($forbidden in @('MasterAuthKey', 'ConfigurationUpdated', 'GameConfigura
     }
 }
 
-Require-Before $client '_client.ServiceProxy.GetConfigurationObject()' 'ObserveAuthoritativeConfiguration(authoritative, "Get")' "Configuration Get authority order"
-Require-Before $client '_client.ServiceProxy.UpdateConfigurationObject(configurationObject)' 'ObserveAuthoritativeConfiguration(configurationObject, "Update")' "Configuration Update authority order"
+Require-Before $client '_rollbackTransport.GetConfigurationObject()' 'ObserveAuthoritativeConfiguration(authoritative, "Get")' "Configuration Get authority order"
+Require-Before $client '_rollbackTransport.UpdateConfigurationObject(' 'ObserveAuthoritativeConfiguration(configurationObject, "Update")' "Configuration Update authority order"
 Require-Before $client 'ObserveAuthoritativeConfiguration(authoritative, "Get")' 'return authoritative;' "Configuration Get preserves the SCS object"
 Require-Text $client 'SCS remains authoritative' "Configuration shadow authority log"
 Require-Text $client 'SCS result remains authoritative' "Configuration shadow failure log"
@@ -131,6 +133,39 @@ foreach ($required in @(
 )) {
     Require-Text $client $required "Configuration joint authority client"
 }
+foreach ($forbidden in @(
+    'NosGm.SCS',
+    'ScsServiceClientBuilder',
+    'IScsServiceClient',
+    'IConfigurationService',
+    '.ServiceProxy',
+    'new ConfigurationClient',
+    'ScsConfigurationRollbackTransport'
+)) {
+    if ($client.IndexOf($forbidden, [StringComparison]::Ordinal) -ge 0) {
+        throw "ConfigurationServiceClient retains forbidden SCS coupling '$forbidden'."
+    }
+}
+foreach ($required in @(
+    'interface IConfigurationRollbackTransport',
+    'static class ConfigurationRollbackTransportFactory',
+    'IConfigurationRollbackTransport Create(',
+    'sealed class ScsConfigurationRollbackTransport',
+    'IScsServiceClient<IConfigurationService>',
+    'ScsServiceClientBuilder',
+    'new ConfigurationClient(',
+    '_client.ServiceProxy.Authenticate',
+    '_client.ServiceProxy.GetConfigurationObject',
+    '_client.ServiceProxy.UpdateConfigurationObject'
+)) {
+    Require-Text $rollbackTransport $required "Isolated Configuration SCS rollback adapter"
+}
+Require-Text $client 'ConfigurationRollbackTransportFactory.Create(' "Configuration rollback factory boundary"
+Require-Text $legacyCallback 'Action<ConfigurationObject>' "Configuration SCS callback delegate boundary"
+Require-Text $legacyCallback '_onConfigurationUpdated(configurationObject)' "Configuration SCS callback delegate dispatch"
+if ($legacyCallback.IndexOf('ConfigurationServiceClient.Instance', [StringComparison]::Ordinal) -ge 0) {
+    throw "The legacy Configuration callback client must not reach through the global facade singleton."
+}
 Require-Text $client 'ledger.RecordScs' "Configuration SCS callback ledger"
 Require-Before $client 'ledger.RecordScs' 'ConfigurationUpdateParityDiagnostics.Observe' "Configuration SCS parity evaluation order"
 Require-Before $subscriberLifecycle 'ledger.RecordGrpc(update)' 'ConfigurationUpdateParityDiagnostics.Observe' "Configuration gRPC parity evaluation order"
@@ -142,11 +177,13 @@ Require-Text $subscriberLifecycle 'failed closed to SCS' "Configuration gRPC aut
 Require-Text $project 'Client\ConfigurationGrpcShadowMirror.cs' "Configuration shadow mirror compile item"
 Require-Text $project 'Client\ConfigurationGrpcShadowOptions.cs' "Configuration shadow options compile item"
 Require-Text $project 'Client\ConfigurationGrpcShadowSubscriberLifecycle.cs' "Configuration subscriber lifecycle compile item"
+Require-Text $project 'Client\ConfigurationRollbackTransport.cs' "Configuration rollback adapter compile item"
 
 Write-Host "[PASS] Configuration gRPC shadow mode is explicit, disabled by default and timeout-bounded." -ForegroundColor Green
 Write-Host "[PASS] SCS Get/Update remain the default and shadow synchronization follows SCS fallback." -ForegroundColor Green
 Write-Host "[PASS] Configuration shadow compares before writing and tolerates gRPC timeout/failure." -ForegroundColor Green
 Write-Host "[PASS] Legacy DateTime conversion handles Unspecified values as local wall time explicitly." -ForegroundColor Green
 Write-Host "[PASS] ConfigurationUpdated and the typed stream share the atomic authority selector." -ForegroundColor Green
+Write-Host "[PASS] Remaining SCS request/reply and callback registration are isolated behind one rollback adapter." -ForegroundColor Green
 Write-Host "[PASS] SCS and gRPC callbacks enter the bounded parity ledger without duplicating gameplay effects." -ForegroundColor Green
 Write-Host "[PASS] Typed authority failures return Get, Update and callback together to SCS." -ForegroundColor Green

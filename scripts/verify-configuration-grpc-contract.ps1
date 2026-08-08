@@ -86,6 +86,14 @@ if ($null -eq $callback -or
     throw "ConfigurationUpdated must map to the typed stream behind the joint authority selector."
 }
 
+$rollback = $map.rollbackBoundary
+if ($null -eq $rollback -or
+    $rollback.adapter -ne "ScsConfigurationRollbackTransport" -or
+    $rollback.contract -ne "IConfigurationRollbackTransport" -or
+    $rollback.isolatedFacade -ne "ConfigurationServiceClient") {
+    throw "The remaining Configuration SCS surface must be mapped to one isolated rollback adapter."
+}
+
 $legacyService = [System.IO.File]::ReadAllText($servicePath)
 foreach ($method in $expectedMethods) {
     if ($legacyService.IndexOf($method + "(", [StringComparison]::Ordinal) -lt 0) {
@@ -134,4 +142,5 @@ foreach ($required in @(
 Write-Host "[PASS] Configuration legacy methods are completely mapped." -ForegroundColor Green
 Write-Host "[PASS] MasterAuthKey is excluded from the typed Configuration protocol." -ForegroundColor Green
 Write-Host "[PASS] ConfigurationUpdated maps to the typed stream behind the fail-closed joint selector." -ForegroundColor Green
+Write-Host "[PASS] Remaining World-side SCS Configuration calls map to one isolated rollback adapter." -ForegroundColor Green
 Write-Host "[PASS] Configuration contract validator and runtime self-test are wired." -ForegroundColor Green
