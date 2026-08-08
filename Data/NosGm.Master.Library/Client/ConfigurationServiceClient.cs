@@ -98,6 +98,7 @@ namespace NosGm.Master.Library.Client
             {
                 RollBackAuthority("startup", null);
             }
+            ConfigurationAuthorityDiagnostics.Observe("STARTUP");
         }
 
         #endregion
@@ -268,6 +269,8 @@ namespace NosGm.Master.Library.Client
                     exception);
                 ConfigurationAuthorityCoordinator.Instance.RequestRollback(
                     rollback);
+                ConfigurationAuthorityDiagnostics.Observe(
+                    "STANDBY_SYNC_FAILED");
                 Logger.Error(
                     "[CONFIG_GRPC_AUTHORITY] SCS rollback standby synchronization " +
                     "failed after a typed Update; typed authority was closed for " +
@@ -289,6 +292,8 @@ namespace NosGm.Master.Library.Client
                 " authority failed with " + resultName + ".");
             ConfigurationAuthorityCoordinator.Instance.RequestRollback(
                 exception);
+            ConfigurationAuthorityDiagnostics.Observe(
+                "AUTHORITY_ROLLBACK");
             Logger.Warn(
                 "[CONFIG_GRPC_AUTHORITY] Typed " + operation +
                 " failed closed; all Configuration operations returned to " +
@@ -310,6 +315,7 @@ namespace NosGm.Master.Library.Client
                 ConfigurationUpdateParityDiagnostics.Observe(report);
                 ConfigurationAuthorityQualificationRuntime.Instance
                     .ObserveParity(report);
+                ConfigurationAuthorityDiagnostics.Observe("SCS_PARITY");
             }
             catch (Exception exception)
             {
