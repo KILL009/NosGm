@@ -97,7 +97,7 @@ ConfigurationRuntimeStatus configurationRuntime =
     app.Services.GetRequiredService<ConfigurationRuntimeController>()
         .GetStatus();
 app.Logger.LogInformation(
-    "NosGM internal cluster runtime {InstanceId} callback generation {CallbackGenerationId} Configuration generation {ConfigurationGenerationId} control enabled {ConfigurationRuntimeControlEnabled} listening on loopback port {Port}; authentication, communication state, callback and shadow configuration services enabled.",
+    "NosGM internal cluster runtime {InstanceId} callback generation {CallbackGenerationId} Configuration generation {ConfigurationGenerationId} control enabled {ConfigurationRuntimeControlEnabled} listening on loopback port {Port}; authentication, communication state, callbacks and authoritative Configuration gRPC services enabled.",
     options.InstanceId,
     callbackRuntimeIdentity.GenerationId,
     configurationRuntime.RuntimeGenerationId,
