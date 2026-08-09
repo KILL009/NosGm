@@ -23,9 +23,15 @@ Master uses a dedicated Master mTLS certificate to confirm an existing Configura
 - .NET Framework 4.8.1
 - Visual Studio Build Tools 2022 with MSBuild
 - stable .NET 10 SDK
-- .NET 9 SDK side by side for the legacy Visual Studio 2022 build bridge
+- .NET 9 compatibility SDK installed side by side for the legacy Visual Studio 2022 build bridge
 - SQL Server and a working NosGM database
 - an authorized NosTale client installation configured in NosGM Launcher
+
+NuGet CLI is optional. When `nuget.exe` is available, the startup script prefers it for the legacy `packages.config` restore. Otherwise Visual Studio Build Tools restores those dependencies with MSBuild and `RestorePackagesConfig=true`.
+
+Visual Studio 2022 uses the side-by-side .NET 9 compatibility SDK only while restoring and building the legacy server solution. During that scoped build the startup path sets `MSBuildEnableWorkloadResolver=false`, then restores the previous SDK/workload environment before building the .NET 10 components. The repository-wide `global.json` is never rewritten.
+
+Modern Login service secrets remain process-only. `NOSGM_MASTER_AUTH_KEY`, `NOSGM_AUTH_SERVICE_KEY`, `NOSGM_GAMEFORGE_TICKET_ISSUER_KEY` and `NOSGM_GAMEFORGE_TICKET_CONSUMER_KEY` must be distinct values of at least 32 characters whenever modern Login is enabled. The local startup script generates them cryptographically and removes them from its own environment after the child processes inherit them.
 
 Native HTTP/2 for the legacy `net481` gRPC caller requires Windows 11 or a supported Windows Server release. `AUTO` selects `GRPCWEB` on Windows 10 and `HTTP2` on Windows 11. Both modes use HTTPS, Protobuf, bounded deadlines and the same mTLS role checks.
 
