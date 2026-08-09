@@ -50,6 +50,7 @@ $masterIdentity = Read-Required $MasterIdentityPath
 $wrapper = Read-Required $WrapperPath
 $cutoverDocument = Read-Required $CutoverDocumentPath
 $masterIdentityCompact = $masterIdentity -replace '\s+', ''
+$wrapperCompact = $wrapper -replace '\s+', ''
 
 Assert-PowerShellParses $WrapperPath
 
@@ -77,15 +78,14 @@ Require $masterIdentityCompact 'ConfigurationRuntimeControllerIdentityOptions.Ad
 Require $masterIdentity 'CommunicationCallbackExistingIdentityFallback.IsEnabled' 'Master identity reuse must remain explicitly opt-in.'
 Require $masterIdentity '!string.IsNullOrEmpty(dedicated)' 'Dedicated callback Master credentials must retain priority over fallback values.'
 
-Require $wrapper 'NOSGM_COMMUNICATION_GRPC_CALLBACKS_ENABLED' 'The shadow wrapper must enable the callback subscriber explicitly.'
-Require $wrapper 'NOSGM_COMMUNICATION_GRPC_CALLBACKS_APPLY_ENABLED' 'The shadow wrapper must set the separate callback effect switch.'
-Require $wrapper '"false"' 'The shadow wrapper must keep typed callback effect application disabled.'
-Require $wrapper 'NOSGM_COMMUNICATION_GRPC_CALLBACK_MIRROR_ENABLED' 'The shadow wrapper must enable Master typed publication.'
-Require $wrapper 'AuthenticationTransport = "GRPC"' 'The shadow wrapper must give Login its role-separated generic gRPC identity before fallback bridging.'
+Require $wrapperCompact '[Environment]::SetEnvironmentVariable("NOSGM_COMMUNICATION_GRPC_CALLBACKS_ENABLED","true",[EnvironmentVariableTarget]::Process)' 'The shadow wrapper must enable the callback subscriber explicitly.'
+Require $wrapperCompact '[Environment]::SetEnvironmentVariable("NOSGM_COMMUNICATION_GRPC_CALLBACKS_APPLY_ENABLED","false",[EnvironmentVariableTarget]::Process)' 'The shadow wrapper must keep typed callback effect application disabled.'
+Forbid $wrapperCompact '[Environment]::SetEnvironmentVariable("NOSGM_COMMUNICATION_GRPC_CALLBACKS_APPLY_ENABLED","true",[EnvironmentVariableTarget]::Process)' 'Shadow acceptance must never enable typed callback effects.'
+Require $wrapperCompact '[Environment]::SetEnvironmentVariable("NOSGM_COMMUNICATION_GRPC_CALLBACK_MIRROR_ENABLED","true",[EnvironmentVariableTarget]::Process)' 'The shadow wrapper must enable Master typed publication.'
+Require $wrapperCompact 'AuthenticationTransport="GRPC"' 'The shadow wrapper must give Login its role-separated generic gRPC identity before fallback bridging.'
 Require $wrapper 'CommunicationCallbackEffectAuthority' 'Runtime state must expose that SCS is still effect-authoritative in this slice.'
 Require $wrapper '"SCS"' 'Runtime state must record SCS callback effect authority during shadow acceptance.'
 Require $wrapper '$previousEnvironment[$name]' 'The wrapper must restore every temporary parent-shell callback variable.'
-Forbid $wrapper 'NOSGM_COMMUNICATION_GRPC_CALLBACKS_APPLY_ENABLED",`n        "true"' 'Shadow acceptance must never enable typed callback effects.'
 
 Require $cutoverDocument 'Slice 1: reproducible local shadow wiring' 'The cutover document must preserve the staged shadow boundary.'
 Require $cutoverDocument 'Slice 2: PenaltyRefresh authority cutover' 'The final SCS suppression must remain a separate validated slice.'
