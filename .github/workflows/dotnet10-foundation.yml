@@ -36,21 +36,13 @@ on:
       - "scripts/invoke-configuration-grpc-runtime-control.ps1"
       - "scripts/verify-configuration-runtime-controller.ps1"
       - "scripts/test-authentication-grpc-local.ps1"
-      - "scripts/test-configuration-grpc-shadow-local.ps1"
-      - "scripts/invoke-configuration-grpc-shadow-acceptance-bounded.ps1"
       - "scripts/test-modern-login-readiness.ps1"
       - "scripts/verify-dotnet10-foundation.ps1"
       - "scripts/verify-scs-transport-contracts.ps1"
       - "scripts/verify-authentication-grpc-runtime.ps1"
       - "scripts/verify-authentication-grpc-local-acceptance.ps1"
-      - "scripts/verify-configuration-grpc-shadow-acceptance.ps1"
-      - "scripts/verify-configuration-grpc-contract.ps1"
       - "scripts/verify-configuration-grpc-state-host.ps1"
-      - "scripts/verify-configuration-grpc-client.ps1"
-      - "scripts/verify-configuration-grpc-shadow-adapter.ps1"
-      - "scripts/verify-configuration-authority-selector.ps1"
-      - "scripts/collect-configuration-authority-evidence.ps1"
-      - "scripts/verify-configuration-authority-evidence-collector.ps1"
+      - "scripts/verify-configuration-grpc-authority-final.ps1"
   pull_request:
     branches:
       - main
@@ -86,21 +78,13 @@ on:
       - "scripts/invoke-configuration-grpc-runtime-control.ps1"
       - "scripts/verify-configuration-runtime-controller.ps1"
       - "scripts/test-authentication-grpc-local.ps1"
-      - "scripts/test-configuration-grpc-shadow-local.ps1"
-      - "scripts/invoke-configuration-grpc-shadow-acceptance-bounded.ps1"
       - "scripts/test-modern-login-readiness.ps1"
       - "scripts/verify-dotnet10-foundation.ps1"
       - "scripts/verify-scs-transport-contracts.ps1"
       - "scripts/verify-authentication-grpc-runtime.ps1"
       - "scripts/verify-authentication-grpc-local-acceptance.ps1"
-      - "scripts/verify-configuration-grpc-shadow-acceptance.ps1"
-      - "scripts/verify-configuration-grpc-contract.ps1"
       - "scripts/verify-configuration-grpc-state-host.ps1"
-      - "scripts/verify-configuration-grpc-client.ps1"
-      - "scripts/verify-configuration-grpc-shadow-adapter.ps1"
-      - "scripts/verify-configuration-authority-selector.ps1"
-      - "scripts/collect-configuration-authority-evidence.ps1"
-      - "scripts/verify-configuration-authority-evidence-collector.ps1"
+      - "scripts/verify-configuration-grpc-authority-final.ps1"
   workflow_dispatch:
 
 permissions:
@@ -147,9 +131,9 @@ jobs:
         shell: powershell
         run: ./scripts/verify-dotnet10-foundation.ps1
 
-      - name: Verify Configuration shadow acceptance harness
+      - name: Verify final Configuration gRPC authority
         shell: powershell
-        run: ./scripts/verify-configuration-grpc-shadow-acceptance.ps1
+        run: ./scripts/verify-configuration-grpc-authority-final.ps1
 
       - name: Create isolated authentication acceptance certificates
         shell: powershell
@@ -158,8 +142,3 @@ jobs:
       - name: Verify live HTTP2 and gRPC-Web mTLS authentication
         shell: powershell
         run: ./scripts/test-authentication-grpc-local.ps1 -UseFileScopedRootTrust
-
-      - name: Verify live net481 Configuration transport and authority cutover
-        timeout-minutes: 10
-        shell: pwsh
-        run: ./scripts/invoke-configuration-grpc-shadow-acceptance-bounded.ps1 -TotalTimeoutSeconds 420
