@@ -17,14 +17,13 @@ CommunicationRuntimeOptions communicationOptions =
     CommunicationRuntimeOptions.Load(builder.Configuration);
 ConfigurationRuntimeControlOptions configurationRuntimeControlOptions =
     ConfigurationRuntimeControlOptions.Load(builder.Configuration);
-if (configurationRuntimeControlOptions.Enabled &&
-    (!options.AllowedFingerprints.TryGetValue(
-         WireV1.ClusterNodeRole.Master,
-         out IReadOnlyCollection<string> masterFingerprints) ||
-     masterFingerprints.Count == 0))
+if (!options.AllowedFingerprints.TryGetValue(
+        WireV1.ClusterNodeRole.Master,
+        out IReadOnlyCollection<string> masterFingerprints) ||
+    masterFingerprints.Count == 0)
 {
     throw new InvalidOperationException(
-        "Configuration runtime control requires at least one Master mTLS certificate fingerprint.");
+        "Authoritative Configuration requires at least one Master mTLS certificate fingerprint for cold-boot seeding.");
 }
 var roleMap = new ClientCertificateRoleMap(options);
 var serverCertificate = options.LoadServerCertificate();
