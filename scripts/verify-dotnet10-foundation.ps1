@@ -21,8 +21,6 @@ function Resolve-DotNetHost {
 
     if (-not [string]::IsNullOrWhiteSpace($env:LOCALAPPDATA)) {
         $candidates.Add((Join-Path $env:LOCALAPPDATA "NosGM\dotnet10\dotnet.exe"))
-        # Older NosGM bootstrap scripts used this directory name even when a
-        # newer SDK was installed side by side into the same dotnet host.
         $candidates.Add((Join-Path $env:LOCALAPPDATA "NosGM\dotnet9\dotnet.exe"))
         $candidates.Add((Join-Path $env:LOCALAPPDATA "Microsoft\dotnet\dotnet.exe"))
     }
@@ -51,11 +49,8 @@ function Invoke-DotNet {
 
 function Assert-FileContains {
     param(
-        [Parameter(Mandatory = $true)]
-        [string]$RelativePath,
-
-        [Parameter(Mandatory = $true)]
-        [string]$ExpectedText
+        [Parameter(Mandatory = $true)][string]$RelativePath,
+        [Parameter(Mandatory = $true)][string]$ExpectedText
     )
 
     $fullPath = Join-Path $repositoryRoot $RelativePath
@@ -120,7 +115,7 @@ foreach ($project in $explicitNet10Projects) {
 foreach ($project in $bridgeProjects) {
     Assert-FileContains -RelativePath $project -ExpectedText '<TargetFramework Condition="''$(NosGmLegacyBuild)'' == ''true''">net481</TargetFramework>'
     Assert-FileContains -RelativePath $project -ExpectedText '<TargetFrameworks Condition="''$(NosGmLegacyBuild)'' != ''true''">net481;net10.0</TargetFrameworks>'
-    Write-Host "[PASS] $project exposes the net481 rollback and .NET 10 migration targets." -ForegroundColor Green
+    Write-Host "[PASS] $project exposes the net481 compatibility and .NET 10 migration targets." -ForegroundColor Green
 }
 
 Assert-FileContains -RelativePath "Web\Directory.Build.props" -ExpectedText "<TargetFramework>net10.0</TargetFramework>"
@@ -154,40 +149,23 @@ foreach ($project in $deferredModern) {
     Write-Host "[DEFERRED] $project" -ForegroundColor Yellow
 }
 
-# Inventory synchronization notes:
-# - 2026-08-03 converted NosGm.Core and NosGm.DAL from classic
-#   TargetFrameworkVersion projects to SDK-style net481 projects. They remain
-#   deferred legacy targets, but no longer increment legacyOnlyCount above.
-# - 2026-08-04 added NosGM.LiveOperationsPublisher.CompileCheck as an isolated
-#   SDK-style net481 project, increasing the repository project total by one.
 if ($allProjects.Count -ne 54) {
     throw "Project inventory changed: expected 54 projects but found $($allProjects.Count). Review the migration matrix."
 }
-
 if ($bridgeCount -ne 8) {
     throw "Bridge inventory changed: expected 8 projects but found $bridgeCount."
 }
-
 if ($legacyOnlyCount -ne 19) {
     throw "Classic legacy inventory changed: expected 19 .NET Framework 4.8.1 projects but found $legacyOnlyCount."
 }
 
 & (Join-Path $PSScriptRoot "verify-scs-transport-contracts.ps1")
-& (Join-Path $PSScriptRoot "verify-configuration-grpc-contract.ps1")
-& (Join-Path $PSScriptRoot "verify-configuration-grpc-state-host.ps1")
-& (Join-Path $PSScriptRoot "verify-configuration-grpc-client.ps1")
-& (Join-Path `
-    $PSScriptRoot `
-    "verify-configuration-runtime-controller.ps1")
-& (Join-Path `
-    $PSScriptRoot `
-    "verify-configuration-authority-evidence-collector.ps1")
+& (Join-Path $PSScriptRoot "verify-configuration-grpc-authority-final.ps1")
+& (Join-Path $PSScriptRoot "verify-configuration-runtime-controller.ps1")
 & (Join-Path $PSScriptRoot "verify-authentication-grpc-runtime.ps1")
 & (Join-Path $PSScriptRoot "verify-communication-grpc-client.ps1")
 & (Join-Path $PSScriptRoot "verify-communication-callback-runtime.ps1")
-& (Join-Path `
-    $PSScriptRoot `
-    "verify-authentication-grpc-local-acceptance.ps1")
+& (Join-Path $PSScriptRoot "verify-authentication-grpc-local-acceptance.ps1")
 
 if ($InventoryOnly) {
     Write-Host "NosGM .NET 10 foundation inventory passed." -ForegroundColor Green
