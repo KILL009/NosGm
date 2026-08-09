@@ -33,14 +33,27 @@ internal static class ConfigurationRuntimeControllerSelfTest
         AssertEqual(0U, initial.RestartCount,
             "Configuration controller starts without restarts");
 
-        ClusterConfigurationState.SnapshotState seeded =
-            controller.Update(
+        AssertTrue(
+            controller.TrySeed(
                 NewSnapshot(200),
-                out Guid seededRuntimeGeneration);
+                out ClusterConfigurationState.SnapshotState seeded,
+                out Guid seededRuntimeGeneration),
+            "Master can seed an empty Configuration runtime once");
         AssertEqual(initial.RuntimeGenerationId, seededRuntimeGeneration,
             "Seeding does not rotate the Configuration runtime");
         AssertEqual(1UL, seeded.Generation,
             "Initial Configuration runtime starts at generation one");
+
+        AssertFalse(
+            controller.TrySeed(
+                NewSnapshot(201),
+                out ClusterConfigurationState.SnapshotState existingSeed,
+                out Guid duplicateSeedRuntimeGeneration),
+            "Master cannot overwrite an already seeded Configuration runtime");
+        AssertEqual(200L, existingSeed.Configuration.MaxGold,
+            "Rejected Master reseed preserves the authoritative snapshot");
+        AssertEqual(seededRuntimeGeneration, duplicateSeedRuntimeGeneration,
+            "Rejected Master reseed stays on the same runtime identity");
 
         AssertEqual(
             ConfigurationSubscriptionOpenResult.Success,
