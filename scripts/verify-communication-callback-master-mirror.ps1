@@ -12,7 +12,7 @@ function Read-RequiredFile {
 
     $fullPath = Join-Path $repositoryRoot $RelativePath
     if (-not (Test-Path -LiteralPath $fullPath -PathType Leaf)) {
-        throw "Expected Master callback mirror file was not found: $RelativePath"
+        throw "Expected callback authority file was not found: $RelativePath"
     }
     return [System.IO.File]::ReadAllText($fullPath)
 }
@@ -54,7 +54,7 @@ function Require-Match {
         $Content,
         $Pattern,
         [Text.RegularExpressions.RegexOptions]::Singleline)) {
-        throw "$Name does not match the required callback mirror ordering."
+        throw "$Name does not match the required callback ordering."
     }
     Write-Host "[PASS] $Name" -ForegroundColor Green
 }
@@ -71,102 +71,44 @@ $program = Read-RequiredFile `
     "Data\NosGm.Program\NosGm.Master.Server\Program.cs"
 $project = Read-RequiredFile `
     "Data\NosGm.Program\NosGm.Master.Server\NosGm.Master.Server.csproj"
-$optionsTest = Read-RequiredFile `
-    "tests\NosGm.Authentication.Runtime.SelfTest\CommunicationCallbackMirrorOptionsSelfTest.cs"
-$liveTest = Read-RequiredFile `
-    "tests\NosGm.Authentication.Runtime.SelfTest\MasterCommunicationCallbackPublisherLiveSelfTest.cs"
+$clientInterface = Read-RequiredFile `
+    "Data\NosGm.Master.Library\Interface\ICommunicationClient.cs"
+$migrationMap = Read-RequiredFile `
+    "contracts\cluster\v1\communication-callback-migration-map.json"
 $interfaceMapTest = Read-RequiredFile `
     "scripts\verify-master-callback-mirror-interface-map.ps1"
 $windowsWorkflow = Read-RequiredFile `
     ".github\workflows\build-windows.yml"
-$documentation = Read-RequiredFile `
-    "docs\master-callback-publication-mirror.md"
-$migrationMap = Read-RequiredFile `
-    "contracts\cluster\v1\communication-callback-migration-map.json"
 
 Require $options "NOSGM_COMMUNICATION_GRPC_CALLBACK_MIRROR_ENABLED" `
-    "Master callback mirror has an explicit activation flag"
+    "Remaining callback mirror retains an explicit activation flag"
 Require $options "DefaultQueueCapacity = 4096" `
-    "Master callback mirror queue has a bounded default"
-Require $options "MinimumQueueCapacity = 64" `
-    "Master callback mirror queue has a safe floor"
-Require $options "MaximumQueueCapacity = 16384" `
-    "Master callback mirror queue has an absolute ceiling"
-Require $options "DefaultStopTimeoutMilliseconds = 5000" `
-    "Master callback mirror shutdown wait has a bounded default"
-Require $options "must be true or false without surrounding whitespace" `
-    "Master callback mirror booleans fail closed"
-
+    "Remaining callback mirror queue stays bounded"
 Require $publisher "options.CallerRole != ClusterNodeRole.Master" `
     "Callback publisher accepts only the Master role"
 Require $publisher "publicationTemplate.Clone()" `
-    "Every callback retry clones one immutable semantic template"
-Require $publisher "request.Context = CreateRequestContext" `
-    "Every callback attempt receives a fresh request context"
-Require $publisher 'RequestId = Guid.NewGuid().ToString("D")' `
-    "Every callback attempt receives a fresh request ID"
-Forbid $publisher "NOSGM_AUTH_GRPC_CLIENT_CERT_PATH" `
-    "Callback publisher never reads the AuthBridge certificate namespace"
+    "Callback retries clone immutable semantic templates"
 
-Require $mirror "MasterCommunicationGrpcIdentityOptions.Load()" `
-    "Mirror lifecycle loads the communication-specific Master identity"
 Require $mirror "new BlockingCollection<MirrorItem>" `
-    "Master callback mirror owns one bounded FIFO queue"
-Require $mirror "new ConcurrentQueue<MirrorItem>()" `
-    "Master callback mirror preserves FIFO enqueue order"
+    "Remaining callback mirror owns one bounded FIFO queue"
 Require $mirror "queue.TryAdd" `
-    "SCS callback threads never block on mirror enqueue"
-Forbid $mirror "queue.Add(" `
-    "Blocking queue insertion cannot return"
-Require $mirror "item.Template" `
-    "Transient retries preserve the original EventId and payload"
-Require $mirror "item.EnqueuedAt.AddSeconds" `
-    "Queued callback copies expire locally"
-Require $mirror "CALLBACK_MIRROR_FAULTED" `
-    "Terminal mirror failure remains observable"
-Require $mirror "SCS remains authoritative" `
-    "Terminal mirror failure cannot claim transport authority"
+    "Legacy callback threads do not block on mirror enqueue"
 Require $mirror "TryCharacterPresence" `
-    "Character presence uses the typed mirror publisher"
-Require $mirror "CommunicationCallbackTargetKind.WorldGroup" `
-    "Character presence and group callbacks preserve legacy group scope"
+    "Character presence retains its typed shadow builder"
 Require $mirror "TryStaticBonusRefresh" `
-    "Future static-bonus publication already has an exact typed builder"
-Require $mirror "CommunicationCallbackTargetKind.CharacterId" `
-    "Static-bonus publication uses the CharacterId route"
-Require $mirror "CommunicationCallbackTargetKind.AllNodes" `
-    "Penalty refresh targets Login and World subscribers"
-Require $mirror "CommunicationCallbackTargetKind.AllWorlds" `
-    "World-wide callbacks preserve their legacy scope"
+    "Static bonus retains its typed shadow builder"
 
 Require $service ": CommunicationService," `
-    "Mirrored service inherits the complete legacy implementation"
+    "Communication wrapper inherits the remaining legacy implementation"
 Require $service "ICommunicationService" `
-    "Mirrored service reimplements the SCS interface"
+    "Communication wrapper reimplements the SCS request interface"
 Require $service "CALLBACK_MIRROR_ISOLATED_FAILURE" `
-    "Mirror exceptions are isolated from SCS results"
-Require $service "IsCurrentClientAuthenticated" `
-    "Void character disconnect preserves the legacy authentication guard"
-Require $service "FindConnectedCharacter" `
-    "Character presence captures the legacy account route"
-Require $service "WORLD_GROUP_NOT_FOUND" `
-    "Unexpected missing presence scope is dropped instead of faulting the worker"
+    "Remaining mirror failures stay isolated from SCS request results"
 Forbid $service "SendMessageToCharacter" `
-    "Rendered legacy character messaging is not mirrored"
-
-Require-Match $service `
-    'public\s+new\s+bool\s+ConnectCharacter\s*\(.*?base\.ConnectCharacter\s*\(.*?if\s*\(connected\).*?MirrorPresence\s*\(' `
-    "SCS succeeds before connected presence is mirrored"
-Require-Match $service `
-    'public\s+new\s+void\s+DisconnectCharacter\s*\(.*?IsCurrentClientAuthenticated\(\).*?FindConnectedCharacter\s*\(.*?base\.DisconnectCharacter\s*\(.*?if\s*\(authenticated\s*&&\s*account\s*!=\s*null\).*?MirrorPresence\s*\(' `
-    "Authenticated SCS disconnect executes before disconnected presence is mirrored"
-Require-Match $service `
-    'private\s+static\s+void\s+MirrorPresence\s*\(.*?TryCharacterPresence\s*\(\s*worldGroup\s*,\s*characterId\s*,\s*connected\s*\)' `
-    "Presence mirror preserves the legacy World-group target"
+    "Rendered character messaging is not mirrored"
 
 $orderedMethods = @(
     @{ Name = "KickSession"; Mirror = "TryKickSession" },
-    @{ Name = "RefreshPenalty"; Mirror = "TryPenaltyRefresh" },
     @{ Name = "Restart"; Mirror = "TryRestart" },
     @{ Name = "RunGlobalEvent"; Mirror = "TryGlobalEvent" },
     @{ Name = "Shutdown"; Mirror = "TryShutdown" },
@@ -181,74 +123,55 @@ foreach ($entry in $orderedMethods) {
         ("public\s+new\s+[^\{]+\b" + $methodName +
          "\s*\(.*?base\." + $methodName +
          "\s*\(.*?" + $mirrorName + "\s*\(") `
-        ("SCS executes before the typed mirror for " + $entry.Name)
+        ("SCS still executes before the typed shadow mirror for " + $entry.Name)
 }
 
-Require-Match $program `
-    'StartCommunicationCallbackMirror\(\).*?AddService<ICommunicationService, MirroredCommunicationService>.*?server\.Start\(\)' `
-    "Master validates mirror configuration before exposing SCS"
-Require $program "StopInfrastructure" `
-    "Master owns callback mirror shutdown"
-Require-Match $program `
-    'private static void StopInfrastructure\(\).*?MasterCommunicationCallbackMirror\.Instance\.Stop\(\).*?StopLauncherAuthBridge\(\)' `
-    "Master stops the callback mirror before its auxiliary bridge"
+Require-Match $service `
+    'public\s+new\s+void\s+RefreshPenalty\s*\(\s*int\s+penaltyId\s*\).*?IsCurrentClientAuthenticated\(\).*?MasterPenaltyRefreshGrpcAuthority\.Instance\.Publish\(penaltyId\)' `
+    "PenaltyRefresh request dispatches only to the gRPC authority"
+Forbid $service "base.RefreshPenalty(penaltyId)" `
+    "PenaltyRefresh never invokes the legacy SCS callback fanout"
+Forbid $service "TryPenaltyRefresh(penaltyId)" `
+    "PenaltyRefresh no longer uses the asynchronous shadow mirror"
+Require $service "class MasterPenaltyRefreshGrpcAuthority" `
+    "Master owns a dedicated PenaltyRefresh authority publisher"
+Require $service 'EventId = eventId' `
+    "PenaltyRefresh retries preserve one idempotent EventId"
+Require $service "CommunicationCallbackTargetKind.AllNodes" `
+    "PenaltyRefresh retains ALL_NODES routing"
+Require $service "response.AcceptedSequence > 0" `
+    "PenaltyRefresh requires a positive accepted runtime sequence"
+Require $service "no SCS callback was attempted" `
+    "PenaltyRefresh publication failure is explicitly fail-closed"
+Require $service "new GrpcCommunicationCallbackPublisher(options)" `
+    "PenaltyRefresh authority uses the Master mTLS gRPC publisher"
 
-Require $project '<Compile Include="MasterCommunicationCallbackMirror.cs" />' `
-    "Classic Master project compiles the mirror lifecycle"
+Forbid $clientInterface "void UpdatePenaltyLog(int penaltyLogId);" `
+    "PenaltyRefresh is absent from the SCS callback interface"
+Require $clientInterface "PenaltyRefresh is gRPC-authoritative and has no SCS fallback" `
+    "Any dead legacy base call fails closed instead of reviving SCS"
+
+Require $migrationMap '"schemaVersion": 2' `
+    "Callback migration map records the completed authority slice"
+Require $migrationMap '"legacyMethod": "UpdatePenaltyLog"' `
+    "Migration history retains the retired SCS method name"
+Require $migrationMap '"disposition": "grpc_authoritative"' `
+    "Migration history marks PenaltyRefresh gRPC authoritative"
+Require $migrationMap '"legacySurfaceRemoved": true' `
+    "Migration history records physical SCS surface removal"
+Require $migrationMap '"fallback": null' `
+    "Migration history records no PenaltyRefresh fallback"
+
+Require-Match $program `
+    'AddService<ICommunicationService, MirroredCommunicationService>\(new MirroredCommunicationService\(\)\)' `
+    "Master exposes the wrapper whose PenaltyRefresh path is gRPC authoritative"
 Require $project '<Compile Include="MirroredCommunicationService.cs" />' `
-    "Classic Master project compiles the SCS-first wrapper"
-
+    "Classic Master project compiles the PenaltyRefresh authority"
 Require $interfaceMapTest "GetInterfaceMap" `
-    "Compiled mirror verification inspects the CLR interface map"
-Require $interfaceMapTest "NosGm.Master.Server.MirroredCommunicationService" `
-    "Compiled mirror verification expects all ten mirrored targets"
-Require $interfaceMapTest "NosGm.Master.Server.CommunicationService" `
-    "Compiled mirror verification preserves deferred raw messaging"
+    "Compiled verification checks CLR interface dispatch"
 Require $windowsWorkflow "Verify Master callback mirror interface dispatch" `
-    "Windows CI names the compiled interface-dispatch check"
-Require $windowsWorkflow "./scripts/verify-master-callback-mirror-interface-map.ps1" `
-    "Windows CI executes the compiled interface-dispatch check"
-
-Require $optionsTest "Master callback mirror is disabled by default" `
-    "Mirror activation default has a regression test"
-Require $optionsTest "rejects surrounding whitespace" `
-    "Mirror boolean strictness has a regression test"
-Require $optionsTest "below the safe floor" `
-    "Mirror queue floor has a regression test"
-Require $optionsTest "above the ceiling" `
-    "Mirror shutdown ceiling has a regression test"
-
-Require $liveTest "new GrpcCommunicationCallbackPublisher" `
-    "Live acceptance exercises the reusable publisher"
-Require-Match $liveTest `
-    'publisher\.PublishAsync\(template.*?publisher\.PublishAsync\(template' `
-    "Live acceptance retries the same semantic publication"
-Require $liveTest "CommunicationGlobalEventType.InstantBattle" `
-    "Live publisher probe uses a valid World-only callback"
-Require $liveTest "retry.AcceptedSequence" `
-    "Live acceptance proves EventId idempotency"
-Require $liveTest "IsBackground = false" `
-    "Live publisher acceptance cannot be skipped by process exit"
-
-Require $migrationMap '"legacyMethod": "CharacterConnected"' `
-    "Migration inventory contains connected presence"
-Require $migrationMap '"legacyMethod": "CharacterDisconnected"' `
-    "Migration inventory contains disconnected presence"
-Require $migrationMap '"legacyMethod": "SendMessageToCharacter"' `
-    "Migration inventory retains the deferred raw-message boundary"
-Require $migrationMap '"targetKind": "ALL_NODES"' `
-    "Migration inventory preserves penalty all-node routing"
-Require $documentation "SCS remains the only transport allowed to apply" `
-    "Documentation preserves one callback effect authority"
-Require $documentation 'non-blocking `TryAdd`' `
-    "Documentation records the non-blocking queue boundary"
-Require $documentation "including the source World" `
-    "Documentation records the actual legacy presence recipient set"
-Require $documentation 'current `ICommunicationService` exposes no SCS emitter' `
-    "Documentation does not invent a static-bonus source"
-Require $documentation "server-issued replay-complete barrier" `
-    "Documentation names the next atomic cutover boundary"
+    "Windows CI keeps the compiled interface-dispatch check"
 
 Write-Host `
-    "NosGM bounded SCS-first Master callback publication mirror contracts passed." `
+    "NosGM callback publication contracts passed: PenaltyRefresh is gRPC authoritative; remaining callbacks keep SCS-first shadow mirrors." `
     -ForegroundColor Green
