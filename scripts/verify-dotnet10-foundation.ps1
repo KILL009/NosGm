@@ -47,6 +47,14 @@ function Invoke-DotNet {
     }
 }
 
+function Stop-DotNetBuildServers {
+    Write-Host "[dotnet] build-server shutdown --msbuild --vbcscompiler" -ForegroundColor Cyan
+    & $script:dotnetHost build-server shutdown --msbuild --vbcscompiler
+    if ($LASTEXITCODE -ne 0) {
+        throw "dotnet build-server shutdown failed with exit code $LASTEXITCODE."
+    }
+}
+
 function Assert-FileContains {
     param(
         [Parameter(Mandatory = $true)][string]$RelativePath,
@@ -172,8 +180,13 @@ if ($InventoryOnly) {
     exit 0
 }
 
+Stop-DotNetBuildServers
+
 Push-Location $repositoryRoot
+$previousUseSharedCompilation = $env:UseSharedCompilation
 try {
+    $env:UseSharedCompilation = "false"
+
     Invoke-DotNet -Arguments @("build", "Web\NosGM.Web.sln", "-c", "Release", "--nologo")
 
     $toolProjects = Get-ChildItem -LiteralPath (Join-Path $repositoryRoot "Tools") -Filter *.csproj -File -Recurse |
@@ -216,7 +229,9 @@ try {
     }
 }
 finally {
+    $env:UseSharedCompilation = $previousUseSharedCompilation
     Pop-Location
+    Stop-DotNetBuildServers
 }
 
 Write-Host "NosGM .NET 10 foundation and waves 1-2B contract bridge build passed." -ForegroundColor Green
