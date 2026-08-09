@@ -63,6 +63,32 @@ namespace NosGm.Master.Library.Client
         public static ConfigurationServiceClient Instance =>
             _instance ?? (_instance = new ConfigurationServiceClient());
 
+        // Compatibility façade for the existing World startup sequence. The
+        // key is deliberately not used: caller identity and authorization are
+        // provided exclusively by the World mTLS certificate. A successful
+        // authoritative Get is the readiness proof.
+        public bool Authenticate(string authKey, Guid serverId)
+        {
+            ThrowIfDisposed();
+            if (serverId == Guid.Empty)
+            {
+                return false;
+            }
+
+            try
+            {
+                GetConfigurationObject();
+                return true;
+            }
+            catch (Exception exception)
+            {
+                Logger.Error(
+                    "[CONFIG_GRPC] Configuration readiness probe failed closed.",
+                    exception);
+                return false;
+            }
+        }
+
         public ConfigurationObject GetConfigurationObject()
         {
             ThrowIfDisposed();
