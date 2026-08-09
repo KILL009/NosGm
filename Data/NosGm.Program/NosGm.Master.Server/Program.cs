@@ -1,4 +1,5 @@
-﻿using log4net;
+using log4net;
+using NosGm.Authentication.Client.Configuration;
 using NosGm.Configuration;
 using NosGm.Core;
 using NosGm.DAL.EF.Helpers;
@@ -7,6 +8,7 @@ using NosGm.SCS.Communication.Scs.Communication.EndPoints.Tcp;
 using NosGm.SCS.Communication.ScsServices.Service;
 using System;
 using System.Linq;
+using System.Threading;
 
 namespace NosGm.Master.Server
 {
@@ -50,12 +52,18 @@ namespace NosGm.Master.Server
                 }
 
                 Logger.Info("Master Server Config has been loaded");
+
+                // Configuration is no longer hosted by the legacy Master SCS
+                // endpoint. Master owns the initial seed and publishes it over
+                // the authenticated gRPC Configuration service before World is
+                // allowed to start consuming that state.
+                SeedConfigurationGrpcAuthority();
+
                 StartCommunicationCallbackMirror();
 
                 string ipAddress = ServerConfiguration.IPAddress;
                 var server = ScsServiceBuilder.CreateService(new ScsTcpEndPoint(ipAddress, port));
                 server.AddService<ICommunicationService, MirroredCommunicationService>(new MirroredCommunicationService());
-                server.AddService<IConfigurationService, ConfigurationService>(new ConfigurationService());
                 server.AddService<IMailService, MailService>(new MailService());
                 server.AddService<IMallService, MallService>(new MallService());
                 server.AddService<IAuthentificationService, AuthentificationService>(new AuthentificationService());
@@ -83,6 +91,61 @@ namespace NosGm.Master.Server
                 StopInfrastructure();
                 Console.ReadKey();
             }
+        }
+
+        private static void SeedConfigurationGrpcAuthority()
+        {
+            var source = MSManager.Instance.ConfigurationObject;
+            var snapshot = new ConfigurationTransportSnapshot
+            {
+                MaxGold = source.MaxGold,
+                TimeExpBuffUnixTimeMilliseconds =
+                    ToUnixTimeMilliseconds(source.TimeExpBuff),
+                TimeGoldBuffUnixTimeMilliseconds =
+                    ToUnixTimeMilliseconds(source.TimeGoldBuff)
+            };
+
+            var options = ConfigurationRuntimeControllerIdentityOptions.Load();
+            using (var client = new ConfigurationMasterSeedClient(options))
+            using (var cancellation = new CancellationTokenSource(
+                       TimeSpan.FromMilliseconds(
+                           options.DeadlineMilliseconds + 1000)))
+            {
+                ConfigurationTransportResult result = client
+                    .SeedAsync(snapshot, cancellation.Token)
+                    .GetAwaiter()
+                    .GetResult();
+                if (result == null ||
+                    result.Result != ConfigurationTransportResultCode.Success ||
+                    result.Generation == 0 ||
+                    string.IsNullOrWhiteSpace(result.RuntimeGenerationId))
+                {
+                    string resultName = result == null
+                        ? "no-response"
+                        : result.Result.ToString();
+                    throw new InvalidOperationException(
+                        "Master could not seed the authoritative Configuration " +
+                        "snapshot over gRPC. Result=" + resultName +
+                        ". Startup is fail-closed and no SCS fallback exists.");
+                }
+
+                Logger.Info(
+                    "[CONFIG_GRPC] Master seeded authoritative Configuration " +
+                    "generation " + result.Generation +
+                    " using the dedicated Master mTLS identity.");
+            }
+        }
+
+        private static long ToUnixTimeMilliseconds(DateTime value)
+        {
+            if (value.Kind == DateTimeKind.Unspecified)
+            {
+                TimeSpan localOffset = TimeZoneInfo.Local.GetUtcOffset(value);
+                return new DateTimeOffset(value, localOffset)
+                    .ToUnixTimeMilliseconds();
+            }
+
+            return new DateTimeOffset(value).ToUnixTimeMilliseconds();
         }
 
         private static void StartCommunicationCallbackMirror()
