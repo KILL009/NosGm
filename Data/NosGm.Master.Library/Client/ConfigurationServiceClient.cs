@@ -168,7 +168,10 @@ namespace NosGm.Master.Library.Client
 
             ConfigurationObject configuration =
                 FromTransportSnapshot(update.Configuration);
-            ConfigurationUpdate?.Invoke(configuration, EventArgs.Empty);
+            RunWithConfigurationMutationBarrier(
+                () => ConfigurationUpdate?.Invoke(
+                    configuration,
+                    EventArgs.Empty));
             Logger.Info(
                 "[CONFIG_GRPC] Applied authoritative Configuration generation " +
                 update.Generation +
