@@ -36,6 +36,20 @@ namespace NosGm.Master.Library.Client
 
             WireV1.CommunicationCallbackKind kind =
                 CommunicationCallbackSemanticFingerprint.ResolveKind(envelope);
+
+            // PenaltyRefresh completed its SCS-to-gRPC authority cutover. It is
+            // applied directly from the typed stream and committed by the
+            // callback processor only after this method completes. There is no
+            // legacy callback fallback for this kind anymore.
+            if (kind == WireV1.CommunicationCallbackKind.PenaltyRefresh)
+            {
+                ApplyCore(envelope);
+                return Task.CompletedTask;
+            }
+
+            // Every other callback kind remains in its existing migration
+            // state. The coordinator therefore continues to suppress typed
+            // effects until that kind receives its own authority cutover.
             string semanticFingerprint =
                 CommunicationCallbackSemanticFingerprint.Compute(envelope);
             _cutoverCoordinator.TryApply(
