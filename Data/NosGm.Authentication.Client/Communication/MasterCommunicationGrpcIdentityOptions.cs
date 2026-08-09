@@ -1,12 +1,15 @@
 using System;
 using NosGm.Authentication.Client;
+using NosGm.Authentication.Client.Configuration;
 
 namespace NosGm.Communication.Client
 {
     /// <summary>
     /// Loads the credential namespace reserved for Master callback publication.
-    /// These variables are intentionally separate from the AuthBridge credential
-    /// namespace used by the same legacy Master process.
+    /// Dedicated callback variables remain authoritative. The explicit local
+    /// shadow fallback may reuse the already role-scoped Master Configuration
+    /// identity so the normal stack can exercise callback publication without
+    /// introducing another plaintext credential boundary.
     /// </summary>
     public static class MasterCommunicationGrpcIdentityOptions
     {
@@ -29,24 +32,59 @@ namespace NosGm.Communication.Client
             Func<string, string> readVariable = null)
         {
             readVariable = readVariable ?? Environment.GetEnvironmentVariable;
+            bool useExistingIdentity =
+                CommunicationCallbackExistingIdentityFallback.IsEnabled(
+                    readVariable);
+
+            string ReadValue(string dedicatedVariable, string fallbackVariable)
+            {
+                string dedicated = readVariable(dedicatedVariable);
+                if (!string.IsNullOrEmpty(dedicated) || !useExistingIdentity)
+                {
+                    return dedicated;
+                }
+                return readVariable(fallbackVariable);
+            }
+
             return AuthenticationGrpcClientOptions.LoadMaster(
                 genericVariable => genericVariable switch
                 {
                     AuthenticationGrpcClientOptions.AddressVariable =>
-                        readVariable(AddressVariable),
+                        ReadValue(
+                            AddressVariable,
+                            ConfigurationRuntimeControllerIdentityOptions
+                                .AddressVariable),
                     AuthenticationGrpcClientOptions.CertificatePathVariable =>
-                        readVariable(CertificatePathVariable),
+                        ReadValue(
+                            CertificatePathVariable,
+                            ConfigurationRuntimeControllerIdentityOptions
+                                .CertificatePathVariable),
                     AuthenticationGrpcClientOptions.CertificatePasswordVariable =>
-                        readVariable(CertificatePasswordVariable),
+                        ReadValue(
+                            CertificatePasswordVariable,
+                            ConfigurationRuntimeControllerIdentityOptions
+                                .CertificatePasswordVariable),
                     AuthenticationGrpcClientOptions
                             .TrustedRootCertificatePathVariable =>
-                        readVariable(TrustedRootCertificatePathVariable),
+                        ReadValue(
+                            TrustedRootCertificatePathVariable,
+                            ConfigurationRuntimeControllerIdentityOptions
+                                .TrustedRootCertificatePathVariable),
                     AuthenticationGrpcClientOptions.CallerInstanceIdVariable =>
-                        readVariable(CallerInstanceIdVariable),
+                        ReadValue(
+                            CallerInstanceIdVariable,
+                            ConfigurationRuntimeControllerIdentityOptions
+                                .CallerInstanceIdVariable),
                     AuthenticationGrpcClientOptions.DeadlineVariable =>
-                        readVariable(DeadlineVariable),
+                        ReadValue(
+                            DeadlineVariable,
+                            ConfigurationRuntimeControllerIdentityOptions
+                                .DeadlineVariable),
                     AuthenticationGrpcClientOptions.WireModeVariable =>
-                        readVariable(WireModeVariable),
+                        ReadValue(
+                            WireModeVariable,
+                            ConfigurationRuntimeControllerIdentityOptions
+                                .WireModeVariable),
                     _ => null
                 });
         }
