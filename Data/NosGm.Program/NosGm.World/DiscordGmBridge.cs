@@ -87,7 +87,7 @@ namespace NosGm.World
             CommandRequest request = null;
             try
             {
-                if (context.Request.HttpMethod != "POST" || context.Request.Url.AbsolutePath != "/v1/commands")
+                if (context.Request.HttpMethod != "POST")
                     throw new BridgeException(404, "Route not found.");
                 if (context.Request.ContentLength64 < 0 || context.Request.ContentLength64 > MaxBodyBytes)
                     throw new BridgeException(413, "Invalid request size.");
@@ -98,6 +98,8 @@ namespace NosGm.World
                 if (Encoding.UTF8.GetByteCount(body) > MaxBodyBytes) throw new BridgeException(413, "Request too large.");
 
                 Authenticate(context.Request, body);
+                if (context.Request.Url.AbsolutePath != "/v1/commands")
+                    throw new BridgeException(404, "Route not found.");
                 request = _json.Deserialize<CommandRequest>(body);
                 ValidateEnvelope(request);
                 var result = Execute(request);
