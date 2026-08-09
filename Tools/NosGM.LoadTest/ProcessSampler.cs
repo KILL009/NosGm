@@ -19,6 +19,7 @@ internal sealed class ProcessSampler
         ArgumentNullException.ThrowIfNull(processNames);
         _processNames = processNames
             .Where(name => !string.IsNullOrWhiteSpace(name))
+            .Select(NormalizeProcessName)
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
     }
@@ -33,9 +34,8 @@ internal sealed class ProcessSampler
         int processCount = 0;
         var liveProcessIds = new HashSet<int>();
 
-        foreach (string configuredName in _processNames)
+        foreach (string processName in _processNames)
         {
-            string processName = Path.GetFileNameWithoutExtension(configuredName);
             foreach (Process process in Process.GetProcessesByName(processName))
             {
                 using (process)
@@ -93,6 +93,14 @@ internal sealed class ProcessSampler
             totalWorkingSet,
             totalPrivateBytes,
             processCount);
+    }
+
+    private static string NormalizeProcessName(string configuredName)
+    {
+        string trimmed = configuredName.Trim();
+        return trimmed.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)
+            ? trimmed[..^4]
+            : trimmed;
     }
 
     private sealed record PreviousProcessSample(long Timestamp, long TotalProcessorTicks);
