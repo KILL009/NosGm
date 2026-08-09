@@ -45,6 +45,7 @@ namespace NosGm.Communication.Client
         public static CommunicationCallbackActivationOptions Load(
             Func<string, string> readVariable = null)
         {
+            bool usesProcessEnvironment = readVariable == null;
             readVariable = readVariable ?? Environment.GetEnvironmentVariable;
             bool enabled = ReadBoolean(
                 readVariable(EnabledVariable),
@@ -65,6 +66,19 @@ namespace NosGm.Communication.Client
             {
                 throw new InvalidOperationException(
                     ApplyVariable + " requires " + EnabledVariable + "=true.");
+            }
+
+            // The normal local stack already scopes distinct authentication
+            // gRPC certificates to Login and World. In explicit shadow mode we
+            // may bridge those process-local identities into the callback
+            // namespace before the subscriber options are loaded. Tests that
+            // provide an isolated variable reader never mutate process state.
+            if (enabled &&
+                usesProcessEnvironment &&
+                CommunicationCallbackExistingIdentityFallback.IsEnabled())
+            {
+                CommunicationCallbackExistingIdentityFallback
+                    .PrepareSubscriberEnvironment();
             }
 
             CommunicationCallbackActivationMode mode =
