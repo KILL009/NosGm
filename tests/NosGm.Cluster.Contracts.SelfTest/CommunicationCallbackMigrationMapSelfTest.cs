@@ -244,7 +244,7 @@ internal static class CommunicationCallbackMigrationMapSelfTest
             withoutComments,
             "public\\s+interface\\s+" +
             Regex.Escape(interfaceName) +
-            "\\b[^{]*\\{(?<body>.*?)\\n\\}",
+            "\\b[^{]*\\{(?<body>.*?)\\r?\\n\\s*\\}",
             RegexOptions.Singleline);
         if (!interfaceMatch.Success)
         {
