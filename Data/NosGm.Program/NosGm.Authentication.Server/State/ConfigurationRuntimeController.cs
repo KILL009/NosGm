@@ -61,6 +61,25 @@ public sealed class ConfigurationRuntimeController
         }
     }
 
+    public bool TrySeed(
+        WireV1.ConfigurationSnapshot snapshot,
+        out ClusterConfigurationState.SnapshotState state,
+        out Guid runtimeGenerationId)
+    {
+        ArgumentNullException.ThrowIfNull(snapshot);
+        lock (_sync)
+        {
+            runtimeGenerationId = _runtimeGenerationId;
+            if (_state.TryGet(out state))
+            {
+                return false;
+            }
+
+            state = _state.Update(snapshot);
+            return true;
+        }
+    }
+
     public ClusterConfigurationState.SnapshotState Update(
         WireV1.ConfigurationSnapshot snapshot,
         out Guid runtimeGenerationId)
