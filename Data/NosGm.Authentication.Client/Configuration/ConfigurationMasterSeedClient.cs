@@ -14,9 +14,11 @@ using WireV1 = global::NosGm.Cluster.Wire.V1;
 namespace NosGm.Authentication.Client.Configuration
 {
     /// <summary>
-    /// Minimal Master-role client used only to seed the authoritative
-    /// Configuration snapshot before World starts. It intentionally exposes no
-    /// subscription API, so only World can consume Configuration updates.
+    /// Minimal Master-role client used to ensure that the authoritative
+    /// Configuration snapshot exists before World starts. A pre-existing live
+    /// snapshot is preserved, so restarting Master cannot overwrite runtime
+    /// Configuration state. This client deliberately exposes no subscription
+    /// API; subscriptions remain World-only.
     /// </summary>
     public sealed class ConfigurationMasterSeedClient : IDisposable
     {
@@ -64,35 +66,64 @@ namespace NosGm.Authentication.Client.Configuration
             }
         }
 
-        public async Task<ConfigurationTransportResult> SeedAsync(
-            ConfigurationTransportSnapshot configuration,
+        public async Task<ConfigurationTransportResult> EnsureSeededAsync(
+            ConfigurationTransportSnapshot initialConfiguration,
             CancellationToken cancellationToken)
         {
             ThrowIfDisposed();
-            if (configuration == null)
+            if (initialConfiguration == null)
             {
-                throw new ArgumentNullException(nameof(configuration));
+                throw new ArgumentNullException(nameof(initialConfiguration));
             }
 
+            ConfigurationTransportResult current =
+                await GetAsync(cancellationToken).ConfigureAwait(false);
+            if (current.Result == ConfigurationTransportResultCode.Success)
+            {
+                return current;
+            }
+
+            if (current.Result != ConfigurationTransportResultCode.Unavailable)
+            {
+                return current;
+            }
+
+            return await SeedAsync(initialConfiguration, cancellationToken)
+                .ConfigureAwait(false);
+        }
+
+        private async Task<ConfigurationTransportResult> GetAsync(
+            CancellationToken cancellationToken)
+        {
+            DateTimeOffset issuedAt = DateTimeOffset.UtcNow;
+            DateTimeOffset deadline =
+                issuedAt.AddMilliseconds(_options.DeadlineMilliseconds);
+            WireV1.GetConfigurationResponse response =
+                await _client.GetConfigurationAsync(
+                        new WireV1.GetConfigurationRequest
+                        {
+                            Context = CreateRequestContext(issuedAt, deadline)
+                        },
+                        deadline: deadline.UtcDateTime,
+                        cancellationToken: cancellationToken)
+                    .ResponseAsync.ConfigureAwait(false);
+            return ToTransportResult(
+                response?.Result ?? WireV1.ConfigurationResultCode.Unspecified,
+                response?.Configuration,
+                response?.Generation ?? 0,
+                response?.RuntimeGenerationId);
+        }
+
+        private async Task<ConfigurationTransportResult> SeedAsync(
+            ConfigurationTransportSnapshot configuration,
+            CancellationToken cancellationToken)
+        {
             DateTimeOffset issuedAt = DateTimeOffset.UtcNow;
             DateTimeOffset deadline =
                 issuedAt.AddMilliseconds(_options.DeadlineMilliseconds);
             var request = new WireV1.UpdateConfigurationRequest
             {
-                Context = new WireV1.RequestContext
-                {
-                    Version = new WireV1.ProtocolVersion
-                    {
-                        Major = ClusterContractVersion.CurrentMajor,
-                        Minor = ClusterContractVersion.CurrentMinor
-                    },
-                    RequestId = Guid.NewGuid().ToString("D"),
-                    IssuedAtUnixTimeMs = issuedAt.ToUnixTimeMilliseconds(),
-                    DeadlineUnixTimeMs = deadline.ToUnixTimeMilliseconds(),
-                    CallerRole = WireV1.ClusterNodeRole.Master,
-                    RequestedService = WireV1.ClusterService.Configuration,
-                    CallerInstanceId = _options.CallerInstanceId
-                },
+                Context = CreateRequestContext(issuedAt, deadline),
                 Configuration = new WireV1.ConfigurationSnapshot
                 {
                     MaxGold = configuration.MaxGold,
@@ -109,7 +140,31 @@ namespace NosGm.Authentication.Client.Configuration
                         deadline: deadline.UtcDateTime,
                         cancellationToken: cancellationToken)
                     .ResponseAsync.ConfigureAwait(false);
-            return ToTransportResult(response);
+            return ToTransportResult(
+                response?.Result ?? WireV1.ConfigurationResultCode.Unspecified,
+                response?.Configuration,
+                response?.Generation ?? 0,
+                response?.RuntimeGenerationId);
+        }
+
+        private WireV1.RequestContext CreateRequestContext(
+            DateTimeOffset issuedAt,
+            DateTimeOffset deadline)
+        {
+            return new WireV1.RequestContext
+            {
+                Version = new WireV1.ProtocolVersion
+                {
+                    Major = ClusterContractVersion.CurrentMajor,
+                    Minor = ClusterContractVersion.CurrentMinor
+                },
+                RequestId = Guid.NewGuid().ToString("D"),
+                IssuedAtUnixTimeMs = issuedAt.ToUnixTimeMilliseconds(),
+                DeadlineUnixTimeMs = deadline.ToUnixTimeMilliseconds(),
+                CallerRole = WireV1.ClusterNodeRole.Master,
+                RequestedService = WireV1.ClusterService.Configuration,
+                CallerInstanceId = _options.CallerInstanceId
+            };
         }
 
         public void Dispose()
@@ -125,28 +180,24 @@ namespace NosGm.Authentication.Client.Configuration
         }
 
         private static ConfigurationTransportResult ToTransportResult(
-            WireV1.UpdateConfigurationResponse response)
+            WireV1.ConfigurationResultCode wireResult,
+            WireV1.ConfigurationSnapshot configuration,
+            ulong generation,
+            string runtimeGenerationId)
         {
-            if (response == null)
-            {
-                throw new InvalidOperationException(
-                    "The Configuration seed service returned no response.");
-            }
-
-            var result = (ConfigurationTransportResultCode)(int)response.Result;
+            var result = (ConfigurationTransportResultCode)(int)wireResult;
             if (!Enum.IsDefined(typeof(ConfigurationTransportResultCode), result))
             {
                 result = ConfigurationTransportResultCode.Unspecified;
             }
 
             if (result == ConfigurationTransportResultCode.Success &&
-                (response.Configuration == null ||
-                 response.Generation == 0 ||
+                (configuration == null ||
+                 generation == 0 ||
                  ClusterConfigurationContractValidator.ValidateSnapshot(
-                     response.Configuration) !=
+                     configuration) !=
                      ConfigurationContractValidationError.None ||
-                 !IsCanonicalRuntimeGeneration(
-                     response.RuntimeGenerationId)))
+                 !IsCanonicalRuntimeGeneration(runtimeGenerationId)))
             {
                 throw new InvalidOperationException(
                     "The Configuration seed service returned malformed success data.");
@@ -155,18 +206,18 @@ namespace NosGm.Authentication.Client.Configuration
             return new ConfigurationTransportResult
             {
                 Result = result,
-                Configuration = response.Configuration == null
+                Configuration = configuration == null
                     ? null
                     : new ConfigurationTransportSnapshot
                     {
-                        MaxGold = response.Configuration.MaxGold,
+                        MaxGold = configuration.MaxGold,
                         TimeExpBuffUnixTimeMilliseconds =
-                            response.Configuration.TimeExpBuffUnixTimeMs,
+                            configuration.TimeExpBuffUnixTimeMs,
                         TimeGoldBuffUnixTimeMilliseconds =
-                            response.Configuration.TimeGoldBuffUnixTimeMs
+                            configuration.TimeGoldBuffUnixTimeMs
                     },
-                Generation = response.Generation,
-                RuntimeGenerationId = response.RuntimeGenerationId
+                Generation = generation,
+                RuntimeGenerationId = runtimeGenerationId
             };
         }
 
