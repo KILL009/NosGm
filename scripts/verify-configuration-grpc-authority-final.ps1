@@ -72,7 +72,9 @@ function Assert-Before {
 $requiredFiles = @(
     "contracts\cluster\v1\cluster_configuration.proto",
     "contracts\cluster\v1\configuration-migration-map.json",
+    "contracts\cluster\v1\legacy-scs-surface.json",
     "Data\NosGm.Cluster.Contracts\Configuration\V1\ClusterConfigurationContractValidator.cs",
+    "Data\NosGm.Program\NosGm.Authentication.Server\State\ConfigurationRuntimeController.cs",
     "Data\NosGm.Program\NosGm.Authentication.Server\Services\ClusterConfigurationService.cs",
     "Data\NosGm.Authentication.Client\Configuration\GrpcClusterConfigurationTransport.cs",
     "Data\NosGm.Authentication.Client\Configuration\ConfigurationGrpcSubscriber.cs",
@@ -81,7 +83,11 @@ $requiredFiles = @(
     "Data\NosGm.Program\NosGm.Master.Server\Program.cs",
     "Data\NosGm.Handler\PacketHandler\Family\UseFamilySkillPacketHandler.cs",
     "scripts\start-modern-login-core-local.ps1",
-    "tests\NosGm.Authentication.Runtime.SelfTest\ClusterConfigurationContractSelfTest.cs"
+    "scripts\start-modern-login-local.ps1",
+    "scripts\invoke-configuration-grpc-runtime-control.ps1",
+    "scripts\verify-configuration-runtime-controller.ps1",
+    "tests\NosGm.Authentication.Runtime.SelfTest\ClusterConfigurationContractSelfTest.cs",
+    "tests\NosGm.Authentication.Runtime.SelfTest\ConfigurationRuntimeControllerSelfTest.cs"
 )
 foreach ($file in $requiredFiles) {
     Assert-FileExists $file
@@ -103,7 +109,17 @@ $retiredFiles = @(
     "Data\NosGm.Authentication.Client\Configuration\ConfigurationAuthorityQualificationRuntime.cs",
     "Data\NosGm.Authentication.Client\Configuration\ConfigurationUpdateObservationLedger.cs",
     "Data\NosGm.Authentication.Client\Configuration\ConfigurationUpdateOverlapDeduplicationLedger.cs",
-    "Data\NosGm.Authentication.Client\Configuration\ConfigurationUpdateParityComparator.cs"
+    "Data\NosGm.Authentication.Client\Configuration\ConfigurationUpdateParityComparator.cs",
+    "scripts\collect-configuration-authority-evidence.ps1",
+    "scripts\invoke-configuration-grpc-shadow-acceptance-bounded.ps1",
+    "scripts\test-configuration-grpc-shadow-local.ps1",
+    "scripts\verify-configuration-authority-evidence-collector.ps1",
+    "scripts\verify-configuration-authority-selector.ps1",
+    "scripts\verify-configuration-grpc-client.ps1",
+    "scripts\verify-configuration-grpc-contract.ps1",
+    "scripts\verify-configuration-grpc-shadow-acceptance.ps1",
+    "scripts\verify-configuration-grpc-shadow-adapter.ps1",
+    "scripts\verify-configuration-grpc-state-host.ps1"
 )
 foreach ($file in $retiredFiles) {
     Assert-FileMissing $file
@@ -131,17 +147,30 @@ if ($map.schemaVersion -ne 2 -or
     $null -ne $map.fallback) {
     throw "Configuration migration map must declare schema 2, complete gRPC authority, and fallback null."
 }
-$getRoles = @($map.operations | Where-Object rpc -eq "GetConfiguration")[0].callerRoles
-$updateRoles = @($map.operations | Where-Object rpc -eq "UpdateConfiguration")[0].callerRoles
-$subscribeRoles = @($map.operations | Where-Object rpc -eq "SubscribeConfigurationUpdates")[0].callerRoles
-if (@($getRoles).Count -ne 2 -or @($getRoles) -notcontains "World" -or @($getRoles) -notcontains "Master") {
+$getOperation = @($map.operations | Where-Object { $_.rpc -eq "GetConfiguration" })[0]
+$updateOperation = @($map.operations | Where-Object { $_.rpc -eq "UpdateConfiguration" })[0]
+$subscribeOperation = @($map.operations | Where-Object { $_.rpc -eq "SubscribeConfigurationUpdates" })[0]
+$getRoles = @($getOperation.callerRoles)
+$updateRoles = @($updateOperation.callerRoles)
+$subscribeRoles = @($subscribeOperation.callerRoles)
+if ($getRoles.Count -ne 2 -or $getRoles -notcontains "World" -or $getRoles -notcontains "Master") {
     throw "GetConfiguration final roles must be exactly World + Master."
 }
-if (@($updateRoles).Count -ne 2 -or @($updateRoles) -notcontains "World" -or @($updateRoles) -notcontains "Master") {
+if ($updateRoles.Count -ne 2 -or $updateRoles -notcontains "World" -or $updateRoles -notcontains "Master") {
     throw "UpdateConfiguration final roles must be exactly World + Master."
 }
-if (@($subscribeRoles).Count -ne 1 -or @($subscribeRoles)[0] -ne "World") {
+if ($updateOperation.masterUse -ne "initial_seed_only") {
+    throw "Master UpdateConfiguration usage must remain initial_seed_only."
+}
+if ($subscribeRoles.Count -ne 1 -or $subscribeRoles[0] -ne "World") {
     throw "SubscribeConfigurationUpdates must remain World-only."
+}
+
+$legacyScs = Get-Content -LiteralPath (Get-RepoPath "contracts\cluster\v1\legacy-scs-surface.json") -Raw | ConvertFrom-Json
+if ($legacyScs.schemaVersion -ne 2 -or
+    @($legacyScs.services).Count -ne 7 -or
+    @($legacyScs.services | Where-Object { $_.interface -like 'IConfiguration*' }).Count -ne 0) {
+    throw "Remaining legacy SCS inventory must be schema 2 and contain no Configuration interfaces."
 }
 
 $facade = Read-RepoText "Data\NosGm.Master.Library\Client\ConfigurationServiceClient.cs"
@@ -151,6 +180,7 @@ foreach ($required in @(
     "AuthenticationGrpcClientOptions.Load(ClusterNodeRole.World)",
     "UpdateAsync(",
     "GetAsync(",
+    "RunWithConfigurationMutationBarrier(",
     "ConfigurationUpdate?.Invoke"
 )) {
     Assert-Contains $facade $required "World Configuration facade"
@@ -192,12 +222,24 @@ foreach ($required in @(
 Assert-NotContains $seedClient "SubscribeConfigurationUpdates" "Master Configuration seed client"
 Assert-Before $seedClient "await GetAsync(" "return await SeedAsync(" "Master restart-safe seed sequence"
 
+$controller = Read-RepoText "Data\NosGm.Program\NosGm.Authentication.Server\State\ConfigurationRuntimeController.cs"
+foreach ($required in @(
+    "public bool TrySeed(",
+    "if (_state.TryGet(out state))",
+    "state = _state.Update(snapshot);"
+)) {
+    Assert-Contains $controller $required "Configuration runtime one-time seed"
+}
+
 $service = Read-RepoText "Data\NosGm.Program\NosGm.Authentication.Server\Services\ClusterConfigurationService.cs"
 foreach ($required in @(
     '"GetConfiguration"',
     'WireV1.ClusterNodeRole.World,',
     'WireV1.ClusterNodeRole.Master);',
     '"UpdateConfiguration"',
+    "request.Context.CallerRole == WireV1.ClusterNodeRole.Master",
+    "_runtimeController.TrySeed(",
+    "WireV1.ConfigurationResultCode.Conflict",
     '"SubscribeConfigurationUpdates"'
 )) {
     Assert-Contains $service $required "Configuration gRPC service"
@@ -213,13 +255,22 @@ foreach ($required in @(
     Assert-Contains $validator $required "Configuration contract validator"
 }
 
-$selfTest = Read-RepoText "tests\NosGm.Authentication.Runtime.SelfTest\ClusterConfigurationContractSelfTest.cs"
+$contractSelfTest = Read-RepoText "tests\NosGm.Authentication.Runtime.SelfTest\ClusterConfigurationContractSelfTest.cs"
 foreach ($required in @(
     "Configuration Get accepts Master context",
     "Configuration Update accepts Master seed snapshot",
     "Configuration Subscribe rejects Master caller role"
 )) {
-    Assert-Contains $selfTest $required "Configuration contract self-test"
+    Assert-Contains $contractSelfTest $required "Configuration contract self-test"
+}
+
+$runtimeSelfTest = Read-RepoText "tests\NosGm.Authentication.Runtime.SelfTest\ConfigurationRuntimeControllerSelfTest.cs"
+foreach ($required in @(
+    "Master can seed an empty Configuration runtime once",
+    "Master cannot overwrite an already seeded Configuration runtime",
+    "Rejected Master reseed preserves the authoritative snapshot"
+)) {
+    Assert-Contains $runtimeSelfTest $required "Configuration runtime self-test"
 }
 
 $family = Read-RepoText "Data\NosGm.Handler\PacketHandler\Family\UseFamilySkillPacketHandler.cs"
@@ -237,7 +288,8 @@ foreach ($required in @(
     'NOSGM_AUTH_GRPC_CLIENT_CERT_PATH = [string]$manifest.Clients.World.CertificatePath',
     '-Name "AuthenticationGrpc"',
     'ConfigurationAuthority = "gRPC"',
-    'ConfigurationFallback = $null'
+    'ConfigurationFallback = $null',
+    'ConfigurationSubscriberRole = "World"'
 )) {
     Assert-Contains $startup $required "Local startup script"
 }
@@ -254,6 +306,15 @@ foreach ($forbidden in @(
 }
 Assert-Before $startup '-Name "AuthenticationGrpc"' '-Name "Master"' "Local process startup order"
 Assert-Before $startup '-Name "Master"' '-Name "World"' "Local process startup order"
+
+$integratedStartup = Read-RepoText "scripts\start-modern-login-local.ps1"
+Assert-Contains $integratedStartup '$state.SchemaVersion -ne 2' "Integrated startup schema"
+Assert-Contains $integratedStartup 'EnableConfigurationRuntimeControl = $EnableConfigurationRuntimeControl' "Integrated startup runtime-control forwarding"
+
+$runtimeControl = Read-RepoText "scripts\invoke-configuration-grpc-runtime-control.ps1"
+Assert-Contains $runtimeControl '$state.SchemaVersion -ne 2' "Configuration runtime control state schema"
+Assert-Contains $runtimeControl '$state.ConfigurationAuthority' "Configuration runtime control authority check"
+Assert-NotContains $runtimeControl "acceptance pulse" "Configuration runtime control final behavior"
 
 $masterLibraryProject = Read-RepoText "Data\NosGm.Master.Library\NosGm.Master.Library.csproj"
 $masterProject = Read-RepoText "Data\NosGm.Program\NosGm.Master.Server\NosGm.Master.Server.csproj"
@@ -273,6 +334,7 @@ Assert-NotContains $masterProject "ConfigurationService.cs" "NosGm.Master.Server
 Write-Host "[PASS] Configuration SCS service, callback, rollback, shadow and selector surfaces are absent." -ForegroundColor Green
 Write-Host "[PASS] Configuration authority is gRPC-only and fail-closed." -ForegroundColor Green
 Write-Host "[PASS] Get/Update allow World + Master while subscription remains World-only." -ForegroundColor Green
+Write-Host "[PASS] Master can seed once but cannot overwrite a live Configuration runtime." -ForegroundColor Green
 Write-Host "[PASS] Master performs restart-safe gRPC seeding before its legacy listener starts." -ForegroundColor Green
-Write-Host "[PASS] World uses the gRPC facade/subscriber and family effects publish authority first." -ForegroundColor Green
+Write-Host "[PASS] World subscriber callbacks and gameplay mutations share one serialization barrier." -ForegroundColor Green
 Write-Host "[PASS] Windows local startup always provisions Authentication/Configuration gRPC plus dedicated Master and World mTLS identities." -ForegroundColor Green
