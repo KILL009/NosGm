@@ -1,4 +1,4 @@
-﻿using NosGm.Packets.Packets.ClientPackets;
+using NosGm.Packets.Packets.ClientPackets;
 using NosGm.Core;
 using NosGm.Data;
 using NosGm.Domain;
@@ -6,6 +6,7 @@ using NosGm.GameObject;
 using NosGm.GameObject.Extension;
 using NosGm.GameObject.Networking;
 using NosGm.Master.Library.Client;
+using NosGm.Master.Library.Data;
 using System;
 using System.Linq;
 using System.Reactive.Linq;
@@ -42,41 +43,94 @@ namespace NosGm.Handler.PacketHandler.Family
                     switch (fwsPacket.ItemVNum)
                     {
                         case 9600:
-                            ConfigurationServiceClient
-                                .RunWithConfigurationMutationBarrier(() =>
-                                {
-                                    ServerManager.Instance.Configuration
-                                        .TimeExpBuff = DateTime.Now.AddMinutes(60);
-                                    foreach (ClientSession s in
-                                             ServerManager.Instance.Sessions)
+                            try
+                            {
+                                ConfigurationServiceClient
+                                    .RunWithConfigurationMutationBarrier(() =>
                                     {
-                                        s.Character.AddStaticBuff(new StaticBuffDTO
+                                        ConfigurationObject current =
+                                            ServerManager.Instance.Configuration;
+                                        var updated = new ConfigurationObject
                                         {
-                                            CardId = 360,
-                                            CharacterId = s.Character.CharacterId,
-                                            RemainingTime = (int)(ServerManager.Instance.Configuration.TimeExpBuff - DateTime.Now).TotalSeconds
-                                        });
-                                    }
-                                });
+                                            MaxGold = current.MaxGold,
+                                            TimeExpBuff = DateTime.Now.AddMinutes(60),
+                                            TimeGoldBuff = current.TimeGoldBuff
+                                        };
+
+                                        // Publish the authoritative state first. If gRPC
+                                        // fails, no local gameplay effect is applied and
+                                        // the mission remains available for a later retry.
+                                        ConfigurationServiceClient.Instance
+                                            .UpdateConfigurationObject(updated);
+                                        ServerManager.Instance.Configuration = updated;
+
+                                        foreach (ClientSession s in
+                                                 ServerManager.Instance.Sessions)
+                                        {
+                                            s.Character.AddStaticBuff(new StaticBuffDTO
+                                            {
+                                                CardId = 360,
+                                                CharacterId = s.Character.CharacterId,
+                                                RemainingTime = (int)(updated.TimeExpBuff - DateTime.Now).TotalSeconds
+                                            });
+                                        }
+                                    });
+                            }
+                            catch (Exception exception)
+                            {
+                                Logger.Error(
+                                    "[CONFIG_GRPC] Family EXP buff publication failed closed; no gameplay effect was applied.",
+                                    exception);
+                                Session.SendPacket(
+                                    "info The family buff could not be activated because the configuration service is unavailable.");
+                                return;
+                            }
                             break;
+
                         case 9601:
-                            ConfigurationServiceClient
-                                .RunWithConfigurationMutationBarrier(() =>
-                                {
-                                    ServerManager.Instance.Configuration
-                                        .TimeGoldBuff = DateTime.Now.AddMinutes(60);
-                                    foreach (ClientSession s in
-                                             ServerManager.Instance.Sessions)
+                            try
+                            {
+                                ConfigurationServiceClient
+                                    .RunWithConfigurationMutationBarrier(() =>
                                     {
-                                        s.Character.AddStaticBuff(new StaticBuffDTO
+                                        ConfigurationObject current =
+                                            ServerManager.Instance.Configuration;
+                                        var updated = new ConfigurationObject
                                         {
-                                            CardId = 361,
-                                            CharacterId = s.Character.CharacterId,
-                                            RemainingTime = (int)(ServerManager.Instance.Configuration.TimeGoldBuff - DateTime.Now).TotalSeconds
-                                        });
-                                    }
-                                });
+                                            MaxGold = current.MaxGold,
+                                            TimeExpBuff = current.TimeExpBuff,
+                                            TimeGoldBuff = DateTime.Now.AddMinutes(60)
+                                        };
+
+                                        // Keep publication and gameplay effects ordered:
+                                        // gRPC authority must accept the new snapshot first.
+                                        ConfigurationServiceClient.Instance
+                                            .UpdateConfigurationObject(updated);
+                                        ServerManager.Instance.Configuration = updated;
+
+                                        foreach (ClientSession s in
+                                                 ServerManager.Instance.Sessions)
+                                        {
+                                            s.Character.AddStaticBuff(new StaticBuffDTO
+                                            {
+                                                CardId = 361,
+                                                CharacterId = s.Character.CharacterId,
+                                                RemainingTime = (int)(updated.TimeGoldBuff - DateTime.Now).TotalSeconds
+                                            });
+                                        }
+                                    });
+                            }
+                            catch (Exception exception)
+                            {
+                                Logger.Error(
+                                    "[CONFIG_GRPC] Family gold buff publication failed closed; no gameplay effect was applied.",
+                                    exception);
+                                Session.SendPacket(
+                                    "info The family buff could not be activated because the configuration service is unavailable.");
+                                return;
+                            }
                             break;
+
                         case 9602:
                             if (ServerManager.Instance.ChannelId != 51) return;
                             if (Session.Character.Family.FamilyFaction != (byte)FactionType.Angel) return;
