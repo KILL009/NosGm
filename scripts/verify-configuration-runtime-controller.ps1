@@ -124,6 +124,9 @@ foreach ($required in @(
     "RequestedService = WireV1.ClusterService.Configuration",
     "GetConfigurationRuntimeInfoAsync",
     "RestartConfigurationRuntimeAsync",
+    "WaitForSubscriberAsync",
+    "status.ActiveSubscribers > 0",
+    "TimeSpan.FromMilliseconds(100)",
     "expectedRuntimeGenerationId"
 )) {
     Require $client $required "Configuration runtime controller client"
@@ -136,6 +139,9 @@ foreach ($required in @(
     'args[0] != "restart"',
     "status.RuntimeGenerationId",
     "client.RestartAsync",
+    "client.WaitForSubscriberAsync",
+    "TimeSpan.FromSeconds(10)",
+    "subscriberReady",
     "JsonSerializer.Serialize"
 )) {
     Require $tool $required "Configuration runtime controller tool"
@@ -146,6 +152,8 @@ foreach ($required in @(
     "credentials.Master",
     "NOSGM_CONFIGURATION_GRPC_CONTROL_MASTER_CERT_PASSWORD",
     "ConfigurationRuntimeControlEnabled",
+    'subscriberReady -ne $true',
+    "Do not retry or send the acceptance pulse",
     "ExpectedRuntimeGenerationId must be a lowercase canonical GUID."
 )) {
     Require $script $required "Configuration runtime control wrapper"

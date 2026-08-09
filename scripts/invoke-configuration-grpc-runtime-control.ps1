@@ -221,6 +221,13 @@ $result = $json | ConvertFrom-Json
 if ($result.schemaVersion -ne 1 -or $result.result -ne "Success") {
     throw "Configuration runtime control returned an invalid result."
 }
+if ($Operation -eq "Restart" -and
+    ($result.PSObject.Properties.Name -notcontains "subscriberReady" -or
+     $result.subscriberReady -ne $true)) {
+    $json | Write-Host
+    throw "Configuration runtime restarted, but its World subscriber did not attach within 10 seconds. " +
+        "Do not retry or send the acceptance pulse; inspect Status and the World log."
+}
 
 if ($PassThru) {
     return $result

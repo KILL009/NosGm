@@ -302,9 +302,15 @@ Inspect or restart the runtime on Windows with:
 The wrapper reads the Master certificate password only from the existing
 DPAPI-protected local credential bundle, passes it to the short-lived .NET 10
 controller process, restores the parent environment, and emits sanitized JSON.
-Run real SCS and typed callback traffic after every restart. Three distinct
-parity windows arm the gate; the next restart creates the fourth activation
-runtime without changing the World process generation.
+After a successful restart the controller waits for up to ten seconds for a
+World subscriber on that exact runtime generation. The returned
+`subscriberReady` field is true only when the new runtime has an active World
+stream; a false value means that no acceptance pulse may be sent for that
+runtime. The wrapper stops in that state and explicitly forbids an automatic
+retry, because a second restart would discard the evidence boundary that must
+be diagnosed. Run real SCS and typed callback traffic after every restart.
+Three distinct parity windows arm the gate; the next restart creates the fourth
+activation runtime without changing the World process generation.
 
 Logging in or selecting a character does not mutate Configuration and therefore
 cannot create a live parity window. After each guarded restart, an administrator

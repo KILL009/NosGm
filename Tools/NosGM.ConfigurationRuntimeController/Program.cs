@@ -67,6 +67,21 @@ try
 
     WireV1.RestartConfigurationRuntimeResponse restarted =
         await client.RestartAsync(expected, cancellation.Token);
+    WireV1.GetConfigurationRuntimeInfoResponse subscriberStatus =
+        restarted.Result == WireV1.ConfigurationResultCode.Success
+            ? await client.WaitForSubscriberAsync(
+                restarted.RuntimeGenerationId,
+                TimeSpan.FromSeconds(10),
+                cancellation.Token)
+            : null;
+    bool subscriberReady =
+        subscriberStatus?.Result ==
+            WireV1.ConfigurationResultCode.Success &&
+        string.Equals(
+            subscriberStatus.RuntimeGenerationId,
+            restarted.RuntimeGenerationId,
+            StringComparison.Ordinal) &&
+        subscriberStatus.ActiveSubscribers > 0;
     WriteJson(new
     {
         schemaVersion = 1,
@@ -77,7 +92,9 @@ try
         runtimeGenerationId = restarted.RuntimeGenerationId,
         startedAtUnixTimeMs = restarted.StartedAtUnixTimeMs,
         configurationGeneration = restarted.ConfigurationGeneration,
-        activeSubscribers = restarted.ActiveSubscribers,
+        activeSubscribers = subscriberStatus?.ActiveSubscribers ??
+            restarted.ActiveSubscribers,
+        subscriberReady,
         restartCount = restarted.RestartCount,
         controlEnabled = restarted.ControlEnabled
     });
