@@ -121,10 +121,38 @@ public sealed class ClusterConfigurationService
                         });
                 }
 
-                ClusterConfigurationState.SnapshotState state =
-                    _runtimeController.Update(
+                ClusterConfigurationState.SnapshotState state;
+                Guid runtimeGenerationId;
+                if (request.Context.CallerRole == WireV1.ClusterNodeRole.Master)
+                {
+                    if (!_runtimeController.TrySeed(
+                            request.Configuration,
+                            out state,
+                            out runtimeGenerationId))
+                    {
+                        WriteAudit(
+                            request.Context,
+                            "UpdateConfiguration",
+                            WireV1.ConfigurationResultCode.Conflict,
+                            state.Generation);
+                        return Task.FromResult(
+                            new WireV1.UpdateConfigurationResponse
+                            {
+                                Result = WireV1.ConfigurationResultCode.Conflict,
+                                Configuration = state.Configuration,
+                                Generation = state.Generation,
+                                RuntimeGenerationId =
+                                    runtimeGenerationId.ToString("D")
+                            });
+                    }
+                }
+                else
+                {
+                    state = _runtimeController.Update(
                         request.Configuration,
-                        out Guid runtimeGenerationId);
+                        out runtimeGenerationId);
+                }
+
                 WriteAudit(
                     request.Context,
                     "UpdateConfiguration",
