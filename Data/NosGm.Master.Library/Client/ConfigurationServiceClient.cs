@@ -15,7 +15,7 @@ namespace NosGm.Master.Library.Client
         private static ConfigurationServiceClient _instance;
 
         private readonly GrpcClusterConfigurationTransport _transport;
-        private readonly ConfigurationGrpcShadowSubscriber _subscriber;
+        private readonly ConfigurationGrpcSubscriber _subscriber;
         private readonly CancellationTokenSource _subscriberCancellation;
         private readonly Task _subscriberTask;
         private int _disposed;
@@ -25,7 +25,7 @@ namespace NosGm.Master.Library.Client
             AuthenticationGrpcClientOptions options =
                 AuthenticationGrpcClientOptions.Load(ClusterNodeRole.World);
             _transport = new GrpcClusterConfigurationTransport(options);
-            _subscriber = new ConfigurationGrpcShadowSubscriber(
+            _subscriber = new ConfigurationGrpcSubscriber(
                 _transport,
                 _transport,
                 new AuthoritativeConfigurationUpdateHandler(this));
@@ -48,44 +48,20 @@ namespace NosGm.Master.Library.Client
                 {
                     Logger.Error(
                         "[CONFIG_GRPC] The authoritative Configuration subscriber stopped. " +
-                        "No SCS fallback is available; operator intervention is required.",
+                        "No fallback transport is available; operator intervention is required.",
                         exception);
                 }
             });
 
             AppDomain.CurrentDomain.ProcessExit += OnProcessExit;
             Logger.Info(
-                "[CONFIG_GRPC] Configuration authority initialized in mandatory gRPC mode; " +
-                "SCS fallback is disabled.");
+                "[CONFIG_GRPC] Configuration authority initialized in mandatory gRPC mode.");
         }
 
         public event EventHandler ConfigurationUpdate;
 
         public static ConfigurationServiceClient Instance =>
             _instance ?? (_instance = new ConfigurationServiceClient());
-
-        public bool Authenticate(string authKey, Guid serverId)
-        {
-            ThrowIfDisposed();
-            if (string.IsNullOrWhiteSpace(authKey) || serverId == Guid.Empty)
-            {
-                return false;
-            }
-
-            try
-            {
-                GetConfigurationObject();
-                return true;
-            }
-            catch (Exception exception)
-            {
-                Logger.Error(
-                    "[CONFIG_GRPC] Configuration readiness probe failed closed. " +
-                    "mTLS is the authoritative authentication mechanism.",
-                    exception);
-                return false;
-            }
-        }
 
         public ConfigurationObject GetConfigurationObject()
         {
@@ -193,7 +169,7 @@ namespace NosGm.Master.Library.Client
                 throw new InvalidOperationException(
                     "Configuration gRPC " + operation +
                     " failed closed with result " + resultName +
-                    "; no SCS fallback exists.");
+                    "; no fallback transport exists.");
             }
         }
 
@@ -253,7 +229,7 @@ namespace NosGm.Master.Library.Client
 
         private sealed class AuthoritativeConfigurationUpdateHandler
             : IClusterConfigurationUpdateHandler,
-              IConfigurationGrpcShadowStreamLifecycleObserver
+              IConfigurationGrpcStreamLifecycleObserver
         {
             private readonly ConfigurationServiceClient _owner;
 
@@ -279,7 +255,7 @@ namespace NosGm.Master.Library.Client
                 Logger.Warn(
                     "[CONFIG_GRPC] Authoritative Configuration stream ended for runtime " +
                     (runtimeGenerationId ?? "unknown") +
-                    "; reconnect/recovery will remain gRPC-only. Reason=" +
+                    "; reconnect/recovery remains gRPC-only. Reason=" +
                     (reason == null ? "stream-completed" : reason.GetType().Name));
             }
         }
