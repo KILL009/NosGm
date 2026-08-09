@@ -75,6 +75,12 @@ internal static class ClusterConfigurationContractSelfTest
             ClusterConfigurationContractValidator.Validate(request),
             "Configuration Subscribe accepts World context");
 
+        request.Context.CallerRole = WireV1.ClusterNodeRole.Master;
+        AssertEqual(
+            ConfigurationContractValidationError.InvalidCallerRole,
+            ClusterConfigurationContractValidator.Validate(request),
+            "Configuration Subscribe rejects Master caller role");
+
         request.Context.CallerRole = WireV1.ClusterNodeRole.Login;
         AssertEqual(
             ConfigurationContractValidationError.InvalidCallerRole,
@@ -94,6 +100,14 @@ internal static class ClusterConfigurationContractSelfTest
             ConfigurationContractValidationError.None,
             ClusterConfigurationContractValidator.Validate(request),
             "Configuration Get accepts World context");
+
+        request.Context = CreateContext(
+            WireV1.ClusterNodeRole.Master,
+            WireV1.ClusterService.Configuration);
+        AssertEqual(
+            ConfigurationContractValidationError.None,
+            ClusterConfigurationContractValidator.Validate(request),
+            "Configuration Get accepts Master context");
 
         request.Context.CallerRole = WireV1.ClusterNodeRole.Login;
         AssertEqual(
@@ -122,8 +136,25 @@ internal static class ClusterConfigurationContractSelfTest
         AssertEqual(
             ConfigurationContractValidationError.None,
             ClusterConfigurationContractValidator.Validate(request),
-            "Configuration Update accepts bounded snapshot");
+            "Configuration Update accepts World snapshot");
 
+        request.Context = CreateContext(
+            WireV1.ClusterNodeRole.Master,
+            WireV1.ClusterService.Configuration);
+        AssertEqual(
+            ConfigurationContractValidationError.None,
+            ClusterConfigurationContractValidator.Validate(request),
+            "Configuration Update accepts Master seed snapshot");
+
+        request.Context.CallerRole = WireV1.ClusterNodeRole.Login;
+        AssertEqual(
+            ConfigurationContractValidationError.InvalidCallerRole,
+            ClusterConfigurationContractValidator.Validate(request),
+            "Configuration Update rejects Login caller role");
+
+        request.Context = CreateContext(
+            WireV1.ClusterNodeRole.World,
+            WireV1.ClusterService.Configuration);
         request.Configuration = null;
         AssertEqual(
             ConfigurationContractValidationError.MissingConfiguration,
