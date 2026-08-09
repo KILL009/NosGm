@@ -33,16 +33,17 @@ on:
       - "scripts/new-local-authentication-certificates.ps1"
       - "scripts/start-modern-login-local.ps1"
       - "scripts/start-modern-login-core-local.ps1"
+      - "scripts/stop-modern-login-local.ps1"
       - "scripts/invoke-configuration-grpc-runtime-control.ps1"
       - "scripts/verify-configuration-runtime-controller.ps1"
+      - "scripts/verify-configuration-grpc-authority-final.ps1"
       - "scripts/test-authentication-grpc-local.ps1"
       - "scripts/test-modern-login-readiness.ps1"
+      - "scripts/verify-modern-login-live-stack.ps1"
       - "scripts/verify-dotnet10-foundation.ps1"
       - "scripts/verify-scs-transport-contracts.ps1"
       - "scripts/verify-authentication-grpc-runtime.ps1"
       - "scripts/verify-authentication-grpc-local-acceptance.ps1"
-      - "scripts/verify-configuration-grpc-state-host.ps1"
-      - "scripts/verify-configuration-grpc-authority-final.ps1"
   pull_request:
     branches:
       - main
@@ -75,16 +76,17 @@ on:
       - "scripts/new-local-authentication-certificates.ps1"
       - "scripts/start-modern-login-local.ps1"
       - "scripts/start-modern-login-core-local.ps1"
+      - "scripts/stop-modern-login-local.ps1"
       - "scripts/invoke-configuration-grpc-runtime-control.ps1"
       - "scripts/verify-configuration-runtime-controller.ps1"
+      - "scripts/verify-configuration-grpc-authority-final.ps1"
       - "scripts/test-authentication-grpc-local.ps1"
       - "scripts/test-modern-login-readiness.ps1"
+      - "scripts/verify-modern-login-live-stack.ps1"
       - "scripts/verify-dotnet10-foundation.ps1"
       - "scripts/verify-scs-transport-contracts.ps1"
       - "scripts/verify-authentication-grpc-runtime.ps1"
       - "scripts/verify-authentication-grpc-local-acceptance.ps1"
-      - "scripts/verify-configuration-grpc-state-host.ps1"
-      - "scripts/verify-configuration-grpc-authority-final.ps1"
   workflow_dispatch:
 
 permissions:
