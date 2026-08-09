@@ -108,6 +108,69 @@ namespace NosGm.Authentication.Client.Configuration
             return response;
         }
 
+        public async Task<WireV1.GetConfigurationRuntimeInfoResponse>
+            WaitForSubscriberAsync(
+                string runtimeGenerationId,
+                TimeSpan timeout,
+                CancellationToken cancellationToken)
+        {
+            ThrowIfDisposed();
+            if (!IsCanonicalGeneration(runtimeGenerationId))
+            {
+                throw new ArgumentException(
+                    "The Configuration runtime generation must be a canonical non-empty GUID.",
+                    nameof(runtimeGenerationId));
+            }
+            if (timeout <= TimeSpan.Zero || timeout > TimeSpan.FromMinutes(1))
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(timeout),
+                    "The Configuration subscriber wait must be between zero and one minute.");
+            }
+
+            DateTimeOffset deadline = DateTimeOffset.UtcNow.Add(timeout);
+            WireV1.GetConfigurationRuntimeInfoResponse status = null;
+            do
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                status = await GetStatusAsync(cancellationToken)
+                    .ConfigureAwait(false);
+                if (status.Result != WireV1.ConfigurationResultCode.Success)
+                {
+                    return status;
+                }
+                if (!string.Equals(
+                        status.RuntimeGenerationId,
+                        runtimeGenerationId,
+                        StringComparison.Ordinal))
+                {
+                    throw new RpcException(
+                        new Status(
+                            StatusCode.Aborted,
+                            "The Configuration runtime changed while waiting for its World subscriber."));
+                }
+                if (status.ActiveSubscribers > 0)
+                {
+                    return status;
+                }
+
+                TimeSpan remaining = deadline - DateTimeOffset.UtcNow;
+                if (remaining <= TimeSpan.Zero)
+                {
+                    break;
+                }
+                await Task.Delay(
+                        remaining < TimeSpan.FromMilliseconds(100)
+                            ? remaining
+                            : TimeSpan.FromMilliseconds(100),
+                        cancellationToken)
+                    .ConfigureAwait(false);
+            }
+            while (DateTimeOffset.UtcNow < deadline);
+
+            return status;
+        }
+
         public void Dispose()
         {
             if (Interlocked.Exchange(ref _disposed, 1) != 0)
