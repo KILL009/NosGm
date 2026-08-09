@@ -4,10 +4,6 @@ param(
     [switch]$SkipLauncher,
     [switch]$ConfigureUrlAcl,
     [switch]$EnableConfigurationRuntimeControl,
-    [switch]$EnableConfigurationGrpcShadow,
-    [string]$ConfigurationAuthorityArmRequestId,
-    [switch]$EnableConfigurationAuthorityEffects,
-    [switch]$RequestConfigurationAuthorityRollback,
     [ValidateSet("SCS", "GRPC")]
     [string]$AuthenticationTransport = "SCS",
     [ValidateSet("AUTO", "HTTP2", "GRPCWEB")]
@@ -28,45 +24,6 @@ Set-StrictMode -Version Latest
 
 if ($env:OS -ne "Windows_NT") {
     throw "The local modern Login stack requires Windows."
-}
-
-if (($EnableConfigurationRuntimeControl -or
-     $EnableConfigurationGrpcShadow -or
-     -not [string]::IsNullOrWhiteSpace(
-         $ConfigurationAuthorityArmRequestId) -or
-     $EnableConfigurationAuthorityEffects -or
-     $RequestConfigurationAuthorityRollback) -and
-    $AuthenticationTransport -ne "GRPC") {
-    throw "Configuration gRPC shadow, authority, and runtime control options require -AuthenticationTransport GRPC."
-}
-if ($EnableConfigurationRuntimeControl -and
-    -not $EnableConfigurationGrpcShadow) {
-    throw "Configuration runtime control requires -EnableConfigurationGrpcShadow so every new runtime can recover through the live World subscriber."
-}
-if ($EnableConfigurationAuthorityEffects -and
-    ([string]::IsNullOrWhiteSpace(
-        $ConfigurationAuthorityArmRequestId) -or
-     -not $EnableConfigurationGrpcShadow)) {
-    throw "Configuration authority effects require shadow mode and an explicit arm request ID."
-}
-if ($RequestConfigurationAuthorityRollback -and
-    (-not [string]::IsNullOrWhiteSpace(
-         $ConfigurationAuthorityArmRequestId) -or
-     $EnableConfigurationAuthorityEffects)) {
-    throw "Configuration rollback is mutually exclusive with arm and live-effects authorization."
-}
-if (-not [string]::IsNullOrWhiteSpace(
-        $ConfigurationAuthorityArmRequestId)) {
-    $parsedArmRequest = [Guid]::Empty
-    if (-not [Guid]::TryParseExact(
-            $ConfigurationAuthorityArmRequestId,
-            "D",
-            [ref]$parsedArmRequest) -or
-        $parsedArmRequest -eq [Guid]::Empty -or
-        $parsedArmRequest.ToString("D") -cne
-            $ConfigurationAuthorityArmRequestId) {
-        throw "ConfigurationAuthorityArmRequestId must be a lowercase canonical non-empty GUID."
-    }
 }
 
 $root = Split-Path -Parent $PSScriptRoot
@@ -93,6 +50,7 @@ $environmentVariableNames = @(
     "NOSGM_AUTH_GRPC_URL",
     "NOSGM_AUTH_GRPC_CLIENT_CERT_PATH",
     "NOSGM_AUTH_GRPC_CLIENT_CERT_PASSWORD",
+    "NOSGM_AUTH_GRPC_TRUSTED_ROOT_CERT_PATH",
     "NOSGM_AUTH_GRPC_CALLER_INSTANCE_ID",
     "NOSGM_AUTH_GRPC_DEADLINE_MILLISECONDS",
     "NOSGM_AUTH_GRPC_WIRE_MODE",
@@ -103,11 +61,13 @@ $environmentVariableNames = @(
     "NOSGM_AUTH_GRPC_WORLD_CERT_SHA256",
     "NOSGM_AUTH_GRPC_MASTER_CERT_SHA256",
     "NOSGM_CONFIGURATION_GRPC_RUNTIME_CONTROL_ENABLED",
-    "NOSGM_CONFIGURATION_GRPC_SHADOW_ENABLED",
-    "NOSGM_CONFIGURATION_GRPC_ACCEPTANCE_PULSE_ENABLED",
-    "NOSGM_CONFIGURATION_GRPC_AUTHORITY_ARM_REQUEST_ID",
-    "NOSGM_CONFIGURATION_GRPC_AUTHORITY_EFFECTS_ENABLED",
-    "NOSGM_CONFIGURATION_GRPC_AUTHORITY_ROLLBACK_REQUESTED",
+    "NOSGM_CONFIGURATION_GRPC_CONTROL_URL",
+    "NOSGM_CONFIGURATION_GRPC_CONTROL_MASTER_CERT_PATH",
+    "NOSGM_CONFIGURATION_GRPC_CONTROL_MASTER_CERT_PASSWORD",
+    "NOSGM_CONFIGURATION_GRPC_CONTROL_TRUSTED_ROOT_CERT_PATH",
+    "NOSGM_CONFIGURATION_GRPC_CONTROL_INSTANCE_ID",
+    "NOSGM_CONFIGURATION_GRPC_CONTROL_DEADLINE_MILLISECONDS",
+    "NOSGM_CONFIGURATION_GRPC_CONTROL_WIRE_MODE",
     "NOSGM_AUTH_GRPC_PORT",
     "NOSGM_AUTH_GRPC_TICKET_TTL_SECONDS",
     "NOSGM_AUTH_GRPC_PERMIT_TTL_SECONDS",
@@ -180,12 +140,21 @@ function Import-LocalAuthenticationBundle {
         throw "The DPAPI-protected authentication credential bundle is invalid."
     }
 
+    foreach ($clientName in @("AuthBridge", "Login", "World", "Master")) {
+        if ($manifest.Clients.PSObject.Properties.Name -notcontains $clientName -or
+            $credentials.PSObject.Properties.Name -notcontains $clientName -or
+            $credentials.$clientName -isnot [Security.SecureString]) {
+            throw "The local authentication bundle is missing the $clientName certificate credential. Generate a fresh bundle."
+        }
+    }
+
     foreach ($certificatePath in @(
         [string]$manifest.RootCertificatePath,
         [string]$manifest.ServerCertificatePath,
         [string]$manifest.Clients.AuthBridge.CertificatePath,
         [string]$manifest.Clients.Login.CertificatePath,
-        [string]$manifest.Clients.World.CertificatePath
+        [string]$manifest.Clients.World.CertificatePath,
+        [string]$manifest.Clients.Master.CertificatePath
     )) {
         if (-not [System.IO.Path]::IsPathRooted($certificatePath) -or
             -not (Test-Path -LiteralPath $certificatePath -PathType Leaf)) {
@@ -196,11 +165,16 @@ function Import-LocalAuthenticationBundle {
     foreach ($fingerprint in @(
         [string]$manifest.Clients.AuthBridge.Sha256,
         [string]$manifest.Clients.Login.Sha256,
-        [string]$manifest.Clients.World.Sha256
+        [string]$manifest.Clients.World.Sha256,
+        [string]$manifest.Clients.Master.Sha256
     )) {
         if ($fingerprint -notmatch '^[A-Fa-f0-9]{64}$') {
             throw "The local authentication certificate bundle contains an invalid SHA-256 fingerprint."
         }
+    }
+
+    if ($credentials.Server -isnot [Security.SecureString]) {
+        throw "The local authentication bundle is missing the server certificate credential."
     }
 
     $trustedRootPath =
@@ -348,8 +322,7 @@ function Start-TrackedProcess {
                     "Process")
             $processValue = $null
             if ($ProcessEnvironment.Contains($variableName)) {
-                $processValue =
-                    [string]$ProcessEnvironment[$variableName]
+                $processValue = [string]$ProcessEnvironment[$variableName]
             }
             [Environment]::SetEnvironmentVariable(
                 $variableName,
@@ -371,13 +344,12 @@ function Start-TrackedProcess {
     if ($null -eq $process) {
         throw "The $Name process could not be started."
     }
-    $startedAtUtc = $process.StartTime.ToUniversalTime().ToString("O")
     $record = [pscustomobject]@{
         Name = $Name
         Id = $process.Id
         ProcessName = $process.ProcessName
         Executable = $Executable
-        StartedAtUtc = $startedAtUtc
+        StartedAtUtc = $process.StartTime.ToUniversalTime().ToString("O")
     }
     $startedProcesses.Add($record)
     Write-Host "[START] $Name PID=$($process.Id)"
@@ -452,8 +424,7 @@ function Resolve-LegacyMSBuildSdk {
         }
     }
 
-    $compatibleSdks =
-        New-Object System.Collections.Generic.List[object]
+    $compatibleSdks = New-Object System.Collections.Generic.List[object]
     foreach ($candidatePath in @($candidatePaths | Select-Object -Unique)) {
         if (-not (Test-Path -LiteralPath $candidatePath -PathType Leaf)) {
             continue
@@ -482,8 +453,7 @@ function Resolve-LegacyMSBuildSdk {
             $compatibleSdks.Add([pscustomobject]@{
                 Version = $sdkVersion
                 SdksPath = [System.IO.Path]::GetFullPath($sdkDirectory)
-                DotNetExecutable =
-                    [System.IO.Path]::GetFullPath($candidatePath)
+                DotNetExecutable = [System.IO.Path]::GetFullPath($candidatePath)
             })
         }
     }
@@ -524,62 +494,23 @@ if (Test-Path -LiteralPath $statePath) {
 $bridgePrefix = "http://127.0.0.1:$BridgePort/"
 $launcherEndpoint = $bridgePrefix + "api/v1/launcher/ticket"
 $healthEndpoint = $bridgePrefix + "api/v1/launcher/health"
-$authenticationGrpcEndpoint =
-    "https://127.0.0.1:$AuthenticationGrpcPort"
-$authenticationBundle = $null
-$resolvedAuthenticationGrpcWireMode = $null
+$authenticationGrpcEndpoint = "https://127.0.0.1:$AuthenticationGrpcPort"
+$resolvedAuthenticationGrpcWireMode =
+    Resolve-AuthenticationGrpcWireMode -RequestedMode $AuthenticationGrpcWireMode
 
-if ($AuthenticationTransport -eq "GRPC") {
-    $resolvedAuthenticationGrpcWireMode =
-        Resolve-AuthenticationGrpcWireMode `
-            -RequestedMode $AuthenticationGrpcWireMode
-    if ([string]::IsNullOrWhiteSpace(
-            $AuthenticationCertificateManifest)) {
-        $AuthenticationCertificateManifest = Join-Path `
-            $root `
-            "artifacts\authentication-grpc-local\manifest.json"
-    }
+if ([string]::IsNullOrWhiteSpace($AuthenticationCertificateManifest)) {
+    $AuthenticationCertificateManifest = Join-Path `
+        $root `
+        "artifacts\authentication-grpc-local\manifest.json"
+}
+$authenticationBundle = Import-LocalAuthenticationBundle `
+    -ManifestPath $AuthenticationCertificateManifest
 
-    $authenticationBundle = Import-LocalAuthenticationBundle `
-        -ManifestPath $AuthenticationCertificateManifest
-
-    if ($EnableConfigurationRuntimeControl) {
-        $manifest = $authenticationBundle.Manifest
-        $credentials = $authenticationBundle.Credentials
-        if ($manifest.Clients.PSObject.Properties.Name -notcontains
-                "Master" -or
-            $credentials.PSObject.Properties.Name -notcontains
-                "Master" -or
-            $credentials.Master -isnot [Security.SecureString] -or
-            [string]::IsNullOrWhiteSpace(
-                [string]$manifest.Clients.Master.CertificatePath) -or
-            -not [IO.Path]::IsPathRooted(
-                [string]$manifest.Clients.Master.CertificatePath) -or
-            -not (Test-Path `
-                -LiteralPath `
-                    ([string]$manifest.Clients.Master.CertificatePath) `
-                -PathType Leaf) -or
-            [string]$manifest.Clients.Master.Sha256 -notmatch
-                '^[A-Fa-f0-9]{64}$') {
-            throw "Configuration runtime control requires a valid Master certificate and DPAPI credential. Generate a fresh local authentication certificate bundle."
-        }
-    }
-}
-elseif ($AuthenticationGrpcWireMode -ne "AUTO") {
-    throw "-AuthenticationGrpcWireMode applies only when -AuthenticationTransport GRPC is selected."
-}
-elseif ($EnableConfigurationRuntimeControl) {
-    throw "-EnableConfigurationRuntimeControl requires -AuthenticationTransport GRPC."
-}
-
-$dotnetExecutable = $null
-$dotnetRoot = $null
-if (-not $SkipBuild -or
-    -not $SkipLauncher -or
-    $AuthenticationTransport -eq "GRPC") {
-    $dotnetExecutable = Resolve-DotNet10Executable
-    $dotnetRoot = Split-Path -Parent $dotnetExecutable
-}
+# Configuration is now a mandatory gRPC cluster service, even when the wider
+# authentication data path is intentionally kept on SCS. Therefore the .NET 10
+# Authentication host and its certificate bundle are always required.
+$dotnetExecutable = Resolve-DotNet10Executable
+$dotnetRoot = Split-Path -Parent $dotnetExecutable
 
 if ($ConfigureUrlAcl) {
     if (-not (Test-IsAdministrator)) {
@@ -598,8 +529,7 @@ if (-not $SkipBuild) {
     try {
         $env:DOTNET_ROOT = $dotnetRoot
         $previousMSBuildSdksPath = $env:MSBuildSDKsPath
-        $previousMSBuildEnableWorkloadResolver =
-            $env:MSBuildEnableWorkloadResolver
+        $previousMSBuildEnableWorkloadResolver = $env:MSBuildEnableWorkloadResolver
         try {
             $legacyMSBuildSdk = Resolve-LegacyMSBuildSdk
             $env:MSBuildSDKsPath = $legacyMSBuildSdk.SdksPath
@@ -647,21 +577,18 @@ if (-not $SkipBuild) {
             throw "Launcher build failed."
         }
 
-        if ($AuthenticationTransport -eq "GRPC") {
-            $authenticationProject = Join-Path `
-                $root `
-                "Data\NosGm.Program\NosGm.Authentication.Server\NosGm.Authentication.Server.csproj"
-            $authenticationOutput =
-                Join-Path $root "bin\Release\Authentication"
-            Write-Host "[BUILD] Publishing the .NET 10 authentication runtime"
-            & $dotnetExecutable publish `
-                $authenticationProject `
-                --configuration Release `
-                --output $authenticationOutput `
-                --nologo
-            if ($LASTEXITCODE -ne 0) {
-                throw "Authentication runtime build failed."
-            }
+        $authenticationProject = Join-Path `
+            $root `
+            "Data\NosGm.Program\NosGm.Authentication.Server\NosGm.Authentication.Server.csproj"
+        $authenticationOutput = Join-Path $root "bin\Release\Authentication"
+        Write-Host "[BUILD] Publishing the .NET 10 authentication/configuration runtime"
+        & $dotnetExecutable publish `
+            $authenticationProject `
+            --configuration Release `
+            --output $authenticationOutput `
+            --nologo
+        if ($LASTEXITCODE -ne 0) {
+            throw "Authentication/configuration runtime build failed."
         }
     }
     finally {
@@ -673,28 +600,17 @@ $masterExecutable = Join-Path $root "bin\Release\Master\NosGm.Master.Server.exe"
 $worldExecutable = Join-Path $root "bin\Release\World\NosGm.World.exe"
 $loginExecutable = Join-Path $root "bin\Release\Login\NosGm.Login.exe"
 $launcherExecutable = Join-Path $root "Launcher\src\NosGM.Launcher\bin\Release\net10.0-windows\NosGM.Launcher.exe"
-$authenticationDirectory =
-    Join-Path `
-        $root `
-        "bin\Release\Authentication"
-$authenticationAssembly =
-    Join-Path `
-        $authenticationDirectory `
-        "NosGm.Authentication.Server.dll"
+$authenticationDirectory = Join-Path $root "bin\Release\Authentication"
+$authenticationAssembly = Join-Path $authenticationDirectory "NosGm.Authentication.Server.dll"
 
 $requiredExecutables = @(
     [pscustomobject]@{ Name = "Master"; Path = $masterExecutable },
     [pscustomobject]@{ Name = "World"; Path = $worldExecutable },
-    [pscustomobject]@{ Name = "Login"; Path = $loginExecutable }
+    [pscustomobject]@{ Name = "Login"; Path = $loginExecutable },
+    [pscustomobject]@{ Name = "Authentication/configuration gRPC runtime"; Path = $authenticationAssembly }
 )
 if (-not $SkipLauncher) {
     $requiredExecutables += [pscustomobject]@{ Name = "Launcher"; Path = $launcherExecutable }
-}
-if ($AuthenticationTransport -eq "GRPC") {
-    $requiredExecutables += [pscustomobject]@{
-        Name = "Authentication gRPC runtime"
-        Path = $authenticationAssembly
-    }
 }
 
 foreach ($requiredExecutable in $requiredExecutables) {
@@ -702,6 +618,9 @@ foreach ($requiredExecutable in $requiredExecutables) {
         throw "Missing $($requiredExecutable.Name) executable after build: $($requiredExecutable.Path)"
     }
 }
+
+$manifest = $authenticationBundle.Manifest
+$credentials = $authenticationBundle.Credentials
 
 $sharedServerEnvironment = @{
     NOSGM_MASTER_AUTH_KEY = New-NosGmSecret
@@ -718,132 +637,103 @@ $sharedServerEnvironment = @{
     NOSGM_LAUNCHER_AUTH_MAX_ATTEMPTS_PER_WINDOW = "10"
     NOSGM_AUTH_TRANSPORT = $AuthenticationTransport
 }
-$masterEnvironment = $sharedServerEnvironment
-$worldEnvironment = $sharedServerEnvironment
-$loginEnvironment = $sharedServerEnvironment
-$authenticationRuntimeEnvironment = @{}
 
+$authenticationRuntimeEnvironment = @{
+    NOSGM_AUTH_GRPC_SERVER_CERT_PATH = [string]$manifest.ServerCertificatePath
+    NOSGM_AUTH_GRPC_SERVER_CERT_PASSWORD = ConvertFrom-SecureStringInMemory $credentials.Server
+    NOSGM_AUTH_GRPC_AUTHBRIDGE_CERT_SHA256 = [string]$manifest.Clients.AuthBridge.Sha256
+    NOSGM_AUTH_GRPC_LOGIN_CERT_SHA256 = [string]$manifest.Clients.Login.Sha256
+    NOSGM_AUTH_GRPC_WORLD_CERT_SHA256 = [string]$manifest.Clients.World.Sha256
+    NOSGM_AUTH_GRPC_MASTER_CERT_SHA256 = [string]$manifest.Clients.Master.Sha256
+    NOSGM_AUTH_GRPC_PORT = $AuthenticationGrpcPort.ToString()
+    NOSGM_AUTH_GRPC_TICKET_TTL_SECONDS = "120"
+    NOSGM_AUTH_GRPC_PERMIT_TTL_SECONDS = "120"
+    NOSGM_AUTH_GRPC_INSTANCE_ID = "authentication-local-1"
+}
+if ($EnableConfigurationRuntimeControl) {
+    $authenticationRuntimeEnvironment[
+        "NOSGM_CONFIGURATION_GRPC_RUNTIME_CONTROL_ENABLED"] = "true"
+}
+
+$masterEnvironment = Merge-ProcessEnvironment `
+    -Base $sharedServerEnvironment `
+    -Additional @{
+        NOSGM_CONFIGURATION_GRPC_CONTROL_URL = $authenticationGrpcEndpoint
+        NOSGM_CONFIGURATION_GRPC_CONTROL_MASTER_CERT_PATH = [string]$manifest.Clients.Master.CertificatePath
+        NOSGM_CONFIGURATION_GRPC_CONTROL_MASTER_CERT_PASSWORD = ConvertFrom-SecureStringInMemory $credentials.Master
+        NOSGM_CONFIGURATION_GRPC_CONTROL_TRUSTED_ROOT_CERT_PATH = [string]$manifest.RootCertificatePath
+        NOSGM_CONFIGURATION_GRPC_CONTROL_INSTANCE_ID = "master-configuration-local-1"
+        NOSGM_CONFIGURATION_GRPC_CONTROL_DEADLINE_MILLISECONDS = "10000"
+        NOSGM_CONFIGURATION_GRPC_CONTROL_WIRE_MODE = $resolvedAuthenticationGrpcWireMode
+    }
+
+# LauncherAuthBridge lives in Master. It only needs the AuthBridge gRPC identity
+# when the wider authentication data path is configured for gRPC.
 if ($AuthenticationTransport -eq "GRPC") {
-    $manifest = $authenticationBundle.Manifest
-    $credentials = $authenticationBundle.Credentials
-
-    $authenticationRuntimeEnvironment = @{
-        NOSGM_AUTH_GRPC_SERVER_CERT_PATH =
-            [string]$manifest.ServerCertificatePath
-        NOSGM_AUTH_GRPC_SERVER_CERT_PASSWORD =
-            ConvertFrom-SecureStringInMemory $credentials.Server
-        NOSGM_AUTH_GRPC_AUTHBRIDGE_CERT_SHA256 =
-            [string]$manifest.Clients.AuthBridge.Sha256
-        NOSGM_AUTH_GRPC_LOGIN_CERT_SHA256 =
-            [string]$manifest.Clients.Login.Sha256
-        NOSGM_AUTH_GRPC_WORLD_CERT_SHA256 =
-            [string]$manifest.Clients.World.Sha256
-        NOSGM_AUTH_GRPC_PORT = $AuthenticationGrpcPort.ToString()
-        NOSGM_AUTH_GRPC_TICKET_TTL_SECONDS = "120"
-        NOSGM_AUTH_GRPC_PERMIT_TTL_SECONDS = "120"
-        NOSGM_AUTH_GRPC_INSTANCE_ID = "authentication-local-1"
-    }
-    if ($EnableConfigurationRuntimeControl) {
-        $authenticationRuntimeEnvironment[
-            "NOSGM_AUTH_GRPC_MASTER_CERT_SHA256"] =
-                [string]$manifest.Clients.Master.Sha256
-        $authenticationRuntimeEnvironment[
-            "NOSGM_CONFIGURATION_GRPC_RUNTIME_CONTROL_ENABLED"] =
-                "true"
-    }
-
     $masterEnvironment = Merge-ProcessEnvironment `
-        -Base $sharedServerEnvironment `
+        -Base $masterEnvironment `
         -Additional @{
             NOSGM_AUTH_GRPC_URL = $authenticationGrpcEndpoint
-            NOSGM_AUTH_GRPC_CLIENT_CERT_PATH =
-                [string]$manifest.Clients.AuthBridge.CertificatePath
-            NOSGM_AUTH_GRPC_CLIENT_CERT_PASSWORD =
-                ConvertFrom-SecureStringInMemory $credentials.AuthBridge
+            NOSGM_AUTH_GRPC_CLIENT_CERT_PATH = [string]$manifest.Clients.AuthBridge.CertificatePath
+            NOSGM_AUTH_GRPC_CLIENT_CERT_PASSWORD = ConvertFrom-SecureStringInMemory $credentials.AuthBridge
+            NOSGM_AUTH_GRPC_TRUSTED_ROOT_CERT_PATH = [string]$manifest.RootCertificatePath
             NOSGM_AUTH_GRPC_CALLER_INSTANCE_ID = "authbridge-local-1"
             NOSGM_AUTH_GRPC_DEADLINE_MILLISECONDS = "10000"
-            NOSGM_AUTH_GRPC_WIRE_MODE =
-                $resolvedAuthenticationGrpcWireMode
+            NOSGM_AUTH_GRPC_WIRE_MODE = $resolvedAuthenticationGrpcWireMode
         }
+}
+
+# World always needs its mTLS identity because Configuration is gRPC-only,
+# regardless of the selected authentication transport for Login/game tickets.
+$worldEnvironment = Merge-ProcessEnvironment `
+    -Base $sharedServerEnvironment `
+    -Additional @{
+        NOSGM_AUTH_GRPC_URL = $authenticationGrpcEndpoint
+        NOSGM_AUTH_GRPC_CLIENT_CERT_PATH = [string]$manifest.Clients.World.CertificatePath
+        NOSGM_AUTH_GRPC_CLIENT_CERT_PASSWORD = ConvertFrom-SecureStringInMemory $credentials.World
+        NOSGM_AUTH_GRPC_TRUSTED_ROOT_CERT_PATH = [string]$manifest.RootCertificatePath
+        NOSGM_AUTH_GRPC_CALLER_INSTANCE_ID = "world-local-1"
+        NOSGM_AUTH_GRPC_DEADLINE_MILLISECONDS = "10000"
+        NOSGM_AUTH_GRPC_WIRE_MODE = $resolvedAuthenticationGrpcWireMode
+    }
+
+$loginEnvironment = $sharedServerEnvironment
+if ($AuthenticationTransport -eq "GRPC") {
     $loginEnvironment = Merge-ProcessEnvironment `
         -Base $sharedServerEnvironment `
         -Additional @{
             NOSGM_AUTH_GRPC_URL = $authenticationGrpcEndpoint
-            NOSGM_AUTH_GRPC_CLIENT_CERT_PATH =
-                [string]$manifest.Clients.Login.CertificatePath
-            NOSGM_AUTH_GRPC_CLIENT_CERT_PASSWORD =
-                ConvertFrom-SecureStringInMemory $credentials.Login
+            NOSGM_AUTH_GRPC_CLIENT_CERT_PATH = [string]$manifest.Clients.Login.CertificatePath
+            NOSGM_AUTH_GRPC_CLIENT_CERT_PASSWORD = ConvertFrom-SecureStringInMemory $credentials.Login
+            NOSGM_AUTH_GRPC_TRUSTED_ROOT_CERT_PATH = [string]$manifest.RootCertificatePath
             NOSGM_AUTH_GRPC_CALLER_INSTANCE_ID = "login-local-1"
             NOSGM_AUTH_GRPC_DEADLINE_MILLISECONDS = "10000"
-            NOSGM_AUTH_GRPC_WIRE_MODE =
-                $resolvedAuthenticationGrpcWireMode
+            NOSGM_AUTH_GRPC_WIRE_MODE = $resolvedAuthenticationGrpcWireMode
         }
-    $worldEnvironment = Merge-ProcessEnvironment `
-        -Base $sharedServerEnvironment `
-        -Additional @{
-            NOSGM_AUTH_GRPC_URL = $authenticationGrpcEndpoint
-            NOSGM_AUTH_GRPC_CLIENT_CERT_PATH =
-                [string]$manifest.Clients.World.CertificatePath
-            NOSGM_AUTH_GRPC_CLIENT_CERT_PASSWORD =
-                ConvertFrom-SecureStringInMemory $credentials.World
-            NOSGM_AUTH_GRPC_CALLER_INSTANCE_ID = "world-local-1"
-            NOSGM_AUTH_GRPC_DEADLINE_MILLISECONDS = "10000"
-            NOSGM_AUTH_GRPC_WIRE_MODE =
-                $resolvedAuthenticationGrpcWireMode
-        }
-    if ($EnableConfigurationGrpcShadow) {
-        $worldEnvironment[
-            "NOSGM_CONFIGURATION_GRPC_SHADOW_ENABLED"] = "true"
-    }
-    if ($EnableConfigurationRuntimeControl -and
-        $EnableConfigurationGrpcShadow) {
-        $worldEnvironment[
-            "NOSGM_CONFIGURATION_GRPC_ACCEPTANCE_PULSE_ENABLED"] = "true"
-    }
-    if (-not [string]::IsNullOrWhiteSpace(
-            $ConfigurationAuthorityArmRequestId)) {
-        $worldEnvironment[
-            "NOSGM_CONFIGURATION_GRPC_AUTHORITY_ARM_REQUEST_ID"] =
-                $ConfigurationAuthorityArmRequestId
-    }
-    if ($EnableConfigurationAuthorityEffects) {
-        $worldEnvironment[
-            "NOSGM_CONFIGURATION_GRPC_AUTHORITY_EFFECTS_ENABLED"] =
-                "true"
-    }
-    if ($RequestConfigurationAuthorityRollback) {
-        $worldEnvironment[
-            "NOSGM_CONFIGURATION_GRPC_AUTHORITY_ROLLBACK_REQUESTED"] =
-                "true"
-    }
 }
 
 try {
     New-Item -ItemType Directory -Path $stateDirectory -Force | Out-Null
 
-    if ($AuthenticationTransport -eq "GRPC") {
-        Start-TrackedProcess `
-            -Name "AuthenticationGrpc" `
-            -Executable $dotnetExecutable `
-            -Arguments @($authenticationAssembly) `
-            -WorkingDirectory $authenticationDirectory `
-            -ProcessEnvironment $authenticationRuntimeEnvironment |
-            Out-Null
-        $authenticationRuntimeEnvironment.Clear()
-        Wait-TcpPort `
-            -HostName "127.0.0.1" `
-            -Port $AuthenticationGrpcPort `
-            -Description "Authentication gRPC"
-    }
+    Start-TrackedProcess `
+        -Name "AuthenticationGrpc" `
+        -Executable $dotnetExecutable `
+        -Arguments @($authenticationAssembly) `
+        -WorkingDirectory $authenticationDirectory `
+        -ProcessEnvironment $authenticationRuntimeEnvironment |
+        Out-Null
+    $authenticationRuntimeEnvironment.Clear()
+    Wait-TcpPort `
+        -HostName "127.0.0.1" `
+        -Port $AuthenticationGrpcPort `
+        -Description "Authentication/Configuration gRPC"
 
     Start-TrackedProcess `
         -Name "Master" `
         -Executable $masterExecutable `
         -ProcessEnvironment $masterEnvironment |
         Out-Null
-    if ($AuthenticationTransport -eq "GRPC") {
-        $masterEnvironment.Clear()
-    }
+    $masterEnvironment.Clear()
     Wait-TcpPort -HostName "127.0.0.1" -Port $masterPort -Description "Master"
     Wait-TcpPort -HostName "127.0.0.1" -Port $BridgePort -Description "Launcher AuthBridge"
 
@@ -853,9 +743,7 @@ try {
         -Arguments @("--nomsg", "--port", $WorldPort.ToString()) `
         -ProcessEnvironment $worldEnvironment |
         Out-Null
-    if ($AuthenticationTransport -eq "GRPC") {
-        $worldEnvironment.Clear()
-    }
+    $worldEnvironment.Clear()
     Wait-TcpPort -HostName "127.0.0.1" -Port $WorldPort -Description "World"
 
     Start-TrackedProcess `
@@ -864,9 +752,7 @@ try {
         -Arguments @("--nomsg") `
         -ProcessEnvironment $loginEnvironment |
         Out-Null
-    if ($AuthenticationTransport -eq "GRPC") {
-        $loginEnvironment.Clear()
-    }
+    $loginEnvironment.Clear()
     $sharedServerEnvironment.Clear()
     Wait-TcpPort -HostName "127.0.0.1" -Port $spanishLoginPort -Description "Spanish Login"
 
@@ -882,32 +768,16 @@ try {
     }
 
     $state = [pscustomobject]@{
-        SchemaVersion = 1
+        SchemaVersion = 2
         CreatedAtUtc = [DateTime]::UtcNow.ToString("O")
         AuthenticationTransport = $AuthenticationTransport
-        AuthenticationGrpcWireMode =
-            if ($AuthenticationTransport -eq "GRPC") {
-                $resolvedAuthenticationGrpcWireMode
-            }
-            else {
-                $null
-            }
+        AuthenticationGrpcWireMode = $resolvedAuthenticationGrpcWireMode
         AuthenticationEndpoint = $launcherEndpoint
-        AuthenticationGrpcEndpoint =
-            if ($AuthenticationTransport -eq "GRPC") {
-                $authenticationGrpcEndpoint
-            }
-            else {
-                $null
-            }
-        ConfigurationRuntimeControlEnabled =
-            [bool]$EnableConfigurationRuntimeControl
-        ConfigurationGrpcShadowEnabled =
-            [bool]$EnableConfigurationGrpcShadow
-        ConfigurationAuthorityEffectsEnabled =
-            [bool]$EnableConfigurationAuthorityEffects
-        ConfigurationAuthorityRollbackRequested =
-            [bool]$RequestConfigurationAuthorityRollback
+        AuthenticationGrpcEndpoint = $authenticationGrpcEndpoint
+        ConfigurationAuthority = "gRPC"
+        ConfigurationFallback = $null
+        ConfigurationSubscriberRole = "World"
+        ConfigurationRuntimeControlEnabled = [bool]$EnableConfigurationRuntimeControl
         HealthEndpoint = $healthEndpoint
         SpanishLoginPort = $spanishLoginPort
         WorldPort = $WorldPort
@@ -939,31 +809,12 @@ try {
     Write-Host "NosGM modern Login local stack is ready." -ForegroundColor Green
     Write-Host "Authentication endpoint: $launcherEndpoint"
     Write-Host "Internal authentication transport: $AuthenticationTransport"
-    if ($AuthenticationTransport -eq "GRPC") {
-        Write-Host "Authentication gRPC endpoint: $authenticationGrpcEndpoint"
-        Write-Host "Authentication wire mode: $resolvedAuthenticationGrpcWireMode"
-        if ($EnableConfigurationRuntimeControl) {
-            Write-Host "Configuration runtime control: enabled (Master mTLS, generation compare-and-swap)"
-            Write-Host "Restart only Configuration gRPC with: ./scripts/invoke-configuration-grpc-runtime-control.ps1 -Operation Restart"
-        }
-        if ($EnableConfigurationGrpcShadow) {
-            Write-Host "Configuration gRPC shadow: enabled"
-            $configurationAuthorityMode =
-                if ($EnableConfigurationAuthorityEffects) {
-                    "live effects"
-                }
-                elseif (-not [string]::IsNullOrWhiteSpace(
-                        $ConfigurationAuthorityArmRequestId)) {
-                    "dry-run arm"
-                }
-                elseif ($RequestConfigurationAuthorityRollback) {
-                    "explicit rollback"
-                }
-                else {
-                    "unarmed observation"
-                }
-            Write-Host "Configuration authority mode: $configurationAuthorityMode"
-        }
+    Write-Host "Authentication/Configuration gRPC endpoint: $authenticationGrpcEndpoint"
+    Write-Host "gRPC wire mode: $resolvedAuthenticationGrpcWireMode"
+    Write-Host "Configuration authority: gRPC only (Master seed, World Get/Update/subscribe, no fallback)"
+    if ($EnableConfigurationRuntimeControl) {
+        Write-Host "Configuration runtime control: enabled (Master mTLS, generation compare-and-swap)"
+        Write-Host "Restart only Configuration gRPC with: ./scripts/invoke-configuration-grpc-runtime-control.ps1 -Operation Restart"
     }
     Write-Host "Health endpoint: $healthEndpoint"
     Write-Host "Launcher language: Español (region 5 / Login $spanishLoginPort)"
