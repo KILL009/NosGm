@@ -119,7 +119,7 @@ namespace NosGm.Authentication.Client.Configuration
         }
     }
 
-    public sealed class ConfigurationGrpcShadowSubscriberOptions
+    public sealed class ConfigurationGrpcSubscriberOptions
     {
         public const int DefaultInitialReconnectDelayMilliseconds = 250;
         public const int DefaultMaximumReconnectDelayMilliseconds = 5000;
@@ -148,20 +148,20 @@ namespace NosGm.Authentication.Client.Configuration
         }
     }
 
-    public interface IConfigurationGrpcShadowSubscriberRunner : IDisposable
+    public interface IConfigurationGrpcSubscriberRunner : IDisposable
     {
         Task RunAsync(CancellationToken cancellationToken);
     }
 
-    public interface IConfigurationGrpcShadowStreamLifecycleObserver
+    public interface IConfigurationGrpcStreamLifecycleObserver
     {
         void ObserveStreamEnded(
             string runtimeGenerationId,
             Exception reason);
     }
 
-    public sealed class ConfigurationGrpcShadowSubscriber
-        : IConfigurationGrpcShadowSubscriberRunner,
+    public sealed class ConfigurationGrpcSubscriber
+        : IConfigurationGrpcSubscriberRunner,
           IClusterConfigurationUpdateHandler
     {
         private readonly ConfigurationUpdateCursor _cursor =
@@ -169,7 +169,7 @@ namespace NosGm.Authentication.Client.Configuration
         private readonly IDisposable _disposableSnapshotTransport;
         private readonly IDisposable _disposableStreamTransport;
         private readonly IClusterConfigurationUpdateHandler _observer;
-        private readonly ConfigurationGrpcShadowSubscriberOptions _options;
+        private readonly ConfigurationGrpcSubscriberOptions _options;
         private readonly IClusterConfigurationTransport _snapshotTransport;
         private readonly IClusterConfigurationUpdateStreamTransport
             _streamTransport;
@@ -177,11 +177,11 @@ namespace NosGm.Authentication.Client.Configuration
         private int _madeStreamProgress;
         private int _running;
 
-        public ConfigurationGrpcShadowSubscriber(
+        public ConfigurationGrpcSubscriber(
             IClusterConfigurationTransport snapshotTransport,
             IClusterConfigurationUpdateStreamTransport streamTransport,
             IClusterConfigurationUpdateHandler observer,
-            ConfigurationGrpcShadowSubscriberOptions options = null)
+            ConfigurationGrpcSubscriberOptions options = null)
         {
             _snapshotTransport = snapshotTransport ??
                 throw new ArgumentNullException(nameof(snapshotTransport));
@@ -189,8 +189,7 @@ namespace NosGm.Authentication.Client.Configuration
                 throw new ArgumentNullException(nameof(streamTransport));
             _observer = observer ??
                 throw new ArgumentNullException(nameof(observer));
-            _options = options ??
-                new ConfigurationGrpcShadowSubscriberOptions();
+            _options = options ?? new ConfigurationGrpcSubscriberOptions();
             _options.Validate();
             _disposableSnapshotTransport = snapshotTransport as IDisposable;
             if (!ReferenceEquals(snapshotTransport, streamTransport))
@@ -209,7 +208,7 @@ namespace NosGm.Authentication.Client.Configuration
             if (Interlocked.CompareExchange(ref _running, 1, 0) != 0)
             {
                 throw new InvalidOperationException(
-                    "The Configuration shadow subscriber is already running.");
+                    "The Configuration subscriber is already running.");
             }
 
             int reconnectDelay =
@@ -244,7 +243,7 @@ namespace NosGm.Authentication.Client.Configuration
                         {
                             if (!cancellationToken.IsCancellationRequested &&
                                 _observer is
-                                    IConfigurationGrpcShadowStreamLifecycleObserver
+                                    IConfigurationGrpcStreamLifecycleObserver
                                         lifecycleObserver)
                             {
                                 lifecycleObserver.ObserveStreamEnded(
@@ -261,8 +260,7 @@ namespace NosGm.Authentication.Client.Configuration
                     catch (Exception exception)
                         when (IsReconnectable(exception))
                     {
-                        // Recovery below is snapshot based. No SCS result or
-                        // gameplay Configuration object is changed here.
+                        // Recovery remains exclusively gRPC snapshot based.
                     }
 
                     bool madeProgress = recovered ||
@@ -332,7 +330,7 @@ namespace NosGm.Authentication.Client.Configuration
                 throw new RpcException(
                     new Status(
                         StatusCode.Unavailable,
-                        "The Configuration shadow snapshot is unavailable."));
+                        "The authoritative Configuration snapshot is unavailable."));
             }
             if (snapshot.Result != ConfigurationTransportResultCode.Success ||
                 snapshot.Configuration == null)
@@ -340,7 +338,7 @@ namespace NosGm.Authentication.Client.Configuration
                 throw new RpcException(
                     new Status(
                         StatusCode.FailedPrecondition,
-                        "The Configuration shadow snapshot was rejected."));
+                        "The authoritative Configuration snapshot was rejected."));
             }
 
             var recovered = new ConfigurationTransportUpdate
@@ -391,7 +389,7 @@ namespace NosGm.Authentication.Client.Configuration
             if (Volatile.Read(ref _disposed) != 0)
             {
                 throw new ObjectDisposedException(
-                    nameof(ConfigurationGrpcShadowSubscriber));
+                    nameof(ConfigurationGrpcSubscriber));
             }
         }
     }

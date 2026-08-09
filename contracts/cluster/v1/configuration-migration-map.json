@@ -1,42 +1,52 @@
 {
-  "schemaVersion": 1,
-  "legacyInterface": "IConfigurationService",
-  "legacyTransport": "SCS request/reply",
-  "targetService": "ClusterConfiguration",
-  "methods": [
+  "schemaVersion": 2,
+  "status": "complete",
+  "service": "ClusterConfiguration",
+  "authority": "gRPC",
+  "fallback": null,
+  "authentication": "mTLS",
+  "startup": {
+    "seedOwner": "Master",
+    "seedBehavior": "ensure_if_unseeded",
+    "preserveExistingSnapshotOnMasterRestart": true,
+    "failureMode": "fail_closed"
+  },
+  "operations": [
     {
-      "legacyMethod": "Authenticate",
-      "disposition": "transport_identity",
-      "target": null,
+      "rpc": "GetConfiguration",
+      "callerRoles": ["World", "Master"]
+    },
+    {
+      "rpc": "UpdateConfiguration",
+      "callerRoles": ["World", "Master"],
+      "masterUse": "initial_seed_only"
+    },
+    {
+      "rpc": "SubscribeConfigurationUpdates",
       "callerRoles": ["World"],
-      "reason": "The replacement transport authenticates the World process with mTLS identity and must never send MasterAuthKey as an application payload."
+      "subscriberCardinality": "World_process_identity"
     },
     {
-      "legacyMethod": "GetConfigurationObject",
-      "disposition": "typed_rpc",
-      "target": "GetConfiguration",
-      "callerRoles": ["World"]
+      "rpc": "GetConfigurationRuntimeInfo",
+      "callerRoles": ["Master"]
     },
     {
-      "legacyMethod": "UpdateConfigurationObject",
-      "disposition": "typed_rpc",
-      "target": "UpdateConfiguration",
-      "callerRoles": ["World"]
+      "rpc": "RestartConfigurationRuntime",
+      "callerRoles": ["Master"]
     }
   ],
-  "callbackBoundary": {
-    "legacyInterface": "IConfigurationClient",
-    "legacyMethod": "ConfigurationUpdated",
-    "disposition": "typed_stream",
-    "target": "SubscribeConfigurationUpdates",
-    "authority": "joint_selector",
-    "reason": "SCS is the fail-closed default. The typed stream may apply gameplay configuration only after immutable operator effect authorization, three qualified parity runtimes, a fourth activation runtime, and successful snapshot recovery select Get, Update, and callback together."
-  },
-  "rollbackBoundary": {
-    "adapter": "ScsConfigurationRollbackTransport",
-    "contract": "IConfigurationRollbackTransport",
-    "owner": "NosGm.Master.Library.Client",
-    "isolatedFacade": "ConfigurationServiceClient",
-    "reason": "All remaining World-side SCS Configuration calls and callback registration are isolated behind one rollback adapter. The gameplay-facing facade has no direct SCS or IConfigurationService dependency, so final removal cannot bypass the joint selector."
+  "removedLegacySurface": [
+    "IConfigurationService",
+    "IConfigurationClient",
+    "ConfigurationService",
+    "ConfigurationClient",
+    "IConfigurationRollbackTransport",
+    "ScsConfigurationRollbackTransport"
+  ],
+  "worldFacade": {
+    "type": "ConfigurationServiceClient",
+    "transport": "GrpcClusterConfigurationTransport",
+    "subscriber": "ConfigurationGrpcSubscriber",
+    "fallback": null
   }
 }

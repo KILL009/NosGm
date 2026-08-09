@@ -6,17 +6,21 @@ option csharp_namespace = "NosGm.Cluster.Wire.V1";
 
 import "cluster_control.proto";
 
-// Typed replacement foundation for the legacy IConfigurationService request/
-// response surface. Authentication is transport identity (mTLS), not an RPC
-// carrying the legacy shared secret.
+// Authoritative Configuration transport for the NosGM cluster.
+// Authentication and role authorization are carried by mTLS identity rather
+// than a Configuration RPC shared secret.
 service ClusterConfiguration {
+  // World reads the active snapshot. Master may also read it to make cold-boot
+  // seeding idempotent and preserve live state across a Master restart.
   rpc GetConfiguration(GetConfigurationRequest)
       returns (GetConfigurationResponse);
+  // World publishes gameplay Configuration changes. Master may update only to
+  // establish the initial snapshot when the Configuration runtime is empty.
   rpc UpdateConfiguration(UpdateConfigurationRequest)
       returns (UpdateConfigurationResponse);
-  // Shadow-only typed replacement for IConfigurationClient.ConfigurationUpdated.
-  // Worlds recover from a snapshot, then resume after the last observed
-  // generation. SCS remains authoritative until the joint cutover gate lands.
+  // World-only authoritative update stream. Worlds recover from a typed gRPC
+  // snapshot and resume after the last observed generation. There is no SCS
+  // Configuration callback or fallback transport.
   rpc SubscribeConfigurationUpdates(SubscribeConfigurationUpdatesRequest)
       returns (stream ConfigurationUpdateEnvelope);
   // Master-only operational surface. Runtime control is disabled unless the

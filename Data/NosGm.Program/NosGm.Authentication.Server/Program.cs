@@ -17,14 +17,13 @@ CommunicationRuntimeOptions communicationOptions =
     CommunicationRuntimeOptions.Load(builder.Configuration);
 ConfigurationRuntimeControlOptions configurationRuntimeControlOptions =
     ConfigurationRuntimeControlOptions.Load(builder.Configuration);
-if (configurationRuntimeControlOptions.Enabled &&
-    (!options.AllowedFingerprints.TryGetValue(
-         WireV1.ClusterNodeRole.Master,
-         out IReadOnlyCollection<string> masterFingerprints) ||
-     masterFingerprints.Count == 0))
+if (!options.AllowedFingerprints.TryGetValue(
+        WireV1.ClusterNodeRole.Master,
+        out IReadOnlyCollection<string> masterFingerprints) ||
+    masterFingerprints.Count == 0)
 {
     throw new InvalidOperationException(
-        "Configuration runtime control requires at least one Master mTLS certificate fingerprint.");
+        "Authoritative Configuration requires at least one Master mTLS certificate fingerprint for cold-boot seeding.");
 }
 var roleMap = new ClientCertificateRoleMap(options);
 var serverCertificate = options.LoadServerCertificate();
@@ -97,7 +96,7 @@ ConfigurationRuntimeStatus configurationRuntime =
     app.Services.GetRequiredService<ConfigurationRuntimeController>()
         .GetStatus();
 app.Logger.LogInformation(
-    "NosGM internal cluster runtime {InstanceId} callback generation {CallbackGenerationId} Configuration generation {ConfigurationGenerationId} control enabled {ConfigurationRuntimeControlEnabled} listening on loopback port {Port}; authentication, communication state, callback and shadow configuration services enabled.",
+    "NosGM internal cluster runtime {InstanceId} callback generation {CallbackGenerationId} Configuration generation {ConfigurationGenerationId} control enabled {ConfigurationRuntimeControlEnabled} listening on loopback port {Port}; authentication, communication state, callbacks and authoritative Configuration gRPC services enabled.",
     options.InstanceId,
     callbackRuntimeIdentity.GenerationId,
     configurationRuntime.RuntimeGenerationId,

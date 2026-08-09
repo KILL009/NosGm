@@ -48,7 +48,8 @@ public sealed class ClusterConfigurationService
                     "GetConfiguration",
                     context,
                     requireGrpcDeadline: true,
-                    WireV1.ClusterNodeRole.World);
+                    WireV1.ClusterNodeRole.World,
+                    WireV1.ClusterNodeRole.Master);
                 if (validation != WireV1.ConfigurationResultCode.Success)
                 {
                     WriteAudit(request?.Context, "GetConfiguration", validation, 0);
@@ -108,7 +109,8 @@ public sealed class ClusterConfigurationService
                     "UpdateConfiguration",
                     context,
                     requireGrpcDeadline: true,
-                    WireV1.ClusterNodeRole.World);
+                    WireV1.ClusterNodeRole.World,
+                    WireV1.ClusterNodeRole.Master);
                 if (validation != WireV1.ConfigurationResultCode.Success)
                 {
                     WriteAudit(request?.Context, "UpdateConfiguration", validation, 0);
@@ -119,10 +121,38 @@ public sealed class ClusterConfigurationService
                         });
                 }
 
-                ClusterConfigurationState.SnapshotState state =
-                    _runtimeController.Update(
+                ClusterConfigurationState.SnapshotState state;
+                Guid runtimeGenerationId;
+                if (request.Context.CallerRole == WireV1.ClusterNodeRole.Master)
+                {
+                    if (!_runtimeController.TrySeed(
+                            request.Configuration,
+                            out state,
+                            out runtimeGenerationId))
+                    {
+                        WriteAudit(
+                            request.Context,
+                            "UpdateConfiguration",
+                            WireV1.ConfigurationResultCode.Conflict,
+                            state.Generation);
+                        return Task.FromResult(
+                            new WireV1.UpdateConfigurationResponse
+                            {
+                                Result = WireV1.ConfigurationResultCode.Conflict,
+                                Configuration = state.Configuration,
+                                Generation = state.Generation,
+                                RuntimeGenerationId =
+                                    runtimeGenerationId.ToString("D")
+                            });
+                    }
+                }
+                else
+                {
+                    state = _runtimeController.Update(
                         request.Configuration,
-                        out Guid runtimeGenerationId);
+                        out runtimeGenerationId);
+                }
+
                 WriteAudit(
                     request.Context,
                     "UpdateConfiguration",
@@ -478,7 +508,7 @@ public sealed class ClusterConfigurationService
                 throw new RpcException(
                     new Status(
                         StatusCode.FailedPrecondition,
-                        "The Configuration shadow state has not been seeded."));
+                        "The Configuration authority has not been seeded."));
             case ConfigurationSubscriptionOpenResult.InvalidResumeCursor:
                 throw new RpcException(
                     new Status(

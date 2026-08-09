@@ -31,7 +31,6 @@
     <Optimize>true</Optimize>
     <OutputPath>bin\Release\</OutputPath>
     <DefineConstants>TRACE</DefineConstants>
-    <ErrorReport>prompt</ErrorReport>
     <WarningLevel>4</WarningLevel>
     <CodeAnalysisRuleSet>..\..\..\ProjectRuleset.ruleset</CodeAnalysisRuleSet>
     <LangVersion>latest</LangVersion>
@@ -80,13 +79,8 @@
     <Compile Include="Client\CommunicationClient.cs" />
     <Compile Include="Client\CommunicationServiceClient.cs" />
     <Compile Include="Client\ScsClusterCommunicationTransport.cs" />
-    <Compile Include="Client\ConfigurationGrpcShadowMirror.cs" />
-    <Compile Include="Client\ConfigurationGrpcShadowOptions.cs" />
-    <Compile Include="Client\ConfigurationGrpcShadowSubscriberLifecycle.cs" />
-    <Compile Include="Client\ConfigurationRollbackTransport.cs" />
     <Compile Include="Client\ConfigurationServiceClient.cs" />
     <Compile Include="Client\MailClient.cs" />
-    <Compile Include="Client\ConfigurationClient.cs" />
     <Compile Include="Client\MailServiceClient.cs" />
     <Compile Include="Client\AuthentificationServiceClient.cs" />
     <Compile Include="Client\ScsGameforgeAuthenticationTransport.cs" />
@@ -102,10 +96,8 @@
     <Compile Include="Interface\ICommunicationClient.cs" />
     <Compile Include="Interface\ICommunicationService.cs" />
     <Compile Include="Data\SCSCharacterMessage.cs" />
-    <Compile Include="Interface\IConfigurationClient.cs" />
     <Compile Include="Interface\IMailClient.cs" />
     <Compile Include="Interface\IMailService.cs" />
-    <Compile Include="Interface\IConfigurationService.cs" />
     <Compile Include="Interface\IAuthentificationService.cs" />
     <Compile Include="Interface\IMallService.cs" />
     <Compile Include="Security\GameforgeAuthTicketStore.cs" />

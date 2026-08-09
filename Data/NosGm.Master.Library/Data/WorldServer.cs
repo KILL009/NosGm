@@ -1,4 +1,4 @@
-﻿using NosGm.SCS.Communication.Scs.Communication.EndPoints.Tcp;
+using NosGm.SCS.Communication.Scs.Communication.EndPoints.Tcp;
 using NosGm.SCS.Communication.ScsServices.Service;
 using System;
 
@@ -25,8 +25,6 @@ namespace NosGm.Master.Library.Data
         public int ChannelId { get; set; }
 
         public IScsServiceClient CommunicationServiceClient { get; set; }
-
-        public IScsServiceClient ConfigurationServiceClient { get; set; }
 
         public ScsTcpEndPoint Endpoint { get; set; }
 

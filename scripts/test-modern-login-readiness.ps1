@@ -106,10 +106,10 @@ else {
 
     try {
         $state = $stateRaw | ConvertFrom-Json
-        if ($state.SchemaVersion -ne 1 -or $null -eq $state.Processes) {
+        if ($state.SchemaVersion -ne 2 -or $null -eq $state.Processes) {
             throw "Unsupported state schema."
         }
-        Add-Check -Name "RuntimeState" -Status "passed" -Detail "Runtime state schema 1 loaded successfully."
+        Add-Check -Name "RuntimeState" -Status "passed" -Detail "Runtime state schema 2 loaded successfully."
     }
     catch {
         Add-Check -Name "RuntimeState" -Status "failed" -Detail "Runtime state JSON is invalid or unsupported."
@@ -119,10 +119,36 @@ else {
 
 if ($null -ne $state) {
     $records = @($state.Processes)
-    foreach ($requiredName in @("Master", "World", "Login")) {
+    foreach ($requiredName in @("AuthenticationGrpc", "Master", "World", "Login")) {
         if (@($records | Where-Object { $_.Name -eq $requiredName }).Count -ne 1) {
             Add-Check -Name "Process.$requiredName" -Status "failed" -Detail "Exactly one $requiredName process must be recorded."
         }
+    }
+
+    $configurationAuthority = $null
+    if ($null -ne $state.PSObject.Properties["ConfigurationAuthority"]) {
+        $configurationAuthority = [string]$state.ConfigurationAuthority
+    }
+    $configurationSubscriberRole = $null
+    if ($null -ne $state.PSObject.Properties["ConfigurationSubscriberRole"]) {
+        $configurationSubscriberRole = [string]$state.ConfigurationSubscriberRole
+    }
+    $hasConfigurationFallback =
+        $null -ne $state.PSObject.Properties["ConfigurationFallback"] -and
+        $null -ne $state.ConfigurationFallback
+    if ($configurationAuthority -ne "gRPC" -or
+        $configurationSubscriberRole -ne "World" -or
+        $hasConfigurationFallback) {
+        Add-Check `
+            -Name "Configuration.Authority" `
+            -Status "failed" `
+            -Detail "Configuration must record gRPC authority, World-only subscription, and no fallback."
+    }
+    else {
+        Add-Check `
+            -Name "Configuration.Authority" `
+            -Status "passed" `
+            -Detail "Configuration is recorded as gRPC-only with World subscription and no fallback."
     }
 
     $authenticationTransport = "SCS"
@@ -143,35 +169,23 @@ if ($null -ne $state) {
             -Detail "The stack recorded the explicit $authenticationTransport authentication transport."
     }
 
-    if ($authenticationTransport -eq "GRPC" -and
-        @($records | Where-Object {
-            $_.Name -eq "AuthenticationGrpc"
-        }).Count -ne 1) {
-        Add-Check `
-            -Name "Process.AuthenticationGrpc" `
-            -Status "failed" `
-            -Detail "Exactly one authentication gRPC runtime must be recorded."
+    $wireMode = $null
+    if ($null -ne $state.PSObject.Properties[
+            "AuthenticationGrpcWireMode"]) {
+        $wireMode =
+            [string]$state.AuthenticationGrpcWireMode
     }
-
-    if ($authenticationTransport -eq "GRPC") {
-        $wireMode = $null
-        if ($null -ne $state.PSObject.Properties[
-                "AuthenticationGrpcWireMode"]) {
-            $wireMode =
-                [string]$state.AuthenticationGrpcWireMode
-        }
-        if ($wireMode -notin @("HTTP2", "GRPCWEB")) {
-            Add-Check `
-                -Name "Authentication.GrpcWireMode" `
-                -Status "failed" `
-                -Detail "The recorded gRPC wire mode is invalid."
-        }
-        else {
-            Add-Check `
-                -Name "Authentication.GrpcWireMode" `
-                -Status "passed" `
-                -Detail "The stack selected $wireMode before starting stateful authentication calls."
-        }
+    if ($wireMode -notin @("HTTP2", "GRPCWEB")) {
+        Add-Check `
+            -Name "Authentication.GrpcWireMode" `
+            -Status "failed" `
+            -Detail "The recorded Authentication/Configuration gRPC wire mode is invalid."
+    }
+    else {
+        Add-Check `
+            -Name "Authentication.GrpcWireMode" `
+            -Status "passed" `
+            -Detail "The stack selected $wireMode for the mandatory Authentication/Configuration gRPC host."
     }
 
     foreach ($record in $records) {
@@ -192,25 +206,27 @@ if ($null -ne $state) {
         [pscustomobject]@{ Name = "Port.World"; Port = $worldPort },
         [pscustomobject]@{ Name = "Port.LoginSpanish"; Port = 4005 }
     )
-    if ($authenticationTransport -eq "GRPC") {
-        try {
-            $grpcEndpoint = [Uri](
-                [string]$state.AuthenticationGrpcEndpoint)
-            if (-not $grpcEndpoint.IsLoopback -or
-                $grpcEndpoint.Scheme -ne "https") {
-                throw "The authentication gRPC endpoint is not loopback HTTPS."
-            }
-            $portChecks += [pscustomobject]@{
-                Name = "Port.AuthenticationGrpc"
-                Port = $grpcEndpoint.Port
-            }
+    try {
+        $grpcEndpoint = [Uri](
+            [string]$state.AuthenticationGrpcEndpoint)
+        if (-not $grpcEndpoint.IsLoopback -or
+            $grpcEndpoint.Scheme -ne "https") {
+            throw "The Authentication/Configuration gRPC endpoint is not loopback HTTPS."
         }
-        catch {
-            Add-Check `
-                -Name "Authentication.GrpcEndpoint" `
-                -Status "failed" `
-                -Detail "The recorded authentication gRPC endpoint is invalid."
+        $portChecks += [pscustomobject]@{
+            Name = "Port.AuthenticationGrpc"
+            Port = $grpcEndpoint.Port
         }
+        Add-Check `
+            -Name "Authentication.GrpcEndpoint" `
+            -Status "passed" `
+            -Detail "The mandatory Authentication/Configuration gRPC endpoint is loopback HTTPS."
+    }
+    catch {
+        Add-Check `
+            -Name "Authentication.GrpcEndpoint" `
+            -Status "failed" `
+            -Detail "The recorded Authentication/Configuration gRPC endpoint is invalid."
     }
 
     foreach ($portCheck in $portChecks) {

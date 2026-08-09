@@ -13,7 +13,7 @@ if (-not (Test-Path -LiteralPath $statePath -PathType Leaf)) {
 }
 
 $state = Get-Content -LiteralPath $statePath -Raw | ConvertFrom-Json
-if ($state.SchemaVersion -ne 1 -or $null -eq $state.Processes) {
+if ($state.SchemaVersion -ne 2 -or $null -eq $state.Processes) {
     throw "The modern Login local process state is invalid."
 }
 
@@ -27,20 +27,25 @@ foreach ($record in $records) {
         continue
     }
 
-    $actualStartedAtUtc = $process.StartTime.ToUniversalTime()
-    $expectedStartedAtUtc = [DateTime]::Parse(
-        [string]$record.StartedAtUtc,
-        [Globalization.CultureInfo]::InvariantCulture,
-        [Globalization.DateTimeStyles]::RoundtripKind).ToUniversalTime()
-    $difference = [Math]::Abs(($actualStartedAtUtc - $expectedStartedAtUtc).TotalSeconds)
+    try {
+        $actualStartedAtUtc = $process.StartTime.ToUniversalTime()
+        $expectedStartedAtUtc = [DateTime]::Parse(
+            [string]$record.StartedAtUtc,
+            [Globalization.CultureInfo]::InvariantCulture,
+            [Globalization.DateTimeStyles]::RoundtripKind).ToUniversalTime()
+        $difference = [Math]::Abs(($actualStartedAtUtc - $expectedStartedAtUtc).TotalSeconds)
 
-    if ($process.ProcessName -ne [string]$record.ProcessName -or $difference -gt 2) {
-        Write-Warning "Skipped PID $($record.Id): it no longer matches the process recorded for $($record.Name)."
-        continue
+        if ($process.ProcessName -ne [string]$record.ProcessName -or $difference -gt 2) {
+            Write-Warning "Skipped PID $($record.Id): it no longer matches the process recorded for $($record.Name)."
+            continue
+        }
+
+        Stop-Process -Id $process.Id -Force
+        Write-Host "[STOP] $($record.Name) PID=$($process.Id)"
     }
-
-    Stop-Process -Id $process.Id -Force
-    Write-Host "[STOP] $($record.Name) PID=$($process.Id)"
+    finally {
+        $process.Dispose()
+    }
 }
 
 Remove-Item -LiteralPath $statePath -Force

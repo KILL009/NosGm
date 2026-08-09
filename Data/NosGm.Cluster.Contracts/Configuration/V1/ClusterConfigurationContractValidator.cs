@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using NosGm.Cluster.Contracts.V1;
 using WireV1 = global::NosGm.Cluster.Wire.V1;
 
@@ -21,7 +22,7 @@ namespace NosGm.Cluster.Contracts.Configuration.V1
     {
         // DateTime.MinValue and DateTime.MaxValue expressed as Unix
         // milliseconds. Keeping the wire values inside this range guarantees
-        // that the legacy ConfigurationObject can be reconstructed safely.
+        // that ConfigurationObject can be reconstructed safely.
         public const long MinimumDateTimeUnixMilliseconds = -62135596800000L;
         public const long MaximumDateTimeUnixMilliseconds = 253402300799999L;
         public const int MaxRetainedUpdates = 256;
@@ -37,7 +38,8 @@ namespace NosGm.Cluster.Contracts.Configuration.V1
             return ValidateRequest(
                 request,
                 request?.Context,
-                ClusterNodeRole.World);
+                ClusterNodeRole.World,
+                ClusterNodeRole.Master);
         }
 
         public static ConfigurationContractValidationError Validate(
@@ -46,7 +48,8 @@ namespace NosGm.Cluster.Contracts.Configuration.V1
             ConfigurationContractValidationError error = ValidateRequest(
                 request,
                 request?.Context,
-                ClusterNodeRole.World);
+                ClusterNodeRole.World,
+                ClusterNodeRole.Master);
             if (error != ConfigurationContractValidationError.None)
             {
                 return error;
@@ -123,7 +126,7 @@ namespace NosGm.Cluster.Contracts.Configuration.V1
         private static ConfigurationContractValidationError ValidateRequest(
             object request,
             WireV1.RequestContext context,
-            ClusterNodeRole expectedRole)
+            params ClusterNodeRole[] allowedRoles)
         {
             if (request == null)
             {
@@ -158,7 +161,8 @@ namespace NosGm.Cluster.Contracts.Configuration.V1
                 return ConfigurationContractValidationError.InvalidContext;
             }
 
-            return contractContext.CallerRole == expectedRole
+            return allowedRoles != null &&
+                   allowedRoles.Contains(contractContext.CallerRole)
                 ? ConfigurationContractValidationError.None
                 : ConfigurationContractValidationError.InvalidCallerRole;
         }

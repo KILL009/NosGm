@@ -4,6 +4,7 @@ param(
     [switch]$SkipLauncher,
     [switch]$SkipPortalBuild,
     [switch]$ConfigureUrlAcl,
+    [switch]$EnableConfigurationRuntimeControl,
     [ValidateSet("SCS", "GRPC")]
     [string]$AuthenticationTransport = "SCS",
     [ValidateSet("AUTO", "HTTP2", "GRPCWEB")]
@@ -145,7 +146,7 @@ function Add-PortalProcessToState {
     }
 
     $state = Get-Content -LiteralPath $statePath -Raw | ConvertFrom-Json
-    if ($state.SchemaVersion -ne 1 -or $null -eq $state.Processes) {
+    if ($state.SchemaVersion -ne 2 -or $null -eq $state.Processes) {
         throw "The modern Login local process state is invalid."
     }
 
@@ -265,6 +266,7 @@ try {
         SkipBuild = $SkipBuild
         SkipLauncher = $SkipLauncher
         ConfigureUrlAcl = $ConfigureUrlAcl
+        EnableConfigurationRuntimeControl = $EnableConfigurationRuntimeControl
         AuthenticationTransport = $AuthenticationTransport
         AuthenticationGrpcWireMode = $AuthenticationGrpcWireMode
         AuthenticationGrpcPort = $AuthenticationGrpcPort

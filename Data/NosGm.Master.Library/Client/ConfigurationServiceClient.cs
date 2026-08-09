@@ -1,864 +1,292 @@
-﻿using NosGm.Authentication.Client.Configuration;
-using NosGm.Configuration;
+using NosGm.Authentication.Client;
+using NosGm.Authentication.Client.Configuration;
+using NosGm.Cluster.Contracts.V1;
 using NosGm.Core;
 using NosGm.Master.Library.Data;
 using System;
 using System.Threading;
+using System.Threading.Tasks;
 
 namespace NosGm.Master.Library.Client
 {
-    public class ConfigurationServiceClient
+    public sealed class ConfigurationServiceClient : IDisposable
     {
-        #region Instantiation
-
-        public ConfigurationServiceClient()
-        {
-            _rollbackTransport =
-                ConfigurationRollbackTransportFactory.Create(
-                    OnConfigurationUpdated);
-
-            string authorityDiagnostic;
-            if (ConfigurationAuthorityQualificationRuntime.Instance
-                    .TryConfigureFromEnvironment(
-                        out authorityDiagnostic))
-            {
-                ConfigurationAuthorityStatus authorityStatus =
-                    ConfigurationAuthorityCoordinator.Instance.GetStatus();
-                if (authorityStatus.EffectRoutingEnabled)
-                {
-                    Logger.Warn(
-                        "[CONFIG_GRPC_AUTHORITY] Joint Get/Update/callback " +
-                        "effect routing was explicitly requested; SCS remains " +
-                        "authoritative until qualification, activation, and " +
-                        "typed snapshot recovery all complete.");
-                }
-                else
-                {
-                    Logger.Info(
-                        "[CONFIG_GRPC_AUTHORITY] Lifecycle observation enabled in " +
-                        authorityDiagnostic +
-                        " mode; SCS remains the immutable production authority.");
-                }
-            }
-            else
-            {
-                Logger.Warn(
-                    "[CONFIG_GRPC_AUTHORITY] Operator controls failed closed; " +
-                    "SCS remains authoritative. Reason=" +
-                    (authorityDiagnostic ?? "unknown"));
-            }
-
-            string shadowDiagnostic;
-            ConfigurationGrpcShadowMirror shadowMirror;
-            if (ConfigurationGrpcShadowMirror.TryCreateFromEnvironment(
-                    out shadowMirror,
-                    out shadowDiagnostic))
-            {
-                _grpcShadowMirror = shadowMirror;
-                Logger.Info(
-                    "[CONFIG_GRPC_SHADOW] Configuration shadow mirror enabled; SCS remains authoritative.");
-            }
-            else if (!string.Equals(
-                         shadowDiagnostic,
-                         "disabled",
-                         StringComparison.Ordinal))
-            {
-                Logger.Warn(
-                    "[CONFIG_GRPC_SHADOW] Shadow mirror unavailable; continuing with SCS authority. Reason=" +
-                    (shadowDiagnostic ?? "unknown"));
-            }
-
-            string subscriberDiagnostic;
-            ConfigurationGrpcShadowSubscriberLifecycle subscriberLifecycle;
-            if (ConfigurationGrpcShadowSubscriberLifecycle
-                    .TryStartFromEnvironment(
-                        OnTypedConfigurationUpdated,
-                        out subscriberLifecycle,
-                        out subscriberDiagnostic))
-            {
-                _grpcShadowSubscriberLifecycle = subscriberLifecycle;
-                Logger.Info(
-                    "[CONFIG_GRPC_SHADOW] Typed Configuration update subscriber started; " +
-                    "the joint selector remains on SCS until every cutover barrier passes.");
-            }
-            else if (!string.Equals(
-                         subscriberDiagnostic,
-                         "disabled",
-                         StringComparison.Ordinal))
-            {
-                Logger.Warn(
-                    "[CONFIG_GRPC_SHADOW] Typed update subscriber unavailable; continuing with SCS callback authority. Reason=" +
-                    (subscriberDiagnostic ?? "unknown"));
-            }
-
-            ConfigurationAuthorityStatus finalAuthorityStatus =
-                ConfigurationAuthorityCoordinator.Instance.GetStatus();
-            if (finalAuthorityStatus.EffectRoutingEnabled &&
-                (_grpcShadowMirror == null ||
-                 _grpcShadowSubscriberLifecycle == null))
-            {
-                RollBackAuthority("startup", null);
-            }
-            ConfigurationAuthorityDiagnostics.Observe("STARTUP");
-        }
-
-        #endregion
-
-        #region Events
-
-        public event EventHandler ConfigurationUpdate;
-
-        #endregion
-
-        #region Members
-
+        private static readonly object MutationRoot = new object();
         private static ConfigurationServiceClient _instance;
 
-        private const int AcceptancePulseTimeoutMilliseconds = 7000;
+        private readonly GrpcClusterConfigurationTransport _transport;
+        private readonly ConfigurationGrpcSubscriber _subscriber;
+        private readonly CancellationTokenSource _subscriberCancellation;
+        private readonly Task _subscriberTask;
+        private int _disposed;
 
-        private const int AcceptancePulseRestoreAttempts = 3;
+        private ConfigurationServiceClient()
+        {
+            AuthenticationGrpcClientOptions options =
+                AuthenticationGrpcClientOptions.Load(ClusterNodeRole.World);
+            _transport = new GrpcClusterConfigurationTransport(options);
+            _subscriber = new ConfigurationGrpcSubscriber(
+                _transport,
+                _transport,
+                new AuthoritativeConfigurationUpdateHandler(this));
+            _subscriberCancellation = new CancellationTokenSource();
+            CancellationToken cancellationToken =
+                _subscriberCancellation.Token;
+            _subscriberTask = Task.Run(async () =>
+            {
+                try
+                {
+                    await _subscriber.RunAsync(cancellationToken)
+                        .ConfigureAwait(false);
+                }
+                catch (OperationCanceledException)
+                    when (cancellationToken.IsCancellationRequested)
+                {
+                    // Expected process shutdown.
+                }
+                catch (Exception exception)
+                {
+                    Logger.Error(
+                        "[CONFIG_GRPC] The authoritative Configuration subscriber stopped. " +
+                        "No fallback transport is available; operator intervention is required.",
+                        exception);
+                }
+            });
 
-        private const string AcceptancePulseEnabledEnvironmentVariable =
-            "NOSGM_CONFIGURATION_GRPC_ACCEPTANCE_PULSE_ENABLED";
+            AppDomain.CurrentDomain.ProcessExit += OnProcessExit;
+            Logger.Info(
+                "[CONFIG_GRPC] Configuration authority initialized in mandatory gRPC mode.");
+        }
 
-        private int _acceptancePulseRunning;
-
-        private static readonly object AcceptancePulseIsolationRoot =
-            new object();
-
-        private readonly object _configurationMutationRoot = new object();
-
-        private readonly IConfigurationRollbackTransport
-            _rollbackTransport;
-
-        private readonly ConfigurationGrpcShadowMirror _grpcShadowMirror;
-
-        private readonly ConfigurationGrpcShadowSubscriberLifecycle
-            _grpcShadowSubscriberLifecycle;
-
-        #endregion
-
-        #region Properties
+        public event EventHandler ConfigurationUpdate;
 
         public static ConfigurationServiceClient Instance =>
             _instance ?? (_instance = new ConfigurationServiceClient());
 
-        #endregion
-
-        #region Methods
-
+        // Compatibility façade for the existing World startup sequence. The
+        // key is deliberately not used: caller identity and authorization are
+        // provided exclusively by the World mTLS certificate. A successful
+        // authoritative Get is the readiness proof.
         public bool Authenticate(string authKey, Guid serverId)
         {
-            return _rollbackTransport.Authenticate(authKey, serverId);
+            ThrowIfDisposed();
+            if (serverId == Guid.Empty)
+            {
+                return false;
+            }
+
+            try
+            {
+                GetConfigurationObject();
+                return true;
+            }
+            catch (Exception exception)
+            {
+                Logger.Error(
+                    "[CONFIG_GRPC] Configuration readiness probe failed closed.",
+                    exception);
+                return false;
+            }
         }
 
         public ConfigurationObject GetConfigurationObject()
         {
-            ConfigurationAuthorityCoordinator authority =
-                ConfigurationAuthorityCoordinator.Instance;
-            if (authority.ShouldUse(
-                    ConfigurationAuthoritySource.TypedGrpc,
-                    ConfigurationAuthorityOperation.Get))
-            {
-                ConfigurationGrpcShadowResult typedResult = null;
-                ConfigurationObject typedConfiguration;
-                if (_grpcShadowMirror != null &&
-                    _grpcShadowMirror.TryGetAuthoritative(
-                        out typedConfiguration,
-                        out typedResult) &&
-                    IsCurrentAuthorityResult(typedResult))
-                {
-                    return typedConfiguration;
-                }
-
-                RollBackAuthority("Get", typedResult);
-            }
-
-            ConfigurationObject authoritative =
-                _rollbackTransport.GetConfigurationObject();
-            ObserveAuthoritativeConfiguration(authoritative, "Get");
-            return authoritative;
+            ThrowIfDisposed();
+            ConfigurationTransportResult result = _transport
+                .GetAsync(CancellationToken.None)
+                .GetAwaiter()
+                .GetResult();
+            EnsureSuccess(result, "Get");
+            return FromTransportSnapshot(result.Configuration);
         }
 
-        public void UpdateConfigurationObject(ConfigurationObject configurationObject)
+        public void UpdateConfigurationObject(
+            ConfigurationObject configurationObject)
         {
-            lock (AcceptancePulseIsolationRoot)
+            ThrowIfDisposed();
+            if (configurationObject == null)
             {
-                lock (_configurationMutationRoot)
-                {
-                    UpdateConfigurationObjectCore(configurationObject);
-                }
+                throw new ArgumentNullException(nameof(configurationObject));
             }
+
+            ConfigurationTransportResult result = _transport
+                .UpdateAsync(
+                    ToTransportSnapshot(configurationObject),
+                    CancellationToken.None)
+                .GetAwaiter()
+                .GetResult();
+            EnsureSuccess(result, "Update");
         }
 
-        public static void RunWithConfigurationMutationBarrier(
-            Action mutation)
+        public static void RunWithConfigurationMutationBarrier(Action mutation)
         {
             if (mutation == null)
             {
                 throw new ArgumentNullException(nameof(mutation));
             }
 
-            lock (AcceptancePulseIsolationRoot)
+            lock (MutationRoot)
             {
                 mutation();
             }
         }
 
-        public bool TryRunGrpcAcceptancePulse(
-            ConfigurationObject liveWorldConfiguration,
-            Func<bool> isolationStillValid,
-            out string diagnostic)
+        public void Dispose()
         {
-            diagnostic = null;
-            if (!string.Equals(
-                    Environment.GetEnvironmentVariable(
-                        AcceptancePulseEnabledEnvironmentVariable),
-                    "true",
-                    StringComparison.OrdinalIgnoreCase))
-            {
-                diagnostic = "acceptance-pulse-disabled";
-                return false;
-            }
-            if (liveWorldConfiguration == null)
-            {
-                diagnostic = "live-world-configuration-unavailable";
-                return false;
-            }
-            if (isolationStillValid == null)
-            {
-                diagnostic = "isolation-check-unavailable";
-                return false;
-            }
-            if (_grpcShadowMirror == null ||
-                _grpcShadowSubscriberLifecycle == null)
-            {
-                diagnostic = "shadow-unavailable";
-                return false;
-            }
-            if (Interlocked.CompareExchange(
-                    ref _acceptancePulseRunning,
-                    1,
-                    0) != 0)
-            {
-                diagnostic = "pulse-already-running";
-                return false;
-            }
-
-            try
-            {
-                lock (AcceptancePulseIsolationRoot)
-                {
-                    bool isolationLost = false;
-                    bool restorationVerified = true;
-                    ConfigurationObject original;
-                    ConfigurationUpdateParityReport before;
-                    lock (_configurationMutationRoot)
-                    {
-                        if (!isolationStillValid())
-                        {
-                            diagnostic = "world-not-isolated";
-                            return false;
-                        }
-
-                        ConfigurationObject liveWorld =
-                            CloneConfiguration(liveWorldConfiguration);
-                        DateTime worldNow = DateTime.Now;
-                        if (liveWorld.TimeExpBuff > worldNow ||
-                            liveWorld.TimeGoldBuff > worldNow)
-                        {
-                            diagnostic = "active-world-buff";
-                            return false;
-                        }
-
-                        original = _rollbackTransport
-                            .GetConfigurationObject();
-                        if (original == null || original.MaxGold <= 0)
-                        {
-                            diagnostic = "configuration-unavailable";
-                            return false;
-                        }
-                        if (!ConfigurationsAreSemanticallyEqual(
-                                liveWorld,
-                                original))
-                        {
-                            diagnostic = "live-world-configuration-drift";
-                            return false;
-                        }
-                        if (original.MaxGold == long.MaxValue)
-                        {
-                            diagnostic = "max-gold-pulse-unavailable";
-                            return false;
-                        }
-
-                        before = ConfigurationUpdateObservationLedger.Instance
-                            .LatestParityReport;
-                        if (string.IsNullOrWhiteSpace(
-                                before.RuntimeGenerationId))
-                        {
-                            diagnostic = "typed-runtime-unavailable";
-                            return false;
-                        }
-                        if (before.HasTerminalMismatch)
-                        {
-                            diagnostic = "terminal-parity-" + before.Verdict;
-                            return false;
-                        }
-
-                        ConfigurationObject typedOriginal;
-                        ConfigurationGrpcShadowResult typedOriginalResult;
-                        if (!_grpcShadowMirror.TryGetAuthoritative(
-                                out typedOriginal,
-                                out typedOriginalResult) ||
-                            !IsExpectedAcceptanceRuntimeResult(
-                                typedOriginalResult,
-                                before.RuntimeGenerationId))
-                        {
-                            diagnostic = "typed-runtime-unavailable";
-                            return false;
-                        }
-                        if (!ConfigurationsAreSemanticallyEqual(
-                                original,
-                                typedOriginal))
-                        {
-                            diagnostic = "typed-configuration-drift";
-                            return false;
-                        }
-                        if (!isolationStillValid())
-                        {
-                            diagnostic = "world-not-isolated";
-                            return false;
-                        }
-
-                        ConfigurationObject pulse =
-                            CreateGrpcAcceptancePulse(original);
-                        bool pulseAttempted = false;
-                        try
-                        {
-                            Logger.Info(
-                                "[CONFIG_GRPC_ACCEPTANCE_PULSE] Stage=STARTED " +
-                                "Runtime=" + before.RuntimeGenerationId +
-                                "; no Configuration values are logged.");
-                            pulseAttempted = true;
-                            UpdateAcceptanceSnapshotEverywhere(
-                                pulse,
-                                before.RuntimeGenerationId);
-                        }
-                        finally
-                        {
-                            if (pulseAttempted)
-                            {
-                                restorationVerified =
-                                    TryRestoreAcceptanceSnapshotEverywhere(
-                                        original);
-                            }
-                        }
-                    }
-
-                    if (!restorationVerified)
-                    {
-                        diagnostic = "restoration-verification-failed";
-                        LogAcceptancePulseResult(
-                            "FAILED",
-                            before,
-                            ConfigurationUpdateObservationLedger.Instance
-                                .LatestParityReport,
-                            false);
-                        return false;
-                    }
-
-                    DateTime deadline = DateTime.UtcNow.AddMilliseconds(
-                        AcceptancePulseTimeoutMilliseconds);
-                    while (DateTime.UtcNow < deadline)
-                    {
-                        if (!isolationStillValid())
-                        {
-                            isolationLost = true;
-                        }
-
-                        ConfigurationUpdateParityReport after =
-                            ConfigurationUpdateObservationLedger.Instance
-                                .LatestParityReport;
-                        if (!string.Equals(
-                                before.RuntimeGenerationId,
-                                after.RuntimeGenerationId,
-                                StringComparison.Ordinal))
-                        {
-                            diagnostic = "runtime-changed";
-                            LogAcceptancePulseResult(
-                                "REJECTED",
-                                before,
-                                after,
-                                true);
-                            return false;
-                        }
-                        if (after.HasTerminalMismatch)
-                        {
-                            diagnostic = "terminal-parity-" + after.Verdict;
-                            LogAcceptancePulseResult(
-                                "REJECTED",
-                                before,
-                                after,
-                                true);
-                            return false;
-                        }
-                        if (after.HasParity &&
-                            after.ScsLiveCount >= before.ScsLiveCount + 2 &&
-                            after.GrpcLiveCount >= before.GrpcLiveCount + 2 &&
-                            after.MatchedLiveCount >=
-                                before.MatchedLiveCount + 2 &&
-                            ConfigurationsAreSemanticallyEqual(
-                                liveWorldConfiguration,
-                                original))
-                        {
-                            diagnostic = isolationLost
-                                ? "world-isolation-lost"
-                                : "pass";
-                            LogAcceptancePulseResult(
-                                isolationLost ? "REJECTED" : "PASS",
-                                before,
-                                after,
-                                true);
-                            return !isolationLost;
-                        }
-                        Thread.Sleep(25);
-                    }
-
-                    diagnostic = ConfigurationsAreSemanticallyEqual(
-                        liveWorldConfiguration,
-                        original)
-                        ? "parity-timeout"
-                        : "live-world-restore-timeout";
-                    LogAcceptancePulseResult(
-                        "TIMEOUT",
-                        before,
-                        ConfigurationUpdateObservationLedger.Instance
-                            .LatestParityReport,
-                        true);
-                    return false;
-                }
-            }
-            catch (Exception exception)
-            {
-                diagnostic = "pulse-failed-" +
-                    exception.GetType().Name;
-                Logger.Error(
-                    "[CONFIG_GRPC_ACCEPTANCE_PULSE] Stage=FAILED; " +
-                    "every changed Configuration store was restored and " +
-                    "verified when reachable, " +
-                    "and no Configuration values were logged.",
-                    exception);
-                return false;
-            }
-            finally
-            {
-                Interlocked.Exchange(ref _acceptancePulseRunning, 0);
-            }
-        }
-
-        private void UpdateConfigurationObjectCore(
-            ConfigurationObject configurationObject)
-        {
-            if (configurationObject == null)
-            {
-                throw new ArgumentNullException(nameof(configurationObject));
-            }
-            ConfigurationAuthorityCoordinator authority =
-                ConfigurationAuthorityCoordinator.Instance;
-            if (authority.ShouldUse(
-                    ConfigurationAuthoritySource.TypedGrpc,
-                    ConfigurationAuthorityOperation.Update))
-            {
-                ConfigurationGrpcShadowResult typedResult = null;
-                if (_grpcShadowMirror != null &&
-                    _grpcShadowMirror.TryUpdateAuthoritative(
-                        configurationObject,
-                        out typedResult) &&
-                    IsCurrentAuthorityResult(typedResult))
-                {
-                    SynchronizeScsStandby(
-                        configurationObject,
-                        typedResult);
-                    return;
-                }
-
-                RollBackAuthority("Update", typedResult);
-            }
-
-            _rollbackTransport.UpdateConfigurationObject(
-                configurationObject);
-            ObserveAuthoritativeConfiguration(configurationObject, "Update");
-        }
-
-        private static ConfigurationObject CreateGrpcAcceptancePulse(
-            ConfigurationObject original)
-        {
-            ConfigurationObject pulse = CloneConfiguration(original);
-            pulse.MaxGold = checked(pulse.MaxGold + 1);
-            return pulse;
-        }
-
-        private void UpdateAcceptanceSnapshotEverywhere(
-            ConfigurationObject configuration,
-            string expectedRuntimeGenerationId)
-        {
-            _rollbackTransport.UpdateConfigurationObject(
-                CloneConfiguration(configuration));
-            ConfigurationGrpcShadowResult typedResult;
-            if (!_grpcShadowMirror.TryUpdateAuthoritative(
-                    CloneConfiguration(configuration),
-                    out typedResult) ||
-                !IsExpectedAcceptanceRuntimeResult(
-                    typedResult,
-                    expectedRuntimeGenerationId))
-            {
-                throw new InvalidOperationException(
-                    "The typed Configuration acceptance write failed closed.");
-            }
-        }
-
-        private bool TryRestoreAcceptanceSnapshotEverywhere(
-            ConfigurationObject original)
-        {
-            for (int attempt = 0;
-                 attempt < AcceptancePulseRestoreAttempts;
-                 attempt++)
-            {
-                try
-                {
-                    _rollbackTransport.UpdateConfigurationObject(
-                        CloneConfiguration(original));
-                }
-                catch (Exception)
-                {
-                    // Verification below decides whether another attempt is
-                    // required without exposing Configuration values.
-                }
-
-                ConfigurationGrpcShadowResult typedUpdateResult;
-                bool typedUpdated =
-                    _grpcShadowMirror.TryUpdateAuthoritative(
-                        CloneConfiguration(original),
-                        out typedUpdateResult);
-
-                ConfigurationObject scsCurrent = null;
-                try
-                {
-                    scsCurrent = _rollbackTransport
-                        .GetConfigurationObject();
-                }
-                catch (Exception)
-                {
-                    // A failed read cannot verify restoration.
-                }
-
-                ConfigurationObject typedCurrent;
-                ConfigurationGrpcShadowResult typedGetResult;
-                bool typedVerified =
-                    typedUpdated &&
-                    _grpcShadowMirror.TryGetAuthoritative(
-                        out typedCurrent,
-                        out typedGetResult) &&
-                    AreSameReachableAcceptanceRuntime(
-                        typedUpdateResult,
-                        typedGetResult,
-                        out string restoredRuntimeGenerationId) &&
-                    !string.IsNullOrWhiteSpace(
-                        restoredRuntimeGenerationId) &&
-                    ConfigurationsAreSemanticallyEqual(
-                        original,
-                        typedCurrent);
-                if (ConfigurationsAreExactlyEqual(original, scsCurrent) &&
-                    typedVerified)
-                {
-                    return true;
-                }
-
-                Thread.Sleep(25);
-            }
-
-            return false;
-        }
-
-        private static bool AreSameReachableAcceptanceRuntime(
-            ConfigurationGrpcShadowResult updateResult,
-            ConfigurationGrpcShadowResult getResult,
-            out string runtimeGenerationId)
-        {
-            runtimeGenerationId = null;
-            if (!IsReachableAcceptanceRuntimeResult(updateResult) ||
-                !IsReachableAcceptanceRuntimeResult(getResult) ||
-                !string.Equals(
-                    updateResult.RuntimeGenerationId,
-                    getResult.RuntimeGenerationId,
-                    StringComparison.Ordinal))
-            {
-                return false;
-            }
-
-            runtimeGenerationId = getResult.RuntimeGenerationId;
-            return true;
-        }
-
-        private static bool IsExpectedAcceptanceRuntimeResult(
-            ConfigurationGrpcShadowResult result,
-            string expectedRuntimeGenerationId)
-        {
-            return IsReachableAcceptanceRuntimeResult(result) &&
-                   !string.IsNullOrWhiteSpace(
-                       expectedRuntimeGenerationId) &&
-                   string.Equals(
-                       result.RuntimeGenerationId,
-                       expectedRuntimeGenerationId,
-                       StringComparison.Ordinal);
-        }
-
-        private static bool IsReachableAcceptanceRuntimeResult(
-            ConfigurationGrpcShadowResult result)
-        {
-            return result != null &&
-                   result.Generation > 0 &&
-                   !string.IsNullOrWhiteSpace(
-                       result.RuntimeGenerationId);
-        }
-
-        private static bool ConfigurationsAreExactlyEqual(
-            ConfigurationObject left,
-            ConfigurationObject right)
-        {
-            return left != null &&
-                   right != null &&
-                   left.MaxGold == right.MaxGold &&
-                   left.TimeExpBuff.Ticks == right.TimeExpBuff.Ticks &&
-                   left.TimeExpBuff.Kind == right.TimeExpBuff.Kind &&
-                   left.TimeGoldBuff.Ticks == right.TimeGoldBuff.Ticks &&
-                   left.TimeGoldBuff.Kind == right.TimeGoldBuff.Kind;
-        }
-
-        private static bool ConfigurationsAreSemanticallyEqual(
-            ConfigurationObject left,
-            ConfigurationObject right)
-        {
-            if (left == null || right == null)
-            {
-                return false;
-            }
-
-            ConfigurationTransportSnapshot leftSnapshot =
-                ConfigurationGrpcShadowMirror.ToTransportSnapshot(left);
-            ConfigurationTransportSnapshot rightSnapshot =
-                ConfigurationGrpcShadowMirror.ToTransportSnapshot(right);
-            return leftSnapshot.MaxGold == rightSnapshot.MaxGold &&
-                   leftSnapshot.TimeExpBuffUnixTimeMilliseconds ==
-                       rightSnapshot.TimeExpBuffUnixTimeMilliseconds &&
-                   leftSnapshot.TimeGoldBuffUnixTimeMilliseconds ==
-                       rightSnapshot.TimeGoldBuffUnixTimeMilliseconds;
-        }
-
-        private static ConfigurationObject CloneConfiguration(
-            ConfigurationObject source)
-        {
-            if (source == null)
-            {
-                throw new ArgumentNullException(nameof(source));
-            }
-            return new ConfigurationObject
-            {
-                MaxGold = source.MaxGold,
-                TimeExpBuff = source.TimeExpBuff,
-                TimeGoldBuff = source.TimeGoldBuff
-            };
-        }
-
-        private static void LogAcceptancePulseResult(
-            string stage,
-            ConfigurationUpdateParityReport before,
-            ConfigurationUpdateParityReport after,
-            bool restored)
-        {
-            int scsDelta = Math.Max(
-                0,
-                after.ScsLiveCount - before.ScsLiveCount);
-            int grpcDelta = Math.Max(
-                0,
-                after.GrpcLiveCount - before.GrpcLiveCount);
-            int matchedDelta = Math.Max(
-                0,
-                after.MatchedLiveCount - before.MatchedLiveCount);
-            Logger.Info(
-                "[CONFIG_GRPC_ACCEPTANCE_PULSE] Stage=" + stage +
-                " Runtime=" + after.RuntimeGenerationId +
-                " ScsDelta=" + scsDelta +
-                " GrpcDelta=" + grpcDelta +
-                " MatchedDelta=" + matchedDelta +
-                " Restored=" + restored +
-                "; no Configuration values are logged.");
-        }
-
-        internal void OnConfigurationUpdated(ConfigurationObject configurationObject)
-        {
-            ObserveScsConfigurationCallback(configurationObject);
-            ConfigurationTransportSnapshot snapshot =
-                ConfigurationGrpcShadowMirror.ToTransportSnapshot(
-                    configurationObject);
-            ConfigurationAuthorityCoordinator.Instance.TryApplyCallback(
-                ConfigurationAuthoritySource.Scs,
-                snapshot,
-                () => ConfigurationUpdate?.Invoke(
-                    configurationObject,
-                    EventArgs.Empty));
-        }
-
-        private bool OnTypedConfigurationUpdated(
-            ConfigurationTransportUpdate update)
-        {
-            ConfigurationAuthorityCoordinator authority =
-                ConfigurationAuthorityCoordinator.Instance;
-            if (!authority.ShouldUse(
-                    ConfigurationAuthoritySource.TypedGrpc,
-                    ConfigurationAuthorityOperation.Callback))
-            {
-                return false;
-            }
-            if (_grpcShadowMirror == null)
-            {
-                RollBackAuthority("Callback", null);
-                return false;
-            }
-
-            ConfigurationObject configuration =
-                ConfigurationGrpcShadowMirror.FromTransportSnapshot(
-                    update.Configuration);
-            return authority.TryApplyCallback(
-                ConfigurationAuthoritySource.TypedGrpc,
-                update.Configuration,
-                () => ConfigurationUpdate?.Invoke(
-                    configuration,
-                    EventArgs.Empty));
-        }
-
-        private static bool IsCurrentAuthorityResult(
-            ConfigurationGrpcShadowResult result)
-        {
-            ConfigurationAuthorityStatus status =
-                ConfigurationAuthorityCoordinator.Instance.GetStatus();
-            return result != null &&
-                   result.Generation > 0 &&
-                   string.Equals(
-                       result.RuntimeGenerationId,
-                       status.ActiveRuntimeGenerationId,
-                       StringComparison.Ordinal);
-        }
-
-        private void SynchronizeScsStandby(
-            ConfigurationObject configuration,
-            ConfigurationGrpcShadowResult typedResult)
-        {
-            try
-            {
-                _rollbackTransport.UpdateConfigurationObject(
-                    configuration);
-                Logger.Info(
-                    "[CONFIG_GRPC_AUTHORITY] Typed Update generation " +
-                    typedResult.Generation +
-                    " synchronized the SCS rollback standby.");
-            }
-            catch (Exception exception)
-            {
-                var rollback = new InvalidOperationException(
-                    "The SCS Configuration rollback standby could not be synchronized after a typed Update.",
-                    exception);
-                ConfigurationAuthorityCoordinator.Instance.RequestRollback(
-                    rollback);
-                ConfigurationAuthorityDiagnostics.Observe(
-                    "STANDBY_SYNC_FAILED");
-                Logger.Error(
-                    "[CONFIG_GRPC_AUTHORITY] SCS rollback standby synchronization " +
-                    "failed after a typed Update; typed authority was closed for " +
-                    "this process.",
-                    exception);
-                throw;
-            }
-        }
-
-        private static void RollBackAuthority(
-            string operation,
-            ConfigurationGrpcShadowResult result)
-        {
-            string resultName = result == null
-                ? "unavailable"
-                : result.Status + "/" + result.TransportResult;
-            var exception = new InvalidOperationException(
-                "Typed Configuration " + operation +
-                " authority failed with " + resultName + ".");
-            ConfigurationAuthorityCoordinator.Instance.RequestRollback(
-                exception);
-            ConfigurationAuthorityDiagnostics.Observe(
-                "AUTHORITY_ROLLBACK");
-            Logger.Warn(
-                "[CONFIG_GRPC_AUTHORITY] Typed " + operation +
-                " failed closed; all Configuration operations returned to " +
-                "SCS for this process. Reason=" + resultName);
-        }
-
-        private static void ObserveScsConfigurationCallback(
-            ConfigurationObject configurationObject)
-        {
-            try
-            {
-                ConfigurationUpdateObservationLedger ledger =
-                    ConfigurationUpdateObservationLedger.Instance;
-                ledger.RecordScs(
-                    ConfigurationGrpcShadowMirror.ToTransportSnapshot(
-                        configurationObject));
-                ConfigurationUpdateParityReport report =
-                    ledger.LatestParityReport;
-                ConfigurationUpdateParityDiagnostics.Observe(report);
-                ConfigurationAuthorityQualificationRuntime.Instance
-                    .ObserveParity(report);
-                ConfigurationAuthorityDiagnostics.Observe("SCS_PARITY");
-            }
-            catch (Exception exception)
-            {
-                Logger.Warn(
-                    "[CONFIG_GRPC_SHADOW] SCS callback observation failed; " +
-                    "the authoritative callback will continue unchanged. Reason=" +
-                    exception.GetType().Name);
-            }
-        }
-
-        private void ObserveAuthoritativeConfiguration(
-            ConfigurationObject authoritative,
-            string source)
-        {
-            if (_grpcShadowMirror == null)
+            if (Interlocked.Exchange(ref _disposed, 1) != 0)
             {
                 return;
             }
 
-            ConfigurationGrpcShadowResult result =
-                _grpcShadowMirror.Synchronize(authoritative);
-            switch (result.Status)
+            AppDomain.CurrentDomain.ProcessExit -= OnProcessExit;
+            _subscriberCancellation.Cancel();
+            try
             {
-                case ConfigurationGrpcShadowStatus.Matched:
-                    return;
-                case ConfigurationGrpcShadowStatus.Seeded:
-                case ConfigurationGrpcShadowStatus.Resynchronized:
-                    Logger.Info(
-                        "[CONFIG_GRPC_SHADOW] " + source +
-                        " synchronized shadow generation " +
-                        result.Generation + ". SCS remains authoritative.");
-                    return;
-                default:
-                    Logger.Warn(
-                        "[CONFIG_GRPC_SHADOW] " + source +
-                        " shadow observation failed with " +
-                        result.Status + "/" + result.TransportResult +
-                        "; SCS result remains authoritative.");
-                    return;
+                _subscriberTask.Wait(TimeSpan.FromSeconds(2));
+            }
+            catch (AggregateException exception)
+                when (exception.InnerExceptions.Count == 1 &&
+                      exception.InnerException is OperationCanceledException)
+            {
+                // Expected controlled shutdown.
+            }
+            finally
+            {
+                _subscriber.Dispose();
+                _subscriberCancellation.Dispose();
             }
         }
 
-        #endregion
+        private void OnAuthoritativeConfigurationUpdate(
+            ConfigurationTransportUpdate update)
+        {
+            if (update == null || update.Configuration == null)
+            {
+                throw new InvalidOperationException(
+                    "The authoritative Configuration stream returned an empty update.");
+            }
+
+            ConfigurationObject configuration =
+                FromTransportSnapshot(update.Configuration);
+            RunWithConfigurationMutationBarrier(
+                () => ConfigurationUpdate?.Invoke(
+                    configuration,
+                    EventArgs.Empty));
+            Logger.Info(
+                "[CONFIG_GRPC] Applied authoritative Configuration generation " +
+                update.Generation +
+                (update.RecoveredFromSnapshot
+                    ? " from snapshot recovery."
+                    : update.Replayed
+                        ? " from replay."
+                        : " from the live stream."));
+        }
+
+        private static void EnsureSuccess(
+            ConfigurationTransportResult result,
+            string operation)
+        {
+            if (result == null ||
+                result.Result != ConfigurationTransportResultCode.Success ||
+                result.Configuration == null ||
+                result.Generation == 0 ||
+                string.IsNullOrWhiteSpace(result.RuntimeGenerationId))
+            {
+                string resultName = result == null
+                    ? "no-response"
+                    : result.Result.ToString();
+                throw new InvalidOperationException(
+                    "Configuration gRPC " + operation +
+                    " failed closed with result " + resultName +
+                    "; no fallback transport exists.");
+            }
+        }
+
+        private static ConfigurationTransportSnapshot ToTransportSnapshot(
+            ConfigurationObject configuration)
+        {
+            return new ConfigurationTransportSnapshot
+            {
+                MaxGold = configuration.MaxGold,
+                TimeExpBuffUnixTimeMilliseconds =
+                    ToUnixTimeMilliseconds(configuration.TimeExpBuff),
+                TimeGoldBuffUnixTimeMilliseconds =
+                    ToUnixTimeMilliseconds(configuration.TimeGoldBuff)
+            };
+        }
+
+        private static ConfigurationObject FromTransportSnapshot(
+            ConfigurationTransportSnapshot configuration)
+        {
+            return new ConfigurationObject
+            {
+                MaxGold = configuration.MaxGold,
+                TimeExpBuff = DateTimeOffset.FromUnixTimeMilliseconds(
+                        configuration.TimeExpBuffUnixTimeMilliseconds)
+                    .LocalDateTime,
+                TimeGoldBuff = DateTimeOffset.FromUnixTimeMilliseconds(
+                        configuration.TimeGoldBuffUnixTimeMilliseconds)
+                    .LocalDateTime
+            };
+        }
+
+        private static long ToUnixTimeMilliseconds(DateTime value)
+        {
+            if (value.Kind == DateTimeKind.Unspecified)
+            {
+                TimeSpan localOffset = TimeZoneInfo.Local.GetUtcOffset(value);
+                return new DateTimeOffset(value, localOffset)
+                    .ToUnixTimeMilliseconds();
+            }
+
+            return new DateTimeOffset(value).ToUnixTimeMilliseconds();
+        }
+
+        private void OnProcessExit(object sender, EventArgs eventArgs)
+        {
+            Dispose();
+        }
+
+        private void ThrowIfDisposed()
+        {
+            if (Volatile.Read(ref _disposed) != 0)
+            {
+                throw new ObjectDisposedException(
+                    nameof(ConfigurationServiceClient));
+            }
+        }
+
+        private sealed class AuthoritativeConfigurationUpdateHandler
+            : IClusterConfigurationUpdateHandler,
+              IConfigurationGrpcStreamLifecycleObserver
+        {
+            private readonly ConfigurationServiceClient _owner;
+
+            internal AuthoritativeConfigurationUpdateHandler(
+                ConfigurationServiceClient owner)
+            {
+                _owner = owner ?? throw new ArgumentNullException(nameof(owner));
+            }
+
+            public Task ObserveAsync(
+                ConfigurationTransportUpdate update,
+                CancellationToken cancellationToken)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                _owner.OnAuthoritativeConfigurationUpdate(update);
+                return Task.CompletedTask;
+            }
+
+            public void ObserveStreamEnded(
+                string runtimeGenerationId,
+                Exception reason)
+            {
+                Logger.Warn(
+                    "[CONFIG_GRPC] Authoritative Configuration stream ended for runtime " +
+                    (runtimeGenerationId ?? "unknown") +
+                    "; reconnect/recovery remains gRPC-only. Reason=" +
+                    (reason == null ? "stream-completed" : reason.GetType().Name));
+            }
+        }
     }
 }

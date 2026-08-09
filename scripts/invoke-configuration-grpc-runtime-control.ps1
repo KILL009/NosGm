@@ -78,11 +78,11 @@ foreach ($required in @($statePath, $project)) {
     }
 }
 $state = Get-Content -LiteralPath $statePath -Raw | ConvertFrom-Json
-if ($state.SchemaVersion -ne 1 -or
-    $state.AuthenticationTransport -ne "GRPC" -or
+if ($state.SchemaVersion -ne 2 -or
+    [string]$state.ConfigurationAuthority -ne "gRPC" -or
     [string]::IsNullOrWhiteSpace(
         [string]$state.AuthenticationGrpcEndpoint)) {
-    throw "The local stack is not running with the Configuration gRPC runtime."
+    throw "The local stack is not running with the final Configuration gRPC authority."
 }
 if ($state.PSObject.Properties.Name -notcontains
         "ConfigurationRuntimeControlEnabled" -or
@@ -226,7 +226,7 @@ if ($Operation -eq "Restart" -and
      $result.subscriberReady -ne $true)) {
     $json | Write-Host
     throw "Configuration runtime restarted, but its World subscriber did not attach within 10 seconds. " +
-        "Do not retry or send the acceptance pulse; inspect Status and the World log."
+        "Do not retry automatically; inspect Status and the World log."
 }
 
 if ($PassThru) {
