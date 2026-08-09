@@ -252,8 +252,7 @@ namespace NosGm.Master.Server
                                 .GetResult();
                         if (response.Result ==
                                 WireV1.CommunicationResultCode.Success &&
-                            response.AcceptedSequence > 0 &&
-                            response.MatchedSubscribers >= 2)
+                            response.AcceptedSequence > 0)
                         {
                             Logger.Info(
                                 "[CALLBACK_PENALTY_GRPC_ACCEPTED] PenaltyLogId=" +
@@ -263,14 +262,6 @@ namespace NosGm.Master.Server
                                 " MatchedSubscribers=" +
                                 response.MatchedSubscribers);
                             return response.AcceptedSequence;
-                        }
-
-                        if (response.Result ==
-                                WireV1.CommunicationResultCode.Success &&
-                            response.AcceptedSequence > 0)
-                        {
-                            throw new InvalidOperationException(
-                                "Authoritative PenaltyRefresh publication matched fewer than two live Login/World subscribers.");
                         }
 
                         if (response.Result !=
