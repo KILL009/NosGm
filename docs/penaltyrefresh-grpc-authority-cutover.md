@@ -30,18 +30,48 @@ This makes it a smaller and safer cut than attempting the full `ICommunicationSe
 
 ## Slice 1: reproducible local shadow wiring
 
-The normal Windows local stack must be able to exercise the existing callback gRPC path without manual environment setup.
+The normal Windows local stack can exercise the existing callback gRPC path without manual credential setup through an explicit wrapper:
 
-The integrated startup will provide:
+```powershell
+./scripts/start-communication-callback-shadow-local.ps1
+```
 
-- Master callback publisher identity using the dedicated Master certificate namespace;
-- Login callback subscriber identity using the Login certificate;
-- World callback subscriber identity using the World certificate;
-- separate absolute callback cursor files for Login and World;
+The wrapper provides:
+
+- Master callback publisher identity by reusing only the already role-scoped Master Configuration mTLS identity when no dedicated callback identity is supplied;
+- Login callback subscriber identity by reusing only the Login process gRPC identity;
+- World callback subscriber identity by reusing only the World process gRPC identity;
+- separate absolute callback cursor files under the current user's local application data;
 - the same preselected HTTP2/GRPCWEB wire mode already chosen before process startup;
-- shadow subscriber and Master publication mirror flags only when explicitly requested.
+- `NOSGM_COMMUNICATION_GRPC_CALLBACKS_ENABLED=true`;
+- `NOSGM_COMMUNICATION_GRPC_CALLBACK_MIRROR_ENABLED=true`;
+- `NOSGM_COMMUNICATION_GRPC_CALLBACKS_APPLY_ENABLED=false`.
 
 During this slice SCS remains the only effect authority. Typed callbacks are observed and compared only.
+
+### Real-process PenaltyRefresh observation probe
+
+With the shadow stack running, execute:
+
+```powershell
+./scripts/test-communication-callback-shadow-local.ps1
+```
+
+The acceptance probe does not create, update or delete a penalty. A dedicated .NET 10 probe publishes one typed `PenaltyRefreshCallback` directly through the Master mTLS publisher while callback APPLY remains disabled in Login and World. The payload uses a reserved positive observation-only ID and targets `ALL_NODES`.
+
+The script requires the central runtime to report at least two matching subscribers, then waits for the durable callback cursor belonging to `login-local-1` and the cursor belonging to `world-local-1` to advance to at least the accepted sequence. Both cursors must commit against the same runtime generation. This proves real typed delivery to Login and World without executing `PenaltyLogRefresh` gameplay effects or touching `PenaltyLogDAO`.
+
+Expected terminal line:
+
+```text
+Communication PenaltyRefresh real-process shadow acceptance passed.
+```
+
+Stop the stack normally afterward:
+
+```powershell
+./scripts/stop-modern-login-local.ps1
+```
 
 ## Slice 2: PenaltyRefresh authority cutover
 
@@ -70,10 +100,12 @@ Configuration remains gRPC-only and is not modified by this work.
 
 ## Merge gate
 
-Do not merge the final authority slice until:
+Do not merge the preparatory shadow slice until:
 
 - Windows CI is green;
 - .NET 10 CI is green;
 - the local stack proves Master publication plus Login/World shadow subscription with role-separated mTLS identities;
-- `PenaltyRefresh` typed delivery is observed in both Login and World;
-- the final authority state has no SCS fallback for the migrated callback.
+- the observation-only `PenaltyRefresh` probe advances both durable subscriber cursors on one runtime generation;
+- SCS remains callback effect authority and typed APPLY remains disabled.
+
+The final authority slice additionally requires no SCS fallback for the migrated callback before merge.
