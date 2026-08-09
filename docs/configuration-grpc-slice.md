@@ -331,8 +331,8 @@ object. Date/time fields are compared after the same Unix-millisecond
 normalization used on the wire, so a successful restoration can be pulsed again
 without treating lost sub-millisecond ticks or `DateTime.Kind` normalization as
 gameplay drift. This still prevents a Master round trip from overwriting locally
-advanced family-buff timestamps; any transported-field drift rejects the pulse
-before the first write.
+advanced family-buff timestamps; any drift rejects the pulse before the first
+write when a transported field differs at wire precision.
 
 The pulse binds its typed reads and writes to the runtime generation observed by
 the parity ledger. It deliberately does not require
