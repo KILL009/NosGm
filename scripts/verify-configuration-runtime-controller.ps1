@@ -81,6 +81,8 @@ foreach ($required in @(
 }
 
 foreach ($required in @(
+    "public bool TrySeed(",
+    "if (_state.TryGet(out state))",
     "expectedRuntimeGenerationId != _runtimeGenerationId",
     "replacement.Update(current.Configuration)",
     "retiredState.RetireForRuntimeRestart()",
@@ -96,6 +98,7 @@ Require $state "The Configuration runtime state is retired." `
 
 foreach ($required in @(
     "WireV1.ClusterNodeRole.Master",
+    "_runtimeController.TrySeed(",
     "RestartConfigurationRuntime",
     ".RuntimeGenerationChanged =>",
     "ConfigurationResultCode.Conflict",
@@ -153,29 +156,41 @@ foreach ($required in @(
     "NOSGM_CONFIGURATION_GRPC_CONTROL_MASTER_CERT_PASSWORD",
     "ConfigurationRuntimeControlEnabled",
     'subscriberReady -ne $true',
-    "Do not retry or send the acceptance pulse",
-    "ExpectedRuntimeGenerationId must be a lowercase canonical GUID."
+    "Do not retry automatically",
+    "ExpectedRuntimeGenerationId must be a lowercase canonical GUID.",
+    '$state.SchemaVersion -ne 2',
+    '$state.ConfigurationAuthority'
 )) {
     Require $script $required "Configuration runtime control wrapper"
 }
 Forbid $script "Export-Clixml" `
     "Configuration runtime control wrapper"
-Forbid $script "Set-Content" `
+Forbid $script "acceptance pulse" `
     "Configuration runtime control wrapper"
 
 foreach ($required in @(
     "EnableConfigurationRuntimeControl",
     "NOSGM_AUTH_GRPC_MASTER_CERT_SHA256",
     "NOSGM_CONFIGURATION_GRPC_RUNTIME_CONTROL_ENABLED",
-    "EnableConfigurationGrpcShadow",
-    "NOSGM_CONFIGURATION_GRPC_SHADOW_ENABLED",
-    "ConfigurationRuntimeControlEnabled"
+    "NOSGM_CONFIGURATION_GRPC_CONTROL_MASTER_CERT_PATH",
+    'ConfigurationAuthority = "gRPC"',
+    'ConfigurationFallback = $null',
+    'ConfigurationRuntimeControlEnabled = [bool]$EnableConfigurationRuntimeControl'
 )) {
     Require $start $required "Configuration runtime local startup"
+}
+foreach ($forbidden in @(
+    "EnableConfigurationGrpcShadow",
+    "NOSGM_CONFIGURATION_GRPC_SHADOW_ENABLED",
+    "NOSGM_CONFIGURATION_GRPC_ACCEPTANCE_PULSE_ENABLED"
+)) {
+    Forbid $start $forbidden "Configuration runtime local startup"
 }
 
 foreach ($required in @(
     "Configuration runtime control is disabled by default",
+    "Master can seed an empty Configuration runtime once",
+    "Master cannot overwrite an already seeded Configuration runtime",
     "Stale compare-and-swap restart is rejected",
     "Configuration restart terminates the old World stream explicitly",
     "Configuration restart signals the old World stream boundary",
@@ -197,6 +212,7 @@ foreach ($forbidden in @(
 }
 
 Write-Host "[PASS] Configuration runtime control is disabled by default and Master-mTLS only." -ForegroundColor Green
+Write-Host "[PASS] Master seeding is one-time and cannot overwrite an active Configuration authority." -ForegroundColor Green
 Write-Host "[PASS] Restart uses exact generation compare-and-swap and preserves only the typed snapshot seed." -ForegroundColor Green
 Write-Host "[PASS] Old streams terminate explicitly while callback and process runtime identities remain unchanged." -ForegroundColor Green
-Write-Host "[PASS] Windows operator control keeps the Master credential DPAPI-protected and emits sanitized JSON." -ForegroundColor Green
+Write-Host "[PASS] Windows operator control uses final schema 2 state and contains no shadow/acceptance-pulse path." -ForegroundColor Green
