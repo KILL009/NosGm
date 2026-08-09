@@ -54,10 +54,10 @@ namespace NosGm.Master.Server
                 Logger.Info("Master Server Config has been loaded");
 
                 // Configuration is no longer hosted by the legacy Master SCS
-                // endpoint. Master owns the initial seed and publishes it over
-                // the authenticated gRPC Configuration service before World is
-                // allowed to start consuming that state.
-                SeedConfigurationGrpcAuthority();
+                // endpoint. Master guarantees that the authenticated gRPC
+                // authority has a snapshot before World can consume it. An
+                // existing live snapshot is preserved across Master restarts.
+                EnsureConfigurationGrpcAuthority();
 
                 StartCommunicationCallbackMirror();
 
@@ -93,7 +93,7 @@ namespace NosGm.Master.Server
             }
         }
 
-        private static void SeedConfigurationGrpcAuthority()
+        private static void EnsureConfigurationGrpcAuthority()
         {
             var source = MSManager.Instance.ConfigurationObject;
             var snapshot = new ConfigurationTransportSnapshot
@@ -112,7 +112,7 @@ namespace NosGm.Master.Server
                            options.DeadlineMilliseconds + 1000)))
             {
                 ConfigurationTransportResult result = client
-                    .SeedAsync(snapshot, cancellation.Token)
+                    .EnsureSeededAsync(snapshot, cancellation.Token)
                     .GetAwaiter()
                     .GetResult();
                 if (result == null ||
@@ -124,13 +124,13 @@ namespace NosGm.Master.Server
                         ? "no-response"
                         : result.Result.ToString();
                     throw new InvalidOperationException(
-                        "Master could not seed the authoritative Configuration " +
+                        "Master could not establish the authoritative Configuration " +
                         "snapshot over gRPC. Result=" + resultName +
                         ". Startup is fail-closed and no SCS fallback exists.");
                 }
 
                 Logger.Info(
-                    "[CONFIG_GRPC] Master seeded authoritative Configuration " +
+                    "[CONFIG_GRPC] Master confirmed authoritative Configuration " +
                     "generation " + result.Generation +
                     " using the dedicated Master mTLS identity.");
             }
