@@ -41,7 +41,7 @@ function Get-InterfaceMethodNames {
         [Text.RegularExpressions.RegexOptions]::Singleline)
     $interfaceMatch = [regex]::Match(
         $withoutComments,
-        ('public\s+interface\s+' + [regex]::Escape($InterfaceName) + '\b[^{]*\{(?<body>.*?)\n\}'),
+        ('public\s+interface\s+' + [regex]::Escape($InterfaceName) + '\b[^{]*\{(?<body>.*?)\r?\n\s*\}'),
         [Text.RegularExpressions.RegexOptions]::Singleline)
     if (-not $interfaceMatch.Success) {
         throw "Unable to locate interface '$InterfaceName'."
