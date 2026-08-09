@@ -1,7 +1,8 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "sourceTransport": "SCS",
   "targetTransport": "gRPC + Protobuf",
+  "note": "Configuration server/callback contracts were removed after the completed gRPC authority cutover.",
   "services": [
     {
       "interface": "IAdminToolService",
@@ -120,26 +121,6 @@
         "UpdateBazaar",
         "UpdateFamily",
         "UpdateRelation"
-      ]
-    },
-    {
-      "interface": "IConfigurationClient",
-      "source": "Data/NosGm.Master.Library/Interface/IConfigurationClient.cs",
-      "legacyVersion": null,
-      "direction": "callback",
-      "methods": [
-        "ConfigurationUpdated"
-      ]
-    },
-    {
-      "interface": "IConfigurationService",
-      "source": "Data/NosGm.Master.Library/Interface/IConfigurationService.cs",
-      "legacyVersion": "1.1.0.0",
-      "direction": "server",
-      "methods": [
-        "Authenticate",
-        "GetConfigurationObject",
-        "UpdateConfigurationObject"
       ]
     },
     {
