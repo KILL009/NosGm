@@ -49,6 +49,7 @@ $activation = Read-Required $ActivationPath
 $masterIdentity = Read-Required $MasterIdentityPath
 $wrapper = Read-Required $WrapperPath
 $cutoverDocument = Read-Required $CutoverDocumentPath
+$masterIdentityCompact = $masterIdentity -replace '\s+', ''
 
 Assert-PowerShellParses $WrapperPath
 
@@ -69,8 +70,10 @@ Require $activation 'CommunicationCallbackExistingIdentityFallback.IsEnabled()' 
 Require $activation '.PrepareSubscriberEnvironment();' 'Callback activation must prepare the role-specific subscriber namespace before subscriber options load.'
 Require $activation 'usesProcessEnvironment' 'Dictionary-backed self-tests must not mutate the real process environment.'
 
-Require $masterIdentity 'ConfigurationRuntimeControllerIdentityOptions.CertificatePathVariable' 'Master callback publication must fall back only to the existing Master certificate identity.'
-Require $masterIdentity 'ConfigurationRuntimeControllerIdentityOptions.CertificatePasswordVariable' 'Master callback publication must keep the Master certificate password role-scoped.'
+Require $masterIdentityCompact 'ConfigurationRuntimeControllerIdentityOptions.CertificatePathVariable' 'Master callback publication must fall back only to the existing Master certificate identity.'
+Require $masterIdentityCompact 'ConfigurationRuntimeControllerIdentityOptions.CertificatePasswordVariable' 'Master callback publication must keep the Master certificate password role-scoped.'
+Require $masterIdentityCompact 'ConfigurationRuntimeControllerIdentityOptions.CallerInstanceIdVariable' 'Master callback publication must preserve the existing Master process identity.'
+Require $masterIdentityCompact 'ConfigurationRuntimeControllerIdentityOptions.AddressVariable' 'Master callback publication must use the existing Master Configuration endpoint only as an explicit fallback.'
 Require $masterIdentity 'CommunicationCallbackExistingIdentityFallback.IsEnabled' 'Master identity reuse must remain explicitly opt-in.'
 Require $masterIdentity '!string.IsNullOrEmpty(dedicated)' 'Dedicated callback Master credentials must retain priority over fallback values.'
 
