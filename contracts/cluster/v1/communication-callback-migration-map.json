@@ -1,9 +1,21 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "legacyInterface": "ICommunicationClient",
   "legacyTransport": "SCS callbacks",
   "targetService": "ClusterCommunicationCallbacks",
   "deliveryModel": "bounded server-streaming subscription with replay cursor",
+  "completed": [
+    {
+      "legacyMethod": "UpdatePenaltyLog",
+      "disposition": "grpc_authoritative",
+      "legacySurfaceRemoved": true,
+      "fallback": null,
+      "target": "PenaltyRefreshCallback",
+      "targetKind": "ALL_NODES",
+      "publisherRole": "Master",
+      "subscriberRoles": ["Login", "World"]
+    }
+  ],
   "methods": [
     {
       "legacyMethod": "CharacterConnected",
@@ -74,14 +86,6 @@
       "targetKind": "WORLD_GROUP",
       "publisherRole": "Master",
       "subscriberRoles": ["World"]
-    },
-    {
-      "legacyMethod": "UpdatePenaltyLog",
-      "disposition": "typed_stream_event",
-      "target": "PenaltyRefreshCallback",
-      "targetKind": "ALL_NODES",
-      "publisherRole": "Master",
-      "subscriberRoles": ["Login", "World"]
     },
     {
       "legacyMethod": "UpdateRelation",
