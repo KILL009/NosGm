@@ -1,5 +1,6 @@
 ﻿using NosGm.Domain;
 using NosGm.Master.Library.Data;
+using System;
 
 namespace NosGm.Master.Library.Interface
 {
@@ -25,12 +26,22 @@ namespace NosGm.Master.Library.Interface
 
         void UpdateFamily(long familyId, bool changeFaction);
 
-        void UpdatePenaltyLog(int penaltyLogId);
-
         void UpdateRelation(long relationId);
 
         void UpdateStaticBonus(long characterId);
 
         #endregion
+    }
+
+    internal static class RetiredCommunicationClientPenaltyExtensions
+    {
+        public static void UpdatePenaltyLog(
+            this ICommunicationClient client,
+            int penaltyLogId)
+        {
+            throw new NotSupportedException(
+                "UpdatePenaltyLog was retired from the SCS callback contract. " +
+                "PenaltyRefresh is gRPC-authoritative and has no SCS fallback.");
+        }
     }
 }
