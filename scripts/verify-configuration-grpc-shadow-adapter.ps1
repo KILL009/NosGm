@@ -188,7 +188,6 @@ foreach ($required in @(
     'lock (_configurationMutationRoot)',
     'CreateGrpcAcceptancePulse(original)',
     'diagnostic = "active-world-buff";',
-    'ConfigurationsAreExactlyEqual(',
     'diagnostic = "live-world-configuration-drift";',
     'diagnostic = "max-gold-pulse-unavailable";',
     'pulse.MaxGold = checked(pulse.MaxGold + 1);',
@@ -234,6 +233,17 @@ $acceptanceBody = $client.Substring(
     $acceptanceEnd - $acceptanceStart)
 Require-Before $acceptanceBody 'UpdateAcceptanceSnapshotEverywhere(' 'TryRestoreAcceptanceSnapshotEverywhere(' "Configuration pulse restoration order"
 Require-Before $acceptanceBody 'before = ConfigurationUpdateObservationLedger.Instance' '_grpcShadowMirror.TryGetAuthoritative(' "Configuration pulse observed-runtime identity order"
+if ($acceptanceBody.IndexOf(
+        'ConfigurationsAreExactlyEqual(',
+        [StringComparison]::Ordinal) -ge 0) {
+    throw "Configuration acceptance must compare live World values at transport precision so a restored DateTime normalization cannot create false drift."
+}
+$semanticAcceptanceComparisons = [regex]::Matches(
+    $acceptanceBody,
+    'ConfigurationsAreSemanticallyEqual\(').Count
+if ($semanticAcceptanceComparisons -lt 3) {
+    throw "Configuration acceptance must use transport-semantic equality before the pulse and while verifying live World restoration."
+}
 if ($acceptanceBody.IndexOf(
         'IsCurrentAuthorityResult(',
         [StringComparison]::Ordinal) -ge 0) {
