@@ -278,7 +278,7 @@ namespace NosGm.Master.Library.Client
                             diagnostic = "configuration-unavailable";
                             return false;
                         }
-                        if (!ConfigurationsAreExactlyEqual(
+                        if (!ConfigurationsAreSemanticallyEqual(
                                 liveWorld,
                                 original))
                         {
@@ -407,7 +407,7 @@ namespace NosGm.Master.Library.Client
                             after.GrpcLiveCount >= before.GrpcLiveCount + 2 &&
                             after.MatchedLiveCount >=
                                 before.MatchedLiveCount + 2 &&
-                            ConfigurationsAreExactlyEqual(
+                            ConfigurationsAreSemanticallyEqual(
                                 liveWorldConfiguration,
                                 original))
                         {
@@ -424,7 +424,7 @@ namespace NosGm.Master.Library.Client
                         Thread.Sleep(25);
                     }
 
-                    diagnostic = ConfigurationsAreExactlyEqual(
+                    diagnostic = ConfigurationsAreSemanticallyEqual(
                         liveWorldConfiguration,
                         original)
                         ? "parity-timeout"
