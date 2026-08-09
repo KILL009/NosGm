@@ -33,7 +33,7 @@ namespace NosGm.Master.Library.Interface
         #endregion
     }
 
-    internal static class RetiredCommunicationClientPenaltyExtensions
+    public static class RetiredCommunicationClientPenaltyExtensions
     {
         public static void UpdatePenaltyLog(
             this ICommunicationClient client,
