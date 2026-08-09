@@ -2,7 +2,7 @@
   "schemaVersion": 2,
   "sourceTransport": "SCS",
   "targetTransport": "gRPC + Protobuf",
-  "note": "Configuration server/callback contracts were removed after the completed gRPC authority cutover.",
+  "note": "Configuration and the PenaltyRefresh callback were removed after their completed gRPC authority cutovers.",
   "services": [
     {
       "interface": "IAdminToolService",
@@ -63,7 +63,6 @@
         "Shutdown",
         "UpdateBazaar",
         "UpdateFamily",
-        "UpdatePenaltyLog",
         "UpdateRelation",
         "UpdateStaticBonus"
       ]
