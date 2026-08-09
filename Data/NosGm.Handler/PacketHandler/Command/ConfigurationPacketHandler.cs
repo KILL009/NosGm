@@ -1,5 +1,6 @@
 using NosGm.Configuration;
 using NosGm.Packets.Packets.CommandPackets;
+using NosGm.Core;
 using NosGm.DAL;
 using NosGm.Data;
 using NosGm.Domain;
