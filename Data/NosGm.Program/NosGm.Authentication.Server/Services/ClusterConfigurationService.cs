@@ -48,7 +48,8 @@ public sealed class ClusterConfigurationService
                     "GetConfiguration",
                     context,
                     requireGrpcDeadline: true,
-                    WireV1.ClusterNodeRole.World);
+                    WireV1.ClusterNodeRole.World,
+                    WireV1.ClusterNodeRole.Master);
                 if (validation != WireV1.ConfigurationResultCode.Success)
                 {
                     WriteAudit(request?.Context, "GetConfiguration", validation, 0);
@@ -108,7 +109,8 @@ public sealed class ClusterConfigurationService
                     "UpdateConfiguration",
                     context,
                     requireGrpcDeadline: true,
-                    WireV1.ClusterNodeRole.World);
+                    WireV1.ClusterNodeRole.World,
+                    WireV1.ClusterNodeRole.Master);
                 if (validation != WireV1.ConfigurationResultCode.Success)
                 {
                     WriteAudit(request?.Context, "UpdateConfiguration", validation, 0);
@@ -478,7 +480,7 @@ public sealed class ClusterConfigurationService
                 throw new RpcException(
                     new Status(
                         StatusCode.FailedPrecondition,
-                        "The Configuration shadow state has not been seeded."));
+                        "The Configuration authority has not been seeded."));
             case ConfigurationSubscriptionOpenResult.InvalidResumeCursor:
                 throw new RpcException(
                     new Status(
