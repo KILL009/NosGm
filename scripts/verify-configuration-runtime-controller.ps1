@@ -115,7 +115,7 @@ Forbid $service "_runtimeIdentity" `
 foreach ($required in @(
     "AddSingleton<ConfigurationRuntimeController>()",
     "ConfigurationRuntimeControlOptions.Load",
-    "Configuration runtime control requires at least one Master mTLS certificate fingerprint.",
+    "Authoritative Configuration requires at least one Master mTLS certificate fingerprint for cold-boot seeding.",
     "configurationRuntime.RuntimeGenerationId",
     "callbackRuntimeIdentity.GenerationId"
 )) {
