@@ -148,13 +148,13 @@ internal sealed class LoadRunner : IAsyncDisposable
 
             int connected = _clients.Count(client => client.IsConnected);
             int loginAccepted = _clients.Count(client => client.LoginAccepted);
-            int worldReady = _clients.Count(client => client.WorldReady);
+            int worldReadyNow = _clients.Count(client => client.WorldReady);
             long received = _clients.Sum(client => client.BytesReceived);
             long sent = _clients.Sum(client => client.BytesSent);
 
             Console.Write(
                 $"\rhold {Math.Min(second + 1, _options.HoldSeconds),3}/{_options.HoldSeconds,3}s " +
-                $"connected={connected,5} login-ok={loginAccepted,5} world-ready={worldReady,5} " +
+                $"connected={connected,5} login-ok={loginAccepted,5} world-ready={worldReadyNow,5} " +
                 $"rx={FormatBytes(received),10} tx={FormatBytes(sent),10} " +
                 $"CPU={process.CpuPercent,6:N1}% WS={ToMegabytes(process.WorkingSetBytes),8:N1}MB");
 
