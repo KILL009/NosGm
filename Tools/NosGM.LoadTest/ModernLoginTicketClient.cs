@@ -1,4 +1,6 @@
 using System.Net.Http.Json;
+using System.Text;
+using System.Text.Json;
 using System.Text.Json.Serialization;
 
 namespace NosGM.LoadTest;
@@ -37,8 +39,12 @@ internal static class ModernLoginTicketClient
             CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         requestCancellation.CancelAfter(options.ReadTimeoutMilliseconds);
 
+        using HttpRequestMessage requestMessage = BuildRequestMessage(options.AuthBridgeUri, request);
         using HttpResponseMessage response = await Client
-            .PostAsJsonAsync(options.AuthBridgeUri, request, requestCancellation.Token)
+            .SendAsync(
+                requestMessage,
+                HttpCompletionOption.ResponseHeadersRead,
+                requestCancellation.Token)
             .ConfigureAwait(false);
 
         if (!response.IsSuccessStatusCode)
@@ -68,6 +74,46 @@ internal static class ModernLoginTicketClient
             payload.AuthorizationCode,
             payload.AccountName,
             payload.ExpiresInSeconds);
+    }
+
+    public static void RunSelfTest()
+    {
+        var request = new TicketRequest
+        {
+            AccountName = "load-selftest",
+            Password = "not-a-real-password",
+            InstallationId = Guid.Parse("11111111-2222-3333-4444-555555555555").ToString("D"),
+            CountryId = 5
+        };
+
+        using HttpRequestMessage message = BuildRequestMessage(
+            new Uri("http://127.0.0.1:8081/api/v1/launcher/ticket"),
+            request);
+
+        long? contentLength = message.Content?.Headers.ContentLength;
+        string? mediaType = message.Content?.Headers.ContentType?.MediaType;
+        if (contentLength is null or <= 0 ||
+            !string.Equals(mediaType, "application/json", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException(
+                "Modern AuthBridge request framing self-test failed.");
+        }
+    }
+
+    private static HttpRequestMessage BuildRequestMessage(Uri endpoint, TicketRequest request)
+    {
+        string json = JsonSerializer.Serialize(request);
+        var message = new HttpRequestMessage(HttpMethod.Post, endpoint)
+        {
+            Content = new StringContent(json, Encoding.UTF8, "application/json")
+        };
+        message.Headers.Accept.ParseAdd("application/json");
+
+        // LauncherAuthBridge rejects requests without a positive Content-Length.
+        // Match the production launcher framing instead of using PostAsJsonAsync,
+        // whose streaming content can arrive at HttpListener with ContentLength64=-1.
+        message.Content.Headers.ContentLength = Encoding.UTF8.GetByteCount(json);
+        return message;
     }
 
     private static HttpClient CreateHttpClient()

@@ -25,6 +25,7 @@ internal static class Program
 
             if (options.SelfTest)
             {
+                ModernLoginTicketClient.RunSelfTest();
                 NosTaleLoginCodec.RunSelfTest();
                 NosTaleWorldCodec.RunSelfTest();
                 await LoopbackAcceptance.RunAsync(shutdown.Token).ConfigureAwait(false);
