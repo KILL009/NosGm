@@ -42,7 +42,7 @@ internal static class Program
                     .ConfigureAwait(false);
             }
 
-            if (options.Scenario is LoadScenario.Login or LoadScenario.World &&
+            if ((options.Scenario is LoadScenario.Login or LoadScenario.World) &&
                 options.LoginMode == LoginMode.Modern)
             {
                 await TargetSafety
