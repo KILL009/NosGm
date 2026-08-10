@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Net.Http;
 using System.Net.Sockets;
 
 namespace NosGM.LoadTest;
@@ -21,10 +22,12 @@ internal sealed class LoadClient : IAsyncDisposable
 
     public int ClientIndex { get; }
     public double ConnectMilliseconds { get; private set; }
+    public double AuthBridgeMilliseconds { get; private set; }
     public double LoginMilliseconds { get; private set; }
     public double WorldReadyMilliseconds { get; private set; }
     public string? Failure { get; private set; }
     public string? LoginResponse { get; private set; }
+    public bool AuthTicketIssued { get; private set; }
     public bool LoginAccepted { get; private set; }
     public bool WorldEntryAccepted { get; private set; }
     public bool CharacterSelected { get; private set; }
@@ -75,7 +78,7 @@ internal sealed class LoadClient : IAsyncDisposable
             await client.DisposeAsync().ConfigureAwait(false);
         }
         catch (Exception exception) when (
-            exception is SocketException or IOException or InvalidOperationException)
+            exception is SocketException or IOException or InvalidOperationException or HttpRequestException)
         {
             client.Failure = exception.GetType().Name + ": " + exception.Message;
             await client.DisposeAsync().ConfigureAwait(false);
@@ -132,6 +135,18 @@ internal sealed class LoadClient : IAsyncDisposable
         LoadAccount? account,
         CancellationToken cancellationToken)
     {
+        string? loginPacket = null;
+        if (options.Scenario == LoadScenario.Login)
+        {
+            if (account == null)
+            {
+                throw new InvalidOperationException("A login client requires an account.");
+            }
+
+            loginPacket = await PrepareLoginPacketAsync(options, account, cancellationToken)
+                .ConfigureAwait(false);
+        }
+
         var stopwatch = Stopwatch.StartNew();
         await ConnectWithTimeoutAsync(
                 _tcpClient,
@@ -146,16 +161,10 @@ internal sealed class LoadClient : IAsyncDisposable
         NetworkStream stream = _tcpClient.GetStream();
         if (options.Scenario == LoadScenario.Login)
         {
-            if (account == null)
-            {
-                throw new InvalidOperationException("A login client requires an account.");
-            }
-
             var loginClock = Stopwatch.StartNew();
-            string packet = NosTaleLoginCodec.BuildPacket(options, account, ClientIndex);
             await WriteAsync(
                     stream,
-                    NosTaleLoginCodec.EncodeClientPacket(packet),
+                    NosTaleLoginCodec.EncodeClientPacket(loginPacket!),
                     cancellationToken)
                 .ConfigureAwait(false);
 
@@ -206,10 +215,14 @@ internal sealed class LoadClient : IAsyncDisposable
                 $"1 {account.Username}",
                 cancellationToken)
             .ConfigureAwait(false);
+
+        string worldCredential = options.LoginMode == LoginMode.Modern
+            ? "thisisgfmode"
+            : account.Password;
         await WriteWorldPacketAsync(
                 stream,
                 WorldSessionId,
-                $"2 0 0 {account.Password}",
+                $"2 0 0 {worldCredential}",
                 cancellationToken)
             .ConfigureAwait(false);
 
@@ -275,11 +288,13 @@ internal sealed class LoadClient : IAsyncDisposable
         LoadAccount account,
         CancellationToken cancellationToken)
     {
+        string packet = await PrepareLoginPacketAsync(options, account, cancellationToken)
+            .ConfigureAwait(false);
+
         using var loginClient = new TcpClient
         {
             NoDelay = true
         };
-        var loginClock = Stopwatch.StartNew();
 
         await ConnectWithTimeoutAsync(
                 loginClient,
@@ -290,7 +305,7 @@ internal sealed class LoadClient : IAsyncDisposable
             .ConfigureAwait(false);
 
         NetworkStream stream = loginClient.GetStream();
-        string packet = NosTaleLoginCodec.BuildPacket(options, account, ClientIndex);
+        var loginClock = Stopwatch.StartNew();
         await WriteAsync(
                 stream,
                 NosTaleLoginCodec.EncodeClientPacket(packet),
@@ -320,6 +335,27 @@ internal sealed class LoadClient : IAsyncDisposable
         WorldSessionId = sessionId;
         AdvertisedWorldHost = advertisedHost;
         AdvertisedWorldPort = advertisedPort;
+    }
+
+    private async Task<string> PrepareLoginPacketAsync(
+        LoadTestOptions options,
+        LoadAccount account,
+        CancellationToken cancellationToken)
+    {
+        if (options.LoginMode == LoginMode.Legacy)
+        {
+            return NosTaleLoginCodec.BuildLegacyPacket(options, account, ClientIndex);
+        }
+
+        Guid installationId = Guid.NewGuid();
+        var authClock = Stopwatch.StartNew();
+        ModernLoginTicket ticket = await ModernLoginTicketClient
+            .IssueAsync(options, account, installationId, cancellationToken)
+            .ConfigureAwait(false);
+        authClock.Stop();
+        AuthBridgeMilliseconds = authClock.Elapsed.TotalMilliseconds;
+        AuthTicketIssued = true;
+        return NosTaleLoginCodec.BuildModernPacket(options, ticket, installationId);
     }
 
     private async Task<string?> ReadLoginResponseAsync(
