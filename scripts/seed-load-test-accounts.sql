@@ -5,9 +5,14 @@ and the three starter Adventurer skills used by normal character creation.
 
 Safe to re-run:
 - missing accounts are inserted
-- existing matching accounts are normalized to the load-test password/locale
+- existing matching accounts are normalized to the load-test password and loopback IP
 - missing slot-0 characters are inserted
 - missing starter skills are inserted
+
+The seed intentionally does not depend on optional Account columns such as Language,
+so it can run against older NosGM databases as well as freshly migrated databases.
+Temporary text columns explicitly use DATABASE_DEFAULT to avoid tempdb/database
+collation conflicts.
 
 Run this against the NosGM SQL Server database while the local stack is stopped
 or before a load-test run.
@@ -30,7 +35,6 @@ DECLARE @CharacterPrefix varchar(16) = 'LoadC';
 DECLARE @PlainPassword varchar(64) = 'NosGM_Load_2026!';
 DECLARE @PasswordHash varchar(255) =
     'nosgm$pbkdf2-sha256$v1$600000$qjgmftRU+71jlsw1heIH6Q==$D3Di2pzO4UhWMtprgkI2WOlBYt0/5iyI2+xFkHjM7j0=';
-DECLARE @Language nvarchar(16) = N'es';
 DECLARE @Loopback varchar(45) = '127.0.0.1';
 
 IF @Count < 1 OR @Count > 9999
@@ -65,8 +69,8 @@ IF EXISTS
 CREATE TABLE #LoadUsers
 (
     SeedNumber int NOT NULL PRIMARY KEY,
-    Username varchar(255) NOT NULL,
-    CharacterName varchar(255) NOT NULL
+    Username varchar(255) COLLATE DATABASE_DEFAULT NOT NULL,
+    CharacterName varchar(255) COLLATE DATABASE_DEFAULT NOT NULL
 );
 
 ;WITH Numbers AS
@@ -92,8 +96,7 @@ INSERT dbo.Account
     Name,
     Password,
     RegistrationIP,
-    VerificationToken,
-    Language
+    VerificationToken
 )
 SELECT
     0,
@@ -101,8 +104,7 @@ SELECT
     u.Username,
     @PasswordHash,
     @Loopback,
-    NULL,
-    @Language
+    NULL
 FROM #LoadUsers AS u
 WHERE NOT EXISTS
 (
@@ -117,8 +119,7 @@ SET
     a.Authority = 0,
     a.Email = u.Username + '@loadtest.local',
     a.Password = @PasswordHash,
-    a.RegistrationIP = @Loopback,
-    a.Language = @Language
+    a.RegistrationIP = @Loopback
 FROM dbo.Account AS a
 INNER JOIN #LoadUsers AS u
     ON u.Username = a.Name;
@@ -296,6 +297,7 @@ SELECT
     0,
     10000,
     1,
+    0,
     0,
     0,
     0,
