@@ -36,10 +36,21 @@ internal sealed class LoadRunner : IAsyncDisposable
 
         Console.WriteLine("NosGM staged load test");
         Console.WriteLine($"Target   : {_options.Host}:{_options.Port}");
+        if (_options.Scenario is LoadScenario.Login or LoadScenario.World)
+        {
+            Console.WriteLine($"LoginMode: {_options.LoginMode}");
+        }
         if (_options.Scenario == LoadScenario.World)
         {
             Console.WriteLine($"Login    : {_options.LoginHost}:{_options.LoginPort}");
             Console.WriteLine($"Ready    : {_options.WorldReadyPacket}");
+        }
+        if (_options.Scenario is LoadScenario.Login or LoadScenario.World &&
+            _options.LoginMode == LoginMode.Modern)
+        {
+            Console.WriteLine(
+                $"Modern   : {_options.ModernLoginHeader} via " +
+                $"{_options.AuthBridgeUri.Scheme}://{_options.AuthBridgeUri.Host}:{_options.AuthBridgeUri.Port}");
         }
         Console.WriteLine($"Scenario : {_options.Scenario}");
         Console.WriteLine($"Stages   : {string.Join(" -> ", _options.Stages)}");
@@ -66,6 +77,10 @@ internal sealed class LoadRunner : IAsyncDisposable
                 $"failed={result.Failed:N0}");
             if (_options.Scenario is LoadScenario.Login or LoadScenario.World)
             {
+                if (_options.LoginMode == LoginMode.Modern)
+                {
+                    Console.Write($" auth-ok={result.AuthTicketIssued:N0}");
+                }
                 Console.Write($" login-ok={result.LoginAccepted:N0}");
             }
             if (_options.Scenario == LoadScenario.World)
@@ -77,6 +92,11 @@ internal sealed class LoadRunner : IAsyncDisposable
             Console.WriteLine(
                 $" connect-p95={result.ConnectP95Milliseconds:N1}ms CPU max={result.ProcessCpuMaximumPercent:N1}% " +
                 $"WS max={ToMegabytes(result.ProcessWorkingSetMaximumBytes):N1}MB");
+
+            foreach (string failure in result.FailureSamples)
+            {
+                Console.WriteLine($"  [FAIL] {failure}");
+            }
             Console.WriteLine();
         }
     }
@@ -147,6 +167,7 @@ internal sealed class LoadRunner : IAsyncDisposable
             processSamples.Add(process);
 
             int connected = _clients.Count(client => client.IsConnected);
+            int authIssued = _clients.Count(client => client.AuthTicketIssued);
             int loginAccepted = _clients.Count(client => client.LoginAccepted);
             int worldReadyNow = _clients.Count(client => client.WorldReady);
             long received = _clients.Sum(client => client.BytesReceived);
@@ -154,8 +175,8 @@ internal sealed class LoadRunner : IAsyncDisposable
 
             Console.Write(
                 $"\rhold {Math.Min(second + 1, _options.HoldSeconds),3}/{_options.HoldSeconds,3}s " +
-                $"connected={connected,5} login-ok={loginAccepted,5} world-ready={worldReadyNow,5} " +
-                $"rx={FormatBytes(received),10} tx={FormatBytes(sent),10} " +
+                $"connected={connected,5} auth-ok={authIssued,5} login-ok={loginAccepted,5} " +
+                $"world-ready={worldReadyNow,5} rx={FormatBytes(received),10} tx={FormatBytes(sent),10} " +
                 $"CPU={process.CpuPercent,6:N1}% WS={ToMegabytes(process.WorkingSetBytes),8:N1}MB");
 
             if (_options.HoldSeconds > 0)
@@ -169,6 +190,11 @@ internal sealed class LoadRunner : IAsyncDisposable
         double[] connectTimes = _clients
             .Where(client => client.Failure == null)
             .Select(client => client.ConnectMilliseconds)
+            .OrderBy(value => value)
+            .ToArray();
+        double[] authBridgeTimes = _clients
+            .Where(client => client.AuthTicketIssued && client.AuthBridgeMilliseconds > 0)
+            .Select(client => client.AuthBridgeMilliseconds)
             .OrderBy(value => value)
             .ToArray();
         double[] loginTimes = _clients
@@ -185,6 +211,7 @@ internal sealed class LoadRunner : IAsyncDisposable
         int attempted = _clients.Count;
         int connectedNow = _clients.Count(client => client.IsConnected);
         int failed = _clients.Count(client => client.Failure != null);
+        int authTicketIssued = _clients.Count(client => client.AuthTicketIssued);
         int loginOk = _clients.Count(client => client.LoginAccepted);
         int loginRejected = _options.Scenario is LoadScenario.Login or LoadScenario.World
             ? _clients.Count(client => !client.LoginAccepted)
@@ -195,6 +222,12 @@ internal sealed class LoadRunner : IAsyncDisposable
         int worldRejected = _options.Scenario == LoadScenario.World
             ? attempted - worldReady
             : 0;
+        string[] failureSamples = _clients
+            .Where(client => !string.IsNullOrWhiteSpace(client.Failure))
+            .Select(client => client.Failure!)
+            .Distinct(StringComparer.Ordinal)
+            .Take(5)
+            .ToArray();
 
         return new StageResult
         {
@@ -204,6 +237,7 @@ internal sealed class LoadRunner : IAsyncDisposable
             Attempted = attempted,
             Connected = connectedNow,
             Failed = failed,
+            AuthTicketIssued = authTicketIssued,
             LoginAccepted = loginOk,
             LoginRejectedOrTimedOut = loginRejected,
             WorldEntryAccepted = worldEntry,
@@ -213,6 +247,7 @@ internal sealed class LoadRunner : IAsyncDisposable
             ConnectP50Milliseconds = Percentile(connectTimes, 0.50),
             ConnectP95Milliseconds = Percentile(connectTimes, 0.95),
             ConnectP99Milliseconds = Percentile(connectTimes, 0.99),
+            AuthBridgeP95Milliseconds = Percentile(authBridgeTimes, 0.95),
             LoginP95Milliseconds = Percentile(loginTimes, 0.95),
             WorldReadyP50Milliseconds = Percentile(worldReadyTimes, 0.50),
             WorldReadyP95Milliseconds = Percentile(worldReadyTimes, 0.95),
@@ -223,7 +258,8 @@ internal sealed class LoadRunner : IAsyncDisposable
             ProcessCpuMaximumPercent = processSamples.Max(sample => sample.CpuPercent),
             ProcessWorkingSetMaximumBytes = processSamples.Max(sample => sample.WorkingSetBytes),
             ProcessPrivateBytesMaximum = processSamples.Max(sample => sample.PrivateBytes),
-            ObservedProcessCountMaximum = processSamples.Max(sample => sample.ProcessCount)
+            ObservedProcessCountMaximum = processSamples.Max(sample => sample.ProcessCount),
+            FailureSamples = failureSamples
         };
     }
 
@@ -237,6 +273,13 @@ internal sealed class LoadRunner : IAsyncDisposable
             LoginHost = _options.Scenario == LoadScenario.World ? _options.LoginHost : null,
             LoginPort = _options.Scenario == LoadScenario.World ? _options.LoginPort : null,
             Scenario = _options.Scenario.ToString(),
+            LoginMode = _options.Scenario is LoadScenario.Login or LoadScenario.World
+                ? _options.LoginMode.ToString()
+                : null,
+            ModernLoginHeader = _options.LoginMode == LoginMode.Modern &&
+                                _options.Scenario is LoadScenario.Login or LoadScenario.World
+                ? _options.ModernLoginHeader
+                : null,
             WorldReadyPacket = _options.Scenario == LoadScenario.World ? _options.WorldReadyPacket : null,
             RampPerSecond = _options.RampPerSecond,
             HoldSeconds = _options.HoldSeconds,
@@ -256,9 +299,9 @@ internal sealed class LoadRunner : IAsyncDisposable
 
         var csv = new StringBuilder();
         csv.AppendLine(
-            "target,attempted,connected,failed,loginAccepted,loginRejectedOrTimedOut," +
+            "target,attempted,connected,failed,authTicketIssued,loginAccepted,loginRejectedOrTimedOut," +
             "worldEntryAccepted,characterSelected,worldReady,worldRejectedOrTimedOut," +
-            "connectP50Ms,connectP95Ms,connectP99Ms,loginP95Ms," +
+            "connectP50Ms,connectP95Ms,connectP99Ms,authBridgeP95Ms,loginP95Ms," +
             "worldReadyP50Ms,worldReadyP95Ms,worldReadyP99Ms,bytesReceived,bytesSent," +
             "processCpuAvgPct,processCpuMaxPct,processWorkingSetMaxBytes,processPrivateMaxBytes,processCountMax");
         foreach (StageResult stage in _stageResults)
@@ -267,6 +310,7 @@ internal sealed class LoadRunner : IAsyncDisposable
                 .Append(stage.Attempted.ToString(CultureInfo.InvariantCulture)).Append(',')
                 .Append(stage.Connected.ToString(CultureInfo.InvariantCulture)).Append(',')
                 .Append(stage.Failed.ToString(CultureInfo.InvariantCulture)).Append(',')
+                .Append(stage.AuthTicketIssued.ToString(CultureInfo.InvariantCulture)).Append(',')
                 .Append(stage.LoginAccepted.ToString(CultureInfo.InvariantCulture)).Append(',')
                 .Append(stage.LoginRejectedOrTimedOut.ToString(CultureInfo.InvariantCulture)).Append(',')
                 .Append(stage.WorldEntryAccepted.ToString(CultureInfo.InvariantCulture)).Append(',')
@@ -276,6 +320,7 @@ internal sealed class LoadRunner : IAsyncDisposable
                 .Append(stage.ConnectP50Milliseconds.ToString("F3", CultureInfo.InvariantCulture)).Append(',')
                 .Append(stage.ConnectP95Milliseconds.ToString("F3", CultureInfo.InvariantCulture)).Append(',')
                 .Append(stage.ConnectP99Milliseconds.ToString("F3", CultureInfo.InvariantCulture)).Append(',')
+                .Append(stage.AuthBridgeP95Milliseconds.ToString("F3", CultureInfo.InvariantCulture)).Append(',')
                 .Append(stage.LoginP95Milliseconds.ToString("F3", CultureInfo.InvariantCulture)).Append(',')
                 .Append(stage.WorldReadyP50Milliseconds.ToString("F3", CultureInfo.InvariantCulture)).Append(',')
                 .Append(stage.WorldReadyP95Milliseconds.ToString("F3", CultureInfo.InvariantCulture)).Append(',')
@@ -333,6 +378,7 @@ internal sealed class StageResult
     public int Attempted { get; init; }
     public int Connected { get; init; }
     public int Failed { get; init; }
+    public int AuthTicketIssued { get; init; }
     public int LoginAccepted { get; init; }
     public int LoginRejectedOrTimedOut { get; init; }
     public int WorldEntryAccepted { get; init; }
@@ -342,6 +388,7 @@ internal sealed class StageResult
     public double ConnectP50Milliseconds { get; init; }
     public double ConnectP95Milliseconds { get; init; }
     public double ConnectP99Milliseconds { get; init; }
+    public double AuthBridgeP95Milliseconds { get; init; }
     public double LoginP95Milliseconds { get; init; }
     public double WorldReadyP50Milliseconds { get; init; }
     public double WorldReadyP95Milliseconds { get; init; }
@@ -353,6 +400,7 @@ internal sealed class StageResult
     public long ProcessWorkingSetMaximumBytes { get; init; }
     public long ProcessPrivateBytesMaximum { get; init; }
     public int ObservedProcessCountMaximum { get; init; }
+    public string[] FailureSamples { get; init; } = [];
 }
 
 internal sealed class LoadTestReport
@@ -363,6 +411,8 @@ internal sealed class LoadTestReport
     public string? LoginHost { get; init; }
     public int? LoginPort { get; init; }
     public string Scenario { get; init; } = string.Empty;
+    public string? LoginMode { get; init; }
+    public string? ModernLoginHeader { get; init; }
     public string? WorldReadyPacket { get; init; }
     public int RampPerSecond { get; init; }
     public int HoldSeconds { get; init; }
