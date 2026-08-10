@@ -3,11 +3,17 @@ param(
     [ValidateSet("tcp", "login", "world")]
     [string]$Scenario = "tcp",
     [string]$HostName = "127.0.0.1",
-    [ValidateRange(1, 65535)]
+    [ValidateRange(0, 65535)]
     [int]$Port = 0,
     [string]$LoginHostName,
-    [ValidateRange(1, 65535)]
-    [int]$LoginPort = 4000,
+    [ValidateRange(0, 65535)]
+    [int]$LoginPort = 0,
+    [ValidateSet("Modern", "Legacy")]
+    [string]$LoginMode = "Modern",
+    [string]$AuthBridgeUrl = "http://127.0.0.1:8081/api/v1/launcher/ticket",
+    [ValidateSet("NoS0576", "NoS0577")]
+    [string]$ModernHeader = "NoS0577",
+    [string]$ClientMd5 = "00000000000000000000000000000000",
     [string]$WorldReadyPacket = "finit",
     [string]$Stages = "100,250,500,750,1000,1250,1500",
     [ValidateRange(1, 5000)]
@@ -15,7 +21,7 @@ param(
     [ValidateRange(0, 3600)]
     [int]$HoldSeconds = 30,
     [string]$AccountsPath,
-    [ValidateRange(0, 255)]
+    [ValidateRange(0, 9)]
     [int]$Region = 5,
     [string]$ClientVersion = "0.9.3.3254",
     [string]$OutputDirectory,
@@ -40,8 +46,12 @@ if ($SelfTest) {
     exit 0
 }
 
+$regionalLoginPort = 4000 + $Region
 if ($Port -eq 0) {
-    $Port = if ($Scenario -eq "login") { 4000 } else { 1337 }
+    $Port = if ($Scenario -eq "login") { $regionalLoginPort } else { 1337 }
+}
+if ($LoginPort -eq 0) {
+    $LoginPort = $regionalLoginPort
 }
 
 if ([string]::IsNullOrWhiteSpace($LoginHostName)) {
@@ -60,8 +70,19 @@ $arguments = @(
     "--ramp-per-second", $RampPerSecond.ToString([Globalization.CultureInfo]::InvariantCulture),
     "--hold-seconds", $HoldSeconds.ToString([Globalization.CultureInfo]::InvariantCulture),
     "--region", $Region.ToString([Globalization.CultureInfo]::InvariantCulture),
-    "--client-version", $ClientVersion
+    "--client-version", $ClientVersion,
+    "--login-mode", $LoginMode.ToLowerInvariant()
 )
+
+if ($Scenario -eq "login" -or $Scenario -eq "world") {
+    if ($LoginMode -eq "Modern") {
+        $arguments += @(
+            "--auth-bridge-url", $AuthBridgeUrl,
+            "--modern-header", $ModernHeader,
+            "--client-md5", $ClientMd5
+        )
+    }
+}
 
 if ($Scenario -eq "world") {
     $arguments += @(
@@ -84,6 +105,12 @@ if ($AllowPublicTarget) {
 }
 
 Write-Host "[LOAD] NosGM $Scenario load test -> ${HostName}:$Port" -ForegroundColor Cyan
+if ($Scenario -eq "login" -or $Scenario -eq "world") {
+    Write-Host "[LOAD] Login mode=$LoginMode region=$Region" -ForegroundColor Cyan
+    if ($LoginMode -eq "Modern") {
+        Write-Host "[LOAD] Modern header=$ModernHeader AuthBridge=$AuthBridgeUrl" -ForegroundColor Cyan
+    }
+}
 if ($Scenario -eq "world") {
     Write-Host "[LOAD] Login -> ${LoginHostName}:$LoginPort | World ready packet=$WorldReadyPacket" -ForegroundColor Cyan
 }

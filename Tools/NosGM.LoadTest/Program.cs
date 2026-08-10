@@ -42,6 +42,17 @@ internal static class Program
                     .ConfigureAwait(false);
             }
 
+            if ((options.Scenario is LoadScenario.Login or LoadScenario.World) &&
+                options.LoginMode == LoginMode.Modern)
+            {
+                await TargetSafety
+                    .EnsureAllowedAsync(
+                        options.AuthBridgeUri.Host,
+                        options.AllowPublicTarget,
+                        shutdown.Token)
+                    .ConfigureAwait(false);
+            }
+
             IReadOnlyList<LoadAccount>? accounts =
                 options.Scenario is LoadScenario.Login or LoadScenario.World
                     ? LoadAccountReader.Read(options.AccountsPath!)

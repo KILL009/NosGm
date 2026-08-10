@@ -11,13 +11,20 @@ internal enum LoadScenario
     World
 }
 
+internal enum LoginMode
+{
+    Modern,
+    Legacy
+}
+
 internal sealed class LoadTestOptions
 {
     public string Host { get; init; } = "127.0.0.1";
     public int Port { get; init; } = 1337;
     public string LoginHost { get; init; } = "127.0.0.1";
-    public int LoginPort { get; init; } = 4000;
+    public int LoginPort { get; init; } = 4005;
     public LoadScenario Scenario { get; init; } = LoadScenario.Tcp;
+    public LoginMode LoginMode { get; init; } = LoginMode.Modern;
     public int[] Stages { get; init; } = [100, 250, 500, 750, 1000, 1250, 1500];
     public int RampPerSecond { get; init; } = 100;
     public int HoldSeconds { get; init; } = 30;
@@ -26,6 +33,10 @@ internal sealed class LoadTestOptions
     public string? AccountsPath { get; init; }
     public byte Region { get; init; } = 5;
     public string ClientVersion { get; init; } = "0.9.3.3254";
+    public string AuthBridgeUrl { get; init; } = "http://127.0.0.1:8081/api/v1/launcher/ticket";
+    public Uri AuthBridgeUri => new(AuthBridgeUrl, UriKind.Absolute);
+    public string ModernLoginHeader { get; init; } = "NoS0577";
+    public string GameforgeClientMd5 { get; init; } = "00000000000000000000000000000000";
     public string GameforgeId { get; init; } = "0";
     public string ClientDataOld { get; init; } = "0.9.3.3254";
     public string ClientData { get; init; } = "0.9.3.3254";
@@ -78,7 +89,10 @@ internal sealed class LoadTestOptions
         }
 
         LoadScenario scenario = ParseScenario(Get(values, "scenario", "tcp"));
+        LoginMode loginMode = ParseLoginMode(Get(values, "login-mode", "modern"));
         string host = Get(values, "host", "127.0.0.1");
+        byte region = checked((byte)ParseInt(values, "region", 5, 0, 9));
+        int regionalLoginPort = 4000 + region;
         int[] stages = ParseStages(Get(values, "stages", "100,250,500,750,1000,1250,1500"));
         string processNames = Get(
             values,
@@ -88,18 +102,33 @@ internal sealed class LoadTestOptions
         var options = new LoadTestOptions
         {
             Host = host,
-            Port = ParseInt(values, "port", scenario == LoadScenario.Login ? 4000 : 1337, 1, 65535),
+            Port = ParseInt(
+                values,
+                "port",
+                scenario == LoadScenario.Login ? regionalLoginPort : 1337,
+                1,
+                65535),
             LoginHost = Get(values, "login-host", host),
-            LoginPort = ParseInt(values, "login-port", 4000, 1, 65535),
+            LoginPort = ParseInt(values, "login-port", regionalLoginPort, 1, 65535),
             Scenario = scenario,
+            LoginMode = loginMode,
             Stages = stages,
             RampPerSecond = ParseInt(values, "ramp-per-second", 100, 1, 5000),
             HoldSeconds = ParseInt(values, "hold-seconds", 30, 0, 3600),
             ConnectTimeoutMilliseconds = ParseInt(values, "connect-timeout-ms", 5000, 100, 120000),
             ReadTimeoutMilliseconds = ParseInt(values, "read-timeout-ms", 5000, 100, 120000),
             AccountsPath = GetOptional(values, "accounts"),
-            Region = checked((byte)ParseInt(values, "region", 5, 0, 255)),
+            Region = region,
             ClientVersion = Get(values, "client-version", "0.9.3.3254"),
+            AuthBridgeUrl = Get(
+                values,
+                "auth-bridge-url",
+                "http://127.0.0.1:8081/api/v1/launcher/ticket"),
+            ModernLoginHeader = Get(values, "modern-header", "NoS0577"),
+            GameforgeClientMd5 = Get(
+                values,
+                "client-md5",
+                "00000000000000000000000000000000"),
             GameforgeId = Get(values, "gameforge-id", "0"),
             ClientDataOld = Get(values, "client-data-old", "0.9.3.3254"),
             ClientData = Get(values, "client-data", "0.9.3.3254"),
@@ -148,6 +177,14 @@ internal sealed class LoadTestOptions
           --accounts path/to/accounts.csv
           --region 5
           --client-version 0.9.3.3254
+          --login-mode modern|legacy       modern is the default
+
+        Modern NoS0576 / NoS0577:
+          --auth-bridge-url http://127.0.0.1:8081/api/v1/launcher/ticket
+          --modern-header NoS0577          NoS0576 is also supported
+          --client-md5 00000000000000000000000000000000
+
+        Legacy NoS0575 only:
           --gameforge-id 0
           --client-data-old 0.9.3.3254
           --client-data 0.9.3.3254
@@ -157,7 +194,7 @@ internal sealed class LoadTestOptions
           --host 127.0.0.1              World host
           --port 1337                   World port
           --login-host 127.0.0.1        Login host (defaults to --host)
-          --login-port 4000             Login port used to obtain SessionId
+          --login-port 4005             Defaults to 4000 + region
           --world-ready-packet finit    Late GameStart packet used as ready proof
           accounts.csv may use username,password,slot; slot defaults to 0.
 
@@ -203,11 +240,57 @@ internal sealed class LoadTestOptions
             }
         }
 
+        if (!Version.TryParse(ClientVersion, out Version? parsedVersion) ||
+            parsedVersion.Build < 0 || parsedVersion.Revision < 0)
+        {
+            throw new ArgumentException("--client-version must be a four-part version such as 0.9.3.3254.");
+        }
+
+        if (LoginMode == LoginMode.Modern)
+        {
+            if (ModernLoginHeader is not "NoS0576" and not "NoS0577")
+            {
+                throw new ArgumentException("--modern-header must be NoS0576 or NoS0577.");
+            }
+
+            if (!IsHex(GameforgeClientMd5, 32))
+            {
+                throw new ArgumentException("--client-md5 must contain exactly 32 hexadecimal characters.");
+            }
+
+            if (!Uri.TryCreate(AuthBridgeUrl, UriKind.Absolute, out Uri? authBridgeUri) ||
+                authBridgeUri.Scheme is not "http" and not "https" ||
+                !string.IsNullOrEmpty(authBridgeUri.UserInfo) ||
+                !string.IsNullOrEmpty(authBridgeUri.Fragment))
+            {
+                throw new ArgumentException("--auth-bridge-url must be an absolute HTTP(S) URL without userinfo or a fragment.");
+            }
+        }
+
         if (Scenario == LoadScenario.World &&
             (WorldReadyPacket.Any(char.IsWhiteSpace) || string.IsNullOrWhiteSpace(WorldReadyPacket)))
         {
             throw new ArgumentException("--world-ready-packet must be a single packet header.");
         }
+    }
+
+    private static bool IsHex(string value, int expectedLength)
+    {
+        if (value.Length != expectedLength)
+        {
+            return false;
+        }
+
+        foreach (char character in value)
+        {
+            bool isHex = character is >= '0' and <= '9' or >= 'a' and <= 'f' or >= 'A' and <= 'F';
+            if (!isHex)
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     private static string Get(
@@ -246,6 +329,13 @@ internal sealed class LoadTestOptions
         "login" => LoadScenario.Login,
         "world" => LoadScenario.World,
         _ => throw new ArgumentException("--scenario must be tcp, login or world.")
+    };
+
+    private static LoginMode ParseLoginMode(string raw) => raw.ToLowerInvariant() switch
+    {
+        "modern" => LoginMode.Modern,
+        "legacy" => LoginMode.Legacy,
+        _ => throw new ArgumentException("--login-mode must be modern or legacy.")
     };
 
     private static int[] ParseStages(string raw)
