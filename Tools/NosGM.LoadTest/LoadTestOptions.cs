@@ -7,13 +7,16 @@ namespace NosGM.LoadTest;
 internal enum LoadScenario
 {
     Tcp,
-    Login
+    Login,
+    World
 }
 
 internal sealed class LoadTestOptions
 {
     public string Host { get; init; } = "127.0.0.1";
     public int Port { get; init; } = 1337;
+    public string LoginHost { get; init; } = "127.0.0.1";
+    public int LoginPort { get; init; } = 4000;
     public LoadScenario Scenario { get; init; } = LoadScenario.Tcp;
     public int[] Stages { get; init; } = [100, 250, 500, 750, 1000, 1250, 1500];
     public int RampPerSecond { get; init; } = 100;
@@ -28,6 +31,7 @@ internal sealed class LoadTestOptions
     public string ClientData { get; init; } = "0.9.3.3254";
     public string LoginPacketTemplate { get; init; } =
         "NoS0575 0 {username} {password} {gameforgeId} {clientDataOld} {region} {clientData}";
+    public string WorldReadyPacket { get; init; } = "finit";
     public string OutputDirectory { get; init; } = Path.Combine(
         "artifacts",
         "load-test",
@@ -74,6 +78,7 @@ internal sealed class LoadTestOptions
         }
 
         LoadScenario scenario = ParseScenario(Get(values, "scenario", "tcp"));
+        string host = Get(values, "host", "127.0.0.1");
         int[] stages = ParseStages(Get(values, "stages", "100,250,500,750,1000,1250,1500"));
         string processNames = Get(
             values,
@@ -82,8 +87,10 @@ internal sealed class LoadTestOptions
 
         var options = new LoadTestOptions
         {
-            Host = Get(values, "host", "127.0.0.1"),
+            Host = host,
             Port = ParseInt(values, "port", scenario == LoadScenario.Login ? 4000 : 1337, 1, 65535),
+            LoginHost = Get(values, "login-host", host),
+            LoginPort = ParseInt(values, "login-port", 4000, 1, 65535),
             Scenario = scenario,
             Stages = stages,
             RampPerSecond = ParseInt(values, "ramp-per-second", 100, 1, 5000),
@@ -100,6 +107,7 @@ internal sealed class LoadTestOptions
                 values,
                 "login-template",
                 "NoS0575 0 {username} {password} {gameforgeId} {clientDataOld} {region} {clientData}"),
+            WorldReadyPacket = Get(values, "world-ready-packet", "finit"),
             OutputDirectory = Get(
                 values,
                 "output",
@@ -125,7 +133,7 @@ internal sealed class LoadTestOptions
         NosGM Load Test
 
         Core options:
-          --scenario tcp|login
+          --scenario tcp|login|world
           --host 127.0.0.1
           --port 1337
           --stages 100,250,500,750,1000,1250,1500
@@ -136,7 +144,7 @@ internal sealed class LoadTestOptions
           --output artifacts/load-test/run-name
           --process-names NosGm.World,NosGm.Login,NosGm.Master.Server
 
-        Login scenario:
+        Login / World authentication:
           --accounts path/to/accounts.csv
           --region 5
           --client-version 0.9.3.3254
@@ -145,9 +153,17 @@ internal sealed class LoadTestOptions
           --client-data 0.9.3.3254
           --login-template "NoS0575 0 {username} {password} {gameforgeId} {clientDataOld} {region} {clientData}"
 
+        World scenario:
+          --host 127.0.0.1              World host
+          --port 1337                   World port
+          --login-host 127.0.0.1        Login host (defaults to --host)
+          --login-port 4000             Login port used to obtain SessionId
+          --world-ready-packet finit    Late GameStart packet used as ready proof
+          accounts.csv may use username,password,slot; slot defaults to 0.
+
         Safety / validation:
           --allow-public-target   Required for public Internet addresses.
-          --self-test             Runs a local loopback acceptance test.
+          --self-test             Runs codec checks plus a 250-client loopback test.
           --help                  Shows this text.
         """;
 
@@ -174,17 +190,23 @@ internal sealed class LoadTestOptions
             previous = stage;
         }
 
-        if (Scenario == LoadScenario.Login && !SelfTest)
+        if ((Scenario == LoadScenario.Login || Scenario == LoadScenario.World) && !SelfTest)
         {
             if (string.IsNullOrWhiteSpace(AccountsPath))
             {
-                throw new ArgumentException("The login scenario requires --accounts <csv>.");
+                throw new ArgumentException("The login/world scenarios require --accounts <csv>.");
             }
 
             if (!File.Exists(AccountsPath))
             {
                 throw new FileNotFoundException("The login accounts CSV was not found.", AccountsPath);
             }
+        }
+
+        if (Scenario == LoadScenario.World &&
+            (WorldReadyPacket.Any(char.IsWhiteSpace) || string.IsNullOrWhiteSpace(WorldReadyPacket)))
+        {
+            throw new ArgumentException("--world-ready-packet must be a single packet header.");
         }
     }
 
@@ -222,7 +244,8 @@ internal sealed class LoadTestOptions
     {
         "tcp" => LoadScenario.Tcp,
         "login" => LoadScenario.Login,
-        _ => throw new ArgumentException("--scenario must be tcp or login.")
+        "world" => LoadScenario.World,
+        _ => throw new ArgumentException("--scenario must be tcp, login or world.")
     };
 
     private static int[] ParseStages(string raw)
