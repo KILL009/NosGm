@@ -83,22 +83,32 @@ internal static class NosTaleWorldCodec
 
     public static void RunSelfTest()
     {
-        const int sessionId = 123456789;
-        byte[] initial = EncodeInitialHandshake(sessionId);
+        const int initialSessionId = 123456789;
+        byte[] initial = EncodeInitialHandshake(initialSessionId);
         string decodedInitial = DecodeInitialForSelfTest(initial);
-        if (!string.Equals(decodedInitial, $"0 {sessionId}", StringComparison.Ordinal))
+        if (!string.Equals(decodedInitial, $"0 {initialSessionId}", StringComparison.Ordinal))
         {
             throw new InvalidOperationException(
                 $"World initial-handshake codec self-test failed: '{decodedInitial}'.");
         }
 
         const string packet = "3 select 0";
-        byte[] encrypted = EncodeClientPacket(sessionId, packet);
-        string decodedPacket = DecodeClientForSelfTest(sessionId, encrypted);
-        if (!string.Equals(decodedPacket, packet, StringComparison.Ordinal))
+        int[] sessionIdsByMode = [1, 64, 128, 192];
+        for (int mode = 0; mode < sessionIdsByMode.Length; mode++)
         {
-            throw new InvalidOperationException(
-                $"World client-packet codec self-test failed: '{decodedPacket}'.");
+            int sessionId = sessionIdsByMode[mode];
+            if (((sessionId >> 6) & 0x03) != mode)
+            {
+                throw new InvalidOperationException("World codec self-test session fixture has the wrong mode.");
+            }
+
+            byte[] encrypted = EncodeClientPacket(sessionId, packet);
+            string decodedPacket = DecodeClientForSelfTest(sessionId, encrypted);
+            if (!string.Equals(decodedPacket, packet, StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException(
+                    $"World client-packet codec mode {mode} self-test failed: '{decodedPacket}'.");
+            }
         }
 
         var reader = new NosTaleWorldPacketReader();
