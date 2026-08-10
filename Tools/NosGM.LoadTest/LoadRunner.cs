@@ -18,11 +18,11 @@ internal sealed class LoadRunner : IAsyncDisposable
         _accounts = accounts ?? Array.Empty<LoadAccount>();
         _processSampler = new ProcessSampler(options.ProcessNames);
 
-        if (_options.Scenario == LoadScenario.Login &&
+        if ((_options.Scenario == LoadScenario.Login || _options.Scenario == LoadScenario.World) &&
             _accounts.Count < _options.Stages.Max())
         {
             throw new InvalidOperationException(
-                $"Login scenario needs at least {_options.Stages.Max():N0} unique accounts, " +
+                $"{_options.Scenario} scenario needs at least {_options.Stages.Max():N0} unique accounts, " +
                 $"but the CSV contains only {_accounts.Count:N0}.");
         }
     }
@@ -36,6 +36,11 @@ internal sealed class LoadRunner : IAsyncDisposable
 
         Console.WriteLine("NosGM staged load test");
         Console.WriteLine($"Target   : {_options.Host}:{_options.Port}");
+        if (_options.Scenario == LoadScenario.World)
+        {
+            Console.WriteLine($"Login    : {_options.LoginHost}:{_options.LoginPort}");
+            Console.WriteLine($"Ready    : {_options.WorldReadyPacket}");
+        }
         Console.WriteLine($"Scenario : {_options.Scenario}");
         Console.WriteLine($"Stages   : {string.Join(" -> ", _options.Stages)}");
         Console.WriteLine($"Ramp     : {_options.RampPerSecond:N0} clients/s");
@@ -56,10 +61,21 @@ internal sealed class LoadRunner : IAsyncDisposable
             _stageResults.Add(result);
             await WriteReportsAsync(cancellationToken).ConfigureAwait(false);
 
-            Console.WriteLine(
+            Console.Write(
                 $"Stage {target:N0}: connected={result.Connected:N0}/{result.Attempted:N0} " +
-                $"failed={result.Failed:N0} login-ok={result.LoginAccepted:N0} " +
-                $"connect p95={result.ConnectP95Milliseconds:N1}ms CPU max={result.ProcessCpuMaximumPercent:N1}% " +
+                $"failed={result.Failed:N0}");
+            if (_options.Scenario is LoadScenario.Login or LoadScenario.World)
+            {
+                Console.Write($" login-ok={result.LoginAccepted:N0}");
+            }
+            if (_options.Scenario == LoadScenario.World)
+            {
+                Console.Write(
+                    $" entry={result.WorldEntryAccepted:N0} selected={result.CharacterSelected:N0} " +
+                    $"world-ready={result.WorldReady:N0} ready-p95={result.WorldReadyP95Milliseconds:N1}ms");
+            }
+            Console.WriteLine(
+                $" connect-p95={result.ConnectP95Milliseconds:N1}ms CPU max={result.ProcessCpuMaximumPercent:N1}% " +
                 $"WS max={ToMegabytes(result.ProcessWorkingSetMaximumBytes):N1}MB");
             Console.WriteLine();
         }
@@ -92,7 +108,7 @@ internal sealed class LoadRunner : IAsyncDisposable
         {
             cancellationToken.ThrowIfCancellationRequested();
             int clientIndex = firstIndex + offset;
-            LoadAccount? account = _options.Scenario == LoadScenario.Login
+            LoadAccount? account = _options.Scenario is LoadScenario.Login or LoadScenario.World
                 ? _accounts[clientIndex - 1]
                 : null;
 
@@ -132,12 +148,13 @@ internal sealed class LoadRunner : IAsyncDisposable
 
             int connected = _clients.Count(client => client.IsConnected);
             int loginAccepted = _clients.Count(client => client.LoginAccepted);
+            int worldReady = _clients.Count(client => client.WorldReady);
             long received = _clients.Sum(client => client.BytesReceived);
             long sent = _clients.Sum(client => client.BytesSent);
 
             Console.Write(
                 $"\rhold {Math.Min(second + 1, _options.HoldSeconds),3}/{_options.HoldSeconds,3}s " +
-                $"connected={connected,5} login-ok={loginAccepted,5} " +
+                $"connected={connected,5} login-ok={loginAccepted,5} world-ready={worldReady,5} " +
                 $"rx={FormatBytes(received),10} tx={FormatBytes(sent),10} " +
                 $"CPU={process.CpuPercent,6:N1}% WS={ToMegabytes(process.WorkingSetBytes),8:N1}MB");
 
@@ -154,13 +171,29 @@ internal sealed class LoadRunner : IAsyncDisposable
             .Select(client => client.ConnectMilliseconds)
             .OrderBy(value => value)
             .ToArray();
+        double[] loginTimes = _clients
+            .Where(client => client.LoginAccepted && client.LoginMilliseconds > 0)
+            .Select(client => client.LoginMilliseconds)
+            .OrderBy(value => value)
+            .ToArray();
+        double[] worldReadyTimes = _clients
+            .Where(client => client.WorldReady && client.WorldReadyMilliseconds > 0)
+            .Select(client => client.WorldReadyMilliseconds)
+            .OrderBy(value => value)
+            .ToArray();
 
         int attempted = _clients.Count;
         int connectedNow = _clients.Count(client => client.IsConnected);
         int failed = _clients.Count(client => client.Failure != null);
         int loginOk = _clients.Count(client => client.LoginAccepted);
-        int loginRejected = _options.Scenario == LoadScenario.Login
-            ? _clients.Count(client => client.Failure == null && !client.LoginAccepted)
+        int loginRejected = _options.Scenario is LoadScenario.Login or LoadScenario.World
+            ? _clients.Count(client => !client.LoginAccepted)
+            : 0;
+        int worldEntry = _clients.Count(client => client.WorldEntryAccepted);
+        int characterSelected = _clients.Count(client => client.CharacterSelected);
+        int worldReady = _clients.Count(client => client.WorldReady);
+        int worldRejected = _options.Scenario == LoadScenario.World
+            ? attempted - worldReady
             : 0;
 
         return new StageResult
@@ -173,9 +206,17 @@ internal sealed class LoadRunner : IAsyncDisposable
             Failed = failed,
             LoginAccepted = loginOk,
             LoginRejectedOrTimedOut = loginRejected,
+            WorldEntryAccepted = worldEntry,
+            CharacterSelected = characterSelected,
+            WorldReady = worldReady,
+            WorldRejectedOrTimedOut = worldRejected,
             ConnectP50Milliseconds = Percentile(connectTimes, 0.50),
             ConnectP95Milliseconds = Percentile(connectTimes, 0.95),
             ConnectP99Milliseconds = Percentile(connectTimes, 0.99),
+            LoginP95Milliseconds = Percentile(loginTimes, 0.95),
+            WorldReadyP50Milliseconds = Percentile(worldReadyTimes, 0.50),
+            WorldReadyP95Milliseconds = Percentile(worldReadyTimes, 0.95),
+            WorldReadyP99Milliseconds = Percentile(worldReadyTimes, 0.99),
             BytesReceived = _clients.Sum(client => client.BytesReceived),
             BytesSent = _clients.Sum(client => client.BytesSent),
             ProcessCpuAveragePercent = processSamples.Average(sample => sample.CpuPercent),
@@ -193,7 +234,10 @@ internal sealed class LoadRunner : IAsyncDisposable
             GeneratedAtUtc = DateTime.UtcNow,
             TargetHost = _options.Host,
             TargetPort = _options.Port,
+            LoginHost = _options.Scenario == LoadScenario.World ? _options.LoginHost : null,
+            LoginPort = _options.Scenario == LoadScenario.World ? _options.LoginPort : null,
             Scenario = _options.Scenario.ToString(),
+            WorldReadyPacket = _options.Scenario == LoadScenario.World ? _options.WorldReadyPacket : null,
             RampPerSecond = _options.RampPerSecond,
             HoldSeconds = _options.HoldSeconds,
             Stages = _stageResults.ToArray()
@@ -213,7 +257,9 @@ internal sealed class LoadRunner : IAsyncDisposable
         var csv = new StringBuilder();
         csv.AppendLine(
             "target,attempted,connected,failed,loginAccepted,loginRejectedOrTimedOut," +
-            "connectP50Ms,connectP95Ms,connectP99Ms,bytesReceived,bytesSent," +
+            "worldEntryAccepted,characterSelected,worldReady,worldRejectedOrTimedOut," +
+            "connectP50Ms,connectP95Ms,connectP99Ms,loginP95Ms," +
+            "worldReadyP50Ms,worldReadyP95Ms,worldReadyP99Ms,bytesReceived,bytesSent," +
             "processCpuAvgPct,processCpuMaxPct,processWorkingSetMaxBytes,processPrivateMaxBytes,processCountMax");
         foreach (StageResult stage in _stageResults)
         {
@@ -223,9 +269,17 @@ internal sealed class LoadRunner : IAsyncDisposable
                 .Append(stage.Failed.ToString(CultureInfo.InvariantCulture)).Append(',')
                 .Append(stage.LoginAccepted.ToString(CultureInfo.InvariantCulture)).Append(',')
                 .Append(stage.LoginRejectedOrTimedOut.ToString(CultureInfo.InvariantCulture)).Append(',')
+                .Append(stage.WorldEntryAccepted.ToString(CultureInfo.InvariantCulture)).Append(',')
+                .Append(stage.CharacterSelected.ToString(CultureInfo.InvariantCulture)).Append(',')
+                .Append(stage.WorldReady.ToString(CultureInfo.InvariantCulture)).Append(',')
+                .Append(stage.WorldRejectedOrTimedOut.ToString(CultureInfo.InvariantCulture)).Append(',')
                 .Append(stage.ConnectP50Milliseconds.ToString("F3", CultureInfo.InvariantCulture)).Append(',')
                 .Append(stage.ConnectP95Milliseconds.ToString("F3", CultureInfo.InvariantCulture)).Append(',')
                 .Append(stage.ConnectP99Milliseconds.ToString("F3", CultureInfo.InvariantCulture)).Append(',')
+                .Append(stage.LoginP95Milliseconds.ToString("F3", CultureInfo.InvariantCulture)).Append(',')
+                .Append(stage.WorldReadyP50Milliseconds.ToString("F3", CultureInfo.InvariantCulture)).Append(',')
+                .Append(stage.WorldReadyP95Milliseconds.ToString("F3", CultureInfo.InvariantCulture)).Append(',')
+                .Append(stage.WorldReadyP99Milliseconds.ToString("F3", CultureInfo.InvariantCulture)).Append(',')
                 .Append(stage.BytesReceived.ToString(CultureInfo.InvariantCulture)).Append(',')
                 .Append(stage.BytesSent.ToString(CultureInfo.InvariantCulture)).Append(',')
                 .Append(stage.ProcessCpuAveragePercent.ToString("F3", CultureInfo.InvariantCulture)).Append(',')
@@ -281,9 +335,17 @@ internal sealed class StageResult
     public int Failed { get; init; }
     public int LoginAccepted { get; init; }
     public int LoginRejectedOrTimedOut { get; init; }
+    public int WorldEntryAccepted { get; init; }
+    public int CharacterSelected { get; init; }
+    public int WorldReady { get; init; }
+    public int WorldRejectedOrTimedOut { get; init; }
     public double ConnectP50Milliseconds { get; init; }
     public double ConnectP95Milliseconds { get; init; }
     public double ConnectP99Milliseconds { get; init; }
+    public double LoginP95Milliseconds { get; init; }
+    public double WorldReadyP50Milliseconds { get; init; }
+    public double WorldReadyP95Milliseconds { get; init; }
+    public double WorldReadyP99Milliseconds { get; init; }
     public long BytesReceived { get; init; }
     public long BytesSent { get; init; }
     public double ProcessCpuAveragePercent { get; init; }
@@ -298,7 +360,10 @@ internal sealed class LoadTestReport
     public DateTime GeneratedAtUtc { get; init; }
     public string TargetHost { get; init; } = string.Empty;
     public int TargetPort { get; init; }
+    public string? LoginHost { get; init; }
+    public int? LoginPort { get; init; }
     public string Scenario { get; init; } = string.Empty;
+    public string? WorldReadyPacket { get; init; }
     public int RampPerSecond { get; init; }
     public int HoldSeconds { get; init; }
     public StageResult[] Stages { get; init; } = [];
