@@ -20,6 +20,10 @@ param(
     [int]$RampPerSecond = 100,
     [ValidateRange(0, 3600)]
     [int]$HoldSeconds = 30,
+    [ValidateRange(100, 120000)]
+    [int]$ConnectTimeoutMilliseconds = 5000,
+    [ValidateRange(100, 120000)]
+    [int]$ReadTimeoutMilliseconds = 5000,
     [string]$AccountsPath,
     [ValidateRange(0, 9)]
     [int]$Region = 5,
@@ -69,6 +73,8 @@ $arguments = @(
     "--stages", $Stages,
     "--ramp-per-second", $RampPerSecond.ToString([Globalization.CultureInfo]::InvariantCulture),
     "--hold-seconds", $HoldSeconds.ToString([Globalization.CultureInfo]::InvariantCulture),
+    "--connect-timeout-ms", $ConnectTimeoutMilliseconds.ToString([Globalization.CultureInfo]::InvariantCulture),
+    "--read-timeout-ms", $ReadTimeoutMilliseconds.ToString([Globalization.CultureInfo]::InvariantCulture),
     "--region", $Region.ToString([Globalization.CultureInfo]::InvariantCulture),
     "--client-version", $ClientVersion,
     "--login-mode", $LoginMode.ToLowerInvariant()
@@ -114,7 +120,7 @@ if ($Scenario -eq "login" -or $Scenario -eq "world") {
 if ($Scenario -eq "world") {
     Write-Host "[LOAD] Login -> ${LoginHostName}:$LoginPort | World ready packet=$WorldReadyPacket" -ForegroundColor Cyan
 }
-Write-Host "[LOAD] stages=$Stages ramp=$RampPerSecond/s hold=${HoldSeconds}s" -ForegroundColor Cyan
+Write-Host "[LOAD] stages=$Stages ramp=$RampPerSecond/s hold=${HoldSeconds}s connectTimeout=${ConnectTimeoutMilliseconds}ms readTimeout=${ReadTimeoutMilliseconds}ms" -ForegroundColor Cyan
 
 & dotnet @arguments
 if ($LASTEXITCODE -ne 0) {
