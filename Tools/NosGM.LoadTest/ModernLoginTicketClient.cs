@@ -85,7 +85,7 @@ internal static class ModernLoginTicketClient
         };
     }
 
-    private sealed class TicketRequest
+    public sealed class TicketRequest
     {
         [JsonPropertyName("accountName")]
         public string AccountName { get; init; } = string.Empty;
@@ -100,7 +100,7 @@ internal static class ModernLoginTicketClient
         public byte CountryId { get; init; }
     }
 
-    private sealed class TicketResponse
+    public sealed class TicketResponse
     {
         [JsonPropertyName("authorizationCode")]
         public string AuthorizationCode { get; init; } = string.Empty;
