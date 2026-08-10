@@ -27,6 +27,7 @@ namespace NosGm.Configuration
         public static string ServerName = "Sumeria";
         public static string ServerGroup = "Sumeria";
         public static byte SessionLimit = 100;
+        public static int MaxAccountsPerIp = 3;
 
         public static string MasterAuthKey = "NosGmServerMain2032NosGm";
         public static string AuthServiceKey = "AuthServiceKey";
@@ -103,6 +104,11 @@ namespace NosGm.Configuration
                 LauncherAuthBridgeMaxAttemptsPerWindow,
                 1,
                 100);
+            MaxAccountsPerIp = ReadInteger(
+                "NOSGM_MAX_ACCOUNTS_PER_IP",
+                MaxAccountsPerIp,
+                1,
+                10000);
 
             ValidateModernLoginConfiguration();
         }
