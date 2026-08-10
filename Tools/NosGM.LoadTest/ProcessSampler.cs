@@ -103,5 +103,5 @@ internal sealed class ProcessSampler
             : trimmed;
     }
 
-    private sealed record PreviousProcessSample(long Timestamp, long TotalProcessorTicks);
+    private readonly record struct PreviousProcessSample(long Timestamp, long TotalProcessorTicks);
 }
