@@ -41,7 +41,7 @@ function Get-InterfaceMethodNames {
         [Text.RegularExpressions.RegexOptions]::Singleline)
     $interfaceMatch = [regex]::Match(
         $withoutComments,
-        ('public\s+interface\s+' + [regex]::Escape($InterfaceName) + '\b[^{]*\{(?<body>.*?)\n\}'),
+        ('public\s+interface\s+' + [regex]::Escape($InterfaceName) + '\b[^{]*\{(?<body>.*?)\r?\n\s*\}'),
         [Text.RegularExpressions.RegexOptions]::Singleline)
     if (-not $interfaceMatch.Success) {
         throw "Unable to locate interface '$InterfaceName'."
@@ -86,7 +86,11 @@ foreach ($service in $manifest.services) {
     }
     $manifestMethodCount += $expectedMethods.Count
 }
-Assert-True ($manifestMethodCount -eq 95) "All 95 remaining non-Configuration SCS methods are accounted for"
+Assert-True ($manifestMethodCount -eq 94) "All 94 remaining non-Configuration SCS methods are accounted for"
+
+$communicationClientSource = Read-RequiredFile (Join-Path $repositoryRoot "Data\NosGm.Master.Library\Interface\ICommunicationClient.cs")
+$communicationClientMethods = @(Get-InterfaceMethodNames -Source $communicationClientSource -InterfaceName "ICommunicationClient")
+Assert-True ($communicationClientMethods -notcontains "UpdatePenaltyLog") "PenaltyRefresh is absent from the SCS callback interface"
 
 foreach ($retiredPath in @(
     "Data\NosGm.Master.Library\Interface\IConfigurationService.cs",
@@ -129,4 +133,4 @@ foreach ($schema in @(
 }
 Assert-True ($contractProject.Contains('GrpcServices="Both"')) "Typed client and server stubs are generated"
 
-Write-Host "Remaining SCS transport inventory verified. Configuration is no longer part of that surface." -ForegroundColor Green
+Write-Host "Remaining SCS transport inventory verified. Configuration and PenaltyRefresh are no longer part of that callback surface." -ForegroundColor Green

@@ -10,24 +10,25 @@ $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
 
 if ($env:OS -ne "Windows_NT") {
-    throw "Communication callback shadow acceptance requires Windows."
+    throw "PenaltyRefresh gRPC authority acceptance requires Windows."
 }
 
 $root = Split-Path -Parent $PSScriptRoot
 $statePath = Join-Path $root "artifacts\modern-login-local\processes.json"
 if (-not (Test-Path -LiteralPath $statePath -PathType Leaf)) {
-    throw "No running local stack state was found. Start it with scripts/start-communication-callback-shadow-local.ps1 first."
+    throw "No running local stack state was found. Start it with scripts/start-penaltyrefresh-grpc-authority-local.ps1 first."
 }
 
 $state = Get-Content -LiteralPath $statePath -Raw | ConvertFrom-Json
 if ($state.SchemaVersion -ne 2 -or
-    [string]$state.CommunicationCallbackMode -ne "Shadow" -or
-    [string]$state.CommunicationCallbackEffectAuthority -ne "SCS" -or
-    [string]$state.CommunicationCallbackPublication -ne "gRPC mirror") {
-    throw "The running stack is not the explicit communication callback shadow stack."
+    [string]$state.CommunicationCallbackMode -ne "PenaltyRefreshAuthority" -or
+    [string]$state.PenaltyRefreshCallbackAuthority -ne "gRPC" -or
+    $null -ne $state.PenaltyRefreshCallbackFallback -or
+    [string]$state.RemainingCommunicationCallbackAuthority -ne "SCS") {
+    throw "The running stack is not the final PenaltyRefresh gRPC authority stack."
 }
 if ([string]$state.AuthenticationTransport -ne "GRPC") {
-    throw "Callback shadow acceptance requires the role-separated GRPC authentication identities."
+    throw "PenaltyRefresh authority acceptance requires the role-separated GRPC authentication identities."
 }
 if ([string]$state.AuthenticationGrpcWireMode -notin @("HTTP2", "GRPCWEB")) {
     throw "The running stack has no supported gRPC wire mode."
@@ -258,12 +259,12 @@ try {
         "false",
         [EnvironmentVariableTarget]::Process)
 
-    Write-Host "[CALLBACK-SHADOW] Publishing observation-only PenaltyRefresh through Master mTLS..." -ForegroundColor Cyan
+    Write-Host "[PENALTY-GRPC] Publishing safe PenaltyRefresh through Master mTLS..." -ForegroundColor Cyan
     $probeOutput = @(& $dotnet $selfTestAssembly --live-penalty-refresh-probe 2>&1)
     $probeExitCode = $LASTEXITCODE
     $probeOutput | ForEach-Object { Write-Host $_ }
     if ($probeExitCode -ne 0) {
-        throw "The typed PenaltyRefresh publication probe failed with exit code $probeExitCode."
+        throw "The typed PenaltyRefresh authority probe failed with exit code $probeExitCode."
     }
 
     $probeText = $probeOutput -join "`n"
@@ -276,7 +277,7 @@ try {
     $acceptedSequence = [UInt64]::Parse($match.Groups[1].Value)
     $matchedSubscribers = [UInt32]::Parse($match.Groups[2].Value)
     if ($acceptedSequence -eq 0 -or $matchedSubscribers -lt 2) {
-        throw "The PenaltyRefresh probe did not match both Login and World subscribers."
+        throw "The PenaltyRefresh probe did not match both required Login and World acceptance routes."
     }
 
     $deadline = [DateTime]::UtcNow.AddSeconds($DeliveryTimeoutSeconds)
@@ -293,20 +294,21 @@ try {
     }
 
     if (-not (Test-CursorAdvanced $loginBaseline $loginCurrent $acceptedSequence)) {
-        throw "Login did not durably observe PenaltyRefresh sequence $acceptedSequence within $DeliveryTimeoutSeconds seconds."
+        throw "Login did not durably apply PenaltyRefresh sequence $acceptedSequence within $DeliveryTimeoutSeconds seconds."
     }
     if (-not (Test-CursorAdvanced $worldBaseline $worldCurrent $acceptedSequence)) {
-        throw "World did not durably observe PenaltyRefresh sequence $acceptedSequence within $DeliveryTimeoutSeconds seconds."
+        throw "World did not durably apply PenaltyRefresh sequence $acceptedSequence within $DeliveryTimeoutSeconds seconds."
     }
     if ($loginCurrent.Generation -ne $worldCurrent.Generation) {
         throw "Login and World committed the probe against different callback runtime generations."
     }
 
-    Write-Host "[PASS] Login durably observed PenaltyRefresh sequence $($loginCurrent.Sequence)." -ForegroundColor Green
-    Write-Host "[PASS] World durably observed PenaltyRefresh sequence $($worldCurrent.Sequence)." -ForegroundColor Green
+    Write-Host "[PASS] Login durably applied PenaltyRefresh sequence $($loginCurrent.Sequence)." -ForegroundColor Green
+    Write-Host "[PASS] World durably applied PenaltyRefresh sequence $($worldCurrent.Sequence)." -ForegroundColor Green
     Write-Host "[PASS] Login and World share callback runtime generation $($loginCurrent.Generation)." -ForegroundColor Green
-    Write-Host "[PASS] SCS remains callback effect authority; the typed probe was observation-only." -ForegroundColor Green
-    Write-Host "Communication PenaltyRefresh real-process shadow acceptance passed." -ForegroundColor Green
+    Write-Host "[PASS] PenaltyRefresh authority is typed gRPC with no SCS callback fallback." -ForegroundColor Green
+    Write-Host "[PASS] Remaining Communication callbacks stay SCS-authoritative in this slice." -ForegroundColor Green
+    Write-Host "Communication PenaltyRefresh real-process gRPC authority acceptance passed." -ForegroundColor Green
 }
 finally {
     foreach ($name in $environmentVariableNames) {

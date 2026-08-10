@@ -34,6 +34,7 @@ on:
       - "scripts/new-local-authentication-certificates.ps1"
       - "scripts/start-modern-login-local.ps1"
       - "scripts/start-modern-login-core-local.ps1"
+      - "scripts/start-penaltyrefresh-grpc-authority-local.ps1"
       - "scripts/start-communication-callback-shadow-local.ps1"
       - "scripts/test-communication-callback-shadow-local.ps1"
       - "scripts/stop-modern-login-local.ps1"
@@ -81,6 +82,7 @@ on:
       - "scripts/new-local-authentication-certificates.ps1"
       - "scripts/start-modern-login-local.ps1"
       - "scripts/start-modern-login-core-local.ps1"
+      - "scripts/start-penaltyrefresh-grpc-authority-local.ps1"
       - "scripts/start-communication-callback-shadow-local.ps1"
       - "scripts/test-communication-callback-shadow-local.ps1"
       - "scripts/stop-modern-login-local.ps1"
@@ -141,7 +143,7 @@ jobs:
         shell: powershell
         run: ./scripts/verify-dotnet10-foundation.ps1
 
-      - name: Verify communication callback shadow identity bridge
+      - name: Verify final PenaltyRefresh gRPC authority contracts
         shell: powershell
         run: ./scripts/verify-communication-callback-shadow-identity-bridge.ps1
 

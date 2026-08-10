@@ -1,12 +1,14 @@
 [CmdletBinding()]
 param(
     [string]$FallbackPath = "Data/NosGm.Authentication.Client/Communication/CommunicationCallbackExistingIdentityFallback.cs",
-    [string]$ActivationPath = "Data/NosGm.Authentication.Client/Communication/CommunicationCallbackActivationOptions.cs",
     [string]$MasterIdentityPath = "Data/NosGm.Authentication.Client/Communication/MasterCommunicationGrpcIdentityOptions.cs",
-    [string]$WrapperPath = "scripts/start-communication-callback-shadow-local.ps1",
+    [string]$AuthorityStartupPath = "scripts/start-penaltyrefresh-grpc-authority-local.ps1",
+    [string]$CompatibilityStartupPath = "scripts/start-communication-callback-shadow-local.ps1",
     [string]$ProbeScriptPath = "scripts/test-communication-callback-shadow-local.ps1",
     [string]$ProbeSelfTestPath = "tests/NosGm.Authentication.Runtime.SelfTest/CommunicationPenaltyRefreshLiveProbeSelfTest.cs",
-    [string]$CutoverDocumentPath = "docs/penaltyrefresh-grpc-authority-cutover.md"
+    [string]$DispatcherPath = "Data/NosGm.Master.Library/Client/CommunicationCallbackEnvelopeDispatcher.cs",
+    [string]$ClientInterfacePath = "Data/NosGm.Master.Library/Interface/ICommunicationClient.cs",
+    [string]$MigrationMapPath = "contracts/cluster/v1/communication-callback-migration-map.json"
 )
 
 $ErrorActionPreference = "Stop"
@@ -14,21 +16,23 @@ Set-StrictMode -Version Latest
 
 function Read-Required([string]$Path) {
     if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
-        throw "Missing communication callback shadow bridge file: $Path"
+        throw "Missing PenaltyRefresh authority file: $Path"
     }
     return Get-Content -LiteralPath $Path -Raw
 }
 
 function Require([string]$Content, [string]$Needle, [string]$Description) {
     if ($Content.IndexOf($Needle, [StringComparison]::Ordinal) -lt 0) {
-        throw "Communication callback shadow bridge contract failed: $Description"
+        throw "PenaltyRefresh authority contract failed: $Description"
     }
+    Write-Host "[PASS] $Description" -ForegroundColor Green
 }
 
 function Forbid([string]$Content, [string]$Needle, [string]$Description) {
     if ($Content.IndexOf($Needle, [StringComparison]::Ordinal) -ge 0) {
-        throw "Communication callback shadow bridge contract failed: $Description"
+        throw "PenaltyRefresh authority contract failed: $Description"
     }
+    Write-Host "[PASS] $Description" -ForegroundColor Green
 }
 
 function Assert-PowerShellParses([string]$Path) {
@@ -47,79 +51,75 @@ function Assert-PowerShellParses([string]$Path) {
 }
 
 $fallback = Read-Required $FallbackPath
-$activation = Read-Required $ActivationPath
 $masterIdentity = Read-Required $MasterIdentityPath
-$wrapper = Read-Required $WrapperPath
+$authorityStartup = Read-Required $AuthorityStartupPath
+$compatibilityStartup = Read-Required $CompatibilityStartupPath
 $probeScript = Read-Required $ProbeScriptPath
 $probeSelfTest = Read-Required $ProbeSelfTestPath
-$cutoverDocument = Read-Required $CutoverDocumentPath
+$dispatcher = Read-Required $DispatcherPath
+$clientInterface = Read-Required $ClientInterfacePath
+$migrationMap = Read-Required $MigrationMapPath
+
 $masterIdentityCompact = $masterIdentity -replace '\s+', ''
-$wrapperCompact = $wrapper -replace '\s+', ''
-$probeScriptCompact = $probeScript -replace '\s+', ''
+$authorityStartupCompact = $authorityStartup -replace '\s+', ''
 $probeSelfTestCompact = $probeSelfTest -replace '\s+', ''
 
-Assert-PowerShellParses $WrapperPath
+Assert-PowerShellParses $AuthorityStartupPath
+Assert-PowerShellParses $CompatibilityStartupPath
 Assert-PowerShellParses $ProbeScriptPath
 
-Require $fallback 'NOSGM_COMMUNICATION_GRPC_USE_EXISTING_IDENTITY_FALLBACK' 'The identity bridge must remain explicitly opt-in.'
-Require $fallback 'return false;' 'The identity bridge must default to disabled.'
-Require $fallback 'AuthenticationGrpcClientOptions.AddressVariable' 'Subscriber address must come from the process-scoped existing gRPC identity.'
-Require $fallback 'AuthenticationGrpcClientOptions.CertificatePathVariable' 'Subscriber certificate path must come from the process-scoped existing gRPC identity.'
-Require $fallback 'AuthenticationGrpcClientOptions.CertificatePasswordVariable' 'Subscriber certificate password must stay inside the same child process.'
-Require $fallback 'AuthenticationGrpcClientOptions.CallerInstanceIdVariable' 'Subscriber caller identity must remain process-scoped.'
-Require $fallback 'AuthenticationGrpcClientOptions.DeadlineVariable' 'Subscriber setup must preserve the bounded gRPC deadline.'
-Require $fallback 'AuthenticationGrpcClientOptions.WireModeVariable' 'Subscriber must preserve the preselected HTTP2 or gRPC-Web wire mode.'
-Require $fallback 'Environment.SpecialFolder.LocalApplicationData' 'Fallback callback cursors must live outside the repository in local application data.'
-Require $fallback 'SHA256.Create()' 'Fallback cursor file names must not embed arbitrary caller identity text.'
-Require $fallback 'CommunicationCallbackSubscriberOptions.CursorPathVariable' 'The bridge must provide a dedicated durable callback cursor path.'
-Forbid $fallback 'AuthenticationGrpcClientOptions.TrustedRootCertificatePathVariable' 'The net481 callback subscriber must not inherit file-scoped root pinning from the generic identity.'
+Require $fallback 'NOSGM_COMMUNICATION_GRPC_USE_EXISTING_IDENTITY_FALLBACK' 'Role-separated callback identity reuse remains explicit.'
+Require $fallback 'AuthenticationGrpcClientOptions.CertificatePathVariable' 'Subscriber certificate remains process-scoped.'
+Require $fallback 'CommunicationCallbackSubscriberOptions.CursorPathVariable' 'Login and World keep dedicated durable callback cursors.'
+Require $fallback 'SHA256.Create()' 'Cursor file names remain bounded hashes of caller identities.'
+Forbid $fallback 'AuthenticationGrpcClientOptions.TrustedRootCertificatePathVariable' 'Legacy net481 subscribers do not inherit file-scoped root pinning.'
 
-Require $activation 'CommunicationCallbackExistingIdentityFallback.IsEnabled()' 'Callback activation must consult the explicit identity bridge switch.'
-Require $activation '.PrepareSubscriberEnvironment();' 'Callback activation must prepare the role-specific subscriber namespace before subscriber options load.'
-Require $activation 'usesProcessEnvironment' 'Dictionary-backed self-tests must not mutate the real process environment.'
+Require $masterIdentityCompact 'ConfigurationRuntimeControllerIdentityOptions.CertificatePathVariable' 'Master reuses only its role-separated mTLS identity when explicitly bridged.'
+Require $masterIdentityCompact 'ConfigurationRuntimeControllerIdentityOptions.CallerInstanceIdVariable' 'Master callback publication preserves its process identity.'
+Require $masterIdentity '!string.IsNullOrEmpty(dedicated)' 'Dedicated callback Master credentials retain priority.'
 
-Require $masterIdentityCompact 'ConfigurationRuntimeControllerIdentityOptions.CertificatePathVariable' 'Master callback publication must fall back only to the existing Master certificate identity.'
-Require $masterIdentityCompact 'ConfigurationRuntimeControllerIdentityOptions.CertificatePasswordVariable' 'Master callback publication must keep the Master certificate password role-scoped.'
-Require $masterIdentityCompact 'ConfigurationRuntimeControllerIdentityOptions.CallerInstanceIdVariable' 'Master callback publication must preserve the existing Master process identity.'
-Require $masterIdentityCompact 'ConfigurationRuntimeControllerIdentityOptions.AddressVariable' 'Master callback publication must use the existing Master Configuration endpoint only as an explicit fallback.'
-Require $masterIdentity 'CommunicationCallbackExistingIdentityFallback.IsEnabled' 'Master identity reuse must remain explicitly opt-in.'
-Require $masterIdentity '!string.IsNullOrEmpty(dedicated)' 'Dedicated callback Master credentials must retain priority over fallback values.'
+Require $authorityStartupCompact '[Environment]::SetEnvironmentVariable("NOSGM_COMMUNICATION_GRPC_USE_EXISTING_IDENTITY_FALLBACK","true",[EnvironmentVariableTarget]::Process)' 'Final startup enables the role-separated identity bridge.'
+Require $authorityStartupCompact '[Environment]::SetEnvironmentVariable("NOSGM_COMMUNICATION_GRPC_CALLBACKS_ENABLED","true",[EnvironmentVariableTarget]::Process)' 'Final startup requires the callback subscribers.'
+Require $authorityStartupCompact '[Environment]::SetEnvironmentVariable("NOSGM_COMMUNICATION_GRPC_CALLBACKS_APPLY_ENABLED","false",[EnvironmentVariableTarget]::Process)' 'Other typed callbacks remain observation-only.'
+Forbid $authorityStartupCompact '[Environment]::SetEnvironmentVariable("NOSGM_COMMUNICATION_GRPC_CALLBACKS_APPLY_ENABLED","true",[EnvironmentVariableTarget]::Process)' 'Final startup never opens broad typed callback application.'
+Require $authorityStartupCompact 'AuthenticationTransport="GRPC"' 'Login and World receive their role-separated gRPC identities.'
+Require $authorityStartup 'CommunicationCallbackMode -NotePropertyValue "PenaltyRefreshAuthority"' 'Runtime state records the final PenaltyRefresh mode.'
+Require $authorityStartup 'PenaltyRefreshCallbackAuthority -NotePropertyValue "gRPC"' 'Runtime state records gRPC as PenaltyRefresh authority.'
+Require $authorityStartup 'PenaltyRefreshCallbackFallback -NotePropertyValue $null' 'Runtime state records no PenaltyRefresh fallback.'
+Require $authorityStartup 'RemainingCommunicationCallbackAuthority -NotePropertyValue "SCS"' 'Other callbacks retain SCS authority.'
+Require $authorityStartup '$previousEnvironment[$name]' 'Final startup restores temporary parent-shell variables.'
 
-Require $wrapperCompact '[Environment]::SetEnvironmentVariable("NOSGM_COMMUNICATION_GRPC_CALLBACKS_ENABLED","true",[EnvironmentVariableTarget]::Process)' 'The shadow wrapper must enable the callback subscriber explicitly.'
-Require $wrapperCompact '[Environment]::SetEnvironmentVariable("NOSGM_COMMUNICATION_GRPC_CALLBACKS_APPLY_ENABLED","false",[EnvironmentVariableTarget]::Process)' 'The shadow wrapper must keep typed callback effect application disabled.'
-Forbid $wrapperCompact '[Environment]::SetEnvironmentVariable("NOSGM_COMMUNICATION_GRPC_CALLBACKS_APPLY_ENABLED","true",[EnvironmentVariableTarget]::Process)' 'Shadow acceptance must never enable typed callback effects.'
-Require $wrapperCompact '[Environment]::SetEnvironmentVariable("NOSGM_COMMUNICATION_GRPC_CALLBACK_MIRROR_ENABLED","true",[EnvironmentVariableTarget]::Process)' 'The shadow wrapper must enable Master typed publication.'
-Require $wrapperCompact 'AuthenticationTransport="GRPC"' 'The shadow wrapper must give Login its role-separated generic gRPC identity before fallback bridging.'
-Require $wrapper 'CommunicationCallbackEffectAuthority' 'Runtime state must expose that SCS is still effect-authoritative in this slice.'
-Require $wrapper '"SCS"' 'Runtime state must record SCS callback effect authority during shadow acceptance.'
-Require $wrapper '$previousEnvironment[$name]' 'The wrapper must restore every temporary parent-shell callback variable.'
+Require $compatibilityStartup 'start-penaltyrefresh-grpc-authority-local.ps1' 'Historical shadow startup redirects to the final authority startup.'
+Forbid $compatibilityStartup 'CommunicationCallbackEffectAuthority' 'Compatibility startup no longer claims global SCS callback authority.'
 
-Require $probeSelfTest '"--live-penalty-refresh-probe"' 'The live probe must use a dedicated command-line mode and never piggyback on the broad live suite.'
-Require $probeSelfTest 'ObservationOnlyPenaltyLogId = int.MaxValue' 'The probe must use the reserved observation-only positive PenaltyLogId.'
-Require $probeSelfTestCompact 'Kind=WireV1.CommunicationCallbackTargetKind.AllNodes' 'PenaltyRefresh must exercise the Login plus World ALL_NODES route.'
-Require $probeSelfTestCompact 'PenaltyRefresh=newWireV1.PenaltyRefreshCallback' 'The live probe must publish the typed PenaltyRefresh payload.'
-Require $probeSelfTest 'response.MatchedSubscribers < 2' 'The publisher must fail unless Login and World routes are both attached.'
-Require $probeSelfTest '[CALLBACK_PENALTY_PROBE]' 'The probe must emit a machine-readable accepted-sequence marker.'
-Forbid $probeSelfTest 'PenaltyLogDAO' 'The typed shadow probe must never touch the penalty database.'
-Forbid $probeSelfTest 'OnUpdatePenaltyLog' 'The typed shadow probe must never invoke the legacy penalty effect directly.'
-Forbid $probeSelfTest 'CommunicationServiceClient.Instance' 'The typed shadow probe must bypass every gameplay effect surface.'
+Require $dispatcher 'kind == WireV1.CommunicationCallbackKind.PenaltyRefresh' 'Dispatcher isolates the completed PenaltyRefresh authority slice.'
+Require $dispatcher 'ApplyCore(envelope);' 'PenaltyRefresh applies directly from the typed stream.'
+Require $dispatcher 'CommunicationCallbackParitySource.TypedGrpc' 'Other callback kinds retain the transitional coordinator.'
+Forbid $clientInterface 'void UpdatePenaltyLog(int penaltyLogId);' 'UpdatePenaltyLog is absent from the SCS callback interface.'
+Require $clientInterface 'PenaltyRefresh is gRPC-authoritative and has no SCS fallback' 'Dead legacy calls fail closed.'
 
-Require $probeScript '[string]$state.CommunicationCallbackEffectAuthority -ne "SCS"' 'The acceptance script must refuse to run unless SCS remains effect authority.'
-Require $probeScript 'Get-CallbackCursorPath "login-local-1"' 'The acceptance script must observe the Login role cursor.'
-Require $probeScript 'Get-CallbackCursorPath "world-local-1"' 'The acceptance script must observe the World role cursor.'
-Require $probeScript '--live-penalty-refresh-probe' 'The acceptance script must invoke only the dedicated PenaltyRefresh probe.'
-Require $probeScript 'Test-CursorAdvanced $loginBaseline $loginCurrent $acceptedSequence' 'Login delivery must be proven by a durable cursor advance to the accepted sequence.'
-Require $probeScript 'Test-CursorAdvanced $worldBaseline $worldCurrent $acceptedSequence' 'World delivery must be proven by a durable cursor advance to the accepted sequence.'
-Require $probeScript '$loginCurrent.Generation -ne $worldCurrent.Generation' 'Login and World must commit against the same callback runtime generation.'
-Require $probeScript 'NOSGM_COMMUNICATION_GRPC_MASTER_CERT_PATH' 'The probe publisher must use the Master callback certificate namespace.'
-Require $probeScript 'NOSGM_COMMUNICATION_GRPC_TRUSTED_ROOT_CERT_PATH' 'The .NET 10 probe must pin the local root without changing the net481 subscriber trust behavior.'
-Require $probeScript '-p:UseSharedCompilation=false' 'The local probe build must avoid compiler-server file locks.'
-Require $probeScript '$previousEnvironment[$name]' 'The probe must restore temporary Master publisher credentials from its shell.'
-Forbid $probeScript 'NOSGM_COMMUNICATION_GRPC_CALLBACKS_APPLY_ENABLED' 'The acceptance probe must never mutate the running child-process APPLY policy.'
-Forbid $probeScript 'PenaltyLogDAO' 'The PowerShell acceptance path must not inspect or mutate the penalty database.'
+Require $probeSelfTest '"--live-penalty-refresh-probe"' 'Acceptance uses a dedicated PenaltyRefresh probe mode.'
+Require $probeSelfTest 'ObservationOnlyPenaltyLogId = int.MaxValue' 'Acceptance uses the reserved nonexistent positive PenaltyLogId.'
+Require $probeSelfTestCompact 'Kind=WireV1.CommunicationCallbackTargetKind.AllNodes' 'Acceptance exercises the ALL_NODES route.'
+Require $probeSelfTestCompact 'PenaltyRefresh=newWireV1.PenaltyRefreshCallback' 'Acceptance publishes the typed PenaltyRefresh payload.'
+Require $probeSelfTest 'response.MatchedSubscribers < 2' 'Acceptance requires both Login and World routes to be live.'
+Forbid $probeSelfTest 'PenaltyLogDAO' 'Probe publisher never mutates or inspects the penalty database.'
+Forbid $probeSelfTest 'CommunicationServiceClient.Instance' 'Probe publisher bypasses gameplay effect surfaces.'
 
-Require $cutoverDocument 'Slice 1: reproducible local shadow wiring' 'The cutover document must preserve the staged shadow boundary.'
-Require $cutoverDocument 'Slice 2: PenaltyRefresh authority cutover' 'The final SCS suppression must remain a separate validated slice.'
-Require $cutoverDocument 'Configuration remains gRPC-only' 'The new callback work must not regress the completed Configuration authority.'
+Require $probeScript '[string]$state.CommunicationCallbackMode -ne "PenaltyRefreshAuthority"' 'Acceptance refuses non-final callback runtime state.'
+Require $probeScript '[string]$state.PenaltyRefreshCallbackAuthority -ne "gRPC"' 'Acceptance requires gRPC PenaltyRefresh authority.'
+Require $probeScript '$null -ne $state.PenaltyRefreshCallbackFallback' 'Acceptance requires a null PenaltyRefresh fallback.'
+Require $probeScript 'Get-CallbackCursorPath "login-local-1"' 'Acceptance observes the Login durable cursor.'
+Require $probeScript 'Get-CallbackCursorPath "world-local-1"' 'Acceptance observes the World durable cursor.'
+Require $probeScript 'Test-CursorAdvanced $loginBaseline $loginCurrent $acceptedSequence' 'Login must durably commit the accepted sequence.'
+Require $probeScript 'Test-CursorAdvanced $worldBaseline $worldCurrent $acceptedSequence' 'World must durably commit the accepted sequence.'
+Require $probeScript 'PenaltyRefresh authority is typed gRPC with no SCS callback fallback.' 'Acceptance reports the final authority invariant.'
+Require $probeScript 'Communication PenaltyRefresh real-process gRPC authority acceptance passed.' 'Acceptance has an unambiguous final success marker.'
+Forbid $probeScript 'observation-only' 'Final acceptance no longer describes PenaltyRefresh as shadow-only.'
 
-Write-Host 'Communication callback role-separated shadow identity and PenaltyRefresh probe contracts passed.' -ForegroundColor Green
+Require $migrationMap '"schemaVersion": 2' 'Migration map uses the completed callback schema.'
+Require $migrationMap '"disposition": "grpc_authoritative"' 'Migration map records PenaltyRefresh gRPC authority.'
+Require $migrationMap '"legacySurfaceRemoved": true' 'Migration map records SCS callback removal.'
+Require $migrationMap '"fallback": null' 'Migration map records no PenaltyRefresh fallback.'
+
+Write-Host 'PenaltyRefresh final gRPC authority, role-separated identity, and real-process acceptance contracts passed.' -ForegroundColor Green
