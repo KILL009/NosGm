@@ -1,10 +1,14 @@
 [CmdletBinding()]
 param(
-    [ValidateSet("tcp", "login")]
+    [ValidateSet("tcp", "login", "world")]
     [string]$Scenario = "tcp",
     [string]$HostName = "127.0.0.1",
     [ValidateRange(1, 65535)]
     [int]$Port = 0,
+    [string]$LoginHostName,
+    [ValidateRange(1, 65535)]
+    [int]$LoginPort = 4000,
+    [string]$WorldReadyPacket = "finit",
     [string]$Stages = "100,250,500,750,1000,1250,1500",
     [ValidateRange(1, 5000)]
     [int]$RampPerSecond = 100,
@@ -40,6 +44,10 @@ if ($Port -eq 0) {
     $Port = if ($Scenario -eq "login") { 4000 } else { 1337 }
 }
 
+if ([string]::IsNullOrWhiteSpace($LoginHostName)) {
+    $LoginHostName = $HostName
+}
+
 $arguments = @(
     "run",
     "--project", $project,
@@ -55,6 +63,14 @@ $arguments = @(
     "--client-version", $ClientVersion
 )
 
+if ($Scenario -eq "world") {
+    $arguments += @(
+        "--login-host", $LoginHostName,
+        "--login-port", $LoginPort.ToString([Globalization.CultureInfo]::InvariantCulture),
+        "--world-ready-packet", $WorldReadyPacket
+    )
+}
+
 if (-not [string]::IsNullOrWhiteSpace($AccountsPath)) {
     $arguments += @("--accounts", [System.IO.Path]::GetFullPath($AccountsPath))
 }
@@ -68,6 +84,9 @@ if ($AllowPublicTarget) {
 }
 
 Write-Host "[LOAD] NosGM $Scenario load test -> ${HostName}:$Port" -ForegroundColor Cyan
+if ($Scenario -eq "world") {
+    Write-Host "[LOAD] Login -> ${LoginHostName}:$LoginPort | World ready packet=$WorldReadyPacket" -ForegroundColor Cyan
+}
 Write-Host "[LOAD] stages=$Stages ramp=$RampPerSecond/s hold=${HoldSeconds}s" -ForegroundColor Cyan
 
 & dotnet @arguments
