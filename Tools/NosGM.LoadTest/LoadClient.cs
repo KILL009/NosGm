@@ -5,12 +5,13 @@ namespace NosGM.LoadTest;
 
 internal sealed class LoadClient : IAsyncDisposable
 {
-    private readonly TcpClient _tcpClient = new(AddressFamily.InterNetwork);
+    private readonly TcpClient _tcpClient = new();
     private CancellationTokenSource? _receiveCancellation;
     private Task? _receiveTask;
     private long _bytesReceived;
     private long _bytesSent;
-    private int _closed;
+    private int _disconnected;
+    private int _disposed;
 
     private LoadClient(int clientIndex)
     {
@@ -26,7 +27,8 @@ internal sealed class LoadClient : IAsyncDisposable
     public long BytesReceived => Interlocked.Read(ref _bytesReceived);
     public long BytesSent => Interlocked.Read(ref _bytesSent);
     public bool IsConnected =>
-        Volatile.Read(ref _closed) == 0 &&
+        Volatile.Read(ref _disposed) == 0 &&
+        Volatile.Read(ref _disconnected) == 0 &&
         Failure == null &&
         _tcpClient.Connected;
 
@@ -65,7 +67,7 @@ internal sealed class LoadClient : IAsyncDisposable
 
                 string packet = NosTaleLoginCodec.BuildPacket(options, account, clientIndex);
                 byte[] payload = NosTaleLoginCodec.EncodeClientPacket(packet);
-                await stream.WriteAsync(payload, cancellationToken).ConfigureAwait(false);
+                await stream.WriteAsync(payload.AsMemory(), cancellationToken).ConfigureAwait(false);
                 await stream.FlushAsync(cancellationToken).ConfigureAwait(false);
                 Interlocked.Add(ref client._bytesSent, payload.Length);
 
@@ -77,7 +79,7 @@ internal sealed class LoadClient : IAsyncDisposable
                 try
                 {
                     int received = await stream
-                        .ReadAsync(responseBuffer, readCancellation.Token)
+                        .ReadAsync(responseBuffer.AsMemory(), readCancellation.Token)
                         .ConfigureAwait(false);
                     if (received > 0)
                     {
@@ -86,6 +88,10 @@ internal sealed class LoadClient : IAsyncDisposable
                             responseBuffer.AsSpan(0, received));
                         client.LoginAccepted = NosTaleLoginCodec.LooksAccepted(client.LoginResponse);
                     }
+                    else
+                    {
+                        Interlocked.Exchange(ref client._disconnected, 1);
+                    }
                 }
                 catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
                 {
@@ -93,11 +99,14 @@ internal sealed class LoadClient : IAsyncDisposable
                 }
             }
 
-            client._receiveCancellation =
-                CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            client._receiveTask = client.DrainAsync(
-                stream,
-                client._receiveCancellation.Token);
+            if (Volatile.Read(ref client._disconnected) == 0)
+            {
+                client._receiveCancellation =
+                    CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                client._receiveTask = client.DrainAsync(
+                    stream,
+                    client._receiveCancellation.Token);
+            }
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
@@ -120,10 +129,12 @@ internal sealed class LoadClient : IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
-        if (Interlocked.Exchange(ref _closed, 1) != 0)
+        if (Interlocked.Exchange(ref _disposed, 1) != 0)
         {
             return;
         }
+
+        Interlocked.Exchange(ref _disconnected, 1);
 
         if (_receiveCancellation != null)
         {
@@ -166,10 +177,12 @@ internal sealed class LoadClient : IAsyncDisposable
         {
             while (!cancellationToken.IsCancellationRequested)
             {
-                int received = await stream.ReadAsync(buffer, cancellationToken).ConfigureAwait(false);
+                int received = await stream
+                    .ReadAsync(buffer.AsMemory(), cancellationToken)
+                    .ConfigureAwait(false);
                 if (received <= 0)
                 {
-                    Interlocked.Exchange(ref _closed, 1);
+                    Interlocked.Exchange(ref _disconnected, 1);
                     return;
                 }
 
@@ -181,11 +194,11 @@ internal sealed class LoadClient : IAsyncDisposable
         }
         catch (IOException)
         {
-            Interlocked.Exchange(ref _closed, 1);
+            Interlocked.Exchange(ref _disconnected, 1);
         }
         catch (SocketException)
         {
-            Interlocked.Exchange(ref _closed, 1);
+            Interlocked.Exchange(ref _disconnected, 1);
         }
     }
 }
