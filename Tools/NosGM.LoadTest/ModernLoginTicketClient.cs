@@ -1,4 +1,6 @@
 using System.Net.Http.Json;
+using System.Text;
+using System.Text.Json;
 using System.Text.Json.Serialization;
 
 namespace NosGM.LoadTest;
@@ -37,8 +39,23 @@ internal static class ModernLoginTicketClient
             CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         requestCancellation.CancelAfter(options.ReadTimeoutMilliseconds);
 
+        string json = JsonSerializer.Serialize(request);
+        using var requestMessage = new HttpRequestMessage(HttpMethod.Post, options.AuthBridgeUri)
+        {
+            Content = new StringContent(json, Encoding.UTF8, "application/json")
+        };
+        requestMessage.Headers.Accept.ParseAdd("application/json");
+
+        // LauncherAuthBridge rejects requests without a positive Content-Length.
+        // Match the production launcher framing instead of using PostAsJsonAsync,
+        // whose streaming content can arrive at HttpListener with ContentLength64=-1.
+        requestMessage.Content.Headers.ContentLength = Encoding.UTF8.GetByteCount(json);
+
         using HttpResponseMessage response = await Client
-            .PostAsJsonAsync(options.AuthBridgeUri, request, requestCancellation.Token)
+            .SendAsync(
+                requestMessage,
+                HttpCompletionOption.ResponseHeadersRead,
+                requestCancellation.Token)
             .ConfigureAwait(false);
 
         if (!response.IsSuccessStatusCode)
