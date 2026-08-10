@@ -14,6 +14,16 @@
       "targetKind": "ALL_NODES",
       "publisherRole": "Master",
       "subscriberRoles": ["Login", "World"]
+    },
+    {
+      "legacyMethod": "UpdateRelation",
+      "disposition": "grpc_authoritative",
+      "legacySurfaceRemoved": true,
+      "fallback": null,
+      "target": "RelationRefreshCallback",
+      "targetKind": "WORLD_GROUP",
+      "publisherRole": "Master",
+      "subscriberRoles": ["World"]
     }
   ],
   "methods": [
@@ -83,14 +93,6 @@
       "legacyMethod": "UpdateFamily",
       "disposition": "typed_stream_event",
       "target": "FamilyRefreshCallback",
-      "targetKind": "WORLD_GROUP",
-      "publisherRole": "Master",
-      "subscriberRoles": ["World"]
-    },
-    {
-      "legacyMethod": "UpdateRelation",
-      "disposition": "typed_stream_event",
-      "target": "RelationRefreshCallback",
       "targetKind": "WORLD_GROUP",
       "publisherRole": "Master",
       "subscriberRoles": ["World"]
