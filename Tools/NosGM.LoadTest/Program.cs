@@ -25,6 +25,8 @@ internal static class Program
 
             if (options.SelfTest)
             {
+                NosTaleLoginCodec.RunSelfTest();
+                NosTaleWorldCodec.RunSelfTest();
                 await LoopbackAcceptance.RunAsync(shutdown.Token).ConfigureAwait(false);
                 return 0;
             }
@@ -32,10 +34,18 @@ internal static class Program
             await TargetSafety
                 .EnsureAllowedAsync(options.Host, options.AllowPublicTarget, shutdown.Token)
                 .ConfigureAwait(false);
+            if (options.Scenario == LoadScenario.World &&
+                !string.Equals(options.LoginHost, options.Host, StringComparison.OrdinalIgnoreCase))
+            {
+                await TargetSafety
+                    .EnsureAllowedAsync(options.LoginHost, options.AllowPublicTarget, shutdown.Token)
+                    .ConfigureAwait(false);
+            }
 
-            IReadOnlyList<LoadAccount>? accounts = options.Scenario == LoadScenario.Login
-                ? LoadAccountReader.Read(options.AccountsPath!)
-                : null;
+            IReadOnlyList<LoadAccount>? accounts =
+                options.Scenario is LoadScenario.Login or LoadScenario.World
+                    ? LoadAccountReader.Read(options.AccountsPath!)
+                    : null;
 
             await using var runner = new LoadRunner(options, accounts);
             await runner.RunAsync(shutdown.Token).ConfigureAwait(false);
@@ -109,7 +119,8 @@ internal static class LoopbackAcceptance
                     "Loopback acceptance did not produce both JSON and CSV reports.");
             }
 
-            Console.WriteLine("NosGM Load Test loopback acceptance passed with 250 concurrent clients.");
+            Console.WriteLine(
+                "NosGM Load Test codec checks and loopback acceptance passed with 250 concurrent clients.");
         }
         finally
         {
