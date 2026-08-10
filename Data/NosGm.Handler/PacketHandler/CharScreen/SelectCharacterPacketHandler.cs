@@ -1,5 +1,6 @@
 ﻿using NosGm.Packets.Packets.ClientPackets;
 
+using NosGm.Configuration;
 using NosGm.Core;
 using NosGm.DAL;
 using NosGm.Data;
@@ -86,8 +87,7 @@ namespace NosGm.Handler.BasicPacket.CharScreen
 
                 #region Limitations
 
-                // If there are > 3 accounts connected, kick this session.
-                if (CommunicationServiceClient.Instance.RetrieveOnlineCharacters(character.CharacterId).Count() > 3 )
+                if (CommunicationServiceClient.Instance.RetrieveOnlineCharacters(character.CharacterId).Count() > ServerConfiguration.MaxAccountsPerIp)
                 {
                    Session.Disconnect();
                 }
@@ -253,8 +253,8 @@ namespace NosGm.Handler.BasicPacket.CharScreen
             }
             finally
             {
-                // Suspicious activity detected -- kick!
-                if (Session != null && ((!Session.HasSelectedCharacter || Session.Character == null) || (CommunicationServiceClient.Instance.RetrieveOnlineCharacters(Session.Character.CharacterId).Count() >= 4)))
+                // Suspicious activity detected -- kick when the configured per-IP limit is exceeded.
+                if (Session != null && ((!Session.HasSelectedCharacter || Session.Character == null) || (CommunicationServiceClient.Instance.RetrieveOnlineCharacters(Session.Character.CharacterId).Count() > ServerConfiguration.MaxAccountsPerIp)))
                 {
                     Session.Disconnect();
                 }
