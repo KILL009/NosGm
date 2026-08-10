@@ -94,11 +94,12 @@ $explicitNet10Projects = @(
     "Launcher\tests\NosGM.SteamClient.SelfTest\NosGM.SteamClient.SelfTest.csproj",
     "Launcher\tests\NosGM.Updater.SelfTest\NosGM.Updater.SelfTest.csproj",
     "Tools\NosGM.ClientThemeEditor\NosGM.ClientThemeEditor.csproj",
+    "Tools\NosGM.ConfigurationRuntimeController\NosGM.ConfigurationRuntimeController.csproj",
     "Tools\NosGM.DataUpdater\NosGM.DataUpdater.csproj",
+    "Tools\NosGM.LoadTest\NosGM.LoadTest.csproj",
     "Tools\NosGM.PacketCatalog\NosGM.PacketCatalog.csproj",
     "Tools\NosGM.ResourceExplorer\NosGM.ResourceExplorer.csproj",
     "Tools\NosGM.TimeSpaceParser\NosGM.TimeSpaceParser.csproj",
-    "Tools\NosGM.ConfigurationRuntimeController\NosGM.ConfigurationRuntimeController.csproj",
     "tests\NosGm.Cluster.Contracts.SelfTest\NosGm.Cluster.Contracts.SelfTest.csproj",
     "Data\NosGm.Program\NosGm.Authentication.Server\NosGm.Authentication.Server.csproj",
     "tests\NosGm.Authentication.Runtime.SelfTest\NosGm.Authentication.Runtime.SelfTest.csproj"
@@ -157,8 +158,8 @@ foreach ($project in $deferredModern) {
     Write-Host "[DEFERRED] $project" -ForegroundColor Yellow
 }
 
-if ($allProjects.Count -ne 54) {
-    throw "Project inventory changed: expected 54 projects but found $($allProjects.Count). Review the migration matrix."
+if ($allProjects.Count -ne 55) {
+    throw "Project inventory changed: expected 55 projects but found $($allProjects.Count). Review the migration matrix."
 }
 if ($bridgeCount -ne 8) {
     throw "Bridge inventory changed: expected 8 projects but found $bridgeCount."
@@ -194,6 +195,15 @@ try {
     foreach ($toolProject in $toolProjects) {
         Invoke-DotNet -Arguments @("build", $toolProject.FullName, "-c", "Release", "--nologo")
     }
+
+    Invoke-DotNet -Arguments @(
+        "run",
+        "--project",
+        "Tools\NosGM.LoadTest\NosGM.LoadTest.csproj",
+        "-c",
+        "Release",
+        "--",
+        "--self-test")
 
     foreach ($bridgeProject in $bridgeProjects) {
         Invoke-DotNet -Arguments @("build", $bridgeProject, "-c", "Release", "-f", "net481", "--nologo", "-m:1", "-nodeReuse:false")
