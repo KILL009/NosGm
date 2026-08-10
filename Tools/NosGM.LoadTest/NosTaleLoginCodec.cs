@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Security.Cryptography;
 using System.Text;
 
 namespace NosGM.LoadTest;
@@ -71,7 +72,7 @@ internal static class NosTaleLoginCodec
     private const int LoginOffset = 15;
     private const byte ServerPacketTerminator = 25;
 
-    public static string BuildPacket(
+    public static string BuildLegacyPacket(
         LoadTestOptions options,
         LoadAccount account,
         int clientIndex)
@@ -88,6 +89,35 @@ internal static class NosTaleLoginCodec
             .Replace("{region}", options.Region.ToString(CultureInfo.InvariantCulture), StringComparison.Ordinal)
             .Replace("{clientData}", options.ClientData, StringComparison.Ordinal)
             .Replace("{clientVersion}", options.ClientVersion, StringComparison.Ordinal);
+    }
+
+    public static string BuildModernPacket(
+        LoadTestOptions options,
+        ModernLoginTicket ticket,
+        Guid installationId)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        ArgumentNullException.ThrowIfNull(ticket);
+        if (installationId == Guid.Empty)
+        {
+            throw new ArgumentException("Modern Login requires a non-empty InstallationId.", nameof(installationId));
+        }
+
+        string randomHex = CreateRandomHex(4);
+        return string.Concat(
+            options.ModernLoginHeader,
+            " ",
+            ticket.AuthorizationCode,
+            "  ",
+            installationId.ToString("D"),
+            " ",
+            randomHex,
+            " ",
+            options.Region.ToString(CultureInfo.InvariantCulture),
+            "\v",
+            options.ClientVersion,
+            " 0 ",
+            options.GameforgeClientMd5.ToUpperInvariant());
     }
 
     public static byte[] EncodeClientPacket(string packet)
@@ -183,7 +213,7 @@ internal static class NosTaleLoginCodec
     public static void RunSelfTest()
     {
         const string response =
-            "NsTeST 5 load001 -99 0 -99 0 -99 0 -99 0 -99 0 424242 127.0.0.1:1337:1:1.1.Sumeria -1:-1:-1:10000.10000.1";
+            "NsTeST  5 load001 2 -99 0 -99 0 -99 0 -99 0 -99 0 424242 127.0.0.1:1337:1:1.1.Sumeria -1:-1:-1:10000.10000.1";
         if (!TryParseWorldTicket(response, out int sessionId, out string? host, out int port) ||
             sessionId != 424242 ||
             !string.Equals(host, "127.0.0.1", StringComparison.Ordinal) ||
@@ -191,6 +221,58 @@ internal static class NosTaleLoginCodec
         {
             throw new InvalidOperationException("Login -> World ticket parser self-test failed.");
         }
+
+        var options = new LoadTestOptions
+        {
+            LoginMode = LoginMode.Modern,
+            Region = 5,
+            ClientVersion = "0.9.3.3256",
+            ModernLoginHeader = "NoS0577",
+            GameforgeClientMd5 = "0123456789ABCDEF0123456789ABCDEF"
+        };
+        var ticket = new ModernLoginTicket(
+            "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+            "load001",
+            120);
+        Guid installationId = Guid.Parse("11111111-2222-3333-4444-555555555555");
+        string modernPacket = BuildModernPacket(options, ticket, installationId);
+        string expectedPrefix =
+            "NoS0577 aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee  11111111-2222-3333-4444-555555555555 ";
+        if (!modernPacket.StartsWith(expectedPrefix, StringComparison.Ordinal) ||
+            !modernPacket.Contains(" 5\v0.9.3.3256 0 0123456789ABCDEF0123456789ABCDEF", StringComparison.Ordinal) ||
+            modernPacket.Contains("load001", StringComparison.Ordinal) ||
+            modernPacket.Contains("password", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException("Modern NoS0577 packet builder self-test failed.");
+        }
+
+        string[] modernTail = modernPacket[(expectedPrefix.Length)..]
+            .Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (modernTail.Length != 4 || modernTail[0].Length != 8 || !IsHex(modernTail[0]))
+        {
+            throw new InvalidOperationException("Modern NoS0577 random-hex field self-test failed.");
+        }
+    }
+
+    private static string CreateRandomHex(int byteCount)
+    {
+        byte[] bytes = new byte[byteCount];
+        RandomNumberGenerator.Fill(bytes);
+        return Convert.ToHexString(bytes);
+    }
+
+    private static bool IsHex(string value)
+    {
+        foreach (char character in value)
+        {
+            bool isHex = character is >= '0' and <= '9' or >= 'A' and <= 'F';
+            if (!isHex)
+            {
+                return false;
+            }
+        }
+
+        return value.Length > 0;
     }
 
     private static bool TryParseAdvertisedEndpoint(string token, out string? host, out int port)
