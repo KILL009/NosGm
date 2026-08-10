@@ -6,6 +6,9 @@ namespace NosGM.LoadTest;
 
 internal sealed class LoadClient : IAsyncDisposable
 {
+    private const byte LoginServerPacketTerminator = 25;
+    private const int MaximumLoginResponseBytes = 65536;
+
     private readonly TcpClient _tcpClient = new();
     private CancellationTokenSource? _receiveCancellation;
     private Task? _receiveTask;
@@ -27,6 +30,9 @@ internal sealed class LoadClient : IAsyncDisposable
     public double WorldReadyMilliseconds { get; private set; }
     public string? Failure { get; private set; }
     public string? LoginResponse { get; private set; }
+    public bool LoginResponseTimedOut { get; private set; }
+    public bool LoginResponseComplete { get; private set; }
+    public int LoginResponseBytes { get; private set; }
     public bool AuthTicketIssued { get; private set; }
     public bool LoginAccepted { get; private set; }
     public bool WorldEntryAccepted { get; private set; }
@@ -176,7 +182,14 @@ internal sealed class LoadClient : IAsyncDisposable
             loginClock.Stop();
             LoginMilliseconds = loginClock.Elapsed.TotalMilliseconds;
             LoginResponse = response ?? "<login-response-timeout>";
-            LoginAccepted = response != null && NosTaleLoginCodec.LooksAccepted(response);
+
+            if (response == null || LoginResponseTimedOut || !NosTaleLoginCodec.LooksAccepted(response))
+            {
+                throw new InvalidOperationException(
+                    DescribeLoginFailure(response, options.ReadTimeoutMilliseconds));
+            }
+
+            LoginAccepted = true;
         }
 
         StartDrain(stream, cancellationToken);
@@ -320,18 +333,25 @@ internal sealed class LoadClient : IAsyncDisposable
         loginClock.Stop();
         LoginMilliseconds = loginClock.Elapsed.TotalMilliseconds;
         LoginResponse = response ?? "<login-response-timeout>";
-        LoginAccepted = response != null && NosTaleLoginCodec.LooksAccepted(response);
-        if (!LoginAccepted ||
-            response == null ||
-            !NosTaleLoginCodec.TryParseWorldTicket(
+
+        if (response == null || LoginResponseTimedOut || !NosTaleLoginCodec.LooksAccepted(response))
+        {
+            throw new InvalidOperationException(
+                DescribeLoginFailure(response, options.ReadTimeoutMilliseconds));
+        }
+
+        if (!NosTaleLoginCodec.TryParseWorldTicket(
                 response,
                 out int sessionId,
                 out string? advertisedHost,
                 out int advertisedPort))
         {
-            throw new InvalidOperationException("Login did not return a usable NsTeST World session ticket.");
+            throw new InvalidOperationException(
+                $"Login returned an incomplete or malformed NsTeST response " +
+                $"(bytes={LoginResponseBytes}, complete={LoginResponseComplete}).");
         }
 
+        LoginAccepted = true;
         WorldSessionId = sessionId;
         AdvertisedWorldHost = advertisedHost;
         AdvertisedWorldPort = advertisedPort;
@@ -363,28 +383,128 @@ internal sealed class LoadClient : IAsyncDisposable
         int timeoutMilliseconds,
         CancellationToken cancellationToken)
     {
-        byte[] responseBuffer = new byte[8192];
+        byte[] buffer = new byte[4096];
+        using var response = new MemoryStream();
         using var readCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         readCancellation.CancelAfter(timeoutMilliseconds);
 
+        LoginResponseTimedOut = false;
+        LoginResponseComplete = false;
+        LoginResponseBytes = 0;
+
         try
         {
-            int received = await stream
-                .ReadAsync(responseBuffer.AsMemory(), readCancellation.Token)
-                .ConfigureAwait(false);
-            if (received <= 0)
+            while (!readCancellation.IsCancellationRequested)
             {
-                Interlocked.Exchange(ref _disconnected, 1);
-                return null;
-            }
+                int received = await stream
+                    .ReadAsync(buffer.AsMemory(), readCancellation.Token)
+                    .ConfigureAwait(false);
+                if (received <= 0)
+                {
+                    Interlocked.Exchange(ref _disconnected, 1);
+                    return response.Length == 0
+                        ? null
+                        : NosTaleLoginCodec.DecodeServerPacket(response.ToArray());
+                }
 
-            Interlocked.Add(ref _bytesReceived, received);
-            return NosTaleLoginCodec.DecodeServerPacket(responseBuffer.AsSpan(0, received));
+                Interlocked.Add(ref _bytesReceived, received);
+                int terminatorIndex = Array.IndexOf(
+                    buffer,
+                    LoginServerPacketTerminator,
+                    0,
+                    received);
+                int bytesToAppend = terminatorIndex >= 0
+                    ? terminatorIndex + 1
+                    : received;
+                response.Write(buffer, 0, bytesToAppend);
+                LoginResponseBytes += bytesToAppend;
+
+                if (response.Length > MaximumLoginResponseBytes)
+                {
+                    throw new InvalidOperationException(
+                        $"Login response exceeded {MaximumLoginResponseBytes} bytes without a packet terminator.");
+                }
+
+                if (terminatorIndex >= 0)
+                {
+                    LoginResponseComplete = true;
+                    return NosTaleLoginCodec.DecodeServerPacket(response.ToArray());
+                }
+            }
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
-            return null;
+            LoginResponseTimedOut = true;
+            return response.Length == 0
+                ? null
+                : NosTaleLoginCodec.DecodeServerPacket(response.ToArray());
         }
+
+        return response.Length == 0
+            ? null
+            : NosTaleLoginCodec.DecodeServerPacket(response.ToArray());
+    }
+
+    private string DescribeLoginFailure(string? response, int timeoutMilliseconds)
+    {
+        if (LoginResponseTimedOut)
+        {
+            return $"Login response timed out after {timeoutMilliseconds} ms " +
+                   $"(bytes={LoginResponseBytes}, complete={LoginResponseComplete}).";
+        }
+
+        if (string.IsNullOrWhiteSpace(response))
+        {
+            return "Login closed the connection without a response.";
+        }
+
+        string value = response.Trim();
+        string[] tokens = value.Split(
+            ' ',
+            StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        if (tokens.Length >= 2 &&
+            string.Equals(tokens[0], "failc", StringComparison.OrdinalIgnoreCase) &&
+            byte.TryParse(tokens[1], out byte code))
+        {
+            return $"Login rejected the request: failc {code} ({DescribeLoginFailCode(code)}).";
+        }
+
+        string header = tokens.Length == 0 ? "<empty>" : SanitizeHeader(tokens[0]);
+        return $"Login returned an unexpected response " +
+               $"(header={header}, bytes={LoginResponseBytes}, complete={LoginResponseComplete}).";
+    }
+
+    private static string DescribeLoginFailCode(byte code) => code switch
+    {
+        1 => "OldClient",
+        2 => "UnhandledError",
+        3 => "Maintenance",
+        4 => "AlreadyConnected",
+        5 => "AccountOrPasswordWrong",
+        6 => "CantConnect",
+        7 => "Banned",
+        8 => "WrongCountry",
+        9 => "WrongCaps",
+        _ => "Unknown"
+    };
+
+    private static string SanitizeHeader(string header)
+    {
+        if (string.IsNullOrWhiteSpace(header))
+        {
+            return "<empty>";
+        }
+
+        string candidate = header.Length <= 24 ? header : header[..24];
+        foreach (char value in candidate)
+        {
+            if (!char.IsLetterOrDigit(value) && value is not '_' and not '-' and not '$')
+            {
+                return "<invalid>";
+            }
+        }
+
+        return candidate;
     }
 
     private async Task<bool> ReadWorldUntilAsync(
