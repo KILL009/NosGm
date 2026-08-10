@@ -40,13 +40,13 @@ internal static class CommunicationCallbackMigrationMapSelfTest
         using JsonDocument map = JsonDocument.Parse(File.ReadAllText(mapPath));
         JsonElement root = map.RootElement;
         AssertEqual(
-            1,
+            2,
             root.GetProperty("schemaVersion").GetInt32(),
             "Callback migration map schema version");
         AssertEqual(
             "ICommunicationClient",
             root.GetProperty("legacyInterface").GetString(),
-            "Callback map names the frozen SCS interface");
+            "Callback map names the remaining SCS interface");
         AssertEqual(
             "ClusterCommunicationCallbacks",
             root.GetProperty("targetService").GetString(),
@@ -54,15 +54,13 @@ internal static class CommunicationCallbackMigrationMapSelfTest
         AssertEqual(
             "bounded server-streaming subscription with replay cursor",
             root.GetProperty("deliveryModel").GetString(),
-            "Callback map records the Windows 10 compatible delivery model");
+            "Callback map records the delivery model");
 
-        JsonElement.ArrayEnumerator mappedEntries =
-            root.GetProperty("methods").EnumerateArray();
         var mappedMethods = new List<string>();
         int typedCount = 0;
         int deferredCount = 0;
         string deferredMethod = null;
-        foreach (JsonElement entry in mappedEntries)
+        foreach (JsonElement entry in root.GetProperty("methods").EnumerateArray())
         {
             mappedMethods.Add(
                 entry.GetProperty("legacyMethod").GetString());
@@ -77,7 +75,7 @@ internal static class CommunicationCallbackMigrationMapSelfTest
                 AssertEqual(
                     "Master",
                     entry.GetProperty("publisherRole").GetString(),
-                    "Every typed callback is published only by Master");
+                    "Every remaining typed callback is published only by Master");
             }
             else if (string.Equals(
                          disposition,
@@ -91,7 +89,7 @@ internal static class CommunicationCallbackMigrationMapSelfTest
             else
             {
                 throw new InvalidOperationException(
-                    "Unknown callback migration disposition: " +
+                    "Unknown remaining callback migration disposition: " +
                     disposition);
             }
         }
@@ -100,19 +98,67 @@ internal static class CommunicationCallbackMigrationMapSelfTest
             interfaceMethods,
             mappedMethods.OrderBy(method => method, StringComparer.Ordinal)
                 .ToArray(),
-            "All twelve legacy callbacks have an explicit disposition");
+            "Every remaining legacy callback has an explicit disposition");
         AssertEqual(
-            11,
+            10,
             typedCount,
-            "Eleven callback methods receive typed stream events");
+            "Ten remaining callback methods have typed shadow stream events");
         AssertEqual(
             1,
             deferredCount,
-            "Exactly one callback remains deferred");
+            "Exactly one remaining callback is deferred");
         AssertEqual(
             "SendMessageToCharacter",
             deferredMethod,
-            "Raw character messaging is deferred to a dedicated typed slice");
+            "Raw character messaging remains deferred to a dedicated typed slice");
+
+        JsonElement completed = root.GetProperty("completed");
+        AssertEqual(
+            1,
+            completed.GetArrayLength(),
+            "Exactly one callback authority cutover is complete");
+        JsonElement penalty = completed[0];
+        AssertEqual(
+            "UpdatePenaltyLog",
+            penalty.GetProperty("legacyMethod").GetString(),
+            "PenaltyRefresh records its retired SCS method");
+        AssertEqual(
+            "grpc_authoritative",
+            penalty.GetProperty("disposition").GetString(),
+            "PenaltyRefresh is gRPC authoritative");
+        AssertEqual(
+            true,
+            penalty.GetProperty("legacySurfaceRemoved").GetBoolean(),
+            "PenaltyRefresh legacy callback surface is removed");
+        AssertEqual(
+            JsonValueKind.Null,
+            penalty.GetProperty("fallback").ValueKind,
+            "PenaltyRefresh has no transport fallback");
+        AssertEqual(
+            "PenaltyRefreshCallback",
+            penalty.GetProperty("target").GetString(),
+            "PenaltyRefresh uses its typed payload");
+        AssertEqual(
+            "ALL_NODES",
+            penalty.GetProperty("targetKind").GetString(),
+            "PenaltyRefresh targets Login and World nodes");
+        AssertEqual(
+            false,
+            interfaceMethods.Contains(
+                "UpdatePenaltyLog",
+                StringComparer.Ordinal),
+            "Retired PenaltyRefresh is absent from ICommunicationClient");
+
+        string[] subscriberRoles = penalty
+            .GetProperty("subscriberRoles")
+            .EnumerateArray()
+            .Select(role => role.GetString())
+            .OrderBy(role => role, StringComparer.Ordinal)
+            .ToArray();
+        AssertSequenceEqual(
+            new[] { "Login", "World" },
+            subscriberRoles,
+            "PenaltyRefresh remains routed to Login and World");
 
         string proto = File.ReadAllText(protoPath);
         AssertContains(
@@ -198,7 +244,7 @@ internal static class CommunicationCallbackMigrationMapSelfTest
             withoutComments,
             "public\\s+interface\\s+" +
             Regex.Escape(interfaceName) +
-            "\\b[^{]*\\{(?<body>.*?)\\n\\}",
+            "\\b[^{]*\\{(?<body>.*?)\\r?\\n\\s*\\}",
             RegexOptions.Singleline);
         if (!interfaceMatch.Success)
         {

@@ -1,92 +1,87 @@
 # PenaltyRefresh gRPC authority cutover
 
-## Objective
+## Status
 
-`PenaltyRefresh` is the first remaining `ICommunicationClient` callback selected for removal from the SCS callback transport after the completed Configuration cutover.
+`PenaltyRefresh` is the first Communication callback to complete its SCS-to-gRPC authority cutover after Configuration.
 
-The target architecture is:
+Final architecture:
 
 - Master publishes one typed `PenaltyRefreshCallback` through `ClusterCommunicationCallbacks`;
-- Login and World keep authenticated server-streaming subscriptions with distinct process identities and cursor files;
-- typed gRPC becomes the only effect authority for `PenaltyRefresh` after the final cutover;
-- the legacy SCS `UpdatePenaltyLog` callback is then suppressed and removed;
-- all other `ICommunicationClient` callbacks remain unchanged until their own slices.
+- the publication uses the Master mTLS identity and one idempotent `EventId` across bounded transient retries;
+- a successful central acceptance requires `Success` plus a positive accepted runtime sequence;
+- Login and World consume `PenaltyRefresh` through authenticated server-streaming subscriptions with separate durable cursor files;
+- `PenaltyRefresh` is applied directly from the validated typed envelope;
+- the callback processor commits its durable sequence only after the typed effect completes successfully;
+- `UpdatePenaltyLog` is absent from `ICommunicationClient` and from the remaining SCS callback inventory;
+- no SCS fallback exists for `PenaltyRefresh`;
+- every other Communication callback keeps its existing SCS authority until its own cutover.
 
-## Why this callback is first
+Configuration remains gRPC-only and is unchanged by this slice.
 
-`PenaltyRefresh` already has:
+## Publication and failure semantics
 
-- a typed Protobuf payload;
-- exact `ALL_NODES` routing;
-- Master mTLS publication;
-- Login and World subscriber roles;
-- replay-complete barriers;
-- semantic fingerprints shared by SCS and gRPC;
-- bounded parity evidence;
-- cross-transport overlap deduplication;
-- operator-controlled activation and terminal rollback machinery.
+`MirroredCommunicationService.RefreshPenalty` no longer calls the legacy `CommunicationService.RefreshPenalty` SCS fanout and no longer queues `TryPenaltyRefresh` on the shadow mirror.
 
-This makes it a smaller and safer cut than attempting the full `ICommunicationService` surface at once.
+Instead, `MasterPenaltyRefreshGrpcAuthority` publishes `PenaltyRefreshCallback` synchronously through the typed gRPC publisher. Transient `Unavailable`, `CapacityExceeded`, and transport availability failures receive a small bounded retry window while preserving the same `EventId`. If no valid central acceptance is obtained, the request fails closed. The implementation never retries the effect over SCS.
 
-## Slice 1: reproducible local shadow wiring
+The production authority does not use the raw live subscriber count as a correctness gate. The central accepted sequence is the durable publication boundary, allowing the callback replay model to remain useful when a subscriber reconnects. The final local acceptance separately proves that the intended Login and World routes are both live.
 
-The normal Windows local stack can exercise the existing callback gRPC path without manual credential setup through an explicit wrapper:
+## Subscriber authority
+
+`CommunicationCallbackEnvelopeDispatcher` treats only `PenaltyRefresh` as completed typed authority. It applies that callback directly after the subscriber validates the envelope. Other callback kinds still pass through their transitional coordinator, so `NOSGM_COMMUNICATION_GRPC_CALLBACKS_APPLY_ENABLED=false` continues to prevent broad typed effect activation.
+
+`CommunicationCallbackProcessor` saves the cursor only after handler completion. Therefore an application failure cannot advance the durable cursor and silently lose the event.
+
+## SCS retirement
+
+The legacy callback surface now has these invariants:
+
+- `ICommunicationClient` contains no `UpdatePenaltyLog` method;
+- `CommunicationClient` contains no SCS `UpdatePenaltyLog` receiver;
+- the legacy SCS inventory contains 94 methods rather than 95;
+- the callback migration map schema version 2 records `UpdatePenaltyLog` under `completed` with `grpc_authoritative`, `legacySurfaceRemoved: true`, and `fallback: null`;
+- a dead compile-compatibility extension throws `NotSupportedException` if the old base path is accidentally called, so it cannot silently resurrect SCS delivery.
+
+## Local final acceptance
+
+Start the final Windows stack with:
 
 ```powershell
-./scripts/start-communication-callback-shadow-local.ps1
+./scripts/start-penaltyrefresh-grpc-authority-local.ps1
 ```
 
-The wrapper provides:
+The compatibility command `start-communication-callback-shadow-local.ps1` now redirects to the same final startup so an old operator command cannot claim that SCS still owns `PenaltyRefresh`.
 
-- Master callback publisher identity by reusing only the already role-scoped Master Configuration mTLS identity when no dedicated callback identity is supplied;
-- Login callback subscriber identity by reusing only the Login process gRPC identity;
-- World callback subscriber identity by reusing only the World process gRPC identity;
-- separate absolute callback cursor files under the current user's local application data;
-- the same preselected HTTP2/GRPCWEB wire mode already chosen before process startup;
-- `NOSGM_COMMUNICATION_GRPC_CALLBACKS_ENABLED=true`;
-- `NOSGM_COMMUNICATION_GRPC_CALLBACK_MIRROR_ENABLED=true`;
-- `NOSGM_COMMUNICATION_GRPC_CALLBACKS_APPLY_ENABLED=false`.
+The final startup records:
 
-During this slice SCS remains the only effect authority. Typed callbacks are observed and compared only.
+- `CommunicationCallbackMode = PenaltyRefreshAuthority`;
+- `PenaltyRefreshCallbackAuthority = gRPC`;
+- `PenaltyRefreshCallbackFallback = null`;
+- `RemainingCommunicationCallbackAuthority = SCS`.
 
-### Real-process PenaltyRefresh observation probe
-
-With the shadow stack running, execute:
+Run the focused acceptance with:
 
 ```powershell
 ./scripts/test-communication-callback-shadow-local.ps1
 ```
 
-The acceptance probe does not create, update or delete a penalty. A dedicated .NET 10 probe publishes one typed `PenaltyRefreshCallback` directly through the Master mTLS publisher while callback APPLY remains disabled in Login and World. The payload uses a reserved positive observation-only ID and targets `ALL_NODES`.
-
-The script requires the central runtime to report at least two matching subscribers, then waits for the durable callback cursor belonging to `login-local-1` and the cursor belonging to `world-local-1` to advance to at least the accepted sequence. Both cursors must commit against the same runtime generation. This proves real typed delivery to Login and World without executing `PenaltyLogRefresh` gameplay effects or touching `PenaltyLogDAO`.
+The historical filename is retained for compatibility, but the test now validates final authority. Its dedicated .NET 10 probe publishes `PenaltyRefresh` with the reserved nonexistent positive ID `int.MaxValue`. The probe itself never accesses `PenaltyLogDAO` or calls a gameplay service directly. Login and World must both durably advance to the accepted sequence in the same callback runtime generation.
 
 Expected terminal line:
 
 ```text
-Communication PenaltyRefresh real-process shadow acceptance passed.
+Communication PenaltyRefresh real-process gRPC authority acceptance passed.
 ```
 
-Stop the stack normally afterward:
+Stop normally with:
 
 ```powershell
 ./scripts/stop-modern-login-local.ps1
 ```
 
-## Slice 2: PenaltyRefresh authority cutover
-
-After the real-process shadow path is green:
-
-1. require the callback subscriber and publisher when PenaltyRefresh gRPC authority is selected;
-2. open typed ingress only after runtime generation and replay completion are valid;
-3. stop Master from sending the legacy SCS `UpdatePenaltyLog` copy;
-4. remove the SCS `UpdatePenaltyLog` receiver path;
-5. fail closed if the typed callback path is unavailable rather than retrying the same effect over SCS;
-6. update the legacy SCS manifest so `ICommunicationClient` no longer lists `UpdatePenaltyLog`.
-
 ## Explicit non-goals
 
-This cutover does not migrate:
+This slice does not migrate:
 
 - `SendMessageToCharacter`;
 - character presence callbacks;
@@ -94,18 +89,16 @@ This cutover does not migrate:
 - lifecycle restart/shutdown callbacks;
 - global events;
 - bazaar, family, relation or static-bonus refresh callbacks;
-- the 48-method `ICommunicationService` request surface.
+- the remaining `ICommunicationService` request surface.
 
-Configuration remains gRPC-only and is not modified by this work.
+Those remain separate migrations so one callback cannot accidentally broaden transport authority for another.
 
 ## Merge gate
 
-Do not merge the preparatory shadow slice until:
+Do not merge the final authority slice until all of the following are green on the exact PR head:
 
-- Windows CI is green;
-- .NET 10 CI is green;
-- the local stack proves Master publication plus Login/World shadow subscription with role-separated mTLS identities;
-- the observation-only `PenaltyRefresh` probe advances both durable subscriber cursors on one runtime generation;
-- SCS remains callback effect authority and typed APPLY remains disabled.
-
-The final authority slice additionally requires no SCS fallback for the migrated callback before merge.
+- Windows .NET Framework build and legacy runtime guards;
+- .NET 10 foundation and callback contract tests;
+- CodeQL and repository security checks;
+- final Windows real-process acceptance showing one accepted `PenaltyRefresh` sequence durably committed by Login and World in the same runtime generation;
+- no `UpdatePenaltyLog` method in the SCS callback interface and no PenaltyRefresh SCS fallback.
