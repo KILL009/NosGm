@@ -8,12 +8,22 @@ internal sealed class LoadClient : IAsyncDisposable
 {
     private const byte LoginServerPacketTerminator = 25;
     private const int MaximumLoginResponseBytes = 65536;
+    private const string MovementPercentVariable = "NOSGM_LOADTEST_MOVEMENT_PERCENT";
+    private const string MovementIntervalVariable = "NOSGM_LOADTEST_MOVEMENT_INTERVAL_MS";
+    private const string MovementBaseXVariable = "NOSGM_LOADTEST_MOVEMENT_BASE_X";
+    private const string MovementBaseYVariable = "NOSGM_LOADTEST_MOVEMENT_BASE_Y";
+    private const string MovementStepVariable = "NOSGM_LOADTEST_MOVEMENT_STEP";
+    private const string MovementSpeedVariable = "NOSGM_LOADTEST_MOVEMENT_SPEED";
 
     private readonly TcpClient _tcpClient = new();
     private CancellationTokenSource? _receiveCancellation;
+    private CancellationTokenSource? _movementCancellation;
     private Task? _receiveTask;
+    private Task? _movementTask;
     private long _bytesReceived;
     private long _bytesSent;
+    private long _movementPacketsSent;
+    private int _nextWorldPacketId = 5;
     private int _disconnected;
     private int _disposed;
 
@@ -38,11 +48,13 @@ internal sealed class LoadClient : IAsyncDisposable
     public bool WorldEntryAccepted { get; private set; }
     public bool CharacterSelected { get; private set; }
     public bool WorldReady { get; private set; }
+    public bool ActiveMovementEnabled { get; private set; }
     public int WorldSessionId { get; private set; }
     public string? AdvertisedWorldHost { get; private set; }
     public int AdvertisedWorldPort { get; private set; }
     public long BytesReceived => Interlocked.Read(ref _bytesReceived);
     public long BytesSent => Interlocked.Read(ref _bytesSent);
+    public long MovementPacketsSent => Interlocked.Read(ref _movementPacketsSent);
     public bool IsConnected =>
         Volatile.Read(ref _disposed) == 0 &&
         Volatile.Read(ref _disconnected) == 0 &&
@@ -102,9 +114,24 @@ internal sealed class LoadClient : IAsyncDisposable
 
         Interlocked.Exchange(ref _disconnected, 1);
 
+        if (_movementCancellation != null)
+        {
+            await _movementCancellation.CancelAsync().ConfigureAwait(false);
+        }
         if (_receiveCancellation != null)
         {
             await _receiveCancellation.CancelAsync().ConfigureAwait(false);
+        }
+
+        if (_movementTask != null)
+        {
+            try
+            {
+                await _movementTask.ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+            }
         }
 
         try
@@ -132,6 +159,7 @@ internal sealed class LoadClient : IAsyncDisposable
             }
         }
 
+        _movementCancellation?.Dispose();
         _receiveCancellation?.Dispose();
         _tcpClient.Dispose();
     }
@@ -294,6 +322,7 @@ internal sealed class LoadClient : IAsyncDisposable
 
         WorldReady = true;
         StartDrain(stream, cancellationToken);
+        StartMovementIfEnabled(stream, cancellationToken);
     }
 
     private async Task PerformLoginForWorldAsync(
@@ -556,6 +585,108 @@ internal sealed class LoadClient : IAsyncDisposable
         }
 
         return false;
+    }
+
+    private void StartMovementIfEnabled(
+        NetworkStream stream,
+        CancellationToken cancellationToken)
+    {
+        int percent = ReadMovementSetting(MovementPercentVariable, 0, 0, 100);
+        if (percent <= 0 || (ClientIndex - 1) % 100 >= percent)
+        {
+            return;
+        }
+
+        int intervalMilliseconds = ReadMovementSetting(
+            MovementIntervalVariable,
+            1000,
+            100,
+            60000);
+        int baseX = ReadMovementSetting(MovementBaseXVariable, 80, 0, short.MaxValue);
+        int baseY = ReadMovementSetting(MovementBaseYVariable, 115, 0, short.MaxValue);
+        int step = ReadMovementSetting(MovementStepVariable, 1, 1, 16);
+        int speed = ReadMovementSetting(MovementSpeedVariable, 11, 1, short.MaxValue);
+        if (baseX + step > short.MaxValue)
+        {
+            throw new InvalidOperationException(
+                $"{MovementBaseXVariable} + {MovementStepVariable} must not exceed {short.MaxValue}.");
+        }
+
+        ActiveMovementEnabled = true;
+        _movementCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        _movementTask = MovementLoopAsync(
+            stream,
+            intervalMilliseconds,
+            (short)baseX,
+            (short)baseY,
+            (short)step,
+            (short)speed,
+            _movementCancellation.Token);
+    }
+
+    private async Task MovementLoopAsync(
+        NetworkStream stream,
+        int intervalMilliseconds,
+        short baseX,
+        short baseY,
+        short step,
+        short speed,
+        CancellationToken cancellationToken)
+    {
+        bool useOffset = (ClientIndex & 1) == 0;
+        try
+        {
+            await Task.Delay(intervalMilliseconds, cancellationToken).ConfigureAwait(false);
+            while (!cancellationToken.IsCancellationRequested && IsConnected)
+            {
+                short targetX = useOffset
+                    ? checked((short)(baseX + step))
+                    : baseX;
+                useOffset = !useOffset;
+
+                int packetId = _nextWorldPacketId;
+                _nextWorldPacketId = packetId >= ushort.MaxValue ? 0 : packetId + 1;
+                await WriteWorldPacketAsync(
+                        stream,
+                        WorldSessionId,
+                        $"{packetId} walk {targetX} {baseY} 0 {speed}",
+                        cancellationToken)
+                    .ConfigureAwait(false);
+                Interlocked.Increment(ref _movementPacketsSent);
+
+                await Task.Delay(intervalMilliseconds, cancellationToken).ConfigureAwait(false);
+            }
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+        }
+        catch (Exception exception) when (
+            exception is IOException or SocketException or InvalidOperationException)
+        {
+            Interlocked.Exchange(ref _disconnected, 1);
+            Failure ??= "active-movement " + exception.GetType().Name + ": " + exception.Message;
+        }
+    }
+
+    private static int ReadMovementSetting(
+        string variableName,
+        int fallback,
+        int minimum,
+        int maximum)
+    {
+        string? raw = Environment.GetEnvironmentVariable(variableName);
+        if (string.IsNullOrWhiteSpace(raw))
+        {
+            return fallback;
+        }
+
+        if (!int.TryParse(raw, out int parsed) || parsed < minimum || parsed > maximum)
+        {
+            throw new InvalidOperationException(
+                $"{variableName} must be an integer between {minimum} and {maximum}.");
+        }
+
+        return parsed;
     }
 
     private async Task WriteWorldPacketAsync(
