@@ -14,7 +14,7 @@ internal static class LoadAccountReader
         foreach (string rawLine in File.ReadLines(path))
         {
             string line = rawLine.Trim();
-            if (line.Length == 0 || line.StartsWith('#'))
+            if (line.Length == 0 || line[0] == '#')
             {
                 continue;
             }
@@ -81,10 +81,6 @@ internal static class NosTaleLoginCodec
             .Replace("{clientVersion}", options.ClientVersion, StringComparison.Ordinal);
     }
 
-    /// <summary>
-    /// Inverse of NosGm.Core.LoginCryptography.Decrypt. This is the transform
-    /// used by a client when sending an ASCII login packet to NosGM.
-    /// </summary>
     public static byte[] EncodeClientPacket(string packet)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(packet);
@@ -100,10 +96,6 @@ internal static class NosTaleLoginCodec
         return encrypted;
     }
 
-    /// <summary>
-    /// Decodes server-to-login-client packets produced by
-    /// NosGm.Core.LoginCryptography.Encrypt. The final byte 25 is a terminator.
-    /// </summary>
     public static string DecodeServerPacket(ReadOnlySpan<byte> encrypted)
     {
         if (encrypted.Length == 0)
@@ -129,5 +121,5 @@ internal static class NosTaleLoginCodec
         !string.IsNullOrWhiteSpace(response) &&
         !response.StartsWith("failc", StringComparison.OrdinalIgnoreCase) &&
         (response.Contains("NsTeST", StringComparison.OrdinalIgnoreCase) ||
-         response.Contains(':', StringComparison.Ordinal));
+         response.Contains(':'));
 }
