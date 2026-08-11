@@ -303,18 +303,41 @@ namespace NosGm.Core.Networking.Communication.Scs.Communication.Channels.Tcp
 
         private void SendByPriority(ConcurrentQueue<byte[]> buffer)
         {
-            IEnumerable<byte> outgoingPacket = new List<byte>();
+            const int maximumPacketsPerBatch = 30;
+            var messages = new List<byte[]>(maximumPacketsPerBatch);
+            int totalLength = 0;
 
-            // send max 30 packets at once
-            for (var i = 0; i < 30; i++)
-                if (buffer.TryDequeue(out var message) && message != null)
-                    outgoingPacket = outgoingPacket.Concat(message);
-                else
+            for (int index = 0; index < maximumPacketsPerBatch; index++)
+            {
+                if (!buffer.TryDequeue(out byte[] message) || message == null || message.Length == 0)
+                {
                     break;
+                }
 
-            if (outgoingPacket.Any())
-                _clientSocket.BeginSend(outgoingPacket.ToArray(), 0, outgoingPacket.Count(), SocketFlags.None,
-                    SendCallback, _clientSocket);
+                messages.Add(message);
+                totalLength = checked(totalLength + message.Length);
+            }
+
+            if (totalLength == 0)
+            {
+                return;
+            }
+
+            var outgoingPacket = new byte[totalLength];
+            int offset = 0;
+            foreach (byte[] message in messages)
+            {
+                Buffer.BlockCopy(message, 0, outgoingPacket, offset, message.Length);
+                offset += message.Length;
+            }
+
+            _clientSocket.BeginSend(
+                outgoingPacket,
+                0,
+                outgoingPacket.Length,
+                SocketFlags.None,
+                SendCallback,
+                _clientSocket);
         }
 
         protected override Task SendMessagePublicAsync(IScsMessage message, byte priority)
