@@ -6,6 +6,21 @@ namespace NosGm.Core
 {
     public class WorldCryptography : CryptographyBase
     {
+        #region Members
+
+        // World outbound encryption is a pure transform of the plaintext. Map
+        // broadcasts send the same movement packet to many sessions sequentially on
+        // one worker thread, so keep only the most recent movement result per thread.
+        // This avoids re-encrypting and allocating the same mv payload once per
+        // recipient without retaining an unbounded packet cache.
+        [ThreadStatic]
+        private static string _lastMovementPlaintext;
+
+        [ThreadStatic]
+        private static byte[] _lastMovementEncrypted;
+
+        #endregion
+
         #region Instantiation
 
         public WorldCryptography() : base(true)
@@ -249,6 +264,14 @@ namespace NosGm.Core
 
         public override byte[] Encrypt(string data)
         {
+            bool cacheMovement = data != null && data.StartsWith("mv ", StringComparison.Ordinal);
+            if (cacheMovement &&
+                _lastMovementEncrypted != null &&
+                string.Equals(_lastMovementPlaintext, data, StringComparison.Ordinal))
+            {
+                return _lastMovementEncrypted;
+            }
+
             var dataBytes = Encoding.Default.GetBytes(data);
             var encryptedData = new byte[dataBytes.Length + (int)Math.Ceiling((decimal)dataBytes.Length / 0x7E) + 1];
             for (int i = 0, j = 0; i < dataBytes.Length; i++)
@@ -263,6 +286,13 @@ namespace NosGm.Core
             }
 
             encryptedData[encryptedData.Length - 1] = 0xFF;
+
+            if (cacheMovement)
+            {
+                _lastMovementPlaintext = data;
+                _lastMovementEncrypted = encryptedData;
+            }
+
             return encryptedData;
         }
 
