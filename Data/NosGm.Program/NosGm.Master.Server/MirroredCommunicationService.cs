@@ -198,7 +198,7 @@ namespace NosGm.Master.Server
                 ? "CharacterConnected"
                 : "CharacterDisconnected";
 
-            foreach (SerializableWorldServer world in MSManager.Instance.WorldServers
+            foreach (WorldServer world in MSManager.Instance.WorldServers
                          .Where(candidate =>
                              candidate.Id != sourceWorldId &&
                              string.Equals(
