@@ -77,43 +77,79 @@ namespace NosGm.GameObject
         {
             _sessions.TryRemove(client.ClientId, out ClientSession session);
 
-            // check if session hasnt been already removed
-            if (session != null)
+            // A disconnect callback can be raised more than once while a socket is
+            // being torn down. Only the callback that successfully removed the
+            // session owns cleanup.
+            if (session == null)
             {
-                if (IsWorldServer)
-                {
-                    Logger.Info(
-                        $"[WORLD_HANDSHAKE] Stage=TCP_DISCONNECTED ClientId={client.ClientId} " +
-                        $"SessionEstablished={session.SessionId > 0} AccountInitialized={session.Account != null} " +
-                        $"Authenticated={session.IsAuthenticated} CharacterSelected={session.HasSelectedCharacter}");
-                }
+                return;
+            }
 
-                session.IsDisposing = true;
-                session.Destroy();
+            if (IsWorldServer)
+            {
+                Logger.Info(
+                    $"[WORLD_HANDSHAKE] Stage=TCP_DISCONNECTED ClientId={client.ClientId} " +
+                    $"SessionEstablished={session.SessionId > 0} AccountInitialized={session.Account != null} " +
+                    $"Authenticated={session.IsAuthenticated} CharacterSelected={session.HasSelectedCharacter}");
+            }
 
-                if (IsWorldServer && session.HasSelectedCharacter)
+            session.IsDisposing = true;
+
+            // Character cleanup must run while the Character is still alive.
+            // ClientSession.Destroy() calls Character.Dispose(), unregisters the
+            // character and emits the map leave broadcasts, so doing these steps
+            // after Destroy() is both duplicate work and a use-after-dispose risk.
+            if (IsWorldServer && session.HasSelectedCharacter)
+            {
+                RunDisconnectCleanupStep(client, "RESTORE_HP", () =>
                 {
                     if (session.Character.Hp < 1)
                     {
                         session.Character.Hp = 1;
                     }
+                });
 
-                    session.Character.LeaveTalentArena();
-                    session.Character.Event.EmitEvent(new CharacterSaveEvent());
+                RunDisconnectCleanupStep(
+                    client,
+                    "LEAVE_TALENT_ARENA",
+                    () => session.Character.LeaveTalentArena());
 
-                    session.Character.Mates.Where(s => s.IsTeamMember && !s.Owner.IsVehicled).ToList().ForEach(s => session.CurrentMapInstance?.Broadcast(session, s.GenerateOut(), ReceiverType.AllExceptMe));
-                    session.CurrentMapInstance?.Broadcast(session, StaticPacketHelper.Out(UserType.Player, session.Character.CharacterId), ReceiverType.AllExceptMe);
+                RunDisconnectCleanupStep(
+                    client,
+                    "SAVE_CHARACTER",
+                    () => session.Character.Event.EmitEvent(new CharacterSaveEvent()));
 
-                    if (ServerManager.Instance.Groups.Any(s => s.IsMemberOfGroup(session.Character.CharacterId)))
+                RunDisconnectCleanupStep(client, "GROUP_LEAVE", () =>
+                {
+                    if (ServerManager.Instance.Groups.Any(
+                            group => group.IsMemberOfGroup(session.Character.CharacterId)))
                     {
                         ServerManager.Instance.GroupLeave(session);
                     }
-                }                
+                });
+            }
 
-                client.Disconnect();
-                //Logger.Info($"ClientID: {client.ClientId} disconnected");
+            // Never let cleanup for one disconnected client escape through the
+            // SCS ClientDisconnected callback and terminate the whole World.
+            RunDisconnectCleanupStep(client, "DESTROY_SESSION", session.Destroy);
+            RunDisconnectCleanupStep(client, "DISCONNECT_SOCKET", client.Disconnect);
+        }
 
-                // session = null;
+        private void RunDisconnectCleanupStep(
+            INetworkClient client,
+            string stage,
+            Action cleanup)
+        {
+            try
+            {
+                cleanup();
+            }
+            catch (Exception ex)
+            {
+                string scope = IsWorldServer ? "WORLD" : "SESSION";
+                Logger.Error(
+                    $"[{scope}_DISCONNECT_FAILED] ClientId={client.ClientId} Stage={stage}",
+                    ex);
             }
         }
 
