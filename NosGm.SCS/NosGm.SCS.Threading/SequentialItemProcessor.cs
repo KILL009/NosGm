@@ -10,13 +10,30 @@ namespace NosGm.SCS.Threading
         private readonly object _syncObj = new object();
         private readonly Action<TItem> _processMethod;
         private readonly Queue<TItem> _queue;
+        private readonly int _maximumConcurrency;
 
-        private bool _isProcessing;
+        private int _activeWorkers;
         private bool _isRunning;
 
         public SequentialItemProcessor(Action<TItem> processMethod)
+            : this(processMethod, 1)
         {
-            _processMethod = processMethod ?? throw new ArgumentNullException(nameof(processMethod));
+        }
+
+        public SequentialItemProcessor(
+            Action<TItem> processMethod,
+            int maximumConcurrency)
+        {
+            _processMethod = processMethod ??
+                throw new ArgumentNullException(nameof(processMethod));
+            if (maximumConcurrency <= 0)
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(maximumConcurrency),
+                    "Maximum concurrency must be positive.");
+            }
+
+            _maximumConcurrency = maximumConcurrency;
             _queue = new Queue<TItem>();
         }
 
@@ -31,6 +48,19 @@ namespace NosGm.SCS.Threading
             }
         }
 
+        public int ActiveWorkers
+        {
+            get
+            {
+                lock (_syncObj)
+                {
+                    return _activeWorkers;
+                }
+            }
+        }
+
+        public int MaximumConcurrency => _maximumConcurrency;
+
         public void EnqueueMessage(TItem item)
         {
             bool startWorker = false;
@@ -42,10 +72,10 @@ namespace NosGm.SCS.Threading
                 }
 
                 _queue.Enqueue(item);
-                if (!_isProcessing)
+                _idle.Reset();
+                if (_activeWorkers < _maximumConcurrency)
                 {
-                    _isProcessing = true;
-                    _idle.Reset();
+                    _activeWorkers++;
                     startWorker = true;
                 }
             }
@@ -70,7 +100,7 @@ namespace NosGm.SCS.Threading
             {
                 _isRunning = false;
                 _queue.Clear();
-                if (!_isProcessing)
+                if (_activeWorkers == 0)
                 {
                     _idle.Set();
                 }
@@ -88,8 +118,11 @@ namespace NosGm.SCS.Threading
                 {
                     if (!_isRunning || _queue.Count == 0)
                     {
-                        _isProcessing = false;
-                        _idle.Set();
+                        _activeWorkers--;
+                        if (_activeWorkers == 0)
+                        {
+                            _idle.Set();
+                        }
                         return;
                     }
 
