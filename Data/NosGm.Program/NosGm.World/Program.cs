@@ -86,6 +86,7 @@ namespace NosGm.World
         private static bool _ignoreTelemetry;
         private static bool _isDebug = false;
         private static int _port;
+        private static int _fatalExceptionHandling;
         private static DiscordGmBridge _discordGmBridge;
 
         #endregion
@@ -147,9 +148,10 @@ namespace NosGm.World
             var ignoreStartupMessages = false;
             _port = Convert.ToInt32(WorldPolicyConfiguration.WorldPort); /*GlacernonServerPort dann solte act 4 auch gehen */
             var portArgIndex = Array.FindIndex(args, s => s == "--port");
-            if (portArgIndex != -1
+            var hasExplicitPort = portArgIndex != -1
                 && args.Length >= portArgIndex + 1
-                && int.TryParse(args[portArgIndex + 1], out _port))
+                && int.TryParse(args[portArgIndex + 1], out _port);
+            if (hasExplicitPort)
             {
                 Console.WriteLine("Port override: " + _port);
             }
@@ -228,6 +230,13 @@ namespace NosGm.World
             {
                 if (ex.ErrorCode == 10048)
                 {
+                    if (hasExplicitPort)
+                    {
+                        Logger.Error($"World port {_port} is already in use. Explicit --port values never auto-increment.", ex);
+                        Environment.Exit(ex.ErrorCode);
+                        return;
+                    }
+
                     _port++;
                     Logger.Info("Port already in use! Incrementing...");
                     goto portloop;
@@ -458,23 +467,38 @@ namespace NosGm.World
 
         private static void UnhandledExceptionHandler(object sender, UnhandledExceptionEventArgs e)
         {
-            Process.Start("NosGm.World.exe", $"--nomsg --port {_port}");
-            ServerManager.Instance.InShutdown = true;
-            if (e == null)
+            if (Interlocked.Exchange(ref _fatalExceptionHandling, 1) != 0)
             {
                 return;
             }
-            foreach (var clients in ServerManager.Instance.Sessions)
+
+            ServerManager.Instance.InShutdown = true;
+            try
             {
-                MessageExtension.SendModal(clients, GameConfiguration.CrashReportMessage);
-                clients.Character.Event.EmitEvent(new CharacterSaveEvent());
+                Exception exception = e?.ExceptionObject as Exception;
+                if (exception != null)
+                {
+                    LoggerService.LogServer.Logger.LogAsync($"World Server {ServerManager.Instance.WorldId} has been shut down. Reason: " + exception, LogType.ERROR);
+                    LoggerService.LogServer.Logger.LogAsync(exception.ToString() + " | " + exception.StackTrace, LogType.ERROR);
+                }
+
+                foreach (var clients in ServerManager.Instance.Sessions)
+                {
+                    MessageExtension.SendModal(clients, GameConfiguration.CrashReportMessage);
+                    clients.Character.Event.EmitEvent(new CharacterSaveEvent());
+                }
+
+                CommunicationServiceClient.Instance.UnregisterWorldServer(ServerManager.Instance.WorldId);
+                ServerManager.Instance.SaveAll();
             }
-            Exception exception = (Exception)e.ExceptionObject;
-            LoggerService.LogServer.Logger.LogAsync($"World Server {ServerManager.Instance.WorldId} has been shut down. Reason: " + exception, LogType.ERROR);
-            LoggerService.LogServer.Logger.LogAsync(exception.ToString() + " | " + exception.StackTrace, LogType.ERROR);
-            CommunicationServiceClient.Instance.UnregisterWorldServer(ServerManager.Instance.WorldId);
-            ServerManager.Instance.SaveAll();
-            Environment.Exit(1);
+            catch (Exception cleanupException)
+            {
+                Logger.Error("World fatal-error cleanup failed", cleanupException);
+            }
+            finally
+            {
+                Environment.Exit(1);
+            }
         }
 
         #endregion
