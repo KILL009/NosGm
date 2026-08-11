@@ -66,6 +66,7 @@ namespace NosGm.Core
             if (!IsDisposing && packet != null && packet != "")
             {
                 packet = NormalizeOfficialPacketLayout(packet);
+                priority = NormalizePacketPriority(packet, priority);
                 var rawMessage = new ScsRawDataMessage(_encryptor.Encrypt(packet));
                 SendMessage(rawMessage, priority);
             }
@@ -74,6 +75,7 @@ namespace NosGm.Core
         public async Task SendPacketAsync(string packet, byte priority = 10)
         {
             packet = NormalizeOfficialPacketLayout(packet);
+            priority = NormalizePacketPriority(packet, priority);
             ScsRawDataMessage rawDataMessage = new ScsRawDataMessage(_encryptor.Encrypt(packet));
             await SendMessageAsync(rawDataMessage, priority).ConfigureAwait(false);
         }
@@ -99,6 +101,21 @@ namespace NosGm.Core
         public void SetClientSession(object clientSession)
         {
             _session = clientSession;
+        }
+
+        /// <summary>
+        /// Keeps high-priority capacity available for critical World state while
+        /// movement fan-out is under pressure. Movement is transient visual state,
+        /// so packets using the normal priority are routed through the existing
+        /// low-priority queue. Explicit non-default priorities remain untouched.
+        /// </summary>
+        private static byte NormalizePacketPriority(string packet, byte priority)
+        {
+            return priority == 10 &&
+                   packet != null &&
+                   packet.StartsWith("mv ", StringComparison.Ordinal)
+                ? (byte)5
+                : priority;
         }
 
         /// <summary>
