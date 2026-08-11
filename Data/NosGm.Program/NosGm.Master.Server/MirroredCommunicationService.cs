@@ -2,6 +2,7 @@ using Grpc.Core;
 using NosGm.Cluster.Contracts.Communication.V1;
 using NosGm.Communication.Client;
 using NosGm.Core;
+using NosGm.DAL;
 using NosGm.Domain;
 using NosGm.Master.Library.Client;
 using NosGm.Master.Library.Data;
@@ -19,33 +20,72 @@ namespace NosGm.Master.Server
     {
         public new bool ConnectCharacter(Guid worldId, long characterId)
         {
-            bool connected = base.ConnectCharacter(worldId, characterId);
-            if (connected)
+            if (!IsCurrentClientAuthenticated())
             {
-                AccountConnection account = FindConnectedCharacter(
-                    worldId,
-                    characterId);
-                MirrorPresence(
-                    account?.ConnectedWorld?.WorldGroup,
-                    characterId,
-                    true);
+                return false;
             }
-            return connected;
+
+            // The legacy SCS service used to fan CharacterConnected back to the
+            // World that originated this mutation. Every selected ClientSession
+            // in that World subscribes to the callback and then ignores its own
+            // character, so the echo only creates O(local players) work for each
+            // login. Keep the legacy callback for the other Worlds in the group,
+            // where cross-channel presence information is actually useful.
+            long accountId = DAOFactory.CharacterDAO.LoadById(characterId)?.AccountId ?? 0;
+            AccountConnection account = MSManager.Instance.ConnectedAccounts.Find(
+                candidate =>
+                    candidate.AccountId == accountId &&
+                    candidate.ConnectedWorld?.Id == worldId);
+            if (account == null)
+            {
+                return false;
+            }
+
+            account.CharacterId = characterId;
+            string worldGroup = account.ConnectedWorld?.WorldGroup;
+            BroadcastLegacyCharacterPresence(
+                worldId,
+                worldGroup,
+                characterId,
+                true);
+            MirrorPresence(worldGroup, characterId, true);
+            return true;
         }
 
         public new void DisconnectCharacter(Guid worldId, long characterId)
         {
-            bool authenticated = IsCurrentClientAuthenticated();
-            AccountConnection account = authenticated
-                ? FindConnectedCharacter(worldId, characterId)
-                : null;
-            string worldGroup = account?.ConnectedWorld?.WorldGroup;
-
-            base.DisconnectCharacter(worldId, characterId);
-            if (authenticated && account != null)
+            if (!IsCurrentClientAuthenticated())
             {
-                MirrorPresence(worldGroup, characterId, false);
+                return;
             }
+
+            AccountConnection account = FindConnectedCharacter(
+                worldId,
+                characterId);
+            if (account == null)
+            {
+                return;
+            }
+
+            string worldGroup = account.ConnectedWorld?.WorldGroup;
+
+            // Do not synchronously call CharacterDisconnected back into the
+            // origin World while that same World is blocked waiting for this SCS
+            // request/reply. Under mass disconnect this circular path can saturate
+            // RequestReplyMessenger and time out hundreds of session teardowns.
+            BroadcastLegacyCharacterPresence(
+                worldId,
+                worldGroup,
+                characterId,
+                false);
+
+            if (!account.CanLoginCrossServer)
+            {
+                account.CharacterId = 0;
+                account.ConnectedWorld = null;
+            }
+
+            MirrorPresence(worldGroup, characterId, false);
         }
 
         public new void KickSession(long? accountId, int? sessionId)
@@ -141,6 +181,55 @@ namespace NosGm.Master.Server
                 account =>
                     account.CharacterId == characterId &&
                     account.ConnectedWorld?.Id == worldId);
+        }
+
+        private static void BroadcastLegacyCharacterPresence(
+            Guid sourceWorldId,
+            string worldGroup,
+            long characterId,
+            bool connected)
+        {
+            if (string.IsNullOrWhiteSpace(worldGroup))
+            {
+                return;
+            }
+
+            string operation = connected
+                ? "CharacterConnected"
+                : "CharacterDisconnected";
+
+            foreach (WorldServer world in MSManager.Instance.WorldServers
+                         .Where(candidate =>
+                             candidate.Id != sourceWorldId &&
+                             string.Equals(
+                                 candidate.WorldGroup,
+                                 worldGroup,
+                                 StringComparison.Ordinal)))
+            {
+                try
+                {
+                    ICommunicationClient callback = world.CommunicationServiceClient
+                        .GetClientProxy<ICommunicationClient>();
+                    if (connected)
+                    {
+                        callback.CharacterConnected(characterId);
+                    }
+                    else
+                    {
+                        callback.CharacterDisconnected(characterId);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Logger.Error(
+                        "[LEGACY_PRESENCE_CALLBACK_ISOLATED_FAILURE] Operation=" +
+                        operation +
+                        " SourceWorldId=" + sourceWorldId.ToString("D") +
+                        " TargetWorldId=" + world.Id.ToString("D") +
+                        " CharacterId=" + characterId,
+                        ex);
+                }
+            }
         }
 
         private static void MirrorPresence(
