@@ -36,13 +36,21 @@ namespace NosGm.SCS.Communication.Scs.Communication.Messengers
         public int Timeout { get; set; }
 
         public RequestReplyMessenger(T messenger)
+            : this(messenger, 1)
         {
-            this.Messenger = messenger;
+        }
+
+        public RequestReplyMessenger(T messenger, int maximumInboundConcurrency)
+        {
+            this.Messenger = messenger ?? throw new ArgumentNullException(nameof(messenger));
             messenger.MessageReceived += new EventHandler<MessageEventArgs>(this.Messenger_MessageReceived);
             messenger.MessageSent += new EventHandler<MessageEventArgs>(this.Messenger_MessageSent);
-            this._incomingMessageProcessor = new SequentialItemProcessor<IScsMessage>(new Action<IScsMessage>(this.OnMessageReceived));
+            this._incomingMessageProcessor =
+                new SequentialItemProcessor<IScsMessage>(
+                    new Action<IScsMessage>(this.OnMessageReceived),
+                    maximumInboundConcurrency);
             this._waitingMessages = new SortedList<string, RequestReplyMessenger<T>.WaitingMessage>();
-            this.Timeout = 60000;
+            this.Timeout = DefaultTimeout;
         }
 
         public virtual void Start() => this._incomingMessageProcessor.Start();
