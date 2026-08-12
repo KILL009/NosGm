@@ -318,6 +318,7 @@ public sealed class ClusterConfigurationService
 
         try
         {
+            await context.WriteResponseHeadersAsync(new Metadata());
             using var linked = CancellationTokenSource.CreateLinkedTokenSource(
                 context.CancellationToken,
                 subscription.TerminationToken);
