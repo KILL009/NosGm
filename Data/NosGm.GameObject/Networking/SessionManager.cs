@@ -3,6 +3,7 @@ using NosGm.Domain;
 using NosGm.GameObject.Characters.Events;
 using NosGm.GameObject.Helpers;
 using NosGm.GameObject.Networking;
+using NosGm.Master.Library.Client;
 using System;
 using System.Collections.Concurrent;
 using System.Linq;
@@ -129,9 +130,34 @@ namespace NosGm.GameObject
                 });
             }
 
-            // Never let cleanup for one disconnected client escape through the
-            // SCS ClientDisconnected callback and terminate the whole World.
-            RunDisconnectCleanupStep(client, "DESTROY_SESSION", session.Destroy);
+            // World TCP disconnect callbacks must never block for the legacy SCS
+            // request/reply timeout. Capture the remote account/character lifecycle
+            // mutations and let CommunicationServiceClient drain them on its
+            // dedicated bounded worker queue after local teardown has completed.
+            RunDisconnectCleanupStep(client, "DESTROY_SESSION", () =>
+            {
+                if (!IsWorldServer)
+                {
+                    session.Destroy();
+                    return;
+                }
+
+                long characterId = session.HasSelectedCharacter && session.Character != null
+                    ? session.Character.CharacterId
+                    : 0;
+                long accountId = session.Account?.AccountId ?? 0;
+
+                using (CommunicationServiceClient.Instance.BeginDeferredSessionTeardown(
+                           client.ClientId,
+                           ServerManager.Instance.WorldId,
+                           characterId,
+                           accountId,
+                           session.SessionId,
+                           session.PreserveAccountRegistrationOnDisconnect))
+                {
+                    session.Destroy();
+                }
+            });
             RunDisconnectCleanupStep(client, "DISCONNECT_SOCKET", client.Disconnect);
         }
 
