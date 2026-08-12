@@ -12,6 +12,8 @@ namespace NosGm.SCS.Communication.ScsServices.Service
 {
     internal class ScsServiceApplication : IScsServiceApplication
     {
+        private const int MaximumConcurrentServiceCallsPerClient = 8;
+
         private readonly IScsServer _scsServer;
         private readonly ThreadSafeSortedList<string, ScsServiceApplication.ServiceObject> _serviceObjects;
         private readonly ThreadSafeSortedList<long, IScsServiceClient> _serviceClients;
@@ -54,7 +56,10 @@ namespace NosGm.SCS.Communication.ScsServices.Service
 
         private void ScsServer_ClientConnected(object sender, ServerClientEventArgs e)
         {
-            RequestReplyMessenger<IScsServerClient> requestReplyMessenger = new RequestReplyMessenger<IScsServerClient>(e.Client);
+            RequestReplyMessenger<IScsServerClient> requestReplyMessenger =
+                new RequestReplyMessenger<IScsServerClient>(
+                    e.Client,
+                    MaximumConcurrentServiceCallsPerClient);
             requestReplyMessenger.MessageReceived += new EventHandler<MessageEventArgs>(this.Client_MessageReceived);
             requestReplyMessenger.Start();
             IScsServiceClient serviceClient = ScsServiceClientFactory.CreateServiceClient(e.Client, requestReplyMessenger);

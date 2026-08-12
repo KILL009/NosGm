@@ -32,17 +32,22 @@ namespace NosGm.Master.Server
             // login. Keep the legacy callback for the other Worlds in the group,
             // where cross-channel presence information is actually useful.
             long accountId = DAOFactory.CharacterDAO.LoadById(characterId)?.AccountId ?? 0;
-            AccountConnection account = MSManager.Instance.ConnectedAccounts.Find(
-                candidate =>
-                    candidate.AccountId == accountId &&
-                    candidate.ConnectedWorld?.Id == worldId);
-            if (account == null)
+            string worldGroup;
+            lock (MSManager.Instance.ConnectedAccounts)
             {
-                return false;
+                AccountConnection account = MSManager.Instance.ConnectedAccounts.Find(
+                    candidate =>
+                        candidate.AccountId == accountId &&
+                        candidate.ConnectedWorld?.Id == worldId);
+                if (account == null)
+                {
+                    return false;
+                }
+
+                account.CharacterId = characterId;
+                worldGroup = account.ConnectedWorld?.WorldGroup;
             }
 
-            account.CharacterId = characterId;
-            string worldGroup = account.ConnectedWorld?.WorldGroup;
             BroadcastLegacyCharacterPresence(
                 worldId,
                 worldGroup,
@@ -59,32 +64,38 @@ namespace NosGm.Master.Server
                 return;
             }
 
-            AccountConnection account = FindConnectedCharacter(
-                worldId,
-                characterId);
-            if (account == null)
+            string worldGroup;
+            lock (MSManager.Instance.ConnectedAccounts)
             {
-                return;
-            }
+                AccountConnection account = MSManager.Instance.ConnectedAccounts.Find(
+                    candidate =>
+                        candidate.CharacterId == characterId &&
+                        candidate.ConnectedWorld?.Id == worldId);
+                if (account == null)
+                {
+                    return;
+                }
 
-            string worldGroup = account.ConnectedWorld?.WorldGroup;
+                worldGroup = account.ConnectedWorld?.WorldGroup;
+                if (!account.CanLoginCrossServer)
+                {
+                    account.CharacterId = 0;
+                    account.ConnectedWorld = null;
+                }
+            }
 
             // Do not synchronously call CharacterDisconnected back into the
             // origin World while that same World is blocked waiting for this SCS
             // request/reply. Under mass disconnect this circular path can saturate
             // RequestReplyMessenger and time out hundreds of session teardowns.
+            // The account mutation above is protected by the same lock used by
+            // DisconnectAccount; callbacks stay outside the lock because they can
+            // perform network I/O.
             BroadcastLegacyCharacterPresence(
                 worldId,
                 worldGroup,
                 characterId,
                 false);
-
-            if (!account.CanLoginCrossServer)
-            {
-                account.CharacterId = 0;
-                account.ConnectedWorld = null;
-            }
-
             MirrorPresence(worldGroup, characterId, false);
         }
 
@@ -171,16 +182,6 @@ namespace NosGm.Master.Server
         {
             return MSManager.Instance.AuthentificatedClients.Any(
                 clientId => clientId.Equals(CurrentClient.ClientId));
-        }
-
-        private static AccountConnection FindConnectedCharacter(
-            Guid worldId,
-            long characterId)
-        {
-            return MSManager.Instance.ConnectedAccounts.Find(
-                account =>
-                    account.CharacterId == characterId &&
-                    account.ConnectedWorld?.Id == worldId);
         }
 
         private static void BroadcastLegacyCharacterPresence(
