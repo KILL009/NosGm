@@ -2,12 +2,24 @@ using System.Diagnostics;
 
 namespace NosGM.LoadTest;
 
+internal sealed record ProcessMetricSample(
+    string ProcessName,
+    double CpuPercent,
+    long WorkingSetBytes,
+    long PrivateBytes,
+    int ThreadCount,
+    int HandleCount,
+    int ProcessCount);
+
 internal sealed record ProcessSample(
     DateTime CapturedAtUtc,
     double CpuPercent,
     long WorkingSetBytes,
     long PrivateBytes,
-    int ProcessCount);
+    int ThreadCount,
+    int HandleCount,
+    int ProcessCount,
+    ProcessMetricSample[] Processes);
 
 internal sealed class ProcessSampler
 {
@@ -31,11 +43,21 @@ internal sealed class ProcessSampler
         double totalCpu = 0;
         long totalWorkingSet = 0;
         long totalPrivateBytes = 0;
+        int totalThreadCount = 0;
+        int totalHandleCount = 0;
         int processCount = 0;
         var liveProcessIds = new HashSet<int>();
+        var processMetrics = new List<ProcessMetricSample>(_processNames.Length);
 
         foreach (string processName in _processNames)
         {
+            double processCpu = 0;
+            long processWorkingSet = 0;
+            long processPrivateBytes = 0;
+            int processThreadCount = 0;
+            int processHandleCount = 0;
+            int namedProcessCount = 0;
+
             foreach (Process process in Process.GetProcessesByName(processName))
             {
                 using (process)
@@ -44,12 +66,20 @@ internal sealed class ProcessSampler
                     {
                         process.Refresh();
                         int processId = process.Id;
-                        liveProcessIds.Add(processId);
-                        processCount++;
-                        totalWorkingSet += Math.Max(0, process.WorkingSet64);
-                        totalPrivateBytes += Math.Max(0, process.PrivateMemorySize64);
-
+                        long workingSet = Math.Max(0, process.WorkingSet64);
+                        long privateBytes = Math.Max(0, process.PrivateMemorySize64);
+                        int threadCount = Math.Max(0, process.Threads.Count);
+                        int handleCount = Math.Max(0, process.HandleCount);
                         long totalProcessorTicks = process.TotalProcessorTime.Ticks;
+                        double cpu = 0;
+
+                        liveProcessIds.Add(processId);
+                        namedProcessCount++;
+                        processWorkingSet += workingSet;
+                        processPrivateBytes += privateBytes;
+                        processThreadCount += threadCount;
+                        processHandleCount += handleCount;
+
                         if (_previous.TryGetValue(processId, out PreviousProcessSample previous))
                         {
                             long elapsedTimestamp = nowTimestamp - previous.Timestamp;
@@ -59,12 +89,12 @@ internal sealed class ProcessSampler
                                 : elapsedTimestamp / (double)Stopwatch.Frequency;
                             if (elapsedSeconds > 0)
                             {
-                                double cpu = processorDelta /
+                                cpu = processorDelta /
                                     (double)TimeSpan.TicksPerSecond /
                                     elapsedSeconds /
                                     Math.Max(1, Environment.ProcessorCount) *
                                     100d;
-                                totalCpu += Math.Max(0, cpu);
+                                processCpu += Math.Max(0, cpu);
                             }
                         }
 
@@ -80,6 +110,24 @@ internal sealed class ProcessSampler
                     }
                 }
             }
+
+            processCpu = Math.Min(100d, processCpu);
+            totalCpu += processCpu;
+            totalWorkingSet += processWorkingSet;
+            totalPrivateBytes += processPrivateBytes;
+            totalThreadCount += processThreadCount;
+            totalHandleCount += processHandleCount;
+            processCount += namedProcessCount;
+
+            processMetrics.Add(
+                new ProcessMetricSample(
+                    processName,
+                    processCpu,
+                    processWorkingSet,
+                    processPrivateBytes,
+                    processThreadCount,
+                    processHandleCount,
+                    namedProcessCount));
         }
 
         foreach (int processId in _previous.Keys.Where(id => !liveProcessIds.Contains(id)).ToArray())
@@ -92,7 +140,10 @@ internal sealed class ProcessSampler
             Math.Min(100d, totalCpu),
             totalWorkingSet,
             totalPrivateBytes,
-            processCount);
+            totalThreadCount,
+            totalHandleCount,
+            processCount,
+            processMetrics.ToArray());
     }
 
     private static string NormalizeProcessName(string configuredName)

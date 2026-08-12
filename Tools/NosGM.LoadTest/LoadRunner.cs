@@ -11,6 +11,7 @@ internal sealed class LoadRunner : IAsyncDisposable
     private readonly List<LoadClient> _clients = [];
     private readonly ProcessSampler _processSampler;
     private readonly List<StageResult> _stageResults = [];
+    private readonly List<StageTelemetrySample> _telemetrySamples = [];
 
     public LoadRunner(LoadTestOptions options, IReadOnlyList<LoadAccount>? accounts = null)
     {
@@ -91,7 +92,19 @@ internal sealed class LoadRunner : IAsyncDisposable
             }
             Console.WriteLine(
                 $" connect-p95={result.ConnectP95Milliseconds:N1}ms CPU max={result.ProcessCpuMaximumPercent:N1}% " +
-                $"WS max={ToMegabytes(result.ProcessWorkingSetMaximumBytes):N1}MB");
+                $"WS max={ToMegabytes(result.ProcessWorkingSetMaximumBytes):N1}MB " +
+                $"rx/s avg={FormatBytes((long)result.ReceiveBytesPerSecondAverage)} " +
+                $"tx/s avg={FormatBytes((long)result.SendBytesPerSecondAverage)} " +
+                $"move/s avg={result.MovementPacketsPerSecondAverage:N1}");
+
+            foreach (ProcessSummary process in result.Processes)
+            {
+                Console.WriteLine(
+                    $"  [PROC] {process.ProcessName,-28} CPU avg/max={process.CpuAveragePercent,5:N1}/{process.CpuMaximumPercent,5:N1}% " +
+                    $"WS max={ToMegabytes(process.WorkingSetMaximumBytes),8:N1}MB " +
+                    $"Private max={ToMegabytes(process.PrivateBytesMaximum),8:N1}MB " +
+                    $"threads max={process.ThreadCountMaximum,4} handles max={process.HandleCountMaximum,5}");
+            }
 
             foreach (string failure in result.FailureSamples)
             {
@@ -158,7 +171,13 @@ internal sealed class LoadRunner : IAsyncDisposable
     {
         int sampleCount = Math.Max(1, _options.HoldSeconds);
         var processSamples = new List<ProcessSample>(sampleCount);
+        var stageTelemetry = new List<StageTelemetrySample>(sampleCount);
         DateTime startedAtUtc = DateTime.UtcNow;
+        DateTime previousCapturedAtUtc = startedAtUtc;
+        long previousReceived = _clients.Sum(client => client.BytesReceived);
+        long previousSent = _clients.Sum(client => client.BytesSent);
+        long previousMovement = _clients.Sum(client => client.MovementPacketsSent);
+        bool hasPreviousRateSample = false;
 
         for (int second = 0; second < sampleCount; second++)
         {
@@ -167,17 +186,66 @@ internal sealed class LoadRunner : IAsyncDisposable
             processSamples.Add(process);
 
             int connected = _clients.Count(client => client.IsConnected);
+            int disconnected = _clients.Count - connected;
             int authIssued = _clients.Count(client => client.AuthTicketIssued);
             int loginAccepted = _clients.Count(client => client.LoginAccepted);
             int worldReadyNow = _clients.Count(client => client.WorldReady);
             long received = _clients.Sum(client => client.BytesReceived);
             long sent = _clients.Sum(client => client.BytesSent);
+            long movement = _clients.Sum(client => client.MovementPacketsSent);
+
+            double elapsedSeconds = Math.Max(
+                0.001d,
+                (process.CapturedAtUtc - previousCapturedAtUtc).TotalSeconds);
+            double receiveRate = hasPreviousRateSample
+                ? Math.Max(0, received - previousReceived) / elapsedSeconds
+                : 0;
+            double sendRate = hasPreviousRateSample
+                ? Math.Max(0, sent - previousSent) / elapsedSeconds
+                : 0;
+            double movementRate = hasPreviousRateSample
+                ? Math.Max(0, movement - previousMovement) / elapsedSeconds
+                : 0;
+
+            var telemetry = new StageTelemetrySample
+            {
+                Target = target,
+                Second = second + 1,
+                CapturedAtUtc = process.CapturedAtUtc,
+                Connected = connected,
+                Disconnected = disconnected,
+                AuthTicketIssued = authIssued,
+                LoginAccepted = loginAccepted,
+                WorldReady = worldReadyNow,
+                BytesReceived = received,
+                BytesSent = sent,
+                MovementPacketsSent = movement,
+                ReceiveBytesPerSecond = receiveRate,
+                SendBytesPerSecond = sendRate,
+                MovementPacketsPerSecond = movementRate,
+                ProcessCpuPercent = process.CpuPercent,
+                ProcessWorkingSetBytes = process.WorkingSetBytes,
+                ProcessPrivateBytes = process.PrivateBytes,
+                ProcessThreadCount = process.ThreadCount,
+                ProcessHandleCount = process.HandleCount,
+                ObservedProcessCount = process.ProcessCount,
+                Processes = process.Processes
+            };
+            stageTelemetry.Add(telemetry);
+            _telemetrySamples.Add(telemetry);
 
             Console.Write(
                 $"\rhold {Math.Min(second + 1, _options.HoldSeconds),3}/{_options.HoldSeconds,3}s " +
                 $"connected={connected,5} auth-ok={authIssued,5} login-ok={loginAccepted,5} " +
-                $"world-ready={worldReadyNow,5} rx={FormatBytes(received),10} tx={FormatBytes(sent),10} " +
+                $"world-ready={worldReadyNow,5} rx/s={FormatBytes((long)receiveRate),10} " +
+                $"tx/s={FormatBytes((long)sendRate),10} move/s={movementRate,8:N1} " +
                 $"CPU={process.CpuPercent,6:N1}% WS={ToMegabytes(process.WorkingSetBytes),8:N1}MB");
+
+            previousCapturedAtUtc = process.CapturedAtUtc;
+            previousReceived = received;
+            previousSent = sent;
+            previousMovement = movement;
+            hasPreviousRateSample = true;
 
             if (_options.HoldSeconds > 0)
             {
@@ -258,7 +326,16 @@ internal sealed class LoadRunner : IAsyncDisposable
             ProcessCpuMaximumPercent = processSamples.Max(sample => sample.CpuPercent),
             ProcessWorkingSetMaximumBytes = processSamples.Max(sample => sample.WorkingSetBytes),
             ProcessPrivateBytesMaximum = processSamples.Max(sample => sample.PrivateBytes),
+            ProcessThreadCountMaximum = processSamples.Max(sample => sample.ThreadCount),
+            ProcessHandleCountMaximum = processSamples.Max(sample => sample.HandleCount),
             ObservedProcessCountMaximum = processSamples.Max(sample => sample.ProcessCount),
+            ReceiveBytesPerSecondAverage = stageTelemetry.Average(sample => sample.ReceiveBytesPerSecond),
+            ReceiveBytesPerSecondMaximum = stageTelemetry.Max(sample => sample.ReceiveBytesPerSecond),
+            SendBytesPerSecondAverage = stageTelemetry.Average(sample => sample.SendBytesPerSecond),
+            SendBytesPerSecondMaximum = stageTelemetry.Max(sample => sample.SendBytesPerSecond),
+            MovementPacketsPerSecondAverage = stageTelemetry.Average(sample => sample.MovementPacketsPerSecond),
+            MovementPacketsPerSecondMaximum = stageTelemetry.Max(sample => sample.MovementPacketsPerSecond),
+            Processes = BuildProcessSummaries(processSamples),
             FailureSamples = failureSamples
         };
     }
@@ -283,7 +360,8 @@ internal sealed class LoadRunner : IAsyncDisposable
             WorldReadyPacket = _options.Scenario == LoadScenario.World ? _options.WorldReadyPacket : null,
             RampPerSecond = _options.RampPerSecond,
             HoldSeconds = _options.HoldSeconds,
-            Stages = _stageResults.ToArray()
+            Stages = _stageResults.ToArray(),
+            Telemetry = _telemetrySamples.ToArray()
         };
 
         var jsonOptions = new JsonSerializerOptions
@@ -297,13 +375,23 @@ internal sealed class LoadRunner : IAsyncDisposable
             Encoding.UTF8,
             cancellationToken).ConfigureAwait(false);
 
+        await WriteStageSummaryCsvAsync(cancellationToken).ConfigureAwait(false);
+        await WriteTelemetryCsvAsync(cancellationToken).ConfigureAwait(false);
+        await WriteProcessTelemetryCsvAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task WriteStageSummaryCsvAsync(CancellationToken cancellationToken)
+    {
         var csv = new StringBuilder();
         csv.AppendLine(
             "target,attempted,connected,failed,authTicketIssued,loginAccepted,loginRejectedOrTimedOut," +
             "worldEntryAccepted,characterSelected,worldReady,worldRejectedOrTimedOut," +
             "connectP50Ms,connectP95Ms,connectP99Ms,authBridgeP95Ms,loginP95Ms," +
             "worldReadyP50Ms,worldReadyP95Ms,worldReadyP99Ms,bytesReceived,bytesSent," +
-            "processCpuAvgPct,processCpuMaxPct,processWorkingSetMaxBytes,processPrivateMaxBytes,processCountMax");
+            "processCpuAvgPct,processCpuMaxPct,processWorkingSetMaxBytes,processPrivateMaxBytes," +
+            "processThreadCountMax,processHandleCountMax,processCountMax," +
+            "rxBytesPerSecondAvg,rxBytesPerSecondMax,txBytesPerSecondAvg,txBytesPerSecondMax," +
+            "movementPacketsPerSecondAvg,movementPacketsPerSecondMax");
         foreach (StageResult stage in _stageResults)
         {
             csv.Append(stage.Target.ToString(CultureInfo.InvariantCulture)).Append(',')
@@ -331,7 +419,15 @@ internal sealed class LoadRunner : IAsyncDisposable
                 .Append(stage.ProcessCpuMaximumPercent.ToString("F3", CultureInfo.InvariantCulture)).Append(',')
                 .Append(stage.ProcessWorkingSetMaximumBytes.ToString(CultureInfo.InvariantCulture)).Append(',')
                 .Append(stage.ProcessPrivateBytesMaximum.ToString(CultureInfo.InvariantCulture)).Append(',')
-                .Append(stage.ObservedProcessCountMaximum.ToString(CultureInfo.InvariantCulture))
+                .Append(stage.ProcessThreadCountMaximum.ToString(CultureInfo.InvariantCulture)).Append(',')
+                .Append(stage.ProcessHandleCountMaximum.ToString(CultureInfo.InvariantCulture)).Append(',')
+                .Append(stage.ObservedProcessCountMaximum.ToString(CultureInfo.InvariantCulture)).Append(',')
+                .Append(stage.ReceiveBytesPerSecondAverage.ToString("F3", CultureInfo.InvariantCulture)).Append(',')
+                .Append(stage.ReceiveBytesPerSecondMaximum.ToString("F3", CultureInfo.InvariantCulture)).Append(',')
+                .Append(stage.SendBytesPerSecondAverage.ToString("F3", CultureInfo.InvariantCulture)).Append(',')
+                .Append(stage.SendBytesPerSecondMaximum.ToString("F3", CultureInfo.InvariantCulture)).Append(',')
+                .Append(stage.MovementPacketsPerSecondAverage.ToString("F3", CultureInfo.InvariantCulture)).Append(',')
+                .Append(stage.MovementPacketsPerSecondMaximum.ToString("F3", CultureInfo.InvariantCulture))
                 .AppendLine();
         }
 
@@ -340,6 +436,99 @@ internal sealed class LoadRunner : IAsyncDisposable
             csv.ToString(),
             Encoding.UTF8,
             cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task WriteTelemetryCsvAsync(CancellationToken cancellationToken)
+    {
+        var csv = new StringBuilder();
+        csv.AppendLine(
+            "target,second,capturedAtUtc,connected,disconnected,authTicketIssued,loginAccepted,worldReady," +
+            "bytesReceived,bytesSent,movementPacketsSent,rxBytesPerSecond,txBytesPerSecond," +
+            "movementPacketsPerSecond,processCpuPct,processWorkingSetBytes,processPrivateBytes," +
+            "processThreadCount,processHandleCount,observedProcessCount");
+
+        foreach (StageTelemetrySample sample in _telemetrySamples)
+        {
+            csv.Append(sample.Target.ToString(CultureInfo.InvariantCulture)).Append(',')
+                .Append(sample.Second.ToString(CultureInfo.InvariantCulture)).Append(',')
+                .Append(sample.CapturedAtUtc.ToString("O", CultureInfo.InvariantCulture)).Append(',')
+                .Append(sample.Connected.ToString(CultureInfo.InvariantCulture)).Append(',')
+                .Append(sample.Disconnected.ToString(CultureInfo.InvariantCulture)).Append(',')
+                .Append(sample.AuthTicketIssued.ToString(CultureInfo.InvariantCulture)).Append(',')
+                .Append(sample.LoginAccepted.ToString(CultureInfo.InvariantCulture)).Append(',')
+                .Append(sample.WorldReady.ToString(CultureInfo.InvariantCulture)).Append(',')
+                .Append(sample.BytesReceived.ToString(CultureInfo.InvariantCulture)).Append(',')
+                .Append(sample.BytesSent.ToString(CultureInfo.InvariantCulture)).Append(',')
+                .Append(sample.MovementPacketsSent.ToString(CultureInfo.InvariantCulture)).Append(',')
+                .Append(sample.ReceiveBytesPerSecond.ToString("F3", CultureInfo.InvariantCulture)).Append(',')
+                .Append(sample.SendBytesPerSecond.ToString("F3", CultureInfo.InvariantCulture)).Append(',')
+                .Append(sample.MovementPacketsPerSecond.ToString("F3", CultureInfo.InvariantCulture)).Append(',')
+                .Append(sample.ProcessCpuPercent.ToString("F3", CultureInfo.InvariantCulture)).Append(',')
+                .Append(sample.ProcessWorkingSetBytes.ToString(CultureInfo.InvariantCulture)).Append(',')
+                .Append(sample.ProcessPrivateBytes.ToString(CultureInfo.InvariantCulture)).Append(',')
+                .Append(sample.ProcessThreadCount.ToString(CultureInfo.InvariantCulture)).Append(',')
+                .Append(sample.ProcessHandleCount.ToString(CultureInfo.InvariantCulture)).Append(',')
+                .Append(sample.ObservedProcessCount.ToString(CultureInfo.InvariantCulture))
+                .AppendLine();
+        }
+
+        await File.WriteAllTextAsync(
+            Path.Combine(_options.OutputDirectory, "load-test-telemetry.csv"),
+            csv.ToString(),
+            Encoding.UTF8,
+            cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task WriteProcessTelemetryCsvAsync(CancellationToken cancellationToken)
+    {
+        var csv = new StringBuilder();
+        csv.AppendLine(
+            "target,second,capturedAtUtc,processName,cpuPct,workingSetBytes,privateBytes," +
+            "threadCount,handleCount,processCount");
+
+        foreach (StageTelemetrySample sample in _telemetrySamples)
+        {
+            foreach (ProcessMetricSample process in sample.Processes)
+            {
+                csv.Append(sample.Target.ToString(CultureInfo.InvariantCulture)).Append(',')
+                    .Append(sample.Second.ToString(CultureInfo.InvariantCulture)).Append(',')
+                    .Append(sample.CapturedAtUtc.ToString("O", CultureInfo.InvariantCulture)).Append(',')
+                    .Append(process.ProcessName).Append(',')
+                    .Append(process.CpuPercent.ToString("F3", CultureInfo.InvariantCulture)).Append(',')
+                    .Append(process.WorkingSetBytes.ToString(CultureInfo.InvariantCulture)).Append(',')
+                    .Append(process.PrivateBytes.ToString(CultureInfo.InvariantCulture)).Append(',')
+                    .Append(process.ThreadCount.ToString(CultureInfo.InvariantCulture)).Append(',')
+                    .Append(process.HandleCount.ToString(CultureInfo.InvariantCulture)).Append(',')
+                    .Append(process.ProcessCount.ToString(CultureInfo.InvariantCulture))
+                    .AppendLine();
+            }
+        }
+
+        await File.WriteAllTextAsync(
+            Path.Combine(_options.OutputDirectory, "load-test-processes.csv"),
+            csv.ToString(),
+            Encoding.UTF8,
+            cancellationToken).ConfigureAwait(false);
+    }
+
+    private static ProcessSummary[] BuildProcessSummaries(IEnumerable<ProcessSample> samples)
+    {
+        return samples
+            .SelectMany(sample => sample.Processes)
+            .GroupBy(sample => sample.ProcessName, StringComparer.OrdinalIgnoreCase)
+            .Select(group => new ProcessSummary
+            {
+                ProcessName = group.Key,
+                CpuAveragePercent = group.Average(sample => sample.CpuPercent),
+                CpuMaximumPercent = group.Max(sample => sample.CpuPercent),
+                WorkingSetMaximumBytes = group.Max(sample => sample.WorkingSetBytes),
+                PrivateBytesMaximum = group.Max(sample => sample.PrivateBytes),
+                ThreadCountMaximum = group.Max(sample => sample.ThreadCount),
+                HandleCountMaximum = group.Max(sample => sample.HandleCount),
+                ProcessCountMaximum = group.Max(sample => sample.ProcessCount)
+            })
+            .OrderBy(summary => summary.ProcessName, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
     }
 
     private static double Percentile(double[] sortedValues, double percentile)
@@ -399,8 +588,54 @@ internal sealed class StageResult
     public double ProcessCpuMaximumPercent { get; init; }
     public long ProcessWorkingSetMaximumBytes { get; init; }
     public long ProcessPrivateBytesMaximum { get; init; }
+    public int ProcessThreadCountMaximum { get; init; }
+    public int ProcessHandleCountMaximum { get; init; }
     public int ObservedProcessCountMaximum { get; init; }
+    public double ReceiveBytesPerSecondAverage { get; init; }
+    public double ReceiveBytesPerSecondMaximum { get; init; }
+    public double SendBytesPerSecondAverage { get; init; }
+    public double SendBytesPerSecondMaximum { get; init; }
+    public double MovementPacketsPerSecondAverage { get; init; }
+    public double MovementPacketsPerSecondMaximum { get; init; }
+    public ProcessSummary[] Processes { get; init; } = [];
     public string[] FailureSamples { get; init; } = [];
+}
+
+internal sealed class ProcessSummary
+{
+    public string ProcessName { get; init; } = string.Empty;
+    public double CpuAveragePercent { get; init; }
+    public double CpuMaximumPercent { get; init; }
+    public long WorkingSetMaximumBytes { get; init; }
+    public long PrivateBytesMaximum { get; init; }
+    public int ThreadCountMaximum { get; init; }
+    public int HandleCountMaximum { get; init; }
+    public int ProcessCountMaximum { get; init; }
+}
+
+internal sealed class StageTelemetrySample
+{
+    public int Target { get; init; }
+    public int Second { get; init; }
+    public DateTime CapturedAtUtc { get; init; }
+    public int Connected { get; init; }
+    public int Disconnected { get; init; }
+    public int AuthTicketIssued { get; init; }
+    public int LoginAccepted { get; init; }
+    public int WorldReady { get; init; }
+    public long BytesReceived { get; init; }
+    public long BytesSent { get; init; }
+    public long MovementPacketsSent { get; init; }
+    public double ReceiveBytesPerSecond { get; init; }
+    public double SendBytesPerSecond { get; init; }
+    public double MovementPacketsPerSecond { get; init; }
+    public double ProcessCpuPercent { get; init; }
+    public long ProcessWorkingSetBytes { get; init; }
+    public long ProcessPrivateBytes { get; init; }
+    public int ProcessThreadCount { get; init; }
+    public int ProcessHandleCount { get; init; }
+    public int ObservedProcessCount { get; init; }
+    public ProcessMetricSample[] Processes { get; init; } = [];
 }
 
 internal sealed class LoadTestReport
@@ -417,4 +652,5 @@ internal sealed class LoadTestReport
     public int RampPerSecond { get; init; }
     public int HoldSeconds { get; init; }
     public StageResult[] Stages { get; init; } = [];
+    public StageTelemetrySample[] Telemetry { get; init; } = [];
 }
