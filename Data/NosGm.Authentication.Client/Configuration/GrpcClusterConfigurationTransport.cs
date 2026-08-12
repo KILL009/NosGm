@@ -236,7 +236,7 @@ namespace NosGm.Authentication.Client.Configuration
                             configuration.TimeExpBuffUnixTimeMs,
                         TimeGoldBuffUnixTimeMilliseconds =
                             configuration.TimeGoldBuffUnixTimeMs
-                },
+                    },
                 Generation = generation,
                 RuntimeGenerationId = runtimeGenerationId
             };
@@ -408,7 +408,12 @@ namespace NosGm.Authentication.Client.Configuration
         {
             var handler = new WinHttpHandler
             {
-                SslProtocols = SslProtocols.Tls12
+                SslProtocols = SslProtocols.Tls12,
+                // WinHttpHandler defaults ReceiveDataTimeout to 30 seconds.
+                // Configuration subscriptions are intentionally long-lived and
+                // may receive no body data for hours when configuration is stable.
+                // Unary RPCs remain bounded by their explicit gRPC deadlines.
+                ReceiveDataTimeout = Timeout.InfiniteTimeSpan
             };
             handler.ClientCertificates.Add(certificate);
             if (!string.IsNullOrEmpty(options.TrustedRootCertificatePath))
