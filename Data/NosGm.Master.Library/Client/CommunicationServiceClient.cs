@@ -9,6 +9,7 @@ using NosGm.SCS.Communication.Scs.Communication;
 using NosGm.SCS.Communication.Scs.Communication.EndPoints.Tcp;
 using NosGm.SCS.Communication.ScsServices.Client;
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Configuration;
 using System.Threading;
@@ -54,11 +55,16 @@ namespace NosGm.Master.Library.Client
                 _communicationMode,
                 scsTransport,
                 null);
+            _deferredSessionTeardownQueue =
+                new DeferredSessionTeardownQueue(this);
         }
 
         #endregion
 
         #region Members
+
+        [ThreadStatic]
+        private static DeferredSessionTeardownContext _deferredSessionTeardown;
 
         private static CommunicationServiceClient _instance;
 
@@ -66,6 +72,7 @@ namespace NosGm.Master.Library.Client
         private readonly CommunicationClient _commClient;
         private readonly CommunicationTransportMode _communicationMode;
         private readonly IClusterCommunicationTransport _communicationTransport;
+        private readonly DeferredSessionTeardownQueue _deferredSessionTeardownQueue;
 
         #endregion
 
@@ -144,6 +151,34 @@ namespace NosGm.Master.Library.Client
             _client.ServiceProxy.CleanupOutdatedSession();
         }
 
+        public IDisposable BeginDeferredSessionTeardown(
+            long clientId,
+            Guid worldId,
+            long characterId,
+            long accountId,
+            int sessionId,
+            bool preserveSessionRegistration)
+        {
+            if (_deferredSessionTeardown != null)
+            {
+                throw new InvalidOperationException(
+                    "A deferred communication teardown scope is already active on this thread.");
+            }
+
+            var context = new DeferredSessionTeardownContext
+            {
+                Owner = this,
+                ClientId = clientId,
+                WorldId = worldId,
+                CharacterId = characterId,
+                AccountId = accountId,
+                SessionId = sessionId,
+                PreserveSessionRegistration = preserveSessionRegistration
+            };
+            _deferredSessionTeardown = context;
+            return new DeferredSessionTeardownScope(this, context);
+        }
+
         public bool ConnectAccount(Guid worldId, long accountId, int sessionId)
         {
             CommunicationTransportResultCode result = Await(
@@ -190,6 +225,14 @@ namespace NosGm.Master.Library.Client
 
         public void DisconnectAccount(long accountId, int sessionId = 0, bool preserveSessionRegistration = false)
         {
+            if (TryDeferDisconnectAccount(
+                    accountId,
+                    sessionId,
+                    preserveSessionRegistration))
+            {
+                return;
+            }
+
             RequireSuccess(
                 Await(
                     _communicationTransport.DisconnectAccountAsync(
@@ -202,6 +245,11 @@ namespace NosGm.Master.Library.Client
 
         public void DisconnectCharacter(Guid worldId, long characterId)
         {
+            if (TryDeferDisconnectCharacter(worldId, characterId))
+            {
+                return;
+            }
+
             RequireSuccess(
                 Await(
                     _communicationTransport.DisconnectCharacterAsync(
@@ -219,6 +267,23 @@ namespace NosGm.Master.Library.Client
             int sessionId,
             long characterId)
         {
+            if (TryDeferDisconnectCharacter(worldId, characterId))
+            {
+                DeferredSessionTeardownContext context = _deferredSessionTeardown;
+                if (context != null)
+                {
+                    if (context.AccountId <= 0)
+                    {
+                        context.AccountId = accountId;
+                    }
+                    if (context.SessionId <= 0)
+                    {
+                        context.SessionId = sessionId;
+                    }
+                }
+                return;
+            }
+
             RequireSuccess(
                 Await(
                     _communicationTransport.DisconnectCharacterAsync(
@@ -568,6 +633,82 @@ namespace NosGm.Master.Library.Client
                 " failed with " + result + ".");
         }
 
+        private bool TryDeferDisconnectCharacter(Guid worldId, long characterId)
+        {
+            DeferredSessionTeardownContext context = _deferredSessionTeardown;
+            if (context == null || !ReferenceEquals(context.Owner, this))
+            {
+                return false;
+            }
+
+            if (context.WorldId == Guid.Empty)
+            {
+                context.WorldId = worldId;
+            }
+            if (context.CharacterId <= 0)
+            {
+                context.CharacterId = characterId;
+            }
+            return true;
+        }
+
+        private bool TryDeferDisconnectAccount(
+            long accountId,
+            int sessionId,
+            bool preserveSessionRegistration)
+        {
+            DeferredSessionTeardownContext context = _deferredSessionTeardown;
+            if (context == null || !ReferenceEquals(context.Owner, this))
+            {
+                return false;
+            }
+
+            if (context.AccountId <= 0)
+            {
+                context.AccountId = accountId;
+            }
+            if (context.SessionId <= 0)
+            {
+                context.SessionId = sessionId;
+            }
+            context.PreserveSessionRegistration = preserveSessionRegistration;
+            return true;
+        }
+
+        private void CompleteDeferredSessionTeardown(
+            DeferredSessionTeardownContext context)
+        {
+            if (!ReferenceEquals(_deferredSessionTeardown, context))
+            {
+                return;
+            }
+
+            _deferredSessionTeardown = null;
+            if (context.CharacterId <= 0 && context.AccountId <= 0)
+            {
+                return;
+            }
+
+            if (!_deferredSessionTeardownQueue.TryEnqueue(
+                    new DeferredSessionTeardownWorkItem
+                    {
+                        ClientId = context.ClientId,
+                        WorldId = context.WorldId,
+                        CharacterId = context.CharacterId,
+                        AccountId = context.AccountId,
+                        SessionId = context.SessionId,
+                        PreserveSessionRegistration =
+                            context.PreserveSessionRegistration
+                    }))
+            {
+                Logger.Error(
+                    "[WORLD_REMOTE_TEARDOWN_QUEUE_FULL] ClientId=" +
+                    context.ClientId +
+                    " AccountId=" + context.AccountId +
+                    " CharacterId=" + context.CharacterId);
+            }
+        }
+
         internal void OnCharacterConnected(long characterId)
         {
             var characterName = DAOFactory.CharacterDAO.LoadById(characterId)?.Name;
@@ -628,6 +769,190 @@ namespace NosGm.Master.Library.Client
         internal void OnUpdateStaticBonus(long characterId)
         {
             StaticBonusRefresh?.Invoke(characterId, null);
+        }
+
+        private sealed class DeferredSessionTeardownContext
+        {
+            public CommunicationServiceClient Owner { get; set; }
+
+            public long ClientId { get; set; }
+
+            public Guid WorldId { get; set; }
+
+            public long CharacterId { get; set; }
+
+            public long AccountId { get; set; }
+
+            public int SessionId { get; set; }
+
+            public bool PreserveSessionRegistration { get; set; }
+        }
+
+        private sealed class DeferredSessionTeardownScope : IDisposable
+        {
+            private readonly CommunicationServiceClient _owner;
+            private readonly DeferredSessionTeardownContext _context;
+            private int _disposed;
+
+            public DeferredSessionTeardownScope(
+                CommunicationServiceClient owner,
+                DeferredSessionTeardownContext context)
+            {
+                _owner = owner;
+                _context = context;
+            }
+
+            public void Dispose()
+            {
+                if (Interlocked.Exchange(ref _disposed, 1) != 0)
+                {
+                    return;
+                }
+
+                _owner.CompleteDeferredSessionTeardown(_context);
+            }
+        }
+
+        private sealed class DeferredSessionTeardownWorkItem
+        {
+            public long ClientId { get; set; }
+
+            public Guid WorldId { get; set; }
+
+            public long CharacterId { get; set; }
+
+            public long AccountId { get; set; }
+
+            public int SessionId { get; set; }
+
+            public bool PreserveSessionRegistration { get; set; }
+        }
+
+        private sealed class DeferredSessionTeardownQueue
+        {
+            private const int QueueCapacity = 16384;
+            private const int WorkerCount = 8;
+
+            private readonly CommunicationServiceClient _owner;
+            private readonly BlockingCollection<DeferredSessionTeardownWorkItem>
+                _queue;
+            private int _highWatermark;
+
+            public DeferredSessionTeardownQueue(
+                CommunicationServiceClient owner)
+            {
+                _owner = owner;
+                _queue =
+                    new BlockingCollection<DeferredSessionTeardownWorkItem>(
+                        new ConcurrentQueue<DeferredSessionTeardownWorkItem>(),
+                        QueueCapacity);
+
+                for (int workerIndex = 0;
+                     workerIndex < WorkerCount;
+                     workerIndex++)
+                {
+                    var worker = new Thread(Drain)
+                    {
+                        IsBackground = true,
+                        Name = "NosGm.SCS.Teardown." + (workerIndex + 1)
+                    };
+                    worker.Start();
+                }
+            }
+
+            public bool TryEnqueue(DeferredSessionTeardownWorkItem item)
+            {
+                bool added = _queue.TryAdd(item);
+                if (!added)
+                {
+                    return false;
+                }
+
+                int depth = _queue.Count;
+                RecordHighWatermark(depth);
+                return true;
+            }
+
+            private void RecordHighWatermark(int depth)
+            {
+                while (true)
+                {
+                    int current = Volatile.Read(ref _highWatermark);
+                    if (depth <= current)
+                    {
+                        return;
+                    }
+                    if (Interlocked.CompareExchange(
+                            ref _highWatermark,
+                            depth,
+                            current) != current)
+                    {
+                        continue;
+                    }
+
+                    if (depth >= 250 && depth % 250 == 0)
+                    {
+                        Logger.Warn(
+                            "[WORLD_REMOTE_TEARDOWN_QUEUE_HIGH_WATERMARK] Depth=" +
+                            depth +
+                            " Workers=" + WorkerCount);
+                    }
+                    return;
+                }
+            }
+
+            private void Drain()
+            {
+                foreach (DeferredSessionTeardownWorkItem item in
+                         _queue.GetConsumingEnumerable())
+                {
+                    Process(item);
+                }
+            }
+
+            private void Process(DeferredSessionTeardownWorkItem item)
+            {
+                if (item.CharacterId > 0 && item.WorldId != Guid.Empty)
+                {
+                    try
+                    {
+                        _owner.DisconnectCharacter(
+                            item.WorldId,
+                            item.CharacterId);
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.Error(
+                            "[WORLD_REMOTE_TEARDOWN_FAILED] ClientId=" +
+                            item.ClientId +
+                            " Stage=DISCONNECT_CHARACTER" +
+                            " AccountId=" + item.AccountId +
+                            " CharacterId=" + item.CharacterId,
+                            ex);
+                    }
+                }
+
+                if (item.AccountId > 0)
+                {
+                    try
+                    {
+                        _owner.DisconnectAccount(
+                            item.AccountId,
+                            item.SessionId,
+                            item.PreserveSessionRegistration);
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.Error(
+                            "[WORLD_REMOTE_TEARDOWN_FAILED] ClientId=" +
+                            item.ClientId +
+                            " Stage=DISCONNECT_ACCOUNT" +
+                            " AccountId=" + item.AccountId +
+                            " CharacterId=" + item.CharacterId,
+                            ex);
+                    }
+                }
+            }
         }
 
         #endregion
