@@ -1,3 +1,4 @@
+using Grpc.Core;
 using NosGm.Authentication.Client;
 using NosGm.Authentication.Client.Configuration;
 using NosGm.Cluster.Contracts.V1;
@@ -281,11 +282,37 @@ namespace NosGm.Master.Library.Client
                 string runtimeGenerationId,
                 Exception reason)
             {
+                string reasonDescription;
+                if (reason == null)
+                {
+                    reasonDescription = "stream-completed";
+                }
+                else if (reason is RpcException rpcException)
+                {
+                    reasonDescription =
+                        "RpcException StatusCode=" + rpcException.StatusCode +
+                        " Detail=" + (rpcException.Status.Detail ?? string.Empty);
+
+                    if (rpcException.InnerException != null)
+                    {
+                        reasonDescription +=
+                            " Inner=" +
+                            rpcException.InnerException.GetType().FullName +
+                            ": " +
+                            rpcException.InnerException.Message;
+                    }
+                }
+                else
+                {
+                    reasonDescription =
+                        reason.GetType().FullName + ": " + reason.Message;
+                }
+
                 Logger.Warn(
                     "[CONFIG_GRPC] Authoritative Configuration stream ended for runtime " +
                     (runtimeGenerationId ?? "unknown") +
                     "; reconnect/recovery remains gRPC-only. Reason=" +
-                    (reason == null ? "stream-completed" : reason.GetType().Name));
+                    reasonDescription);
             }
         }
     }
