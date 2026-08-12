@@ -42,7 +42,12 @@ namespace NosGm.SCS.Communication.Scs.Communication.Messengers
 
         public RequestReplyMessenger(T messenger, int maximumInboundConcurrency)
         {
-            this.Messenger = messenger ?? throw new ArgumentNullException(nameof(messenger));
+            if (ReferenceEquals(messenger, null))
+            {
+                throw new ArgumentNullException(nameof(messenger));
+            }
+
+            this.Messenger = messenger;
             messenger.MessageReceived += new EventHandler<MessageEventArgs>(this.Messenger_MessageReceived);
             messenger.MessageSent += new EventHandler<MessageEventArgs>(this.Messenger_MessageSent);
             this._incomingMessageProcessor =
