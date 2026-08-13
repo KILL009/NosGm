@@ -282,7 +282,9 @@ namespace NosGm.Authentication.Client
                 {
                     ClientCertificateOptions =
                         ClientCertificateOption.Manual,
-                    SslProtocols = SslProtocols.Tls12
+                    SslProtocols = SslProtocols.Tls12,
+                    MaxConnectionsPerServer =
+                        ClusterProtocolLimits.MaxConcurrentCallsPerConnection
                 };
                 primaryHandler.ClientCertificates.Add(certificate);
 #if NET10_0_OR_GREATER
