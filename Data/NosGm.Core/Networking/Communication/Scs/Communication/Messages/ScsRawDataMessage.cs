@@ -47,6 +47,19 @@ namespace NosGm.Core.Networking.Communication.Scs.Communication.Messages
 
         public int Priority { get; set; }
 
+        /// <summary>
+        /// Marks visual state that may safely be replaced by a newer pending state.
+        /// This is transport-local metadata and is never part of serialized SCS contracts.
+        /// </summary>
+        [field: NonSerialized]
+        public bool IsTransient { get; set; }
+
+        /// <summary>
+        /// Stable source key used to coalesce replaceable state before the next send tick.
+        /// </summary>
+        [field: NonSerialized]
+        public long TransientKey { get; set; }
+
         #endregion
 
         #region Methods
