@@ -192,47 +192,12 @@ namespace NosGm.Handler.BasicPacket.CharScreen
 
         private void RejectEntry(string code, Exception exception = null)
         {
+            string exceptionDetail = exception == null
+                ? string.Empty
+                : $" ExceptionType={exception.GetType().Name}";
             Logger.Warn(
-                $"[WORLD_ENTRY] Stage=REJECTED Code={code} ClientId={Session.ClientId}{FormatExceptionDetail(exception)}");
+                $"[WORLD_ENTRY] Stage=REJECTED Code={code} ClientId={Session.ClientId}{exceptionDetail}");
             Session.Disconnect();
-        }
-
-        private static string FormatExceptionDetail(Exception exception)
-        {
-            if (exception == null)
-            {
-                return string.Empty;
-            }
-
-            if (exception is Grpc.Core.RpcException rpcException)
-            {
-                string innerDetail = rpcException.InnerException == null
-                    ? string.Empty
-                    : $" InnerType={rpcException.InnerException.GetType().Name} InnerMessage={SanitizeLogValue(rpcException.InnerException.Message)}";
-                return
-                    $" ExceptionType=RpcException StatusCode={rpcException.StatusCode} Detail={SanitizeLogValue(rpcException.Status.Detail)}{innerDetail}";
-            }
-
-            return
-                $" ExceptionType={exception.GetType().Name} Message={SanitizeLogValue(exception.Message)}";
-        }
-
-        private static string SanitizeLogValue(string value)
-        {
-            if (string.IsNullOrWhiteSpace(value))
-            {
-                return "-";
-            }
-
-            string normalized = value
-                .Replace('\r', ' ')
-                .Replace('\n', ' ')
-                .Replace('\t', ' ')
-                .Trim();
-            const int maximumLength = 320;
-            return normalized.Length <= maximumLength
-                ? normalized
-                : normalized.Substring(0, maximumLength) + "...";
         }
 
         private static bool EnsureAuthenticationServiceAuthenticated()
