@@ -26,10 +26,6 @@ namespace NosGm.Core
 
         private const int MaximumInitialCustomParameterBytes = 4096;
 
-        private const ulong FnvOffsetBasis = 14695981039346656037UL;
-
-        private const ulong FnvPrime = 1099511628211UL;
-
         private static readonly HashSet<string> ModernFourArgumentWopenTypes =
             new HashSet<string>(StringComparer.Ordinal)
             {
@@ -71,7 +67,7 @@ namespace NosGm.Core
             {
                 packet = NormalizeOfficialPacketLayout(packet);
                 priority = NormalizePacketPriority(packet, priority);
-                ScsRawDataMessage rawMessage = CreateRawMessage(packet);
+                var rawMessage = new ScsRawDataMessage(_encryptor.Encrypt(packet));
                 SendMessage(rawMessage, priority);
             }
         }
@@ -80,7 +76,7 @@ namespace NosGm.Core
         {
             packet = NormalizeOfficialPacketLayout(packet);
             priority = NormalizePacketPriority(packet, priority);
-            ScsRawDataMessage rawDataMessage = CreateRawMessage(packet);
+            ScsRawDataMessage rawDataMessage = new ScsRawDataMessage(_encryptor.Encrypt(packet));
             await SendMessageAsync(rawDataMessage, priority).ConfigureAwait(false);
         }
 
@@ -110,8 +106,8 @@ namespace NosGm.Core
         /// <summary>
         /// Keeps high-priority capacity available for critical World state while
         /// movement fan-out is under pressure. Movement is transient visual state,
-        /// so packets using the normal priority are routed through the low-priority
-        /// transport path. Explicit non-default priorities remain untouched.
+        /// so packets using the normal priority are routed through the existing
+        /// low-priority queue. Explicit non-default priorities remain untouched.
         /// </summary>
         private static byte NormalizePacketPriority(string packet, byte priority)
         {
@@ -120,63 +116,6 @@ namespace NosGm.Core
                    packet.StartsWith("mv ", StringComparison.Ordinal)
                 ? (byte)5
                 : priority;
-        }
-
-        /// <summary>
-        /// Creates the encrypted wire message and tags movement as replaceable state.
-        /// The transient key hashes only the stable "mv type callerId" prefix, so a
-        /// newer position for the same entity can replace an older unsent position
-        /// without allocating Split/Substring objects on the hot broadcast path.
-        /// </summary>
-        private ScsRawDataMessage CreateRawMessage(string packet)
-        {
-            var rawMessage = new ScsRawDataMessage(_encryptor.Encrypt(packet));
-            if (TryGetMovementTransientKey(packet, out long transientKey))
-            {
-                rawMessage.IsTransient = true;
-                rawMessage.TransientKey = transientKey;
-            }
-
-            return rawMessage;
-        }
-
-        private static bool TryGetMovementTransientKey(string packet, out long transientKey)
-        {
-            transientKey = 0;
-            if (string.IsNullOrEmpty(packet) ||
-                !packet.StartsWith("mv ", StringComparison.Ordinal))
-            {
-                return false;
-            }
-
-            unchecked
-            {
-                ulong hash = FnvOffsetBasis;
-                int spaces = 0;
-
-                for (int index = 0; index < packet.Length; index++)
-                {
-                    char value = packet[index];
-                    hash ^= value;
-                    hash *= FnvPrime;
-
-                    if (value != ' ')
-                    {
-                        continue;
-                    }
-
-                    spaces++;
-                    if (spaces != 3)
-                    {
-                        continue;
-                    }
-
-                    transientKey = (long)(hash == 0 ? 1UL : hash);
-                    return true;
-                }
-            }
-
-            return false;
         }
 
         /// <summary>
