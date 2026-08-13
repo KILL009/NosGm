@@ -120,8 +120,9 @@ namespace NosGm.Handler.PacketHandler.Basic
 
                 PlayerCountThread.UpdatePlayerCount(PlayerCountType.Increased);
 
-                //Load Mail when logging in, not in a 10 second cycle
-                LoadMail.LoadMailProcess();
+                // Load mail only for the character entering the World. Loading every
+                // connected player's mailbox here creates O(N²) database work during ramps.
+                LoadMail.LoadMailProcess(Session);
 
                 Session.SendPacket($"lf 1 {DateTime.Now.ToString("HH:mm")}");
                 //Session.SendPacket($"qnaml 7 #guri^505 Duel System\n\nDo you want to queue up for a Duel?");
