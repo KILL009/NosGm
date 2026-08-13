@@ -49,15 +49,17 @@ namespace NosGm.Core.Networking.Communication.Scs.Communication.Messages
 
         /// <summary>
         /// Marks visual state that may safely be replaced by a newer state before it
-        /// reaches the socket. This metadata is transport-local and is not serialized
-        /// by the NosTale wire protocol.
+        /// reaches the socket. This metadata is transport-local and is never included
+        /// in serialized SCS message contracts.
         /// </summary>
+        [field: NonSerialized]
         public bool IsTransient { get; set; }
 
         /// <summary>
         /// Identifies the transient state source. Messages with the same key may be
         /// coalesced so only the latest pending value is sent.
         /// </summary>
+        [field: NonSerialized]
         public long TransientKey { get; set; }
 
         #endregion
