@@ -24,9 +24,11 @@ namespace NosGm.Master.Library.Client
                 new Dictionary<ClusterNodeRole, IGameforgeAuthenticationTransport>();
         private readonly AuthenticationTransportMode _transportMode;
         private readonly IScsServiceClient<IAuthentificationService> _client;
+        private readonly AsyncGameforgeOperations _asyncOperations;
 
         public AuthentificationServiceClient()
         {
+            _asyncOperations = new AsyncGameforgeOperations(this);
             _transportMode =
                 AuthenticationTransportModeParser.ParseEnvironment();
             if (_transportMode == AuthenticationTransportMode.Grpc)
@@ -50,6 +52,7 @@ namespace NosGm.Master.Library.Client
         }
 
         public static AuthentificationServiceClient Instance => _instance ?? (_instance = new AuthentificationServiceClient());
+        public AsyncGameforgeOperations Async => _asyncOperations;
         public CommunicationStates CommunicationState =>
             _transportMode == AuthenticationTransportMode.Grpc
                 ? CommunicationStates.Connected
@@ -284,6 +287,50 @@ namespace NosGm.Master.Library.Client
             {
                 throw new InvalidOperationException(
                     "Legacy account validation is unavailable when the authentication transport is GRPC.");
+            }
+        }
+
+        public sealed class AsyncGameforgeOperations
+        {
+            private readonly AuthentificationServiceClient _owner;
+
+            internal AsyncGameforgeOperations(AuthentificationServiceClient owner)
+            {
+                _owner = owner ?? throw new ArgumentNullException(nameof(owner));
+            }
+
+            public Task<GameforgeAuthTicketConsumption> ConsumeGameforgeAuthTicket(
+                string authToken,
+                string installationId,
+                byte countryId,
+                int proposedSessionId)
+            {
+                return _owner.ConsumeGameforgeAuthTicketAsync(
+                    authToken,
+                    installationId,
+                    countryId,
+                    proposedSessionId,
+                    CancellationToken.None);
+            }
+
+            public Task<bool> RegisterGameforgeWorldPermit(
+                long accountId,
+                int sessionId,
+                string ipAddress)
+            {
+                return _owner.RegisterGameforgeWorldPermitAsync(
+                    accountId,
+                    sessionId,
+                    ipAddress,
+                    CancellationToken.None);
+            }
+
+            public Task RevokeGameforgeWorldPermit(long accountId, int sessionId)
+            {
+                return _owner.RevokeGameforgeWorldPermitAsync(
+                    accountId,
+                    sessionId,
+                    CancellationToken.None);
             }
         }
     }
