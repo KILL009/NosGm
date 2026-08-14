@@ -13,7 +13,6 @@ using NosGm.Packets.Packets.ClientPackets;
 using System;
 using System.Collections.Concurrent;
 using System.Linq;
-using System.Threading;
 using System.Threading.Tasks;
 
 namespace NosGm.Handler.BasicPacket.Login
@@ -219,13 +218,12 @@ namespace NosGm.Handler.BasicPacket.Login
                 // active-session ticket issued for the same country and InstallationId.
                 // Consumption remains one-use and is deliberately not retried.
                 int proposedSessionId = SessionFactory.Instance.GenerateSessionId();
-                ticketConsumption = await AuthentificationServiceClient.Instance
-                    .ConsumeGameforgeAuthTicketAsync(
+                ticketConsumption = await AuthentificationServiceClient.Instance.Async
+                    .ConsumeGameforgeAuthTicket(
                         payload.AuthToken,
                         payload.InstallationId.ToString("D"),
                         payload.CountryId,
-                        proposedSessionId,
-                        CancellationToken.None)
+                        proposedSessionId)
                     .ConfigureAwait(false);
             }
             catch (Exception ex)
@@ -368,12 +366,11 @@ namespace NosGm.Handler.BasicPacket.Login
 
                 if (issueGameforgeWorldPermit)
                 {
-                    worldPermitRegistered = await AuthentificationServiceClient.Instance
-                        .RegisterGameforgeWorldPermitAsync(
+                    worldPermitRegistered = await AuthentificationServiceClient.Instance.Async
+                        .RegisterGameforgeWorldPermit(
                             loadedAccount.AccountId,
                             newSessionId,
-                            ipAddress,
-                            CancellationToken.None)
+                            ipAddress)
                         .ConfigureAwait(false);
                     if (!worldPermitRegistered) throw new InvalidOperationException("Master rejected the Gameforge World permit.");
                 }
@@ -441,8 +438,8 @@ namespace NosGm.Handler.BasicPacket.Login
         {
             try
             {
-                await AuthentificationServiceClient.Instance
-                    .RevokeGameforgeWorldPermitAsync(accountId, sessionId, CancellationToken.None)
+                await AuthentificationServiceClient.Instance.Async
+                    .RevokeGameforgeWorldPermit(accountId, sessionId)
                     .ConfigureAwait(false);
             }
             catch (Exception ex)
