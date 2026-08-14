@@ -1,4 +1,4 @@
-﻿using NosGm.Authentication.Client;
+using NosGm.Authentication.Client;
 using NosGm.Cluster.Contracts.Authentication.Runtime;
 using NosGm.Cluster.Contracts.V1;
 using NosGm.Configuration;
@@ -127,16 +127,32 @@ namespace NosGm.Master.Library.Client
             byte countryId,
             int proposedSessionId)
         {
+            return ConsumeGameforgeAuthTicketAsync(
+                    authToken,
+                    installationId,
+                    countryId,
+                    proposedSessionId,
+                    CancellationToken.None)
+                .GetAwaiter()
+                .GetResult();
+        }
+
+        public async Task<GameforgeAuthTicketConsumption> ConsumeGameforgeAuthTicketAsync(
+            string authToken,
+            string installationId,
+            byte countryId,
+            int proposedSessionId,
+            CancellationToken cancellationToken)
+        {
             AuthenticationTicketConsumptionResult result =
-                GetTransport(ClusterNodeRole.Login)
+                await GetTransport(ClusterNodeRole.Login)
                     .ConsumeAuthTicketAsync(
                         authToken,
                         installationId,
                         countryId,
                         proposedSessionId,
-                        CancellationToken.None)
-                    .GetAwaiter()
-                    .GetResult();
+                        cancellationToken)
+                    .ConfigureAwait(false);
             return result.IsSuccess
                 ? new GameforgeAuthTicketConsumption
                 {
@@ -149,15 +165,30 @@ namespace NosGm.Master.Library.Client
 
         public bool RegisterGameforgeWorldPermit(long accountId, int sessionId, string ipAddress)
         {
-            return GetTransport(ClusterNodeRole.Login)
-                       .IssueWorldPermitAsync(
-                           accountId,
-                           sessionId,
-                           ipAddress,
-                           CancellationToken.None)
-                       .GetAwaiter()
-                       .GetResult() ==
-                   AuthenticationTransportResultCode.Success;
+            return RegisterGameforgeWorldPermitAsync(
+                    accountId,
+                    sessionId,
+                    ipAddress,
+                    CancellationToken.None)
+                .GetAwaiter()
+                .GetResult();
+        }
+
+        public async Task<bool> RegisterGameforgeWorldPermitAsync(
+            long accountId,
+            int sessionId,
+            string ipAddress,
+            CancellationToken cancellationToken)
+        {
+            AuthenticationTransportResultCode result =
+                await GetTransport(ClusterNodeRole.Login)
+                    .IssueWorldPermitAsync(
+                        accountId,
+                        sessionId,
+                        ipAddress,
+                        cancellationToken)
+                    .ConfigureAwait(false);
+            return result == AuthenticationTransportResultCode.Success;
         }
 
         public bool ConsumeGameforgeWorldPermit(long accountId, int sessionId, string ipAddress)
@@ -190,13 +221,25 @@ namespace NosGm.Master.Library.Client
 
         public void RevokeGameforgeWorldPermit(long accountId, int sessionId)
         {
-            GetTransport(ClusterNodeRole.Login)
-                .RevokeWorldPermitAsync(
+            RevokeGameforgeWorldPermitAsync(
                     accountId,
                     sessionId,
                     CancellationToken.None)
                 .GetAwaiter()
                 .GetResult();
+        }
+
+        public async Task RevokeGameforgeWorldPermitAsync(
+            long accountId,
+            int sessionId,
+            CancellationToken cancellationToken)
+        {
+            await GetTransport(ClusterNodeRole.Login)
+                .RevokeWorldPermitAsync(
+                    accountId,
+                    sessionId,
+                    cancellationToken)
+                .ConfigureAwait(false);
         }
 
         private IGameforgeAuthenticationTransport GetTransport(
