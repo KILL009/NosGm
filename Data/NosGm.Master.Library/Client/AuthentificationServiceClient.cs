@@ -11,6 +11,7 @@ using NosGm.SCS.Communication.ScsServices.Client;
 using System;
 using System.Collections.Generic;
 using System.Threading;
+using System.Threading.Tasks;
 
 namespace NosGm.Master.Library.Client
 {
@@ -161,15 +162,30 @@ namespace NosGm.Master.Library.Client
 
         public bool ConsumeGameforgeWorldPermit(long accountId, int sessionId, string ipAddress)
         {
-            return GetTransport(ClusterNodeRole.World)
-                       .ConsumeWorldPermitAsync(
-                           accountId,
-                           sessionId,
-                           ipAddress,
-                           CancellationToken.None)
-                       .GetAwaiter()
-                       .GetResult() ==
-                   AuthenticationTransportResultCode.Success;
+            return ConsumeGameforgeWorldPermit(
+                    accountId,
+                    sessionId,
+                    ipAddress,
+                    CancellationToken.None)
+                .GetAwaiter()
+                .GetResult();
+        }
+
+        public async Task<bool> ConsumeGameforgeWorldPermit(
+            long accountId,
+            int sessionId,
+            string ipAddress,
+            CancellationToken cancellationToken)
+        {
+            AuthenticationTransportResultCode result =
+                await GetTransport(ClusterNodeRole.World)
+                    .ConsumeWorldPermitAsync(
+                        accountId,
+                        sessionId,
+                        ipAddress,
+                        cancellationToken)
+                    .ConfigureAwait(false);
+            return result == AuthenticationTransportResultCode.Success;
         }
 
         public void RevokeGameforgeWorldPermit(long accountId, int sessionId)
