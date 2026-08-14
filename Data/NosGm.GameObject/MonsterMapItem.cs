@@ -24,6 +24,7 @@ namespace NosGm.GameObject
 
         private static int _autoLootWorkerScheduled;
         private int _autoLootLookupAttempts;
+        private int _autoLootRecipientResolved;
 
         #endregion
 
@@ -61,7 +62,7 @@ namespace NosGm.GameObject
 
         public sealed override short ItemVNum { get; set; }
 
-        public long? OwnerId { get; }
+        public long? OwnerId { get; private set; }
 
         #endregion
 
@@ -155,6 +156,61 @@ namespace NosGm.GameObject
             }
         }
 
+        private ClientSession ResolveAutoLootSession()
+        {
+            if (!OwnerId.HasValue || OwnerId.Value <= 0)
+            {
+                return null;
+            }
+
+            ClientSession originalOwnerSession =
+                ServerManager.Instance.GetSessionByCharacterId(OwnerId.Value);
+
+            if (originalOwnerSession?.Character != null
+                && Volatile.Read(ref _autoLootRecipientResolved) == 0
+                && Interlocked.CompareExchange(ref _autoLootRecipientResolved, 1, 0) == 0)
+            {
+                Group group = originalOwnerSession.Character.Group;
+                if (group?.GroupType == GroupType.Group
+                    && group.SharingMode == (byte)GroupSharingType.ByOrder)
+                {
+                    int attempts = Math.Max(1, group.SessionCount);
+                    for (int index = 0; index < attempts; index++)
+                    {
+                        long? candidateId =
+                            group.GetNextOrderedCharacterId(originalOwnerSession.Character);
+                        if (!candidateId.HasValue || candidateId.Value <= 0)
+                        {
+                            break;
+                        }
+
+                        ClientSession candidate =
+                            ServerManager.Instance.GetSessionByCharacterId(candidateId.Value);
+                        if (candidate?.Character == null
+                            || !candidate.HasSelectedCharacter
+                            || !candidate.IsConnected
+                            || candidate.IsDisposing
+                            || candidate.Account?.IsLimited == true
+                            || candidate.Character.IsSeal
+                            || candidate.CurrentMapInstance == null
+                            || !ReferenceEquals(
+                                candidate.CurrentMapInstance,
+                                originalOwnerSession.CurrentMapInstance))
+                        {
+                            continue;
+                        }
+
+                        OwnerId = candidate.Character.CharacterId;
+                        break;
+                    }
+                }
+            }
+
+            return OwnerId.HasValue
+                ? ServerManager.Instance.GetSessionByCharacterId(OwnerId.Value)
+                : originalOwnerSession;
+        }
+
         private bool TryAutoLoot()
         {
             if (!AutoLootEligible || !OwnerId.HasValue || OwnerId.Value <= 0)
@@ -162,7 +218,7 @@ namespace NosGm.GameObject
                 return true;
             }
 
-            ClientSession session = ServerManager.Instance.GetSessionByCharacterId(OwnerId.Value);
+            ClientSession session = ResolveAutoLootSession();
             if (session?.Character == null
                 || !session.HasSelectedCharacter
                 || !session.IsConnected
