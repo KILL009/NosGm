@@ -18,12 +18,19 @@ namespace ChickenAPI.Events
         {
             if (!_postprocessorsDictionary.TryGetValue(typeof(TNotification), out var processors)) return;
 
-            if (!await CanSendEvent(notification, typeof(TNotification), cancellationToken)) return;
+            if (!await CanSendEvent(notification, typeof(TNotification), cancellationToken).ConfigureAwait(false)) return;
 
             foreach (var postProcessor in processors)
                 try
                 {
-                    postProcessor.Handle(notification, cancellationToken);
+                    if (postProcessor is IAsyncEventHandler asyncPostProcessor)
+                    {
+                        await asyncPostProcessor.HandleAsync(notification, cancellationToken).ConfigureAwait(false);
+                    }
+                    else
+                    {
+                        postProcessor.Handle(notification, cancellationToken);
+                    }
                 }
                 catch (Exception e)
                 {
@@ -95,7 +102,7 @@ namespace ChickenAPI.Events
 
             foreach (var filter in filters)
                 // filter is not passed correctly
-                if (await filter.Handle(e, cancellationToken) == false)
+                if (await filter.Handle(e, cancellationToken).ConfigureAwait(false) == false)
                     return false;
 
             return true;

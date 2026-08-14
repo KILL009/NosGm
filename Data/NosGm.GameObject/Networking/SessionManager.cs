@@ -96,69 +96,106 @@ namespace NosGm.GameObject
 
             session.IsDisposing = true;
 
-            // Character cleanup must run while the Character is still alive.
-            // ClientSession.Destroy() calls Character.Dispose(), unregisters the
-            // character and emits the map leave broadcasts, so doing these steps
-            // after Destroy() is both duplicate work and a use-after-dispose risk.
-            if (IsWorldServer && session.HasSelectedCharacter)
+            // Do not block the socket/disconnect callback on database persistence.
+            // The asynchronous teardown awaits the bounded CharacterSaveEvent before
+            // destroying Character, which prevents both SqlClient pool stampedes and
+            // save-vs-dispose races during mass disconnects.
+            _ = RunSessionTeardownAsync(client, session);
+        }
+
+        private async Task RunSessionTeardownAsync(INetworkClient client, ClientSession session)
+        {
+            try
             {
-                RunDisconnectCleanupStep(client, "RESTORE_HP", () =>
+                // Character cleanup must run while the Character is still alive.
+                // ClientSession.Destroy() calls Character.Dispose(), unregisters the
+                // character and emits the map leave broadcasts.
+                if (IsWorldServer && session.HasSelectedCharacter)
                 {
-                    if (session.Character.Hp < 1)
+                    RunDisconnectCleanupStep(client, "RESTORE_HP", () =>
                     {
-                        session.Character.Hp = 1;
+                        if (session.Character.Hp < 1)
+                        {
+                            session.Character.Hp = 1;
+                        }
+                    });
+
+                    RunDisconnectCleanupStep(
+                        client,
+                        "LEAVE_TALENT_ARENA",
+                        () => session.Character.LeaveTalentArena());
+
+                    await RunDisconnectCleanupStepAsync(
+                            client,
+                            "SAVE_CHARACTER",
+                            () => session.Character.Event.EmitEventAsync(new CharacterSaveEvent()))
+                        .ConfigureAwait(false);
+
+                    RunDisconnectCleanupStep(client, "GROUP_LEAVE", () =>
+                    {
+                        if (ServerManager.Instance.Groups.Any(
+                                group => group.IsMemberOfGroup(session.Character.CharacterId)))
+                        {
+                            ServerManager.Instance.GroupLeave(session);
+                        }
+                    });
+                }
+
+                // World TCP disconnect callbacks must never block for the legacy SCS
+                // request/reply timeout. Capture the remote account/character lifecycle
+                // mutations and let CommunicationServiceClient drain them on its
+                // dedicated bounded worker queue after local teardown has completed.
+                RunDisconnectCleanupStep(client, "DESTROY_SESSION", () =>
+                {
+                    if (!IsWorldServer)
+                    {
+                        session.Destroy();
+                        return;
+                    }
+
+                    long characterId = session.HasSelectedCharacter && session.Character != null
+                        ? session.Character.CharacterId
+                        : 0;
+                    long accountId = session.Account?.AccountId ?? 0;
+
+                    using (CommunicationServiceClient.Instance.BeginDeferredSessionTeardown(
+                               client.ClientId,
+                               ServerManager.Instance.WorldId,
+                               characterId,
+                               accountId,
+                               session.SessionId,
+                               session.PreserveAccountRegistrationOnDisconnect))
+                    {
+                        session.Destroy();
                     }
                 });
-
-                RunDisconnectCleanupStep(
-                    client,
-                    "LEAVE_TALENT_ARENA",
-                    () => session.Character.LeaveTalentArena());
-
-                RunDisconnectCleanupStep(
-                    client,
-                    "SAVE_CHARACTER",
-                    () => session.Character.Event.EmitEvent(new CharacterSaveEvent()));
-
-                RunDisconnectCleanupStep(client, "GROUP_LEAVE", () =>
-                {
-                    if (ServerManager.Instance.Groups.Any(
-                            group => group.IsMemberOfGroup(session.Character.CharacterId)))
-                    {
-                        ServerManager.Instance.GroupLeave(session);
-                    }
-                });
+                RunDisconnectCleanupStep(client, "DISCONNECT_SOCKET", client.Disconnect);
             }
-
-            // World TCP disconnect callbacks must never block for the legacy SCS
-            // request/reply timeout. Capture the remote account/character lifecycle
-            // mutations and let CommunicationServiceClient drain them on its
-            // dedicated bounded worker queue after local teardown has completed.
-            RunDisconnectCleanupStep(client, "DESTROY_SESSION", () =>
+            catch (Exception ex)
             {
-                if (!IsWorldServer)
-                {
-                    session.Destroy();
-                    return;
-                }
+                string scope = IsWorldServer ? "WORLD" : "SESSION";
+                Logger.Error(
+                    $"[{scope}_DISCONNECT_FAILED] ClientId={client.ClientId} Stage=ASYNC_TEARDOWN",
+                    ex);
+            }
+        }
 
-                long characterId = session.HasSelectedCharacter && session.Character != null
-                    ? session.Character.CharacterId
-                    : 0;
-                long accountId = session.Account?.AccountId ?? 0;
-
-                using (CommunicationServiceClient.Instance.BeginDeferredSessionTeardown(
-                           client.ClientId,
-                           ServerManager.Instance.WorldId,
-                           characterId,
-                           accountId,
-                           session.SessionId,
-                           session.PreserveAccountRegistrationOnDisconnect))
-                {
-                    session.Destroy();
-                }
-            });
-            RunDisconnectCleanupStep(client, "DISCONNECT_SOCKET", client.Disconnect);
+        private async Task RunDisconnectCleanupStepAsync(
+            INetworkClient client,
+            string stage,
+            Func<Task> cleanup)
+        {
+            try
+            {
+                await cleanup().ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                string scope = IsWorldServer ? "WORLD" : "SESSION";
+                Logger.Error(
+                    $"[{scope}_DISCONNECT_FAILED] ClientId={client.ClientId} Stage={stage}",
+                    ex);
+            }
         }
 
         private void RunDisconnectCleanupStep(
