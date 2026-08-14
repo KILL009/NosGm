@@ -5,29 +5,12 @@ using NosGm.GameObject.Extension.Inventory;
 using NosGm.GameObject.Helpers;
 using NosGm.GameObject.Networking;
 using System;
-using System.Collections.Concurrent;
 using System.Linq;
-using System.Threading;
 
 namespace NosGm.GameObject
 {
     public class MonsterMapItem : MapItem
     {
-        #region Members
-
-        private const int AutoLootInitialDelayMilliseconds = 10;
-        private const int AutoLootLookupRetryMilliseconds = 10;
-        private const int AutoLootMaximumLookupAttempts = 20;
-
-        private static readonly ConcurrentQueue<MonsterMapItem> AutoLootQueue =
-            new ConcurrentQueue<MonsterMapItem>();
-
-        private static int _autoLootWorkerScheduled;
-        private int _autoLootLookupAttempts;
-        private int _autoLootRecipientResolved;
-
-        #endregion
-
         #region Instantiation
 
         public MonsterMapItem(short x, short y, short itemVNum, int amount = 1, long ownerId = -1) : base(x, y)
@@ -43,11 +26,6 @@ namespace NosGm.GameObject
             AutoLootEligible = WorldPolicyConfiguration.EnableAutoLoot
                                && ownerId > 0
                                && itemVNum != 1000;
-
-            if (AutoLootEligible)
-            {
-                QueueAutoLoot(this);
-            }
         }
 
         #endregion
@@ -88,75 +66,76 @@ namespace NosGm.GameObject
             }
         }
 
-        private static void QueueAutoLoot(MonsterMapItem item)
+        /// <summary>
+        /// Delivers an owned monster drop before it is registered in DroppedList.
+        /// Returning true means the drop was completely handled and must never be
+        /// broadcast as a ground item. Returning false preserves the classic ground
+        /// fallback, for example when inventory space is unavailable.
+        /// </summary>
+        public bool TryDirectAutoLoot(MapInstance mapInstance, bool isQuestDrop = false)
         {
-            AutoLootQueue.Enqueue(item);
-            ScheduleAutoLootWorker();
-        }
-
-        private static void ScheduleAutoLootWorker()
-        {
-            if (Interlocked.CompareExchange(ref _autoLootWorkerScheduled, 1, 0) != 0)
+            if (!AutoLootEligible || mapInstance == null || !OwnerId.HasValue || OwnerId.Value <= 0)
             {
-                return;
+                return false;
             }
 
-            ThreadPool.QueueUserWorkItem(_ => DrainAutoLootQueue());
-        }
+            ClientSession session = ResolveAutoLootSession(mapInstance, !isQuestDrop);
+            if (session?.Character == null
+                || !session.HasSelectedCharacter
+                || !session.IsConnected
+                || session.IsDisposing
+                || session.Account?.IsLimited == true
+                || session.Character.IsSeal
+                || session.CurrentMapInstance == null
+                || !ReferenceEquals(session.CurrentMapInstance, mapInstance)
+                || mapInstance.MapInstanceType == MapInstanceType.TimeSpaceInstance
+                && mapInstance.InstanceBag?.EndState != 0)
+            {
+                return false;
+            }
 
-        private static void DrainAutoLootQueue()
-        {
             try
             {
-                Thread.Sleep(AutoLootInitialDelayMilliseconds);
+                Rarify(null);
 
-                while (!AutoLootQueue.IsEmpty)
+                if (ItemVNum == 1097
+                    && mapInstance.MapInstanceType == MapInstanceType.TimeSpaceInstance
+                    && session.Character.Timespace?.InstanceBag != null)
                 {
-                    int batchSize = Math.Max(1, AutoLootQueue.Count);
-                    bool hasDeferredItems = false;
-
-                    for (int index = 0; index < batchSize; index++)
-                    {
-                        if (!AutoLootQueue.TryDequeue(out MonsterMapItem item) || item == null)
-                        {
-                            break;
-                        }
-
-                        if (item.TryAutoLoot())
-                        {
-                            continue;
-                        }
-
-                        item._autoLootLookupAttempts++;
-                        if (item._autoLootLookupAttempts < AutoLootMaximumLookupAttempts
-                            && item.CreatedDate.AddSeconds(1) > DateTime.Now)
-                        {
-                            AutoLootQueue.Enqueue(item);
-                            hasDeferredItems = true;
-                        }
-                    }
-
-                    if (hasDeferredItems)
-                    {
-                        Thread.Sleep(AutoLootLookupRetryMilliseconds);
-                    }
+                    session.Character.Timespace.InstanceBag.Point += new Random().Next(3, 7);
+                    session.SendPacket(session.Character.Timespace.InstanceBag.GenerateScore());
                 }
+
+                if (ItemVNum == 1046)
+                {
+                    DirectAutoLootGold(session);
+                    return true;
+                }
+
+                ItemInstance itemInstance = GetItemInstance();
+                if (itemInstance?.Item == null)
+                {
+                    return false;
+                }
+
+                if (itemInstance.Item.ItemType == ItemType.Map)
+                {
+                    DirectAutoLootMapItem(session, itemInstance);
+                    return true;
+                }
+
+                return DirectAutoLootInventoryItem(session, mapInstance, itemInstance);
             }
             catch (Exception exception)
             {
-                Logger.Error("[AUTO_LOOT] Monster drop worker failed.", exception);
-            }
-            finally
-            {
-                Interlocked.Exchange(ref _autoLootWorkerScheduled, 0);
-                if (!AutoLootQueue.IsEmpty)
-                {
-                    ScheduleAutoLootWorker();
-                }
+                Logger.Error(
+                    $"[AUTO_LOOT] Direct delivery failed for CharacterId={session.Character.CharacterId} ItemVNum={ItemVNum} TransportId={TransportId}.",
+                    exception);
+                return false;
             }
         }
 
-        private ClientSession ResolveAutoLootSession()
+        private ClientSession ResolveAutoLootSession(MapInstance mapInstance, bool allowGroupRotation)
         {
             if (!OwnerId.HasValue || OwnerId.Value <= 0)
             {
@@ -165,140 +144,56 @@ namespace NosGm.GameObject
 
             ClientSession originalOwnerSession =
                 ServerManager.Instance.GetSessionByCharacterId(OwnerId.Value);
-
-            if (originalOwnerSession?.Character != null
-                && Volatile.Read(ref _autoLootRecipientResolved) == 0
-                && Interlocked.CompareExchange(ref _autoLootRecipientResolved, 1, 0) == 0)
+            if (originalOwnerSession?.Character == null
+                || originalOwnerSession.CurrentMapInstance == null
+                || !ReferenceEquals(originalOwnerSession.CurrentMapInstance, mapInstance))
             {
-                Group group = originalOwnerSession.Character.Group;
-                if (group?.GroupType == GroupType.Group
-                    && group.SharingMode == (byte)GroupSharingType.ByOrder)
+                return originalOwnerSession;
+            }
+
+            Group group = originalOwnerSession.Character.Group;
+            if (allowGroupRotation
+                && group?.GroupType == GroupType.Group
+                && group.SharingMode == (byte)GroupSharingType.ByOrder)
+            {
+                int attempts = Math.Max(1, group.SessionCount);
+                for (int index = 0; index < attempts; index++)
                 {
-                    int attempts = Math.Max(1, group.SessionCount);
-                    for (int index = 0; index < attempts; index++)
+                    long? candidateId =
+                        group.GetNextOrderedCharacterId(originalOwnerSession.Character);
+                    if (!candidateId.HasValue || candidateId.Value <= 0)
                     {
-                        long? candidateId =
-                            group.GetNextOrderedCharacterId(originalOwnerSession.Character);
-                        if (!candidateId.HasValue || candidateId.Value <= 0)
-                        {
-                            break;
-                        }
-
-                        ClientSession candidate =
-                            ServerManager.Instance.GetSessionByCharacterId(candidateId.Value);
-                        if (candidate?.Character == null
-                            || !candidate.HasSelectedCharacter
-                            || !candidate.IsConnected
-                            || candidate.IsDisposing
-                            || candidate.Account?.IsLimited == true
-                            || candidate.Character.IsSeal
-                            || candidate.CurrentMapInstance == null
-                            || !ReferenceEquals(
-                                candidate.CurrentMapInstance,
-                                originalOwnerSession.CurrentMapInstance))
-                        {
-                            continue;
-                        }
-
-                        OwnerId = candidate.Character.CharacterId;
                         break;
                     }
+
+                    ClientSession candidate =
+                        ServerManager.Instance.GetSessionByCharacterId(candidateId.Value);
+                    if (candidate?.Character == null
+                        || !candidate.HasSelectedCharacter
+                        || !candidate.IsConnected
+                        || candidate.IsDisposing
+                        || candidate.Account?.IsLimited == true
+                        || candidate.Character.IsSeal
+                        || candidate.CurrentMapInstance == null
+                        || !ReferenceEquals(candidate.CurrentMapInstance, mapInstance))
+                    {
+                        continue;
+                    }
+
+                    OwnerId = candidate.Character.CharacterId;
+                    return candidate;
                 }
             }
 
-            return OwnerId.HasValue
-                ? ServerManager.Instance.GetSessionByCharacterId(OwnerId.Value)
-                : originalOwnerSession;
+            return originalOwnerSession;
         }
 
-        private bool TryAutoLoot()
-        {
-            if (!AutoLootEligible || !OwnerId.HasValue || OwnerId.Value <= 0)
-            {
-                return true;
-            }
-
-            ClientSession session = ResolveAutoLootSession();
-            if (session?.Character == null
-                || !session.HasSelectedCharacter
-                || !session.IsConnected
-                || session.IsDisposing
-                || session.Account?.IsLimited == true
-                || session.CurrentMapInstance == null)
-            {
-                return true;
-            }
-
-            MapInstance mapInstance = session.CurrentMapInstance;
-            lock (mapInstance.DroppedList)
-            {
-                if (!mapInstance.DroppedList.ContainsKey(TransportId))
-                {
-                    return CreatedDate.AddMilliseconds(250) <= DateTime.Now;
-                }
-
-                MapItem currentItem = mapInstance.DroppedList[TransportId];
-                if (!ReferenceEquals(currentItem, this))
-                {
-                    return true;
-                }
-
-                if (session.Character.IsSeal
-                    || mapInstance.MapInstanceType == MapInstanceType.TimeSpaceInstance
-                    && mapInstance.InstanceBag?.EndState != 0)
-                {
-                    return true;
-                }
-
-                try
-                {
-                    Rarify(null);
-
-                    if (ItemVNum == 1097
-                        && mapInstance.MapInstanceType == MapInstanceType.TimeSpaceInstance
-                        && session.Character.Timespace?.InstanceBag != null)
-                    {
-                        session.Character.Timespace.InstanceBag.Point += new Random().Next(3, 7);
-                        session.SendPacket(session.Character.Timespace.InstanceBag.GenerateScore());
-                    }
-
-                    if (ItemVNum == 1046)
-                    {
-                        return AutoLootGold(session, mapInstance);
-                    }
-
-                    ItemInstance itemInstance = GetItemInstance();
-                    if (itemInstance?.Item == null)
-                    {
-                        return true;
-                    }
-
-                    if (itemInstance.Item.ItemType == ItemType.Map)
-                    {
-                        return AutoLootMapItem(session, mapInstance, itemInstance);
-                    }
-
-                    return AutoLootInventoryItem(session, mapInstance, itemInstance);
-                }
-                catch (Exception exception)
-                {
-                    Logger.Error(
-                        $"[AUTO_LOOT] Failed for CharacterId={session.Character.CharacterId} ItemVNum={ItemVNum} TransportId={TransportId}.",
-                        exception);
-                    return true;
-                }
-            }
-        }
-
-        private bool AutoLootMapItem(
-            ClientSession session,
-            MapInstance mapInstance,
-            ItemInstance itemInstance)
+        private void DirectAutoLootMapItem(ClientSession session, ItemInstance itemInstance)
         {
             short amount = Amount;
             if (amount < 1)
             {
-                return true;
+                return;
             }
 
             session.Character.IncrementQuests(QuestType.Collect1, ItemVNum);
@@ -345,12 +240,9 @@ namespace NosGm.GameObject
                         break;
                 }
             }
-
-            RemoveFromGround(session, mapInstance);
-            return true;
         }
 
-        private bool AutoLootInventoryItem(
+        private bool DirectAutoLootInventoryItem(
             ClientSession session,
             MapInstance mapInstance,
             ItemInstance itemInstance)
@@ -358,7 +250,7 @@ namespace NosGm.GameObject
             short amount = Amount;
             if (amount <= 0)
             {
-                return true;
+                return false;
             }
 
             lock (session.Character.Inventory)
@@ -372,14 +264,12 @@ namespace NosGm.GameObject
                     session.SendPacket(UserInterfaceHelper.GenerateMsg(
                         Language.Instance.GetMessageFromKey("NOT_ENOUGH_PLACE"),
                         0));
-                    return true;
+                    return false;
                 }
 
                 session.Character.IncrementQuests(QuestType.Collect1, ItemVNum);
                 session.Character.IncrementQuests(QuestType.Collect2, ItemVNum);
                 session.Character.IncrementQuests(QuestType.Collect4, ItemVNum);
-
-                RemoveFromGround(session, mapInstance);
 
                 session.SendPacket(session.Character.GenerateSay(
                     $"{Language.Instance.GetMessageFromKey("ITEM_ACQUIRED")} {inventoryItem.Item.Name} x{amount}",
@@ -395,13 +285,13 @@ namespace NosGm.GameObject
                 Logger.LogUserEvent(
                     "CHARACTER_ITEM_GET",
                     session.GenerateIdentity(),
-                    $"[AutoLoot]IIId: {inventoryItem.Id} ItemVNum: {inventoryItem.ItemVNum} Amount: {amount}");
+                    $"[AutoLootDirect]IIId: {inventoryItem.Id} ItemVNum: {inventoryItem.ItemVNum} Amount: {amount}");
             }
 
             return true;
         }
 
-        private bool AutoLootGold(ClientSession session, MapInstance mapInstance)
+        private void DirectAutoLootGold(ClientSession session)
         {
             long maxGold = GameConfiguration.MaxGold;
             double multiplier = 1 + session.Character.GetBuff(
@@ -419,7 +309,7 @@ namespace NosGm.GameObject
                 Logger.LogUserEvent(
                     "CHARACTER_ITEM_GET",
                     session.GenerateIdentity(),
-                    $"[AutoLoot]Gold: {earnedGold}");
+                    $"[AutoLootDirect]Gold: {earnedGold}");
 
                 ItemInstance goldItem = GetItemInstance();
                 string goldName = goldItem?.Item?.Name ?? "Gold";
@@ -433,24 +323,13 @@ namespace NosGm.GameObject
                 Logger.LogUserEvent(
                     "CHARACTER_ITEM_GET",
                     session.GenerateIdentity(),
-                    "[AutoLoot][MaxGold]");
+                    "[AutoLootDirect][MaxGold]");
                 session.SendPacket(UserInterfaceHelper.GenerateMsg(
                     Language.Instance.GetMessageFromKey("MAX_GOLD"),
                     0));
             }
 
             session.SendPacket(session.Character.GenerateGold());
-            RemoveFromGround(session, mapInstance);
-            return true;
-        }
-
-        private void RemoveFromGround(ClientSession session, MapInstance mapInstance)
-        {
-            mapInstance.DroppedList.Remove(TransportId);
-            mapInstance.Broadcast(StaticPacketHelper.GenerateGet(
-                1,
-                (int)session.Character.CharacterId,
-                TransportId));
         }
 
         #endregion

@@ -371,9 +371,14 @@ namespace NosGm.GameObject
                 }
 
                 var droppedItem = new MonsterMapItem(localMapX, localMapY, drop.ItemVNum, drop.Amount, owner ?? -1);
+                if (droppedItem.TryDirectAutoLoot(this, isQuest))
+                {
+                    return;
+                }
+
                 DroppedList[droppedItem.TransportId] = droppedItem;
                 Broadcast(
-                    $"drop {droppedItem.ItemVNum} {droppedItem.TransportId} {droppedItem.PositionX} {droppedItem.PositionY} {(droppedItem.GoldAmount > 1 ? droppedItem.GoldAmount : droppedItem.Amount)} {(isQuest ? 1 : 0)} {owner}");
+                    $"drop {droppedItem.ItemVNum} {droppedItem.TransportId} {droppedItem.PositionX} {droppedItem.PositionY} {(droppedItem.GoldAmount > 1 ? droppedItem.GoldAmount : droppedItem.Amount)} {(isQuest ? 1 : 0)} {droppedItem.OwnerId ?? owner}");
             }
             catch (Exception e)
             {
@@ -951,7 +956,7 @@ namespace NosGm.GameObject
                     NpcVNum = npcMonster.NpcMonsterVNum,
                     MapX = npcToSummon.SpawnCell.X,
                     MapY = npcToSummon.SpawnCell.Y,
-                    Position = npcToSummon.Dir,
+                    Position = 2,
                     MapId = Map.MapId,
                     ShouldRespawn = false,
                     IsMoving = npcToSummon.Move,
