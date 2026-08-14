@@ -4,7 +4,6 @@ using NosGm.Domain;
 using NosGm.GameObject;
 using NosGm.GameObject.Helpers;
 using System;
-using System.Diagnostics;
 using System.Linq;
 using System.Reactive.Linq;
 using System.Threading.Tasks;
@@ -42,16 +41,6 @@ namespace NosGm.Handler.PacketHandler.Basic
             {
                 Session.Character.MeditationDictionary.Clear();
             }
-
-            var currentRunningSeconds = (DateTime.Now - Process.GetCurrentProcess().StartTime.AddSeconds(-50)).TotalSeconds;
-            var timeSpanSinceLastPortal = currentRunningSeconds - Session.Character.LastPortal;
-            var distance = Map.GetDistance(new MapCell { X = Session.Character.PositionX, Y = Session.Character.PositionY }, new MapCell { X = walkPacket.XCoordinate, Y = walkPacket.YCoordinate });
-
-            //if (distance > 9)
-            //{
-            //    Session.SendPacket(Session.Character.GenerateTp());ev
-            //    return;
-            //}
 
             if (Session.HasCurrentMapInstance
                 && !Session.CurrentMapInstance.Map.IsBlockedZone(walkPacket.XCoordinate, walkPacket.YCoordinate)
