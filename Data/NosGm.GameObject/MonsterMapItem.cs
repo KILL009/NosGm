@@ -3,6 +3,7 @@ using NosGm.Core;
 using NosGm.Domain;
 using NosGm.GameObject.Extension.Inventory;
 using NosGm.GameObject.Helpers;
+using NosGm.GameObject.Networking;
 using System;
 using System.Collections.Concurrent;
 using System.Linq;
@@ -106,9 +107,6 @@ namespace NosGm.GameObject
         {
             try
             {
-                // DropItemByMonster inserts the freshly created item into DroppedList
-                // immediately after construction. One shared delay avoids allocating a
-                // timer/task per drop while still letting that insertion complete first.
                 Thread.Sleep(AutoLootInitialDelayMilliseconds);
 
                 while (!AutoLootQueue.IsEmpty)
@@ -157,11 +155,6 @@ namespace NosGm.GameObject
             }
         }
 
-        /// <summary>
-        /// Returns false only while the drop has not yet appeared in DroppedList and
-        /// should be retried briefly. Every other outcome deliberately leaves the item
-        /// on the floor or completes the pickup and therefore returns true.
-        /// </summary>
         private bool TryAutoLoot()
         {
             if (!AutoLootEligible || !OwnerId.HasValue || OwnerId.Value <= 0)
@@ -185,9 +178,6 @@ namespace NosGm.GameObject
             {
                 if (!mapInstance.DroppedList.ContainsKey(TransportId))
                 {
-                    // Most commonly this is the tiny constructor -> DroppedList insertion
-                    // race. After a short grace period it also safely covers a player who
-                    // picked the item manually before the worker reached it.
                     return CreatedDate.AddMilliseconds(250) <= DateTime.Now;
                 }
 
