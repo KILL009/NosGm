@@ -60,6 +60,39 @@ public sealed class GameforgeAuthenticationState
         uint countryId,
         TimeSpan lifetime)
     {
+        return TryIssueTicketCore(
+            accountName,
+            authorizationCode,
+            installationId,
+            countryId,
+            lifetime,
+            allowIdenticalRetry: false);
+    }
+
+    public AuthenticationTransportResultCode TryIssueTicketIdempotent(
+        string accountName,
+        string authorizationCode,
+        Guid installationId,
+        uint countryId,
+        TimeSpan lifetime)
+    {
+        return TryIssueTicketCore(
+            accountName,
+            authorizationCode,
+            installationId,
+            countryId,
+            lifetime,
+            allowIdenticalRetry: true);
+    }
+
+    private AuthenticationTransportResultCode TryIssueTicketCore(
+        string accountName,
+        string authorizationCode,
+        Guid installationId,
+        uint countryId,
+        TimeSpan lifetime,
+        bool allowIdenticalRetry)
+    {
         if (!TryNormalizeAuthorizationCode(
                 authorizationCode,
                 out string normalizedAuthorizationCode) ||
@@ -80,13 +113,40 @@ public sealed class GameforgeAuthenticationState
         {
             DateTimeOffset now = _timeProvider.GetUtcNow();
             RemoveExpiredTickets(now);
+
+            string key = ComputeAuthorizationCodeKey(
+                normalizedAuthorizationCode);
+            if (_tickets.TryGetValue(key, out Ticket existingTicket))
+            {
+                if (allowIdenticalRetry)
+                {
+                    lock (existingTicket)
+                    {
+                        bool identicalUnconsumedTicket =
+                            existingTicket.ExpiresAt > now &&
+                            existingTicket.ConsumptionCount == 0 &&
+                            existingTicket.SessionId <= 0 &&
+                            string.Equals(
+                                existingTicket.AccountName,
+                                accountName,
+                                StringComparison.Ordinal) &&
+                            existingTicket.InstallationId == installationId &&
+                            existingTicket.CountryId == countryId;
+                        if (identicalUnconsumedTicket)
+                        {
+                            return AuthenticationTransportResultCode.Success;
+                        }
+                    }
+                }
+
+                return AuthenticationTransportResultCode.Conflict;
+            }
+
             if (_tickets.Count >= MaximumOutstandingTickets)
             {
                 return AuthenticationTransportResultCode.CapacityExceeded;
             }
 
-            string key = ComputeAuthorizationCodeKey(
-                normalizedAuthorizationCode);
             bool added = _tickets.TryAdd(
                 key,
                 new Ticket
@@ -175,6 +235,35 @@ public sealed class GameforgeAuthenticationState
         string ipAddress,
         TimeSpan lifetime)
     {
+        return TryIssuePermitCore(
+            accountId,
+            sessionId,
+            ipAddress,
+            lifetime,
+            allowIdenticalRetry: false);
+    }
+
+    public AuthenticationTransportResultCode TryIssuePermitIdempotent(
+        long accountId,
+        int sessionId,
+        string ipAddress,
+        TimeSpan lifetime)
+    {
+        return TryIssuePermitCore(
+            accountId,
+            sessionId,
+            ipAddress,
+            lifetime,
+            allowIdenticalRetry: true);
+    }
+
+    private AuthenticationTransportResultCode TryIssuePermitCore(
+        long accountId,
+        int sessionId,
+        string ipAddress,
+        TimeSpan lifetime,
+        bool allowIdenticalRetry)
+    {
         if (accountId <= 0 ||
             sessionId <= 0 ||
             lifetime <= TimeSpan.Zero ||
@@ -187,17 +276,35 @@ public sealed class GameforgeAuthenticationState
         {
             DateTimeOffset now = _timeProvider.GetUtcNow();
             RemoveExpiredPermits(now);
+
+            string key = BuildPermitKey(accountId, sessionId);
+            string normalizedIpAddress = NormalizeIpAddress(ipAddress);
+            if (_permits.TryGetValue(key, out Permit existingPermit))
+            {
+                if (allowIdenticalRetry &&
+                    existingPermit.ExpiresAt > now &&
+                    string.Equals(
+                        existingPermit.IpAddress,
+                        normalizedIpAddress,
+                        StringComparison.OrdinalIgnoreCase))
+                {
+                    return AuthenticationTransportResultCode.Success;
+                }
+
+                return AuthenticationTransportResultCode.Conflict;
+            }
+
             if (_permits.Count >= MaximumOutstandingPermits)
             {
                 return AuthenticationTransportResultCode.CapacityExceeded;
             }
 
             bool added = _permits.TryAdd(
-                BuildPermitKey(accountId, sessionId),
+                key,
                 new Permit
                 {
                     ExpiresAt = now.Add(lifetime),
-                    IpAddress = NormalizeIpAddress(ipAddress)
+                    IpAddress = normalizedIpAddress
                 });
             return added
                 ? AuthenticationTransportResultCode.Success

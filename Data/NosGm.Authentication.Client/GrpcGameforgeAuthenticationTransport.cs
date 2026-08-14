@@ -17,6 +17,8 @@ namespace NosGm.Authentication.Client
     public sealed class GrpcGameforgeAuthenticationTransport
         : IGameforgeAuthenticationTransport, IDisposable
     {
+        private const int TransientIssueRetryDelayMilliseconds = 25;
+
         private readonly AuthenticationGrpcClientOptions _options;
         private readonly X509Certificate2 _clientCertificate;
         private readonly HttpMessageHandler _httpHandler;
@@ -66,23 +68,38 @@ namespace NosGm.Authentication.Client
                 CancellationToken cancellationToken)
         {
             ThrowIfDisposed();
-            DateTime deadline = CreateDeadline(out WireV1.RequestContext context);
-            WireV1.IssueAuthTicketResponse response =
-                await _client.IssueAuthTicketAsync(
-                        new WireV1.IssueAuthTicketRequest
-                        {
-                            Context = context,
-                            AccountName = accountName ?? string.Empty,
-                            AuthorizationCode =
-                                authorizationCode ?? string.Empty,
-                            InstallationId = installationId ?? string.Empty,
-                            CountryId = countryId
-                        },
-                        deadline: deadline,
-                        cancellationToken: cancellationToken)
-                    .ResponseAsync
-                    .ConfigureAwait(false);
-            return ToTransportResult(response.Result);
+            for (int attempt = 0; ; attempt++)
+            {
+                try
+                {
+                    DateTime deadline = CreateDeadline(out WireV1.RequestContext context);
+                    WireV1.IssueAuthTicketResponse response =
+                        await _client.IssueAuthTicketAsync(
+                                new WireV1.IssueAuthTicketRequest
+                                {
+                                    Context = context,
+                                    AccountName = accountName ?? string.Empty,
+                                    AuthorizationCode =
+                                        authorizationCode ?? string.Empty,
+                                    InstallationId = installationId ?? string.Empty,
+                                    CountryId = countryId
+                                },
+                                deadline: deadline,
+                                cancellationToken: cancellationToken)
+                            .ResponseAsync
+                            .ConfigureAwait(false);
+                    return ToTransportResult(response.Result);
+                }
+                catch (RpcException exception) when (
+                    attempt == 0 &&
+                    ShouldRetryIssue(exception, cancellationToken))
+                {
+                    await Task.Delay(
+                            TransientIssueRetryDelayMilliseconds,
+                            cancellationToken)
+                        .ConfigureAwait(false);
+                }
+            }
         }
 
         public async Task<AuthenticationTicketConsumptionResult>
@@ -127,21 +144,36 @@ namespace NosGm.Authentication.Client
                 CancellationToken cancellationToken)
         {
             ThrowIfDisposed();
-            DateTime deadline = CreateDeadline(out WireV1.RequestContext context);
-            WireV1.IssueWorldPermitResponse response =
-                await _client.IssueWorldPermitAsync(
-                        new WireV1.IssueWorldPermitRequest
-                        {
-                            Context = context,
-                            AccountId = accountId,
-                            SessionId = sessionId,
-                            IpAddress = ipAddress ?? string.Empty
-                        },
-                        deadline: deadline,
-                        cancellationToken: cancellationToken)
-                    .ResponseAsync
-                    .ConfigureAwait(false);
-            return ToTransportResult(response.Result);
+            for (int attempt = 0; ; attempt++)
+            {
+                try
+                {
+                    DateTime deadline = CreateDeadline(out WireV1.RequestContext context);
+                    WireV1.IssueWorldPermitResponse response =
+                        await _client.IssueWorldPermitAsync(
+                                new WireV1.IssueWorldPermitRequest
+                                {
+                                    Context = context,
+                                    AccountId = accountId,
+                                    SessionId = sessionId,
+                                    IpAddress = ipAddress ?? string.Empty
+                                },
+                                deadline: deadline,
+                                cancellationToken: cancellationToken)
+                            .ResponseAsync
+                            .ConfigureAwait(false);
+                    return ToTransportResult(response.Result);
+                }
+                catch (RpcException exception) when (
+                    attempt == 0 &&
+                    ShouldRetryIssue(exception, cancellationToken))
+                {
+                    await Task.Delay(
+                            TransientIssueRetryDelayMilliseconds,
+                            cancellationToken)
+                        .ConfigureAwait(false);
+                }
+            }
         }
 
         public async Task<AuthenticationTransportResultCode>
@@ -224,6 +256,19 @@ namespace NosGm.Authentication.Client
                 CallerInstanceId = _options.CallerInstanceId
             };
             return deadline.UtcDateTime;
+        }
+
+        private static bool ShouldRetryIssue(
+            RpcException exception,
+            CancellationToken cancellationToken)
+        {
+            if (exception == null || cancellationToken.IsCancellationRequested)
+            {
+                return false;
+            }
+
+            return exception.StatusCode == StatusCode.DeadlineExceeded ||
+                   exception.StatusCode == StatusCode.Unavailable;
         }
 
         private static AuthenticationTransportResultCode ToTransportResult(

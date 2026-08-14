@@ -68,7 +68,7 @@ public sealed class GameforgeAuthenticationService
                 }
 
                 AuthenticationTransportResultCode result =
-                    _state.TryIssueTicket(
+                    _state.TryIssueTicketIdempotent(
                         request.AccountName,
                         request.AuthorizationCode,
                         Guid.ParseExact(request.InstallationId, "D"),
@@ -159,7 +159,7 @@ public sealed class GameforgeAuthenticationService
                         context);
                 AuthenticationTransportResultCode result =
                     validation == AuthenticationTransportResultCode.Success
-                        ? _state.TryIssuePermit(
+                        ? _state.TryIssuePermitIdempotent(
                             request.AccountId,
                             request.SessionId,
                             request.IpAddress,
