@@ -80,13 +80,34 @@ public sealed class GameforgeAuthenticationState
         {
             DateTimeOffset now = _timeProvider.GetUtcNow();
             RemoveExpiredTickets(now);
+
+            string key = ComputeAuthorizationCodeKey(
+                normalizedAuthorizationCode);
+            if (_tickets.TryGetValue(key, out Ticket existingTicket))
+            {
+                lock (existingTicket)
+                {
+                    bool identicalUnconsumedTicket =
+                        existingTicket.ExpiresAt > now &&
+                        existingTicket.ConsumptionCount == 0 &&
+                        existingTicket.SessionId <= 0 &&
+                        string.Equals(
+                            existingTicket.AccountName,
+                            accountName,
+                            StringComparison.Ordinal) &&
+                        existingTicket.InstallationId == installationId &&
+                        existingTicket.CountryId == countryId;
+                    return identicalUnconsumedTicket
+                        ? AuthenticationTransportResultCode.Success
+                        : AuthenticationTransportResultCode.Conflict;
+                }
+            }
+
             if (_tickets.Count >= MaximumOutstandingTickets)
             {
                 return AuthenticationTransportResultCode.CapacityExceeded;
             }
 
-            string key = ComputeAuthorizationCodeKey(
-                normalizedAuthorizationCode);
             bool added = _tickets.TryAdd(
                 key,
                 new Ticket
@@ -187,17 +208,33 @@ public sealed class GameforgeAuthenticationState
         {
             DateTimeOffset now = _timeProvider.GetUtcNow();
             RemoveExpiredPermits(now);
+
+            string key = BuildPermitKey(accountId, sessionId);
+            string normalizedIpAddress = NormalizeIpAddress(ipAddress);
+            if (_permits.TryGetValue(key, out Permit existingPermit))
+            {
+                bool identicalActivePermit =
+                    existingPermit.ExpiresAt > now &&
+                    string.Equals(
+                        existingPermit.IpAddress,
+                        normalizedIpAddress,
+                        StringComparison.OrdinalIgnoreCase);
+                return identicalActivePermit
+                    ? AuthenticationTransportResultCode.Success
+                    : AuthenticationTransportResultCode.Conflict;
+            }
+
             if (_permits.Count >= MaximumOutstandingPermits)
             {
                 return AuthenticationTransportResultCode.CapacityExceeded;
             }
 
             bool added = _permits.TryAdd(
-                BuildPermitKey(accountId, sessionId),
+                key,
                 new Permit
                 {
                     ExpiresAt = now.Add(lifetime),
-                    IpAddress = NormalizeIpAddress(ipAddress)
+                    IpAddress = normalizedIpAddress
                 });
             return added
                 ? AuthenticationTransportResultCode.Success
