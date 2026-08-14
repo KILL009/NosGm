@@ -340,7 +340,12 @@ namespace NosGm.Authentication.Client
 #else
             var handler = new WinHttpHandler
             {
-                SslProtocols = SslProtocols.Tls12
+                SslProtocols = SslProtocols.Tls12,
+                // .NET Framework gRPC otherwise waits for capacity on the existing
+                // HTTP/2 connection after its concurrent stream limit is reached.
+                // Allow WinHTTP to open another HTTP/2 connection during bursts so
+                // World entry permit checks do not queue behind a saturated channel.
+                EnableMultipleHttp2Connections = true
             };
             handler.ClientCertificates.Add(certificate);
             return handler;
