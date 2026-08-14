@@ -53,7 +53,15 @@ namespace NosGm.Handler.PacketHandler.Basic
                         Session.Character.Speed));
                 Session.SendPacket(Session.Character.GenerateCond());
                 Session.Character.WalkDisposable?.Dispose();
+                Session.Character.WalkDisposable = null;
                 walk();
+
+                if (Session.Character.PositionX == walkPacket.XCoordinate &&
+                    Session.Character.PositionY == walkPacket.YCoordinate)
+                {
+                    return;
+                }
+
                 var interval = 100 - Session.Character.Speed * 5 + 100 > 0
                     ? 100 - Session.Character.Speed * 5 + 100
                     : 0;
@@ -106,6 +114,7 @@ namespace NosGm.Handler.PacketHandler.Basic
                     if (Session.Character.PositionX == walkPacket.XCoordinate && Session.Character.PositionY == walkPacket.YCoordinate)
                     {
                         Session.Character.WalkDisposable?.Dispose();
+                        Session.Character.WalkDisposable = null;
                     }
                 }
             }
