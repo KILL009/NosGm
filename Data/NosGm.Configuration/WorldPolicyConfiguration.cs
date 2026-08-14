@@ -16,6 +16,8 @@ namespace NosGm.Configuration
             GetEnvironmentBoolean("NOSGM_DISABLE_HERO_EXP");
         public static readonly bool AllowDedicatedPvpInPveWorld =
             GetEnvironmentBoolean("NOSGM_PVE_ALLOW_INSTANCED_PVP", true);
+        public static readonly bool EnableAutoLoot =
+            GetEnvironmentBoolean("NOSGM_AUTO_LOOT_ENABLED", true);
 
         public static readonly string ServerGroup =
             GetEnvironmentString("NOSGM_SERVER_GROUP", ServerConfiguration.ServerGroup);
