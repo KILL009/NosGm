@@ -1,4 +1,6 @@
 using System.Diagnostics;
+using System.Globalization;
+using System.Text.Json;
 
 namespace NosGM.LoadTest;
 
@@ -23,8 +25,18 @@ internal sealed record ProcessSample(
 
 internal sealed class ProcessSampler
 {
+    private static readonly IReadOnlyDictionary<string, string> RuntimeRoleAliases =
+        new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["NosGm.Authentication.Server"] = "AuthenticationGrpc",
+            ["NosGm.Master.Server"] = "Master",
+            ["NosGm.World"] = "World",
+            ["NosGm.Login"] = "Login"
+        };
+
     private readonly string[] _processNames;
     private readonly Dictionary<int, PreviousProcessSample> _previous = new();
+    private readonly IReadOnlyDictionary<string, TrackedProcessTarget> _trackedProcesses;
 
     public ProcessSampler(IEnumerable<string> processNames)
     {
@@ -34,6 +46,7 @@ internal sealed class ProcessSampler
             .Select(NormalizeProcessName)
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
+        _trackedProcesses = LoadTrackedProcessTargets();
     }
 
     public ProcessSample Capture()
@@ -58,7 +71,7 @@ internal sealed class ProcessSampler
             int processHandleCount = 0;
             int namedProcessCount = 0;
 
-            foreach (Process process in Process.GetProcessesByName(processName))
+            foreach (Process process in ResolveProcesses(processName))
             {
                 using (process)
                 {
@@ -146,6 +159,119 @@ internal sealed class ProcessSampler
             processMetrics.ToArray());
     }
 
+    private IEnumerable<Process> ResolveProcesses(string configuredName)
+    {
+        if (_trackedProcesses.TryGetValue(configuredName, out TrackedProcessTarget tracked))
+        {
+            Process? trackedProcess = null;
+            try
+            {
+                trackedProcess = Process.GetProcessById(tracked.ProcessId);
+                if (MatchesTrackedProcess(trackedProcess, tracked))
+                {
+                    return [trackedProcess];
+                }
+            }
+            catch (ArgumentException)
+            {
+            }
+            catch (InvalidOperationException)
+            {
+            }
+            catch (System.ComponentModel.Win32Exception)
+            {
+            }
+
+            trackedProcess?.Dispose();
+        }
+
+        return Process.GetProcessesByName(configuredName);
+    }
+
+    private static bool MatchesTrackedProcess(Process process, TrackedProcessTarget tracked)
+    {
+        if (tracked.StartedAtUtc == default)
+        {
+            return true;
+        }
+
+        DateTimeOffset actualStart = new(process.StartTime.ToUniversalTime(), TimeSpan.Zero);
+        return Math.Abs((actualStart - tracked.StartedAtUtc).TotalSeconds) <= 2;
+    }
+
+    private static IReadOnlyDictionary<string, TrackedProcessTarget> LoadTrackedProcessTargets()
+    {
+        var targets = new Dictionary<string, TrackedProcessTarget>(StringComparer.OrdinalIgnoreCase);
+        string statePath = Path.Combine(
+            Directory.GetCurrentDirectory(),
+            "artifacts",
+            "modern-login-local",
+            "processes.json");
+        if (!File.Exists(statePath))
+        {
+            return targets;
+        }
+
+        try
+        {
+            using JsonDocument document = JsonDocument.Parse(File.ReadAllText(statePath));
+            if (!document.RootElement.TryGetProperty("Processes", out JsonElement processes) ||
+                processes.ValueKind != JsonValueKind.Array)
+            {
+                return targets;
+            }
+
+            foreach (JsonElement process in processes.EnumerateArray())
+            {
+                if (!process.TryGetProperty("Name", out JsonElement nameElement) ||
+                    !process.TryGetProperty("Id", out JsonElement idElement) ||
+                    idElement.ValueKind != JsonValueKind.Number ||
+                    !idElement.TryGetInt32(out int processId) ||
+                    processId <= 0)
+                {
+                    continue;
+                }
+
+                string? roleName = nameElement.GetString();
+                if (string.IsNullOrWhiteSpace(roleName))
+                {
+                    continue;
+                }
+
+                DateTimeOffset startedAtUtc = default;
+                if (process.TryGetProperty("StartedAtUtc", out JsonElement startedAtElement))
+                {
+                    string? startedAtText = startedAtElement.GetString();
+                    DateTimeOffset.TryParse(
+                        startedAtText,
+                        CultureInfo.InvariantCulture,
+                        DateTimeStyles.RoundtripKind,
+                        out startedAtUtc);
+                }
+
+                foreach ((string configuredName, string runtimeRole) in RuntimeRoleAliases)
+                {
+                    if (string.Equals(roleName, runtimeRole, StringComparison.OrdinalIgnoreCase))
+                    {
+                        targets[configuredName] = new TrackedProcessTarget(processId, startedAtUtc);
+                        break;
+                    }
+                }
+            }
+        }
+        catch (IOException)
+        {
+        }
+        catch (UnauthorizedAccessException)
+        {
+        }
+        catch (JsonException)
+        {
+        }
+
+        return targets;
+    }
+
     private static string NormalizeProcessName(string configuredName)
     {
         string trimmed = configuredName.Trim();
@@ -155,4 +281,6 @@ internal sealed class ProcessSampler
     }
 
     private readonly record struct PreviousProcessSample(long Timestamp, long TotalProcessorTicks);
+
+    private readonly record struct TrackedProcessTarget(int ProcessId, DateTimeOffset StartedAtUtc);
 }
