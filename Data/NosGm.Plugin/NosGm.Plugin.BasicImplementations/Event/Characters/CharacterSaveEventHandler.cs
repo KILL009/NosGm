@@ -9,7 +9,6 @@ using NosGm.GameObject.Characters.Events;
 using NosGm.GameObject.Networking;
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -193,18 +192,21 @@ namespace Plugins.BasicImplementations.Event.Characters
                 #region Miniland Save
                 if (character.MinilandObjects.Count > 0)
                 {
+                    List<MinilandObjectDTO> minilandObjectsToSave;
                     lock (character.MinilandObjects)
                     {
-                        foreach (MinilandObjectDTO minilandObject in character.MinilandObjects)
+                        minilandObjectsToSave = character.MinilandObjects.Cast<MinilandObjectDTO>().ToList();
+                    }
+
+                    foreach (MinilandObjectDTO minilandObject in minilandObjectsToSave)
+                    {
+                        try
                         {
-                            try
-                            {
-                                DAOFactory.MinilandObjectDAO.InsertOrUpdateAsync(minilandObject);
-                            }
-                            catch (Exception ex)
-                            {
-                                Logger.LogUserEventError("CHARACTER_DB_SAVE", character.Session.GenerateIdentity(), "ERROR", ex);
-                            }
+                            await DAOFactory.MinilandObjectDAO.InsertOrUpdateAsync(minilandObject).ConfigureAwait(false);
+                        }
+                        catch (Exception ex)
+                        {
+                            Logger.LogUserEventError("CHARACTER_DB_SAVE", character.Session.GenerateIdentity(), "ERROR", ex);
                         }
                     }
                 }
