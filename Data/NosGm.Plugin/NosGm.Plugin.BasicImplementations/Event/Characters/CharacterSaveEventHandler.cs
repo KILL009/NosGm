@@ -1,6 +1,5 @@
 ﻿using ChickenAPI.Events;
 
-
 using NosGm.Core;
 using NosGm.DAL;
 using NosGm.Data;
@@ -15,20 +14,50 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 
-
 namespace Plugins.BasicImplementations.Event.Characters
 {
-    public class CharacterSaveEventHandler : GenericEventHandlerBase<CharacterSaveEvent> 
+    public class CharacterSaveEventHandler : GenericEventHandlerBase<CharacterSaveEvent>, IAsyncEventHandler
     {
+        // Character persistence fans out into many DAO calls. Keep disconnect storms
+        // below the default SqlClient pool limit instead of allowing hundreds of
+        // async-void saves to compete for connections at once.
+        private static readonly SemaphoreSlim SaveConcurrency = new SemaphoreSlim(16, 16);
 
-        protected override async void Handle(CharacterSaveEvent e, CancellationToken cancellation)
+        protected override void Handle(CharacterSaveEvent e, CancellationToken cancellation)
         {
-            Character character = e.Sender.Character;
-
-            await HandleSaveAsync(character);
+            HandleSaveEventAsync(e, cancellation).ConfigureAwait(false).GetAwaiter().GetResult();
         }
 
-        private async Task HandleSaveAsync(Character character)
+        public Task HandleAsync(IEventNotification notification, CancellationToken cancellation)
+        {
+            if (!(notification is CharacterSaveEvent saveEvent))
+            {
+                return Task.CompletedTask;
+            }
+
+            return HandleSaveEventAsync(saveEvent, cancellation);
+        }
+
+        private static async Task HandleSaveEventAsync(CharacterSaveEvent e, CancellationToken cancellation)
+        {
+            Character character = e?.Sender?.Character;
+            if (character == null)
+            {
+                return;
+            }
+
+            await SaveConcurrency.WaitAsync(cancellation).ConfigureAwait(false);
+            try
+            {
+                await HandleSaveAsync(character).ConfigureAwait(false);
+            }
+            finally
+            {
+                SaveConcurrency.Release();
+            }
+        }
+
+        private static async Task HandleSaveAsync(Character character)
         {
             try
             {
@@ -36,7 +65,7 @@ namespace Plugins.BasicImplementations.Event.Characters
 
                 CharacterDTO characterDTO = character.DeepCopy();
 
-                await DAOFactory.CharacterDAO.InsertOrUpdateAsync(characterDTO);
+                await DAOFactory.CharacterDAO.InsertOrUpdateAsync(characterDTO).ConfigureAwait(false);
 
                 #endregion
 
@@ -71,18 +100,17 @@ namespace Plugins.BasicImplementations.Event.Characters
                     // create or update all which are new or do still exist
                     List<ItemInstance> saveInventory = inventories.Where(s => s.Type != InventoryType.Bazaar && s.Type != InventoryType.FamilyWareHouse).ToList();
 
-                    await DAOFactory.ItemInstanceDAO.InsertOrUpdateFromListAsync(saveInventory);
+                    await DAOFactory.ItemInstanceDAO.InsertOrUpdateFromListAsync(saveInventory).ConfigureAwait(false);
 
                     foreach (ItemInstance itemInstance in saveInventory)
                     {
-                        await DAOFactory.ShellEffectDAO.InsertOrUpdateFromListAsync(itemInstance.ShellEffects, itemInstance.EquipmentSerialId);
-                        await DAOFactory.CellonOptionDAO.InsertOrUpdateFromListAsync(itemInstance.CellonOptions, itemInstance.EquipmentSerialId);
+                        await DAOFactory.ShellEffectDAO.InsertOrUpdateFromListAsync(itemInstance.ShellEffects, itemInstance.EquipmentSerialId).ConfigureAwait(false);
+                        await DAOFactory.CellonOptionDAO.InsertOrUpdateFromListAsync(itemInstance.CellonOptions, itemInstance.EquipmentSerialId).ConfigureAwait(false);
                         DAOFactory.RuneEffectDAO.InsertOrUpdateFromList(itemInstance.RuneEffects, itemInstance.EquipmentSerialId);
                         DAOFactory.FairyEnchantmentDAO.InsertOrUpdateFromList(itemInstance.FairyEnchantments, itemInstance.EquipmentSerialId);
-
                     }
                 }
-                #endregion 
+                #endregion
 
                 #region Skill Save
                 if (character.Skills != null)
@@ -98,7 +126,7 @@ namespace Plugins.BasicImplementations.Event.Characters
 
                         foreach (CharacterSkill characterSkill in character.Skills.GetAllItems())
                         {
-                            await DAOFactory.CharacterSkillDAO.InsertOrUpdateAsync(characterSkill);
+                            await DAOFactory.CharacterSkillDAO.InsertOrUpdateAsync(characterSkill).ConfigureAwait(false);
                         }
                     }
                     catch (Exception ex)
@@ -113,7 +141,7 @@ namespace Plugins.BasicImplementations.Event.Characters
                 {
                     foreach (var tit in character.Title)
                     {
-                        await DAOFactory.CharacterTitleDAO.InsertOrUpdateAsync(tit);
+                        await DAOFactory.CharacterTitleDAO.InsertOrUpdateAsync(tit).ConfigureAwait(false);
                     }
                 }
                 #endregion
@@ -135,7 +163,7 @@ namespace Plugins.BasicImplementations.Event.Characters
 
                 foreach (Mate mate in character.Mates)
                 {
-                    await DAOFactory.MateDAO.InsertOrUpdateAsync(mate);
+                    await DAOFactory.MateDAO.InsertOrUpdateAsync(mate).ConfigureAwait(false);
                 }
                 #endregion
 
@@ -152,7 +180,7 @@ namespace Plugins.BasicImplementations.Event.Characters
 
                     foreach (QuicklistEntryDTO quicklistEntry in quickListEntriesToInsertOrUpdateAsync)
                     {
-                        await DAOFactory.QuicklistEntryDAO.InsertOrUpdateAsync(quicklistEntry);
+                        await DAOFactory.QuicklistEntryDAO.InsertOrUpdateAsync(quicklistEntry).ConfigureAwait(false);
                     }
                 }
                 catch (Exception ex)
@@ -216,7 +244,7 @@ namespace Plugins.BasicImplementations.Event.Characters
                                 RemainingTime = (int)(buff.RemainingTime - (DateTime.Now - buff.Start).TotalSeconds),
                                 CardId = buff.Card.CardId
                             };
-                            await DAOFactory.StaticBuffDAO.InsertOrUpdateAsync(bf);
+                            await DAOFactory.StaticBuffDAO.InsertOrUpdateAsync(bf).ConfigureAwait(false);
                         }
                         catch (Exception ex)
                         {
@@ -231,7 +259,7 @@ namespace Plugins.BasicImplementations.Event.Characters
                 {
                     try
                     {
-                        await DAOFactory.StaticBonusDAO.InsertOrUpdateAsync(bonus);
+                        await DAOFactory.StaticBonusDAO.InsertOrUpdateAsync(bonus).ConfigureAwait(false);
                     }
                     catch (Exception ex)
                     {
@@ -247,7 +275,7 @@ namespace Plugins.BasicImplementations.Event.Characters
                     {
                         if (resp.MapId != 0 && resp.X != 0 && resp.Y != 0)
                         {
-                            await DAOFactory.RespawnDAO.InsertOrUpdateAsync(resp);
+                            await DAOFactory.RespawnDAO.InsertOrUpdateAsync(resp).ConfigureAwait(false);
                         }
                     }
                     catch (Exception ex)
@@ -308,7 +336,6 @@ namespace Plugins.BasicImplementations.Event.Characters
                     //LOGGERServerLog(ex.ToString(), LogType.ServerError);
                 }
                 #endregion
-
             }
             catch (Exception ex)
             {
