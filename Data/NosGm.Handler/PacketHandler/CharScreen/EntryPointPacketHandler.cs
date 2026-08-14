@@ -12,13 +12,19 @@ using NosGm.GameObject.Service;
 using NosGm.Handler.Packets.CharScreenPackets;
 using NosGm.Master.Library.Client;
 using System;
+using System.Collections.Concurrent;
 using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace NosGm.Handler.BasicPacket.CharScreen
 {
     internal class EntryPointPacketHandler : IPacketHandler
     {
         private static readonly object GameforgeAuthSync = new object();
+        private static readonly ConcurrentDictionary<long, byte>
+            PendingGameforgeWorldPermitChecks =
+                new ConcurrentDictionary<long, byte>();
         private static bool _authenticationServiceAuthenticated;
 
         public EntryPointPacketHandler(ClientSession session)
@@ -103,42 +109,131 @@ namespace NosGm.Handler.BasicPacket.CharScreen
                         return;
                     }
 
-                    bool permitValid;
-                    try
+                    if (!PendingGameforgeWorldPermitChecks.TryAdd(Session.ClientId, 0))
                     {
-                        permitValid = AuthentificationServiceClient.Instance.ConsumeGameforgeWorldPermit(account.AccountId, Session.SessionId, NormalizeRemoteIp(Session.IpAddress));
-                    }
-                    catch (Exception ex)
-                    {
-                        RejectEntry("GAMEFORGE_WORLD_PERMIT_CHECK_FAILED", ex);
+                        RejectEntry("GAMEFORGE_WORLD_PERMIT_CHECK_IN_PROGRESS");
                         return;
                     }
 
-                    if (!permitValid)
-                    {
-                        RejectEntry("GAMEFORGE_WORLD_PERMIT_INVALID");
-                        return;
-                    }
-                    LogEntryStage("GAMEFORGE_WORLD_PERMIT_ACCEPTED");
-                }
-
-                bool passwordValid = isCrossServerLogin || isGameforgePasswordlessLogin ||
-                                      PasswordHashService.VerifyPassword(account.Password, loginPacketParts[7], true, out _);
-                if (!passwordValid)
-                {
-                    RejectEntry("PASSWORD_REJECTED");
+                    LogEntryStage("GAMEFORGE_WORLD_PERMIT_CHECK_PENDING");
+                    _ = CompleteGameforgeEntryAsync(account, loginPacketParts);
                     return;
                 }
-                LogEntryStage(
-                    "CREDENTIALS_ACCEPTED",
-                    $"Mode={(isCrossServerLogin ? "CrossServer" : isGameforgePasswordlessLogin ? "Gameforge" : "Password")}");
 
-                Session.InitializeAccount(
-                    new Account(account),
-                    isCrossServerLogin,
-                    isGameforgePasswordlessLogin);
-                ServerManager.Instance.CharacterScreenSessions[Session.Account.AccountId] = Session;
-                LogEntryStage("ACCOUNT_INITIALIZED", $"CrossServer={isCrossServerLogin}");
+                if (!CompleteAccountInitialization(
+                        account,
+                        loginPacketParts,
+                        isCrossServerLogin,
+                        false))
+                {
+                    return;
+                }
+            }
+
+            CompletePostAccountEntry(loginPacketParts, isCrossServerLogin);
+        }
+
+        private async Task CompleteGameforgeEntryAsync(
+            AccountDTO account,
+            string[] loginPacketParts)
+        {
+            try
+            {
+                bool permitValid;
+                try
+                {
+                    permitValid = await AuthentificationServiceClient.Instance
+                        .ConsumeGameforgeWorldPermit(
+                            account.AccountId,
+                            Session.SessionId,
+                            NormalizeRemoteIp(Session.IpAddress),
+                            CancellationToken.None)
+                        .ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    if (Session.IsConnected && !Session.IsDisposing)
+                    {
+                        RejectEntry("GAMEFORGE_WORLD_PERMIT_CHECK_FAILED", ex);
+                    }
+                    return;
+                }
+
+                if (!Session.IsConnected || Session.IsDisposing)
+                {
+                    return;
+                }
+
+                if (!permitValid)
+                {
+                    RejectEntry("GAMEFORGE_WORLD_PERMIT_INVALID");
+                    return;
+                }
+                LogEntryStage("GAMEFORGE_WORLD_PERMIT_ACCEPTED");
+
+                if (!CompleteAccountInitialization(
+                        account,
+                        loginPacketParts,
+                        false,
+                        true))
+                {
+                    return;
+                }
+
+                CompletePostAccountEntry(loginPacketParts, false);
+            }
+            catch (Exception ex)
+            {
+                if (Session.IsConnected && !Session.IsDisposing)
+                {
+                    RejectEntry("GAMEFORGE_WORLD_ENTRY_CONTINUATION_FAILED", ex);
+                }
+                else
+                {
+                    Logger.Error(
+                        $"[WORLD_ENTRY] Async Gameforge continuation failed after disconnect ClientId={Session.ClientId}",
+                        ex);
+                }
+            }
+            finally
+            {
+                PendingGameforgeWorldPermitChecks.TryRemove(Session.ClientId, out _);
+            }
+        }
+
+        private bool CompleteAccountInitialization(
+            AccountDTO account,
+            string[] loginPacketParts,
+            bool isCrossServerLogin,
+            bool isGameforgePasswordlessLogin)
+        {
+            bool passwordValid = isCrossServerLogin || isGameforgePasswordlessLogin ||
+                                 PasswordHashService.VerifyPassword(account.Password, loginPacketParts[7], true, out _);
+            if (!passwordValid)
+            {
+                RejectEntry("PASSWORD_REJECTED");
+                return false;
+            }
+            LogEntryStage(
+                "CREDENTIALS_ACCEPTED",
+                $"Mode={(isCrossServerLogin ? "CrossServer" : isGameforgePasswordlessLogin ? "Gameforge" : "Password")}");
+
+            Session.InitializeAccount(
+                new Account(account),
+                isCrossServerLogin,
+                isGameforgePasswordlessLogin);
+            ServerManager.Instance.CharacterScreenSessions[Session.Account.AccountId] = Session;
+            LogEntryStage("ACCOUNT_INITIALIZED", $"CrossServer={isCrossServerLogin}");
+            return true;
+        }
+
+        private void CompletePostAccountEntry(
+            string[] loginPacketParts,
+            bool isCrossServerLogin)
+        {
+            if (!Session.IsConnected || Session.IsDisposing || Session.Account == null)
+            {
+                return;
             }
 
             if (isCrossServerLogin)
