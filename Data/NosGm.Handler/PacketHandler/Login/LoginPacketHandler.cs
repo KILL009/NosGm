@@ -11,13 +11,18 @@ using NosGm.Master.Library.Data;
 using NosGm.Master.Library.Interface;
 using NosGm.Packets.Packets.ClientPackets;
 using System;
+using System.Collections.Concurrent;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace NosGm.Handler.BasicPacket.Login
 {
     public class LoginPacketHandler : IPacketHandler
     {
+        private static readonly ConcurrentDictionary<long, byte> PendingGameforgeLogins =
+            new ConcurrentDictionary<long, byte>();
+
         private readonly ClientSession _session;
 
         public LoginPacketHandler(ClientSession session)
@@ -125,11 +130,46 @@ namespace NosGm.Handler.BasicPacket.Login
         [Packet("NoS0576", "NoS0577")]
         public void VerifyGameforgeLogin(string rawPacket)
         {
-            VerifyGameforgeLoginAsync(rawPacket).ConfigureAwait(false).GetAwaiter().GetResult();
+            if (!PendingGameforgeLogins.TryAdd(_session.ClientId, 0))
+            {
+                Logger.Warn($"Gameforge login already pending | ClientId={_session.ClientId}");
+                return;
+            }
+
+            _ = CompleteGameforgeLoginRequestAsync(rawPacket);
+        }
+
+        private async Task CompleteGameforgeLoginRequestAsync(string rawPacket)
+        {
+            try
+            {
+                await VerifyGameforgeLoginAsync(rawPacket).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                if (_session.IsConnected && !_session.IsDisposing)
+                {
+                    Logger.Error("Gameforge login continuation failed", ex);
+                    Reject(LoginFailType.CantConnect, "Session removed. Reason: Authentication service failed");
+                }
+                else
+                {
+                    Logger.Error($"Gameforge login continuation failed after disconnect ClientId={_session.ClientId}", ex);
+                }
+            }
+            finally
+            {
+                PendingGameforgeLogins.TryRemove(_session.ClientId, out _);
+            }
         }
 
         private async Task VerifyGameforgeLoginAsync(string rawPacket)
         {
+            if (!_session.IsConnected || _session.IsDisposing)
+            {
+                return;
+            }
+
             if (!ServerConfiguration.EnableGameforgeTokenLogin)
             {
                 Reject(LoginFailType.CantConnect, "Session removed. Reason: Gameforge token login disabled");
@@ -175,21 +215,31 @@ namespace NosGm.Handler.BasicPacket.Login
             GameforgeAuthTicketConsumption ticketConsumption;
             try
             {
-                // The packet country is only accepted when Master can consume an
-                // active-session ticket issued for the same country and
-                // InstallationId. The first consumption binds the SessionId and
-                // every later character-selection entry must reuse it.
+                // The packet country is only accepted when Authentication can consume an
+                // active-session ticket issued for the same country and InstallationId.
+                // Consumption remains one-use and is deliberately not retried.
                 int proposedSessionId = SessionFactory.Instance.GenerateSessionId();
-                ticketConsumption = AuthentificationServiceClient.Instance.ConsumeGameforgeAuthTicket(
-                    payload.AuthToken,
-                    payload.InstallationId.ToString("D"),
-                    payload.CountryId,
-                    proposedSessionId);
+                ticketConsumption = await AuthentificationServiceClient.Instance
+                    .ConsumeGameforgeAuthTicketAsync(
+                        payload.AuthToken,
+                        payload.InstallationId.ToString("D"),
+                        payload.CountryId,
+                        proposedSessionId,
+                        CancellationToken.None)
+                    .ConfigureAwait(false);
             }
             catch (Exception ex)
             {
-                Logger.Error("Gameforge ticket resolution failed", ex);
-                Reject(LoginFailType.CantConnect, "Session removed. Reason: Authentication service failed");
+                if (_session.IsConnected && !_session.IsDisposing)
+                {
+                    Logger.Error("Gameforge ticket resolution failed", ex);
+                    Reject(LoginFailType.CantConnect, "Session removed. Reason: Authentication service failed");
+                }
+                return;
+            }
+
+            if (!_session.IsConnected || _session.IsDisposing)
+            {
                 return;
             }
 
@@ -238,6 +288,11 @@ namespace NosGm.Handler.BasicPacket.Login
             string authenticationMode,
             GameforgeAuthTicketConsumption gameforgeTicket)
         {
+            if (!_session.IsConnected || _session.IsDisposing)
+            {
+                return;
+            }
+
             string ipAddress = NormalizeRemoteIp(_session.IpAddress);
             if (DAOFactory.PenaltyLogDAO.LoadByIp(ipAddress).Any())
             {
@@ -313,8 +368,28 @@ namespace NosGm.Handler.BasicPacket.Login
 
                 if (issueGameforgeWorldPermit)
                 {
-                    worldPermitRegistered = AuthentificationServiceClient.Instance.RegisterGameforgeWorldPermit(loadedAccount.AccountId, newSessionId, ipAddress);
+                    worldPermitRegistered = await AuthentificationServiceClient.Instance
+                        .RegisterGameforgeWorldPermitAsync(
+                            loadedAccount.AccountId,
+                            newSessionId,
+                            ipAddress,
+                            CancellationToken.None)
+                        .ConfigureAwait(false);
                     if (!worldPermitRegistered) throw new InvalidOperationException("Master rejected the Gameforge World permit.");
+                }
+
+                if (!_session.IsConnected || _session.IsDisposing)
+                {
+                    if (worldPermitRegistered)
+                    {
+                        await RevokeGameforgeWorldPermitQuietlyAsync(loadedAccount.AccountId, newSessionId)
+                            .ConfigureAwait(false);
+                    }
+                    if (accountRegistered && ownsAccountRegistration)
+                    {
+                        CommunicationServiceClient.Instance.DisconnectAccount(loadedAccount.AccountId);
+                    }
+                    return;
                 }
 
                 string serversPacket = BuildServersPacket(
@@ -328,7 +403,8 @@ namespace NosGm.Handler.BasicPacket.Login
                 {
                     if (worldPermitRegistered)
                     {
-                        AuthentificationServiceClient.Instance.RevokeGameforgeWorldPermit(loadedAccount.AccountId, newSessionId);
+                        await RevokeGameforgeWorldPermitQuietlyAsync(loadedAccount.AccountId, newSessionId)
+                            .ConfigureAwait(false);
                     }
                     if (ownsAccountRegistration)
                     {
@@ -346,14 +422,32 @@ namespace NosGm.Handler.BasicPacket.Login
             {
                 if (worldPermitRegistered)
                 {
-                    AuthentificationServiceClient.Instance.RevokeGameforgeWorldPermit(loadedAccount.AccountId, newSessionId);
+                    await RevokeGameforgeWorldPermitQuietlyAsync(loadedAccount.AccountId, newSessionId)
+                        .ConfigureAwait(false);
                 }
                 if (accountRegistered && ownsAccountRegistration)
                 {
                     CommunicationServiceClient.Instance.DisconnectAccount(loadedAccount.AccountId);
                 }
                 Logger.Error("Login registration failed", ex);
-                Reject(LoginFailType.CantConnect, "Session removed. Reason: Login registration failed");
+                if (_session.IsConnected && !_session.IsDisposing)
+                {
+                    Reject(LoginFailType.CantConnect, "Session removed. Reason: Login registration failed");
+                }
+            }
+        }
+
+        private async Task RevokeGameforgeWorldPermitQuietlyAsync(long accountId, int sessionId)
+        {
+            try
+            {
+                await AuthentificationServiceClient.Instance
+                    .RevokeGameforgeWorldPermitAsync(accountId, sessionId, CancellationToken.None)
+                    .ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"Gameforge World permit cleanup failed | AccountId={accountId} SessionId={sessionId}", ex);
             }
         }
 
