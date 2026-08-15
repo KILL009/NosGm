@@ -97,7 +97,7 @@ if ($login.IndexOf(
     throw "Character reselection would reuse an already consumed entry-one World permit."
 }
 Assert-Contains $login "if (accountRegistered && ownsAccountRegistration)" "A later modern entry could disconnect the shared account during rollback."
-Assert-Regex $login 'RegisterGameforgeWorldPermit\(loadedAccount\.AccountId, newSessionId, ipAddress\).*?BuildServersPacket\(' "A fresh one-use World permit must exist before every modern server list is sent."
+Assert-Regex $login 'RegisterGameforgeWorldPermit\(\s*loadedAccount\.AccountId,\s*newSessionId,\s*ipAddress\s*\).*?BuildServersPacket\(' "A fresh one-use World permit must exist before every modern server list is sent."
 
 Assert-Regex $entry 'Session\.InitializeAccount\(\s*new Account\(account\),\s*isCrossServerLogin,\s*isGameforgePasswordlessLogin\s*\)' "Validated Gameforge mode is not carried into the World session lifecycle."
 Assert-Contains $clientSession "public bool PreserveAccountRegistrationOnDisconnect { get; private set; }" "ClientSession does not remember the validated Gameforge lifecycle."
