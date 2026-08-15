@@ -35,6 +35,8 @@ namespace NosGm.Core.Networking.Communication.Scs.Communication.Channels.Tcp
             _syncLock = new object();
             _highPriorityBuffer = new ConcurrentQueue<byte[]>();
             _lowPriorityBuffer = new ConcurrentQueue<byte[]>();
+            _highPriorityBatchScratch = new byte[MAXIMUM_PACKETS_PER_BATCH][];
+            _lowPriorityBatchScratch = new byte[MAXIMUM_PACKETS_PER_BATCH][];
             var cancellationToken = _sendCancellationToken.Token;
 
             _sendTask = StartSendingAsync(SendInterval, new TimeSpan(0, 0, 0, 0, 10), cancellationToken);
@@ -57,6 +59,8 @@ namespace NosGm.Core.Networking.Communication.Scs.Communication.Channels.Tcp
 
         private const ushort PING_RESPONSE = 0x0988;
 
+        private const int MAXIMUM_PACKETS_PER_BATCH = 30;
+
         /// <summary>
         ///     Size of the buffer that is used to receive bytes from TCP socket.
         /// </summary>
@@ -74,7 +78,11 @@ namespace NosGm.Core.Networking.Communication.Scs.Communication.Channels.Tcp
 
         private readonly ConcurrentQueue<byte[]> _highPriorityBuffer;
 
+        private readonly byte[][] _highPriorityBatchScratch;
+
         private readonly ConcurrentQueue<byte[]> _lowPriorityBuffer;
+
+        private readonly byte[][] _lowPriorityBatchScratch;
 
         private readonly ScsTcpEndPoint _remoteEndPoint;
 
@@ -180,8 +188,8 @@ namespace NosGm.Core.Networking.Communication.Scs.Communication.Channels.Tcp
             {
                 if (WireProtocol != null)
                 {
-                    SendByPriority(_highPriorityBuffer);
-                    SendByPriority(_lowPriorityBuffer);
+                    SendByPriority(_highPriorityBuffer, _highPriorityBatchScratch);
+                    SendByPriority(_lowPriorityBuffer, _lowPriorityBatchScratch);
                 }
             }
             catch (Exception)
@@ -301,20 +309,19 @@ namespace NosGm.Core.Networking.Communication.Scs.Communication.Channels.Tcp
             }
         }
 
-        private void SendByPriority(ConcurrentQueue<byte[]> buffer)
+        private void SendByPriority(ConcurrentQueue<byte[]> buffer, byte[][] batchScratch)
         {
-            const int maximumPacketsPerBatch = 30;
-            var messages = new List<byte[]>(maximumPacketsPerBatch);
+            int messageCount = 0;
             int totalLength = 0;
 
-            for (int index = 0; index < maximumPacketsPerBatch; index++)
+            for (int index = 0; index < MAXIMUM_PACKETS_PER_BATCH; index++)
             {
                 if (!buffer.TryDequeue(out byte[] message) || message == null || message.Length == 0)
                 {
                     break;
                 }
 
-                messages.Add(message);
+                batchScratch[messageCount++] = message;
                 totalLength = checked(totalLength + message.Length);
             }
 
@@ -325,10 +332,12 @@ namespace NosGm.Core.Networking.Communication.Scs.Communication.Channels.Tcp
 
             var outgoingPacket = new byte[totalLength];
             int offset = 0;
-            foreach (byte[] message in messages)
+            for (int index = 0; index < messageCount; index++)
             {
+                byte[] message = batchScratch[index];
                 Buffer.BlockCopy(message, 0, outgoingPacket, offset, message.Length);
                 offset += message.Length;
+                batchScratch[index] = null;
             }
 
             _clientSocket.BeginSend(
