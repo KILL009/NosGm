@@ -195,14 +195,15 @@ namespace NosGm.GameObject
 
         private void spreadBroadcastpacket(BroadcastPacket sentPacket)
         {
-            if (Sessions != null && !string.IsNullOrEmpty(sentPacket?.Packet))
+            IEnumerable<ClientSession> sessions = Sessions;
+            if (sessions != null && !string.IsNullOrEmpty(sentPacket?.Packet))
             {
                 switch (sentPacket.Receiver)
                 {
                     case ReceiverType.All: // send packet to everyone
                         if (sentPacket.Packet.StartsWith("out", StringComparison.CurrentCulture))
                         {
-                            foreach (var session in Sessions.Where(s =>
+                            foreach (var session in sessions.Where(s =>
                                     s.Character == null || !s.Character.IsChangingMapInstance))
                             {
                                 if (session.HasSelectedCharacter)
@@ -224,7 +225,7 @@ namespace NosGm.GameObject
                         }
                         else
                         {
-                            foreach (var session in Sessions)
+                            foreach (var session in sessions)
                             {
                                 if (session?.HasSelectedCharacter == true)
                                 {
@@ -250,7 +251,7 @@ namespace NosGm.GameObject
                     case ReceiverType.AllExceptMe: // send to everyone except the sender
                         if (sentPacket.Packet.StartsWith("out", StringComparison.CurrentCulture))
                         {
-                            foreach (var session in Sessions.Where(s =>
+                            foreach (var session in sessions.Where(s =>
                                     s?.SessionId != sentPacket.Sender?.SessionId &&
                                     (s.Character == null || !s.Character.IsChangingMapInstance)))
                             {
@@ -270,7 +271,7 @@ namespace NosGm.GameObject
                         }
                         else
                         {
-                            foreach (var session in Sessions.Where(s => s?.SessionId != sentPacket.Sender?.SessionId))
+                            foreach (var session in sessions.Where(s => s?.SessionId != sentPacket.Sender?.SessionId))
                             {
                                 if (session?.HasSelectedCharacter == true)
                                 {
@@ -295,7 +296,7 @@ namespace NosGm.GameObject
                     case ReceiverType.AllExceptGroup:
                         if (sentPacket.Packet.StartsWith("out", StringComparison.CurrentCulture))
                         {
-                            foreach (var session in Sessions.Where(s =>
+                            foreach (var session in sessions.Where(s =>
                                     s.SessionId != sentPacket.Sender.SessionId &&
                                     (s.Character == null || !s.Character.IsChangingMapInstance)))
                             {
@@ -318,7 +319,7 @@ namespace NosGm.GameObject
                         }
                         else
                         {
-                            foreach (var session in Sessions.Where(s =>
+                            foreach (var session in sessions.Where(s =>
                                     s.SessionId != sentPacket.Sender.SessionId &&
                                     (s.Character?.Group == null || s.Character?.Group?.GroupId !=
                                             sentPacket.Sender?.Character?.Group?.GroupId)))
@@ -334,7 +335,7 @@ namespace NosGm.GameObject
                         break;
 
                     case ReceiverType.AllExceptMeAct4: // send to everyone except the sender(Act4)
-                        foreach (var session in Sessions.Where(s =>
+                        foreach (var session in sessions.Where(s =>
                                 s.SessionId != sentPacket.Sender?.SessionId &&
                                 (s.Character == null || !s.Character.IsChangingMapInstance)))
                         {
@@ -375,7 +376,7 @@ namespace NosGm.GameObject
                     case ReceiverType.AllInRange: // send to everyone which is in a range of 50x50
                         if (sentPacket.XCoordinate != 0 && sentPacket.YCoordinate != 0)
                         {
-                            foreach (var session in Sessions.Where(s =>
+                            foreach (var session in sessions.Where(s =>
                                     s?.Character.IsInRange(sentPacket.XCoordinate, sentPacket.YCoordinate) == true &&
                                     (s.Character == null || !s.Character.IsChangingMapInstance)))
                             {
@@ -403,7 +404,7 @@ namespace NosGm.GameObject
                         if (sentPacket.SomeonesCharacterId > 0 ||
                             !string.IsNullOrEmpty(sentPacket.SomeonesCharacterName))
                         {
-                            var targetSession = Sessions.SingleOrDefault(s =>
+                            var targetSession = sessions.SingleOrDefault(s =>
                                     s.Character.CharacterId == sentPacket.SomeonesCharacterId ||
                                     s.Character.Name == sentPacket.SomeonesCharacterName);
                             if (targetSession?.HasSelectedCharacter == true)
@@ -432,7 +433,7 @@ namespace NosGm.GameObject
                         break;
 
                     case ReceiverType.AllNoEmoBlocked:
-                        foreach (var session in Sessions.Where(s => s?.Character.EmoticonsBlocked == false))
+                        foreach (var session in sessions.Where(s => s?.Character.EmoticonsBlocked == false))
                         {
                             if (session?.HasSelectedCharacter == true &&
                                 sentPacket.Sender?.Character.IsBlockedByCharacter(session.Character.CharacterId) ==
@@ -445,7 +446,7 @@ namespace NosGm.GameObject
                         break;
 
                     case ReceiverType.AllNoHeroBlocked:
-                        foreach (var session in Sessions.Where(s => s?.Character.HeroChatBlocked == false))
+                        foreach (var session in sessions.Where(s => s?.Character.HeroChatBlocked == false))
                         {
                             if (session?.HasSelectedCharacter == true &&
                                 sentPacket.Sender?.Character.IsBlockedByCharacter(session.Character.CharacterId) ==
@@ -458,7 +459,7 @@ namespace NosGm.GameObject
                         break;
 
                     case ReceiverType.Group:
-                        foreach (var session in Sessions.Where(s =>
+                        foreach (var session in sessions.Where(s =>
                                 s.Character?.Group != null && sentPacket.Sender?.Character?.Group != null &&
                                 s.Character.Group.GroupId == sentPacket.Sender.Character.Group.GroupId))
                         {
@@ -470,7 +471,7 @@ namespace NosGm.GameObject
                     case ReceiverType.OnlySomeLevel:
                         if (sentPacket.LevelMinimum != 0 && sentPacket.LevelMaximum != 0)
                         {
-                            Parallel.ForEach(Sessions.Where(s => s?.Character.Level >= sentPacket.LevelMinimum && s?.Character.Level <= sentPacket.LevelMaximum), session =>
+                            Parallel.ForEach(sessions.Where(s => s?.Character.Level >= sentPacket.LevelMinimum && s?.Character.Level <= sentPacket.LevelMaximum), session =>
                             {
                                 if (session?.HasSelectedCharacter == true)
                                 {
@@ -481,11 +482,11 @@ namespace NosGm.GameObject
                         break;
 
                     case ReceiverType.AllInTimeSpace:
-                        foreach (var session in Sessions.Where(s => s.Character?.Timespace != null))
+                        foreach (var session in sessions.Where(s => s.Character?.Timespace != null))
                         {
                             session.SendPacket(sentPacket.Packet);
                         }
-                        foreach (var session in Sessions.Where(s => s.CurrentMapInstance.MapInstanceType == MapInstanceType.TimeSpaceInstance))
+                        foreach (var session in sessions.Where(s => s.CurrentMapInstance.MapInstanceType == MapInstanceType.TimeSpaceInstance))
                         {
                             session.SendPacket(sentPacket.Packet);
                         }
