@@ -22,6 +22,9 @@ namespace NosGm.Handler.BasicPacket.Login
         private static readonly ConcurrentDictionary<long, byte> PendingGameforgeLogins =
             new ConcurrentDictionary<long, byte>();
 
+        private static readonly ConcurrentDictionary<long, Task> PendingGameforgeLoginTasks =
+            new ConcurrentDictionary<long, Task>();
+
         private readonly ClientSession _session;
 
         public LoginPacketHandler(ClientSession session)
@@ -135,7 +138,22 @@ namespace NosGm.Handler.BasicPacket.Login
                 return;
             }
 
-            _ = CompleteGameforgeLoginRequestAsync(rawPacket);
+            TrackGameforgeLoginContinuation(CompleteGameforgeLoginRequestAsync(rawPacket));
+        }
+
+        private void TrackGameforgeLoginContinuation(Task continuationTask)
+        {
+            if (continuationTask == null)
+            {
+                PendingGameforgeLogins.TryRemove(_session.ClientId, out _);
+                return;
+            }
+
+            PendingGameforgeLoginTasks[_session.ClientId] = continuationTask;
+            if (continuationTask.IsCompleted)
+            {
+                PendingGameforgeLoginTasks.TryRemove(_session.ClientId, out _);
+            }
         }
 
         private async Task CompleteGameforgeLoginRequestAsync(string rawPacket)
@@ -158,6 +176,7 @@ namespace NosGm.Handler.BasicPacket.Login
             }
             finally
             {
+                PendingGameforgeLoginTasks.TryRemove(_session.ClientId, out _);
                 PendingGameforgeLogins.TryRemove(_session.ClientId, out _);
             }
         }
