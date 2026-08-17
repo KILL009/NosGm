@@ -23,20 +23,23 @@ using System.Web.Script.Serialization;
 namespace NosGm.World
 {
     /// <summary>
-    /// Local Discord-to-World bridge. Requests require HMAC authentication and the
-    /// Discord actor must also be present in the World Server's local allowlist.
+    /// Local Discord-to-World bridge. Requests require two independent HMAC
+    /// signatures plus a server-local actor allowlist before any GM command runs.
     /// Raw console packets are never accepted.
     /// </summary>
     public sealed class DiscordGmBridge : IDisposable
     {
         private const int MaxBodyBytes = 32 * 1024;
         private const int MinimumSecretLength = 48;
+        private const string ActorSignatureDomain = "nosgm-actor-v1";
         private readonly HttpListener _listener = new HttpListener();
         private readonly CancellationTokenSource _stop = new CancellationTokenSource();
         private readonly ConcurrentDictionary<string, long> _nonces = new ConcurrentDictionary<string, long>();
         private readonly JavaScriptSerializer _json = new JavaScriptSerializer { MaxJsonLength = MaxBodyBytes };
         private readonly string _secret;
+        private readonly string _identitySecret;
         private readonly string _previousSecret;
+        private readonly string _previousIdentitySecret;
         private readonly long _previousSecretExpiresUnix;
         private readonly IReadOnlyDictionary<string, BridgeRole> _authorizedActors;
         private readonly string _auditPath;
@@ -45,12 +48,16 @@ namespace NosGm.World
         private DiscordGmBridge(
             string prefix,
             string secret,
+            string identitySecret,
             string previousSecret,
+            string previousIdentitySecret,
             long previousSecretExpiresUnix,
             IReadOnlyDictionary<string, BridgeRole> authorizedActors)
         {
             _secret = secret;
+            _identitySecret = identitySecret;
             _previousSecret = previousSecret;
+            _previousIdentitySecret = previousIdentitySecret;
             _previousSecretExpiresUnix = previousSecretExpiresUnix;
             _authorizedActors = authorizedActors;
             _listener.Prefixes.Add(prefix.EndsWith("/", StringComparison.Ordinal) ? prefix : prefix + "/");
@@ -64,29 +71,36 @@ namespace NosGm.World
             if (!string.Equals(Environment.GetEnvironmentVariable("NOSGM_GM_BRIDGE_ENABLED"), "true", StringComparison.OrdinalIgnoreCase))
                 return null;
 
-            var secret = Environment.GetEnvironmentVariable("NOSGM_GM_BRIDGE_SECRET");
-            if (string.IsNullOrWhiteSpace(secret) || secret.Length < MinimumSecretLength || secret.Length > 512)
-                throw new InvalidOperationException("NOSGM_GM_BRIDGE_SECRET must contain between 48 and 512 characters.");
-            if (secret.IndexOf("changeme", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                secret.IndexOf("password", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                secret.Distinct().Count() < 12)
-                throw new InvalidOperationException("NOSGM_GM_BRIDGE_SECRET is too predictable. Generate a new high-entropy secret.");
+            var secret = ReadRequiredSecret("NOSGM_GM_BRIDGE_SECRET");
+            var identitySecret = ReadRequiredSecret("NOSGM_GM_BRIDGE_IDENTITY_SECRET");
+            if (string.Equals(secret, identitySecret, StringComparison.Ordinal))
+                throw new InvalidOperationException("NOSGM_GM_BRIDGE_SECRET and NOSGM_GM_BRIDGE_IDENTITY_SECRET must be different secrets.");
 
             var previousSecret = Environment.GetEnvironmentVariable("NOSGM_GM_BRIDGE_PREVIOUS_SECRET");
+            var previousIdentitySecret = Environment.GetEnvironmentVariable("NOSGM_GM_BRIDGE_PREVIOUS_IDENTITY_SECRET");
+            var previousSecretConfigured = !string.IsNullOrWhiteSpace(previousSecret);
+            var previousIdentityConfigured = !string.IsNullOrWhiteSpace(previousIdentitySecret);
             var previousSecretExpiresUnix = 0L;
-            if (!string.IsNullOrWhiteSpace(previousSecret))
+
+            if (previousSecretConfigured != previousIdentityConfigured)
+                throw new InvalidOperationException("Previous bridge and identity secrets must be configured together.");
+
+            if (previousSecretConfigured)
             {
-                if (previousSecret.Length < MinimumSecretLength || previousSecret.Length > 512 ||
-                    string.Equals(previousSecret, secret, StringComparison.Ordinal))
-                    throw new InvalidOperationException("NOSGM_GM_BRIDGE_PREVIOUS_SECRET must be a different high-entropy secret of 48 to 512 characters.");
+                ValidateSecret("NOSGM_GM_BRIDGE_PREVIOUS_SECRET", previousSecret);
+                ValidateSecret("NOSGM_GM_BRIDGE_PREVIOUS_IDENTITY_SECRET", previousIdentitySecret);
+
+                var configuredSecrets = new[] { secret, identitySecret, previousSecret, previousIdentitySecret };
+                if (configuredSecrets.Distinct(StringComparer.Ordinal).Count() != configuredSecrets.Length)
+                    throw new InvalidOperationException("Current and previous GM bridge secrets must all be different.");
 
                 var expiresText = Environment.GetEnvironmentVariable("NOSGM_GM_BRIDGE_PREVIOUS_SECRET_EXPIRES_UNIX");
                 if (!long.TryParse(expiresText, NumberStyles.None, CultureInfo.InvariantCulture, out previousSecretExpiresUnix))
-                    throw new InvalidOperationException("NOSGM_GM_BRIDGE_PREVIOUS_SECRET_EXPIRES_UNIX is required when a previous secret is configured.");
+                    throw new InvalidOperationException("NOSGM_GM_BRIDGE_PREVIOUS_SECRET_EXPIRES_UNIX is required when previous secrets are configured.");
 
                 var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
                 if (previousSecretExpiresUnix <= now || previousSecretExpiresUnix - now > 3600)
-                    throw new InvalidOperationException("The previous GM bridge secret may only remain valid for a future window of at most 3600 seconds.");
+                    throw new InvalidOperationException("Previous GM bridge secrets may only remain valid for a future window of at most 3600 seconds.");
             }
 
             var prefix = Environment.GetEnvironmentVariable("NOSGM_GM_BRIDGE_PREFIX") ?? "http://127.0.0.1:8787/";
@@ -97,11 +111,35 @@ namespace NosGm.World
                 throw new InvalidOperationException(
                     "The GM bridge is enabled but no Discord actor IDs are allowlisted. Configure NOSGM_GM_BRIDGE_HELPER_IDS, NOSGM_GM_BRIDGE_MODERATOR_IDS, NOSGM_GM_BRIDGE_ADMIN_IDS or NOSGM_GM_BRIDGE_OWNER_IDS.");
 
-            var bridge = new DiscordGmBridge(prefix, secret, previousSecret, previousSecretExpiresUnix, authorizedActors);
+            var bridge = new DiscordGmBridge(
+                prefix,
+                secret,
+                identitySecret,
+                previousSecret,
+                previousIdentitySecret,
+                previousSecretExpiresUnix,
+                authorizedActors);
             bridge._listener.Start();
             Task.Run(() => bridge.ListenLoopAsync());
-            Logger.Info("Discord GM bridge listening on " + prefix + " with " + authorizedActors.Count + " allowlisted actor(s).");
+            Logger.Info("Discord GM bridge listening on " + prefix + " with " + authorizedActors.Count + " allowlisted actor(s) and dual-signature authentication.");
             return bridge;
+        }
+
+        private static string ReadRequiredSecret(string variableName)
+        {
+            var value = Environment.GetEnvironmentVariable(variableName);
+            ValidateSecret(variableName, value);
+            return value;
+        }
+
+        private static void ValidateSecret(string variableName, string value)
+        {
+            if (string.IsNullOrWhiteSpace(value) || value.Length < MinimumSecretLength || value.Length > 512)
+                throw new InvalidOperationException(variableName + " must contain between 48 and 512 characters.");
+            if (value.IndexOf("changeme", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                value.IndexOf("password", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                value.Distinct().Count() < 12)
+                throw new InvalidOperationException(variableName + " is too predictable. Generate a new high-entropy secret.");
         }
 
         private static void ValidateLocalPrefix(string prefix)
@@ -166,10 +204,16 @@ namespace NosGm.World
         private async Task HandleAsync(HttpListenerContext context)
         {
             CommandRequest request = null;
+            var fullyAuthenticated = false;
             try
             {
-                if (context.Request.HttpMethod != "POST")
+                if (context.Request.HttpMethod != "POST" ||
+                    context.Request.Url == null ||
+                    context.Request.Url.AbsolutePath != "/v1/commands")
+                {
                     throw new BridgeException(404, "Route not found.");
+                }
+
                 if (context.Request.ContentLength64 < 0 || context.Request.ContentLength64 > MaxBodyBytes)
                     throw new BridgeException(413, "Invalid request size.");
 
@@ -178,12 +222,13 @@ namespace NosGm.World
                     body = await reader.ReadToEndAsync().ConfigureAwait(false);
                 if (Encoding.UTF8.GetByteCount(body) > MaxBodyBytes) throw new BridgeException(413, "Request too large.");
 
-                Authenticate(context.Request, body);
-                if (context.Request.Url.AbsolutePath != "/v1/commands")
-                    throw new BridgeException(404, "Route not found.");
-
+                var authentication = AuthenticateGateway(context.Request, body);
                 request = _json.Deserialize<CommandRequest>(body);
                 ValidateEnvelope(request);
+                AuthenticateActor(context.Request, authentication, request, body);
+                ConsumeNonce(authentication.Nonce, authentication.Now);
+                fullyAuthenticated = true;
+
                 var role = Authorize(request);
                 var result = Execute(request);
                 Audit(request, role, true, result.message);
@@ -191,18 +236,20 @@ namespace NosGm.World
             }
             catch (BridgeException ex)
             {
-                Audit(request, ResolveRole(request), false, ex.Message);
-                await WriteAsync(context.Response, ex.Status, Response.Fail(request == null ? null : request.requestId, ex.Message)).ConfigureAwait(false);
+                var trustedRequest = fullyAuthenticated ? request : null;
+                Audit(trustedRequest, fullyAuthenticated ? ResolveRole(request) : BridgeRole.None, false, ex.Message);
+                await WriteAsync(context.Response, ex.Status, Response.Fail(trustedRequest == null ? null : trustedRequest.requestId, ex.Message)).ConfigureAwait(false);
             }
             catch (Exception ex)
             {
                 Logger.Error("Discord GM bridge command failed", ex);
-                Audit(request, ResolveRole(request), false, ex.GetType().Name + ": " + ex.Message);
-                await WriteAsync(context.Response, 500, Response.Fail(request == null ? null : request.requestId, "Internal World Server error.")).ConfigureAwait(false);
+                var trustedRequest = fullyAuthenticated ? request : null;
+                Audit(trustedRequest, fullyAuthenticated ? ResolveRole(request) : BridgeRole.None, false, ex.GetType().Name + ": " + ex.Message);
+                await WriteAsync(context.Response, 500, Response.Fail(trustedRequest == null ? null : trustedRequest.requestId, "Internal World Server error.")).ConfigureAwait(false);
             }
         }
 
-        private void Authenticate(HttpListenerRequest request, string body)
+        private GatewayAuthentication AuthenticateGateway(HttpListenerRequest request, string body)
         {
             var timestampText = request.Headers["X-NosGM-Timestamp"];
             var nonce = request.Headers["X-NosGM-Nonce"];
@@ -211,19 +258,52 @@ namespace NosGm.World
             if (!long.TryParse(timestampText, NumberStyles.None, CultureInfo.InvariantCulture, out timestamp) ||
                 string.IsNullOrWhiteSpace(nonce) || nonce.Length < 16 || nonce.Length > 100 ||
                 nonce.Any(c => !(char.IsLetterOrDigit(c) || c == '-' || c == '_')) ||
-                string.IsNullOrWhiteSpace(supplied) || supplied.Length != 64 || !supplied.All(IsHexCharacter))
-                throw new BridgeException(401, "Missing or invalid authentication headers.");
+                !IsValidSignatureHeader(supplied))
+            {
+                throw new BridgeException(401, "Missing or invalid gateway authentication headers.");
+            }
 
             var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
             if (Math.Abs(now - timestamp) > 60) throw new BridgeException(401, "Expired request.");
+
             var canonical = timestampText + "\n" + nonce + "\n" + body;
             var normalizedSignature = supplied.ToLowerInvariant();
-            if (!SignatureMatches(_secret, canonical, normalizedSignature) &&
-                !PreviousSignatureMatches(canonical, normalizedSignature, now))
+            var usesPreviousSecret = false;
+            if (!SignatureMatches(_secret, canonical, normalizedSignature))
             {
-                throw new BridgeException(401, "Invalid signature.");
+                if (!PreviousGatewaySignatureMatches(canonical, normalizedSignature, now))
+                    throw new BridgeException(401, "Invalid gateway signature.");
+                usesPreviousSecret = true;
             }
 
+            return new GatewayAuthentication(timestampText, nonce, now, usesPreviousSecret);
+        }
+
+        private void AuthenticateActor(
+            HttpListenerRequest request,
+            GatewayAuthentication authentication,
+            CommandRequest command,
+            string body)
+        {
+            var supplied = request.Headers["X-NosGM-Actor-Signature"];
+            if (!IsValidSignatureHeader(supplied))
+                throw new BridgeException(401, "Missing or invalid actor authentication header.");
+
+            var canonical = ActorSignatureDomain + "\n" +
+                            authentication.TimestampText + "\n" +
+                            authentication.Nonce + "\n" +
+                            command.actor.discordUserId + "\n" +
+                            body;
+            var identitySecret = authentication.UsesPreviousSecret ? _previousIdentitySecret : _identitySecret;
+            if (string.IsNullOrWhiteSpace(identitySecret) ||
+                !SignatureMatches(identitySecret, canonical, supplied.ToLowerInvariant()))
+            {
+                throw new BridgeException(401, "Invalid actor signature.");
+            }
+        }
+
+        private void ConsumeNonce(string nonce, long now)
+        {
             CleanupNonces(now);
             if (!_nonces.TryAdd(nonce, now)) throw new BridgeException(409, "Replayed request.");
         }
@@ -537,6 +617,11 @@ namespace NosGm.World
             }
         }
 
+        private static bool IsValidSignatureHeader(string value)
+        {
+            return !string.IsNullOrWhiteSpace(value) && value.Length == 64 && value.All(IsHexCharacter);
+        }
+
         private static bool IsHexCharacter(char value)
         {
             return (value >= '0' && value <= '9') ||
@@ -552,7 +637,7 @@ namespace NosGm.World
             return FixedTimeEquals(expected, supplied);
         }
 
-        private bool PreviousSignatureMatches(string canonical, string supplied, long now)
+        private bool PreviousGatewaySignatureMatches(string canonical, string supplied, long now)
         {
             return !string.IsNullOrWhiteSpace(_previousSecret) &&
                    now <= _previousSecretExpiresUnix &&
@@ -616,6 +701,22 @@ namespace NosGm.World
             Moderator = 2,
             Admin = 3,
             Owner = 4
+        }
+
+        private sealed class GatewayAuthentication
+        {
+            public GatewayAuthentication(string timestampText, string nonce, long now, bool usesPreviousSecret)
+            {
+                TimestampText = timestampText;
+                Nonce = nonce;
+                Now = now;
+                UsesPreviousSecret = usesPreviousSecret;
+            }
+
+            public string TimestampText { get; private set; }
+            public string Nonce { get; private set; }
+            public long Now { get; private set; }
+            public bool UsesPreviousSecret { get; private set; }
         }
 
         private sealed class BridgeException : Exception
