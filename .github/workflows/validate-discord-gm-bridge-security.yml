@@ -1,0 +1,31 @@
+name: Validate Discord GM bridge security
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: discord-gm-bridge-security-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  security-contracts:
+    name: Discord GM bridge security contracts
+    runs-on: windows-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Verify authorization, rotation and deny-by-default contracts
+        shell: pwsh
+        run: ./scripts/verify-discord-gm-bridge-security.ps1
