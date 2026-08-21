@@ -201,15 +201,24 @@ namespace NosGm.World
             }
         }
 
+        private static string GetRequestPath(string rawUrl)
+        {
+            if (string.IsNullOrEmpty(rawUrl))
+                return string.Empty;
+
+            var queryIndex = rawUrl.IndexOf('?');
+            return queryIndex >= 0 ? rawUrl.Substring(0, queryIndex) : rawUrl;
+        }
+
         private async Task HandleAsync(HttpListenerContext context)
         {
             CommandRequest request = null;
             var fullyAuthenticated = false;
             try
             {
+                var requestPath = GetRequestPath(context.Request.RawUrl);
                 if (context.Request.HttpMethod != "POST" ||
-                    context.Request.Url == null ||
-                    context.Request.Url.AbsolutePath != "/v1/commands")
+                    requestPath != "/v1/commands")
                 {
                     throw new BridgeException(404, "Route not found.");
                 }
