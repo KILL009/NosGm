@@ -68,11 +68,15 @@ namespace NosGm.Core
         {
             if (!IsDisposing && packet != null && packet != "")
             {
-                packet = NormalizeOfficialPacketLayout(packet);
-                priority = NormalizePacketPriority(packet, priority);
+                bool isMovement = packet.StartsWith("mv ", StringComparison.Ordinal);
+                if (!isMovement)
+                {
+                    packet = NormalizeOfficialPacketLayout(packet);
+                }
+                priority = NormalizePacketPriority(isMovement, priority);
                 byte[] encryptedPacket = _encryptor.Encrypt(packet);
 
-                if (packet.StartsWith("mv ", StringComparison.Ordinal))
+                if (isMovement)
                 {
                     ScsRawDataMessage movementMessage = _movementRawMessage ??
                         (_movementRawMessage = new ScsRawDataMessage());
@@ -87,8 +91,12 @@ namespace NosGm.Core
 
         public async Task SendPacketAsync(string packet, byte priority = 10)
         {
-            packet = NormalizeOfficialPacketLayout(packet);
-            priority = NormalizePacketPriority(packet, priority);
+            bool isMovement = packet != null && packet.StartsWith("mv ", StringComparison.Ordinal);
+            if (!isMovement)
+            {
+                packet = NormalizeOfficialPacketLayout(packet);
+            }
+            priority = NormalizePacketPriority(isMovement, priority);
             ScsRawDataMessage rawDataMessage = new ScsRawDataMessage(_encryptor.Encrypt(packet));
             await SendMessageAsync(rawDataMessage, priority).ConfigureAwait(false);
         }
@@ -122,11 +130,9 @@ namespace NosGm.Core
         /// so packets using the normal priority are routed through the existing
         /// low-priority queue. Explicit non-default priorities remain untouched.
         /// </summary>
-        private static byte NormalizePacketPriority(string packet, byte priority)
+        private static byte NormalizePacketPriority(bool isMovement, byte priority)
         {
-            return priority == 10 &&
-                   packet != null &&
-                   packet.StartsWith("mv ", StringComparison.Ordinal)
+            return priority == 10 && isMovement
                 ? (byte)5
                 : priority;
         }
