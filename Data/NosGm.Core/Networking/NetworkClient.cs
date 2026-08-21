@@ -35,6 +35,9 @@ namespace NosGm.Core
                 "93"
             };
 
+        [ThreadStatic]
+        private static ScsRawDataMessage _movementRawMessage;
+
         private CryptographyBase _encryptor;
         private object _session;
         private readonly object _initialCustomParameterSync = new object();
@@ -67,8 +70,18 @@ namespace NosGm.Core
             {
                 packet = NormalizeOfficialPacketLayout(packet);
                 priority = NormalizePacketPriority(packet, priority);
-                var rawMessage = new ScsRawDataMessage(_encryptor.Encrypt(packet));
-                SendMessage(rawMessage, priority);
+                byte[] encryptedPacket = _encryptor.Encrypt(packet);
+
+                if (packet.StartsWith("mv ", StringComparison.Ordinal))
+                {
+                    ScsRawDataMessage movementMessage = _movementRawMessage ??
+                        (_movementRawMessage = new ScsRawDataMessage());
+                    movementMessage.MessageData = encryptedPacket;
+                    SendMessage(movementMessage, priority);
+                    return;
+                }
+
+                SendMessage(new ScsRawDataMessage(encryptedPacket), priority);
             }
         }
 
