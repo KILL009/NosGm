@@ -1,5 +1,85 @@
 [
   {
+    "id": "weekly-update-2026-08-21-es",
+    "slug": "weekly-update-2026-08-21",
+    "title": "NosGM: avances técnicos de la semana",
+    "summary": "Ya están integradas la autoridad de Configuration en gRPC, mejoras asíncronas de Login y World, optimizaciones de red, auto-loot directo al inventario, guardado y desconexión más seguros, y protección reforzada para el puente GM de Discord. La migración total de SCS continúa.",
+    "publishedAt": "2026-08-21T16:00:00-04:00",
+    "language": "es"
+  },
+  {
+    "id": "weekly-update-2026-08-21-en",
+    "slug": "weekly-update-2026-08-21",
+    "title": "NosGM: this week's technical progress",
+    "summary": "Configuration is now authoritative on gRPC, Login and World use safer asynchronous paths, network hot paths are optimized, auto-loot delivers directly to inventory, persistence and disconnects are safer, and the Discord GM bridge has stronger authorization. Full SCS retirement continues.",
+    "publishedAt": "2026-08-21T16:00:00-04:00",
+    "language": "en"
+  },
+  {
+    "id": "weekly-update-2026-08-21-de",
+    "slug": "weekly-update-2026-08-21",
+    "title": "NosGM: Technische Fortschritte dieser Woche",
+    "summary": "Configuration nutzt nun gRPC als einzige Autorität. Login und World arbeiten sicherer asynchron, kritische Netzwerkpfade wurden optimiert, Auto-Loot liefert direkt ins Inventar, Speichern und Trennen sind robuster und die Discord-GM-Brücke ist stärker abgesichert. Die vollständige SCS-Ablösung läuft weiter.",
+    "publishedAt": "2026-08-21T16:00:00-04:00",
+    "language": "de"
+  },
+  {
+    "id": "weekly-update-2026-08-21-fr",
+    "slug": "weekly-update-2026-08-21",
+    "title": "NosGM : progrès techniques de la semaine",
+    "summary": "Configuration utilise désormais gRPC comme seule autorité. Login et World suivent des chemins asynchrones plus sûrs, le réseau est optimisé, l'auto-loot livre directement dans l'inventaire, la sauvegarde et la déconnexion sont renforcées, et le pont GM Discord est mieux protégé. Le retrait complet de SCS continue.",
+    "publishedAt": "2026-08-21T16:00:00-04:00",
+    "language": "fr"
+  },
+  {
+    "id": "weekly-update-2026-08-21-it",
+    "slug": "weekly-update-2026-08-21",
+    "title": "NosGM: progressi tecnici della settimana",
+    "summary": "Configuration usa ora gRPC come unica autorità. Login e World seguono percorsi asincroni più sicuri, la rete è ottimizzata, l'auto-loot consegna direttamente nell'inventario, salvataggi e disconnessioni sono più robusti e il ponte GM Discord è meglio protetto. La rimozione completa di SCS continua.",
+    "publishedAt": "2026-08-21T16:00:00-04:00",
+    "language": "it"
+  },
+  {
+    "id": "weekly-update-2026-08-21-pl",
+    "slug": "weekly-update-2026-08-21",
+    "title": "NosGM: postępy techniczne w tym tygodniu",
+    "summary": "Configuration korzysta teraz wyłącznie z gRPC. Login i World używają bezpieczniejszych ścieżek asynchronicznych, zoptymalizowano sieć, auto-loot przekazuje przedmioty do ekwipunku, zapis i rozłączenia są stabilniejsze, a most GM Discord ma mocniejsze zabezpieczenia. Pełne usunięcie SCS trwa.",
+    "publishedAt": "2026-08-21T16:00:00-04:00",
+    "language": "pl"
+  },
+  {
+    "id": "weekly-update-2026-08-21-cs",
+    "slug": "weekly-update-2026-08-21",
+    "title": "NosGM: technický pokrok tohoto týdne",
+    "summary": "Configuration nyní používá výhradně gRPC. Login a World mají bezpečnější asynchronní cesty, síť byla optimalizována, auto-loot ukládá předměty přímo do inventáře, ukládání i odpojování je stabilnější a Discord GM most má silnější zabezpečení. Úplné odstranění SCS pokračuje.",
+    "publishedAt": "2026-08-21T16:00:00-04:00",
+    "language": "cs"
+  },
+  {
+    "id": "weekly-update-2026-08-21-ru",
+    "slug": "weekly-update-2026-08-21",
+    "title": "NosGM: технический прогресс недели",
+    "summary": "Configuration теперь использует gRPC как единственный источник. Login и World перешли на более безопасные асинхронные пути, сеть оптимизирована, auto-loot отправляет добычу в инвентарь, сохранение и отключение стали надёжнее, а Discord GM-мост получил усиленную защиту. Полное удаление SCS продолжается.",
+    "publishedAt": "2026-08-21T16:00:00-04:00",
+    "language": "ru"
+  },
+  {
+    "id": "weekly-update-2026-08-21-ja",
+    "slug": "weekly-update-2026-08-21",
+    "title": "NosGM：今週の技術進捗",
+    "summary": "ConfigurationはgRPCを唯一の正規経路として使用します。LoginとWorldの非同期処理、ネットワーク最適化、インベントリ直送のauto-loot、安全な保存と切断、Discord GMブリッジの認可強化を統合しました。SCSの完全廃止は引き続き進行中です。",
+    "publishedAt": "2026-08-21T16:00:00-04:00",
+    "language": "ja"
+  },
+  {
+    "id": "weekly-update-2026-08-21-zh-cn",
+    "slug": "weekly-update-2026-08-21",
+    "title": "NosGM：本周技术进展",
+    "summary": "Configuration 现已仅使用 gRPC 权威通道。Login 与 World 采用更安全的异步路径，网络关键路径得到优化，auto-loot 可直接放入背包，保存和断开流程更稳定，Discord GM 桥接的授权也已加强。SCS 的完全移除仍在继续。",
+    "publishedAt": "2026-08-21T16:00:00-04:00",
+    "language": "zh-CN"
+  },
+  {
     "id": "welcome-2026",
     "slug": "welcome-to-nosgm",
     "title": "Bienvenido a NosGM",

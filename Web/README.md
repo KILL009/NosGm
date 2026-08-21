@@ -1,11 +1,12 @@
 # NosGM Web
 
-A standalone, package-free ASP.NET Core 9 public portal for NosGM.
+A standalone, package-free ASP.NET Core 10 public portal for NosGM.
 It is deliberately outside `NosGm.sln`, does not reference the legacy game DAL and never receives a game database connection string.
 
 ## Included
 
 - original responsive interface with no commercial theme assets;
+- multilingual weekly technical progress sourced from confirmed `main` changes;
 - Spanish, English, German, French, Italian, Polish, Czech, Russian, Japanese and Simplified Chinese;
 - public home, news, service status, rankings and launcher download pages;
 - versioned public JSON endpoints under `/api/v1/public`;

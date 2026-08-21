@@ -16,6 +16,9 @@ Assert(PortalCulture.Normalize("cz") == "cs", "Czech alias failed.");
 Assert(PortalCulture.Normalize("jp") == "ja", "Japanese alias failed.");
 Assert(PortalCulture.Normalize("cn") == "zh-CN", "Chinese alias failed.");
 Assert(PortalCulture.Normalize("unknown") == "en", "Unknown language must fall back to English.");
+Assert(
+    PortalText.Languages.All(language => PortalText.Get(language, "weekly.title") != "weekly.title"),
+    "Weekly progress copy must be available in every language.");
 Assert(WebSecurityPolicy.ContentSecurityPolicy.Contains("default-src 'none'", StringComparison.Ordinal), "CSP default deny missing.");
 Assert(WebSecurityPolicy.ContentSecurityPolicy.Contains("frame-ancestors 'none'", StringComparison.Ordinal), "Frame denial missing.");
 Assert(PortalOptions.IsSafe(new PortalOptions { LauncherDownloadUrl = string.Empty }), "Empty launcher URL should be allowed.");
