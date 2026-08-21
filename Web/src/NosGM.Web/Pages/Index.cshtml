@@ -36,6 +36,44 @@
         <article class="feature-card"><span>03</span><h3>@Model.T("feature.status.title")</h3><p>@Model.T("feature.status.body")</p></article>
     </div>
 </section>
+<section class="section weekly-section">
+    <div class="shell">
+        <div class="section-heading weekly-heading">
+            <div>
+                <p class="eyebrow">@Model.T("weekly.eyebrow")</p>
+                <h2>@Model.T("weekly.title")</h2>
+                <p class="section-copy">@Model.T("weekly.body")</p>
+            </div>
+        </div>
+        <div class="progress-grid">
+            <article class="progress-card">
+                <div class="progress-card-top"><span>gRPC + .NET 10</span><small>✓ MAIN</small></div>
+                <p>@Model.T("weekly.grpc.body")</p>
+            </article>
+            <article class="progress-card">
+                <div class="progress-card-top"><span>World / Login</span><small>✓ MAIN</small></div>
+                <p>@Model.T("weekly.performance.body")</p>
+            </article>
+            <article class="progress-card">
+                <div class="progress-card-top"><span>Auto-loot</span><small>✓ MAIN</small></div>
+                <p>@Model.T("weekly.autoloot.body")</p>
+            </article>
+            <article class="progress-card">
+                <div class="progress-card-top"><span>Discord GM Bridge</span><small>✓ MAIN</small></div>
+                <p>@Model.T("weekly.discord.body")</p>
+            </article>
+            <article class="progress-card progress-card-wide">
+                <div class="progress-card-top"><span>SCS → gRPC</span><small>@Model.T("weekly.inprogress")</small></div>
+                <p>@Model.T("weekly.migration.body")</p>
+            </article>
+        </div>
+        <div class="update-source">
+            <span class="source-dot" aria-hidden="true"></span>
+            <span>@Model.T("weekly.source")</span>
+            <a href="https://github.com/KILL009/NosGm/compare/ea374ae1...5cab6fe5" target="_blank" rel="noopener noreferrer">GitHub</a>
+        </div>
+    </div>
+</section>
 <section class="section section-muted">
     <div class="shell">
         <div class="section-heading">
