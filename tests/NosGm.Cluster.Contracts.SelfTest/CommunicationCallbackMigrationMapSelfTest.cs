@@ -100,9 +100,9 @@ internal static class CommunicationCallbackMigrationMapSelfTest
                 .ToArray(),
             "Every remaining legacy callback has an explicit disposition");
         AssertEqual(
-            10,
+            9,
             typedCount,
-            "Ten remaining callback methods have typed shadow stream events");
+            "Nine remaining callback methods have typed shadow stream events");
         AssertEqual(
             1,
             deferredCount,
@@ -114,9 +114,10 @@ internal static class CommunicationCallbackMigrationMapSelfTest
 
         JsonElement completed = root.GetProperty("completed");
         AssertEqual(
-            1,
+            2,
             completed.GetArrayLength(),
-            "Exactly one callback authority cutover is complete");
+            "Exactly two callback authority cutovers are complete");
+
         JsonElement penalty = completed[0];
         AssertEqual(
             "UpdatePenaltyLog",
@@ -149,7 +150,7 @@ internal static class CommunicationCallbackMigrationMapSelfTest
                 StringComparer.Ordinal),
             "Retired PenaltyRefresh is absent from ICommunicationClient");
 
-        string[] subscriberRoles = penalty
+        string[] penaltySubscriberRoles = penalty
             .GetProperty("subscriberRoles")
             .EnumerateArray()
             .Select(role => role.GetString())
@@ -157,8 +158,51 @@ internal static class CommunicationCallbackMigrationMapSelfTest
             .ToArray();
         AssertSequenceEqual(
             new[] { "Login", "World" },
-            subscriberRoles,
+            penaltySubscriberRoles,
             "PenaltyRefresh remains routed to Login and World");
+
+        JsonElement relation = completed[1];
+        AssertEqual(
+            "UpdateRelation",
+            relation.GetProperty("legacyMethod").GetString(),
+            "RelationRefresh records its retired SCS method");
+        AssertEqual(
+            "grpc_authoritative",
+            relation.GetProperty("disposition").GetString(),
+            "RelationRefresh is gRPC authoritative");
+        AssertEqual(
+            true,
+            relation.GetProperty("legacySurfaceRemoved").GetBoolean(),
+            "RelationRefresh legacy callback surface is removed");
+        AssertEqual(
+            JsonValueKind.Null,
+            relation.GetProperty("fallback").ValueKind,
+            "RelationRefresh has no transport fallback");
+        AssertEqual(
+            "RelationRefreshCallback",
+            relation.GetProperty("target").GetString(),
+            "RelationRefresh uses its typed payload");
+        AssertEqual(
+            "WORLD_GROUP",
+            relation.GetProperty("targetKind").GetString(),
+            "RelationRefresh preserves WorldGroup routing");
+        AssertEqual(
+            false,
+            interfaceMethods.Contains(
+                "UpdateRelation",
+                StringComparer.Ordinal),
+            "Retired RelationRefresh is absent from ICommunicationClient");
+
+        string[] relationSubscriberRoles = relation
+            .GetProperty("subscriberRoles")
+            .EnumerateArray()
+            .Select(role => role.GetString())
+            .OrderBy(role => role, StringComparer.Ordinal)
+            .ToArray();
+        AssertSequenceEqual(
+            new[] { "World" },
+            relationSubscriberRoles,
+            "RelationRefresh remains routed only to World");
 
         string proto = File.ReadAllText(protoPath);
         AssertContains(

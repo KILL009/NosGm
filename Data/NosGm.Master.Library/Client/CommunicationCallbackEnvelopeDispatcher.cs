@@ -37,11 +37,12 @@ namespace NosGm.Master.Library.Client
             WireV1.CommunicationCallbackKind kind =
                 CommunicationCallbackSemanticFingerprint.ResolveKind(envelope);
 
-            // PenaltyRefresh completed its SCS-to-gRPC authority cutover. It is
-            // applied directly from the typed stream and committed by the
-            // callback processor only after this method completes. There is no
-            // legacy callback fallback for this kind anymore.
-            if (kind == WireV1.CommunicationCallbackKind.PenaltyRefresh)
+            // PenaltyRefresh and RelationRefresh completed their SCS-to-gRPC
+            // authority cutovers. They are applied directly from the typed
+            // stream and committed by the callback processor only after this
+            // method completes. Neither kind has a legacy callback fallback.
+            if (kind == WireV1.CommunicationCallbackKind.PenaltyRefresh ||
+                kind == WireV1.CommunicationCallbackKind.RelationRefresh)
             {
                 ApplyCore(envelope);
                 return Task.CompletedTask;

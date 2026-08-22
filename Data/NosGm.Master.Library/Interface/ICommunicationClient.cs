@@ -1,4 +1,4 @@
-﻿using NosGm.Domain;
+using NosGm.Domain;
 using NosGm.Master.Library.Data;
 using System;
 
@@ -26,8 +26,6 @@ namespace NosGm.Master.Library.Interface
 
         void UpdateFamily(long familyId, bool changeFaction);
 
-        void UpdateRelation(long relationId);
-
         void UpdateStaticBonus(long characterId);
 
         #endregion
@@ -42,6 +40,18 @@ namespace NosGm.Master.Library.Interface
             throw new NotSupportedException(
                 "UpdatePenaltyLog was retired from the SCS callback contract. " +
                 "PenaltyRefresh is gRPC-authoritative and has no SCS fallback.");
+        }
+    }
+
+    public static class RetiredCommunicationClientRelationExtensions
+    {
+        public static void UpdateRelation(
+            this ICommunicationClient client,
+            long relationId)
+        {
+            throw new NotSupportedException(
+                "UpdateRelation was retired from the SCS callback contract. " +
+                "RelationRefresh is gRPC-authoritative and has no SCS fallback.");
         }
     }
 }

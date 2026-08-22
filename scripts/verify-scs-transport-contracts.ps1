@@ -86,11 +86,12 @@ foreach ($service in $manifest.services) {
     }
     $manifestMethodCount += $expectedMethods.Count
 }
-Assert-True ($manifestMethodCount -eq 94) "All 94 remaining non-Configuration SCS methods are accounted for"
+Assert-True ($manifestMethodCount -eq 93) "All 93 remaining non-Configuration SCS methods are accounted for"
 
 $communicationClientSource = Read-RequiredFile (Join-Path $repositoryRoot "Data\NosGm.Master.Library\Interface\ICommunicationClient.cs")
 $communicationClientMethods = @(Get-InterfaceMethodNames -Source $communicationClientSource -InterfaceName "ICommunicationClient")
 Assert-True ($communicationClientMethods -notcontains "UpdatePenaltyLog") "PenaltyRefresh is absent from the SCS callback interface"
+Assert-True ($communicationClientMethods -notcontains "UpdateRelation") "RelationRefresh is absent from the SCS callback interface"
 
 foreach ($retiredPath in @(
     "Data\NosGm.Master.Library\Interface\IConfigurationService.cs",
@@ -133,4 +134,4 @@ foreach ($schema in @(
 }
 Assert-True ($contractProject.Contains('GrpcServices="Both"')) "Typed client and server stubs are generated"
 
-Write-Host "Remaining SCS transport inventory verified. Configuration and PenaltyRefresh are no longer part of that callback surface." -ForegroundColor Green
+Write-Host "Remaining SCS transport inventory verified. Configuration, PenaltyRefresh and RelationRefresh are no longer part of that callback surface." -ForegroundColor Green
