@@ -87,6 +87,17 @@ namespace NosGm.Core.Networking.Communication.Scs.Communication.Channels.Tcp
         /// </summary>
         private readonly object _syncLock;
 
+        /// <summary>
+        /// At most one asynchronous socket send may own an outgoing batch at a time.
+        /// This bounds the number of managed byte arrays retained by outstanding
+        /// BeginSend operations while preserving the stable 10 ms batching timer.
+        /// </summary>
+        private int _sendInProgress;
+
+        private byte[] _pendingSendBuffer;
+
+        private int _pendingSendOffset;
+
         private bool _disposed;
 
         /// <summary>
@@ -176,17 +187,26 @@ namespace NosGm.Core.Networking.Communication.Scs.Communication.Channels.Tcp
 
         public void SendInterval()
         {
+            if (WireProtocol == null || Interlocked.CompareExchange(ref _sendInProgress, 1, 0) != 0)
+            {
+                return;
+            }
+
             try
             {
-                if (WireProtocol != null)
+                if (!TryBuildOutgoingPacket(out byte[] outgoingPacket))
                 {
-                    SendByPriority(_highPriorityBuffer);
-                    SendByPriority(_lowPriorityBuffer);
+                    CompletePendingSend();
+                    return;
                 }
+
+                _pendingSendBuffer = outgoingPacket;
+                _pendingSendOffset = 0;
+                BeginPendingSend();
             }
             catch (Exception)
             {
-                // disconnect
+                CompletePendingSend();
             }
 
             if (!_clientSocket.Connected)
@@ -226,22 +246,57 @@ namespace NosGm.Core.Networking.Communication.Scs.Communication.Channels.Tcp
             _clientSocket.BeginReceive(_buffer, 0, _buffer.Length, 0, ReceiveCallback, null);
         }
 
-        private static void SendCallback(IAsyncResult result)
+        private void BeginPendingSend()
+        {
+            byte[] buffer = _pendingSendBuffer;
+            int offset = _pendingSendOffset;
+            if (buffer == null || offset >= buffer.Length)
+            {
+                CompletePendingSend();
+                return;
+            }
+
+            _clientSocket.BeginSend(
+                buffer,
+                offset,
+                buffer.Length - offset,
+                SocketFlags.None,
+                SendCallback,
+                null);
+        }
+
+        private void SendCallback(IAsyncResult result)
         {
             try
             {
-                // Retrieve the socket from the state object.
-                var client = (Socket)result.AsyncState;
+                int bytesSent = _clientSocket.EndSend(result);
+                if (bytesSent <= 0)
+                {
+                    CompletePendingSend();
+                    return;
+                }
 
-                if (!client.Connected) return;
-
-                // Complete sending the data to the remote device.
-                var bytesSent = client.EndSend(result);
+                _pendingSendOffset += bytesSent;
+                byte[] buffer = _pendingSendBuffer;
+                if (buffer != null && _pendingSendOffset < buffer.Length)
+                {
+                    BeginPendingSend();
+                    return;
+                }
             }
             catch (Exception)
             {
-                // disconnect
+                // The next timer tick may retry queued data if the channel remains connected.
             }
+
+            CompletePendingSend();
+        }
+
+        private void CompletePendingSend()
+        {
+            _pendingSendBuffer = null;
+            _pendingSendOffset = 0;
+            Volatile.Write(ref _sendInProgress, 0);
         }
 
         /// <summary>
@@ -301,13 +356,47 @@ namespace NosGm.Core.Networking.Communication.Scs.Communication.Channels.Tcp
             }
         }
 
-        private void SendByPriority(ConcurrentQueue<byte[]> buffer)
+        private bool TryBuildOutgoingPacket(out byte[] outgoingPacket)
         {
-            const int maximumPacketsPerBatch = 30;
-            var messages = new List<byte[]>(maximumPacketsPerBatch);
+            const int maximumPacketsPerPriority = 30;
+            var messages = new List<byte[]>(maximumPacketsPerPriority * 2);
             int totalLength = 0;
 
-            for (int index = 0; index < maximumPacketsPerBatch; index++)
+            DequeueMessages(
+                _highPriorityBuffer,
+                messages,
+                maximumPacketsPerPriority,
+                ref totalLength);
+            DequeueMessages(
+                _lowPriorityBuffer,
+                messages,
+                maximumPacketsPerPriority,
+                ref totalLength);
+
+            if (totalLength == 0)
+            {
+                outgoingPacket = null;
+                return false;
+            }
+
+            outgoingPacket = new byte[totalLength];
+            int offset = 0;
+            foreach (byte[] message in messages)
+            {
+                Buffer.BlockCopy(message, 0, outgoingPacket, offset, message.Length);
+                offset += message.Length;
+            }
+
+            return true;
+        }
+
+        private static void DequeueMessages(
+            ConcurrentQueue<byte[]> buffer,
+            ICollection<byte[]> messages,
+            int maximumPackets,
+            ref int totalLength)
+        {
+            for (int index = 0; index < maximumPackets; index++)
             {
                 if (!buffer.TryDequeue(out byte[] message) || message == null || message.Length == 0)
                 {
@@ -317,27 +406,6 @@ namespace NosGm.Core.Networking.Communication.Scs.Communication.Channels.Tcp
                 messages.Add(message);
                 totalLength = checked(totalLength + message.Length);
             }
-
-            if (totalLength == 0)
-            {
-                return;
-            }
-
-            var outgoingPacket = new byte[totalLength];
-            int offset = 0;
-            foreach (byte[] message in messages)
-            {
-                Buffer.BlockCopy(message, 0, outgoingPacket, offset, message.Length);
-                offset += message.Length;
-            }
-
-            _clientSocket.BeginSend(
-                outgoingPacket,
-                0,
-                outgoingPacket.Length,
-                SocketFlags.None,
-                SendCallback,
-                _clientSocket);
         }
 
         protected override Task SendMessagePublicAsync(IScsMessage message, byte priority)
