@@ -11,5 +11,6 @@
     <Compile Include="$(MSBuildThisFileDirectory)Data\NosGm.Handler\PacketHandler\Command\GmCaseHandler.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Data\NosGm.Handler\PacketHandler\Command\SanctionHandler.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Data\NosGm.Handler\PacketHandler\Command\BazaarAuditHandler.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Data\NosGm.Handler\PacketHandler\Basic\MallPacketHandler.cs" />
   </ItemGroup>
 </Project>
