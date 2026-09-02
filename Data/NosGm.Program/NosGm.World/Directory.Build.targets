@@ -1,7 +1,14 @@
 <Project>
   <PropertyGroup>
     <WorldValueTupleAssembly>$(NuGetPackageRoot)system.valuetuple\4.6.2\lib\net47\System.ValueTuple.dll</WorldValueTupleAssembly>
+    <StartupObject>NosGm.World.PortalWorldEntryPoint</StartupObject>
   </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="$(MSBuildProjectDirectory)\PortalBridgeWorker.cs" />
+    <Compile Include="$(MSBuildProjectDirectory)\PortalWorldEntryPoint.cs" />
+    <Compile Include="$(MSBuildProjectDirectory)\ShopDeliveryWorker.cs" />
+  </ItemGroup>
 
   <Target Name="CopyWorldValueTupleRuntime"
           BeforeTargets="VerifyWorldRuntimeDependencies">
