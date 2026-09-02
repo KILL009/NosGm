@@ -1,5 +1,6 @@
 using NosGm.Core;
 using NosGm.GameObject;
+using NosGm.GameObject.Networking;
 using System;
 using System.Threading.Tasks;
 
