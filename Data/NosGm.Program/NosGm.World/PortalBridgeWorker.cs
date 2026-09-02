@@ -1,5 +1,6 @@
 using NosGm.Core;
 using NosGm.GameObject;
+using NosGm.GameObject.Networking;
 using NosGm.GameObject.Helpers;
 using System;
 using System.Collections.Generic;
