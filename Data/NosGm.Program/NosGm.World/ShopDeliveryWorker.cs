@@ -2,6 +2,7 @@ using NosGm.Core;
 using NosGm.Data;
 using NosGm.Domain;
 using NosGm.GameObject;
+using NosGm.GameObject.Networking;
 using System;
 using System.Data;
 using System.Data.SqlClient;
